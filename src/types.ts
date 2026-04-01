@@ -184,6 +184,8 @@ export interface SessionState {
   >;
   /** tool_use_ids of regular tools already traced by PostToolUse (prevents double-tracing in traceTurn) */
   traced_tool_use_ids?: string[];
+  /** Wall-clock time (ms) when the last PreCompact hook fired */
+  compaction_start_time?: number;
   /** Pending subagent traces to process (set by SubagentStop, processed by Stop) */
   pending_subagent_traces?: Array<{
     agent_id: string;

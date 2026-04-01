@@ -16,7 +16,11 @@ function lockPath(stateFilePath: string): string {
   return `${stateFilePath}.lock`;
 }
 
-function acquireLock(stateFilePath: string): void {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function acquireLock(stateFilePath: string): Promise<void> {
   const lock = lockPath(stateFilePath);
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
   mkdirSync(dirname(stateFilePath), { recursive: true });
@@ -27,7 +31,7 @@ function acquireLock(stateFilePath: string): void {
       closeSync(fd);
       return;
     } catch {
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, LOCK_RETRY_MS);
+      await sleep(LOCK_RETRY_MS);
     }
   }
   // Stale lock — remove it and proceed rather than deadlocking.
@@ -50,11 +54,11 @@ function releaseLock(stateFilePath: string): void {
  * Atomically read state, apply `fn`, and write the result back.
  * A file lock prevents concurrent PostToolUse hooks from clobbering each other.
  */
-export function atomicUpdateState(
+export async function atomicUpdateState(
   stateFilePath: string,
   fn: (state: TracingState) => TracingState,
-): void {
-  acquireLock(stateFilePath);
+): Promise<void> {
+  await acquireLock(stateFilePath);
   try {
     const state = loadState(stateFilePath);
     writeFileSync(stateFilePath, JSON.stringify(fn(state), null, 2));

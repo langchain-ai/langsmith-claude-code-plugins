@@ -7,6 +7,7 @@
  * so SubagentStop can nest the subagent trace under it.
  */
 
+import { randomUUID } from "node:crypto";
 import { debug, error } from "../logger.js";
 import { initClient, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
@@ -33,6 +34,13 @@ async function main(): Promise<void> {
   const config = initHook();
   if (!config) return;
 
+  // Subagent tool calls are traced by the Stop hook from the transcript.
+  // Skip here to avoid double-tracing and orphan runs.
+  if (input.agent_id || input.agent_type) {
+    debug("Skipping PostToolUse for subagent tool — Stop hook handles tracing");
+    return;
+  }
+
   const client = initClient(config.apiKey, config.apiBaseUrl);
 
   // Load state to get current turn's run ID (created by UserPromptSubmit)
@@ -49,7 +57,6 @@ async function main(): Promise<void> {
   }
 
   // Generate run ID and dotted order for this tool
-  const { randomUUID } = await import("crypto");
   const toolRunId = randomUUID();
   const startTime = Date.now();
 
@@ -81,6 +88,7 @@ async function main(): Promise<void> {
       extra: {
         metadata: {
           thread_id: input.session_id,
+          ls_integration: "claude-code",
           tool_name: input.tool_name,
         },
       },
@@ -88,7 +96,7 @@ async function main(): Promise<void> {
   }
 
   // Save state atomically so concurrent PostToolUse hooks don't clobber each other.
-  atomicUpdateState(config.stateFilePath, (freshState) => {
+  await atomicUpdateState(config.stateFilePath, (freshState) => {
     const freshSession = getSessionState(freshState, input.session_id);
     return {
       ...freshState,

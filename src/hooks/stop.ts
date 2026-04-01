@@ -7,9 +7,10 @@
  * groups them into turns, and sends traces to LangSmith.
  */
 
+import { randomUUID } from "node:crypto";
 import { readTranscript, groupIntoTurns } from "../transcript.js";
 import { log, warn, debug, error } from "../logger.js";
-import { loadState, saveState, getSessionState, updateSessionState } from "../state.js";
+import { loadState, atomicUpdateState, getSessionState, updateSessionState } from "../state.js";
 import {
   initClient,
   traceTurn,
@@ -57,9 +58,9 @@ async function main(): Promise<void> {
     debug("No new messages");
     // Clear stale current_turn_run_id so the next invocation doesn't try to complete it.
     if (sessionState.current_turn_run_id) {
-      saveState(config.stateFilePath, {
-        ...state,
-        [input.session_id]: { ...sessionState, current_turn_run_id: undefined },
+      await atomicUpdateState(config.stateFilePath, (s) => {
+        const ss = getSessionState(s, input.session_id);
+        return { ...s, [input.session_id]: { ...ss, current_turn_run_id: undefined } };
       });
     }
     return;
@@ -99,9 +100,6 @@ async function main(): Promise<void> {
 
   let tracedTurns = 0;
 
-  // Detect if this is a subagent based on agent_id or agent_type
-  const isSubagent = !!(input.agent_id || input.agent_type);
-
   // Collect task run mappings for subagent linking
   const allTaskRunMaps: Record<string, { run_id: string; dotted_order: string }> = {};
 
@@ -134,7 +132,7 @@ async function main(): Promise<void> {
         sessionId: input.session_id,
         turnNum,
         project: config.project,
-        isSubagent,
+
         parentRunId,
         existingTaskRunMap,
         tracedToolUseIds,
@@ -161,6 +159,13 @@ async function main(): Promise<void> {
         end_time: Date.now(),
         outputs: {
           messages: [{ role: "assistant", content: input.last_assistant_message }],
+        },
+        extra: {
+          metadata: {
+            thread_id: input.session_id,
+            ls_integration: "claude-code",
+            ls_agent_type: "agent",
+          },
         },
       });
       debug(`Turn run ${currentRunId} completed`);
@@ -222,6 +227,7 @@ async function main(): Promise<void> {
             extra: {
               metadata: {
                 thread_id: input.session_id,
+                ls_integration: "claude-code",
                 tool_name: "Agent",
                 agent_type: toolName,
                 agent_id: subagent.agent_id,
@@ -241,7 +247,6 @@ async function main(): Promise<void> {
 
         // Create an intermediate chain run named "${toolName} Subagent" as a child
         // of the Agent tool run, then nest all subagent turns under it.
-        const { randomUUID } = await import("crypto");
         const subagentChainId = randomUUID();
         const subagentChainStartTime = deferred?.start_time ?? Date.now();
         const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentChainStartTime, subagentChainId, 1)}`;
@@ -250,7 +255,7 @@ async function main(): Promise<void> {
           id: subagentChainId,
           name: `${toolName} Subagent`,
           run_type: "chain",
-          inputs: {},
+          inputs: deferred?.inputs ?? {},
           outputs: { output: deferred?.outputs },
           project_name: config.project,
           start_time: subagentChainStartTime,
@@ -261,6 +266,7 @@ async function main(): Promise<void> {
           extra: {
             metadata: {
               thread_id: input.session_id,
+              ls_integration: "claude-code",
               agent_type: toolName,
               agent_id: subagent.agent_id,
             },
@@ -273,7 +279,7 @@ async function main(): Promise<void> {
             sessionId: input.session_id,
             turnNum: i + 1,
             project: config.project,
-            isSubagent: true,
+
             parentRunId: subagentChainId,
             existingTaskRunMap: undefined,
             traceId: parentTraceId,
@@ -295,20 +301,22 @@ async function main(): Promise<void> {
     await flushPendingTraces();
   }
 
-  // Save updated state — use freshState as base so we don't clobber
-  // writes from PostToolUse/SubagentStop, then layer our updates on top.
-  const updatedState = updateSessionState(
-    freshState,
-    input.session_id,
-    lastLine,
-    sessionState.turn_count + tracedTurns,
-    allTaskRunMaps,
-  );
-  // Clear fields that are no longer needed
-  updatedState[input.session_id].current_turn_run_id = undefined;
-  updatedState[input.session_id].pending_subagent_traces = [];
-  updatedState[input.session_id].traced_tool_use_ids = [];
-  saveState(config.stateFilePath, updatedState);
+  // Save updated state — re-read inside the lock so we don't clobber
+  // concurrent writes from PostToolUse/SubagentStop.
+  await atomicUpdateState(config.stateFilePath, (latestState) => {
+    const updatedState = updateSessionState(
+      latestState,
+      input.session_id,
+      lastLine,
+      sessionState.turn_count + tracedTurns,
+      { ...getSessionState(latestState, input.session_id).task_run_map, ...allTaskRunMaps },
+    );
+    // Clear fields that are no longer needed
+    updatedState[input.session_id].current_turn_run_id = undefined;
+    updatedState[input.session_id].pending_subagent_traces = [];
+    updatedState[input.session_id].traced_tool_use_ids = [];
+    return updatedState;
+  });
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
   log(`Processed ${tracedTurns} turns in ${duration}s`);

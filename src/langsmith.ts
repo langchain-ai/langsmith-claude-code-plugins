@@ -6,6 +6,7 @@
  * serialization, retries, and auth automatically.
  */
 
+import { randomUUID } from "node:crypto";
 import { Client } from "langsmith";
 import type { Turn, ContentBlock, Usage } from "./types.js";
 import * as logger from "./logger.js";
@@ -118,7 +119,6 @@ export interface TraceTurnOptions {
   sessionId: string;
   turnNum: number;
   project: string;
-  isSubagent?: boolean;
   parentRunId?: string;
   existingTaskRunMap?: Record<string, { run_id: string; dotted_order: string }>;
   /** tool_use_ids already traced by PostToolUse — skip creating runs for these */
@@ -139,7 +139,6 @@ export async function traceTurn(
     sessionId,
     turnNum,
     project,
-    isSubagent = false,
     parentRunId,
     existingTaskRunMap,
     tracedToolUseIds,
@@ -154,12 +153,6 @@ export async function traceTurn(
   }
 
   const userContent = [{ type: "text", text: turn.userContent }];
-
-  // Build tags - add "subagent" tag if this is a subagent trace
-  const tags = ["claude-code", `turn-${turnNum}`];
-  if (isSubagent) {
-    tags.push("subagent");
-  }
 
   // Determine the turn run ID and whether we need to create it
   let turnRunId: string;
@@ -181,7 +174,6 @@ export async function traceTurn(
   } else {
     // Create a new turn run for interrupted/standalone turns
     shouldCreateTurn = true;
-    const { randomUUID } = await import("crypto");
     turnRunId = randomUUID();
     traceId = turnRunId; // This turn is its own trace root
 
@@ -201,7 +193,7 @@ export async function traceTurn(
       extra: {
         metadata: {
           thread_id: sessionId,
-          tags,
+          ls_integration: "claude-code",
           turn_number: turnNum,
         },
       },
@@ -219,21 +211,17 @@ export async function traceTurn(
   };
 
   let lastEndTime = turn.userTimestamp;
-  let childCounter = 0;
 
   // 2. Process each LLM call - create as children of the turn run
   for (const llmCall of turn.llmCalls) {
     const assistantContent = formatContent(llmCall.content);
 
     // Generate run ID for this LLM call
-    const { randomUUID } = await import("crypto");
     const assistantRunId = randomUUID();
-    childCounter++;
     const assistantStartTime = isoToMillis(llmCall.startTime);
     const assistantDottedOrderSegment = generateDottedOrderSegment(
       assistantStartTime,
       assistantRunId,
-      childCounter,
     );
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
 
@@ -251,6 +239,7 @@ export async function traceTurn(
       extra: {
         metadata: {
           thread_id: sessionId,
+          ls_integration: "claude-code",
           ls_provider: "anthropic",
           ls_model_name: llmCall.model,
           usage_metadata: buildUsageMetadata(llmCall.usage),
@@ -273,18 +262,16 @@ export async function traceTurn(
         continue;
       }
 
-      const toolStartTime = llmCall.endTime; // tools start after LLM finishes
+      // Tools start when the LLM finishes, but for parallel tool calls the result
+      // timestamp can precede the last LLM streaming chunk. Clamp to avoid negative latency.
       const toolEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
+      const toolStartTime =
+        isoToMillis(llmCall.endTime) <= isoToMillis(toolEndTime) ? llmCall.endTime : toolEndTime;
 
       // Generate run ID for this tool
       const toolRunId = randomUUID();
-      childCounter++;
       const toolStartTimeMs = isoToMillis(toolStartTime);
-      const toolDottedOrderSegment = generateDottedOrderSegment(
-        toolStartTimeMs,
-        toolRunId,
-        childCounter,
-      );
+      const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTimeMs, toolRunId);
       const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
 
       // Create and complete tool run in a single call.
@@ -301,7 +288,7 @@ export async function traceTurn(
         trace_id: traceId,
         dotted_order: toolDottedOrder,
         extra: {
-          metadata: { thread_id: sessionId },
+          metadata: { thread_id: sessionId, ls_integration: "claude-code" },
           tags: ["tool"],
         },
       });
@@ -333,6 +320,7 @@ export async function traceTurn(
       extra: {
         metadata: {
           thread_id: sessionId,
+          ls_integration: "claude-code",
           usage_metadata: buildUsageMetadata(llmCall.usage),
         },
       },
@@ -364,6 +352,12 @@ export async function traceTurn(
       end_time: isoToMillis(lastEndTime),
       outputs: { messages: turnOutputs },
       error: error,
+      extra: {
+        metadata: {
+          thread_id: sessionId,
+          ls_integration: "claude-code",
+        },
+      },
     });
   }
 

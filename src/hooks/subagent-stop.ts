@@ -13,7 +13,7 @@
  */
 
 import { debug, error } from "../logger.js";
-import { loadState, saveState, getSessionState } from "../state.js";
+import { atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import type { SubagentStopHookInput } from "../types.js";
@@ -35,23 +35,23 @@ async function main(): Promise<void> {
 
   // Queue subagent info for the Stop hook to process later.
   // This avoids the race condition with PostToolUse (both run async).
-  const state = loadState(config.stateFilePath);
-  const parentSessionState = getSessionState(state, input.session_id);
-
-  const pendingTraces = parentSessionState.pending_subagent_traces || [];
-  pendingTraces.push({
-    agent_id: input.agent_id,
-    agent_type: input.agent_type,
-    agent_transcript_path: agentTranscriptPath,
-    session_id: input.session_id,
-  });
-
-  saveState(config.stateFilePath, {
-    ...state,
-    [input.session_id]: {
-      ...parentSessionState,
-      pending_subagent_traces: pendingTraces,
-    },
+  await atomicUpdateState(config.stateFilePath, (state) => {
+    const parentSessionState = getSessionState(state, input.session_id);
+    return {
+      ...state,
+      [input.session_id]: {
+        ...parentSessionState,
+        pending_subagent_traces: [
+          ...(parentSessionState.pending_subagent_traces || []),
+          {
+            agent_id: input.agent_id,
+            agent_type: input.agent_type,
+            agent_transcript_path: agentTranscriptPath,
+            session_id: input.session_id,
+          },
+        ],
+      },
+    };
   });
 
   debug(
