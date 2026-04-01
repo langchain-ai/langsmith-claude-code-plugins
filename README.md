@@ -1,6 +1,6 @@
 # LangSmith Tracing Plugin for Claude Code
 
-A Claude Code plugin that traces conversations, tool calls, and subagent executions to [LangSmith](https://smith.langchain.com).
+A Claude Code plugin that traces conversations, tool calls, subagent executions, and context compaction to [LangSmith](https://smith.langchain.com).
 
 ## Installation
 
@@ -60,16 +60,24 @@ export CC_LANGSMITH_PROJECT="my-project"
 
 ## How it works
 
-The plugin registers two hooks:
+The plugin registers hooks that fire at different points in a Claude Code session.
+
+### `UserPromptSubmit` hook
+
+Fires when you submit a prompt. Creates the top-level Turn run in LangSmith so tool traces can be nested under it in real time.
+
+### `PostToolUse` hook
+
+Fires immediately after each tool executes. Creates a tool run in LangSmith while the session is still ongoing, so traces appear progressively rather than all at once at the end.
 
 ### `Stop` hook
 
-Fires when the main Claude Code agent finishes responding. Reads the JSONL transcript, identifies new messages since the last invocation, groups them into turns, and sends traces to LangSmith.
+Fires when the main agent finishes responding. Reads the JSONL transcript, reconciles any LLM calls not yet traced, completes the Turn run, and processes any pending subagent traces.
 
 **Trace hierarchy:**
 
 ```
-Turn (chain) — "Claude Code"
+Turn (chain)
 ├── Claude (llm) — first LLM call
 ├── Read (tool)
 ├── Edit (tool)
@@ -79,9 +87,32 @@ Turn (chain) — "Claude Code"
 
 ### `SubagentStop` hook
 
-Fires when a subagent finishes. Reads the subagent's separate transcript file and traces it as a standalone trace in LangSmith, tagged with the agent type and ID.
+Fires when a subagent (spawned via the Agent tool) finishes. Queues the subagent's transcript for processing by the Stop hook, which nests it under the Agent tool run that spawned it.
 
-Runs asynchronously so it doesn't block the main agent.
+```
+Turn (chain)
+└── Agent (tool)
+    └── general-purpose Subagent (chain)
+        ├── Claude (llm)
+        ├── Bash (tool)
+        └── Claude (llm)
+```
+
+### `PreCompact` / `PostCompact` hooks
+
+Fire before and after a context compaction operation. Creates a standalone LangSmith run capturing the compaction trigger and summary, linked to the session via `thread_id`.
+
+## What gets traced
+
+Each LLM run includes:
+
+- **Inputs**: accumulated conversation messages
+- **Outputs**: assistant response content
+- **Metadata**: `ls_provider: "anthropic"`, `ls_model_name`, `ls_invocation_params` (model, stop reason), token usage
+
+Tool runs include the tool name, inputs, and output content.
+
+Interrupted turns (where the user cancels mid-response) are marked with status `"interrupted"` in LangSmith.
 
 ## Architecture
 
@@ -90,13 +121,17 @@ src/
 ├── types.ts          # TypeScript types for hook inputs, transcript messages, runs
 ├── config.ts         # Environment variable configuration
 ├── logger.ts         # File-based logger (writes to ~/.claude/state/hook.log)
-├── state.ts          # Persistent state (tracks transcript read position per session)
+├── state.ts          # Persistent state with file locking (tracks transcript position per session)
 ├── transcript.ts     # JSONL transcript parser — groups messages into Turns
 ├── langsmith.ts      # LangSmith run construction using the official JS SDK
 ├── index.ts          # Public API re-exports
 └── hooks/
-    ├── stop.ts           # Stop hook entry point
-    └── subagent-stop.ts  # SubagentStop hook entry point
+    ├── user-prompt-submit.ts  # UserPromptSubmit hook
+    ├── post-tool-use.ts       # PostToolUse hook
+    ├── stop.ts                # Stop hook
+    ├── subagent-stop.ts       # SubagentStop hook
+    ├── pre-compact.ts         # PreCompact hook
+    └── post-compact.ts        # PostCompact hook
 ```
 
 ## Development
@@ -108,7 +143,7 @@ pnpm test        # Run tests
 pnpm build       # Production build
 ```
 
-After making changes, run `/reload-plugins` in Claude Code to pick up updates.
+After making changes, run `pnpm build` and send a new message in Claude Code to pick up the updated hooks.
 
 ## License
 

@@ -242,6 +242,10 @@ export async function traceTurn(
           ls_integration: "claude-code",
           ls_provider: "anthropic",
           ls_model_name: llmCall.model,
+          ls_invocation_params: {
+            model: llmCall.model,
+            ...(llmCall.stopReason != null ? { stop_reason: llmCall.stopReason } : {}),
+          },
           usage_metadata: buildUsageMetadata(llmCall.usage),
         },
         tags: [llmCall.model],
