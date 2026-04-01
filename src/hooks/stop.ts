@@ -10,7 +10,13 @@
 import { uuid7 } from "langsmith";
 import { readTranscript, groupIntoTurns } from "../transcript.js";
 import { log, warn, debug, error } from "../logger.js";
-import { loadState, atomicUpdateState, getSessionState, updateSessionState } from "../state.js";
+import {
+  loadState,
+  atomicUpdateState,
+  getSessionState,
+  updateSessionState,
+  pruneOldSessions,
+} from "../state.js";
 import {
   initClient,
   traceTurn,
@@ -98,6 +104,7 @@ async function main(): Promise<void> {
         startTime: syntheticStart,
         endTime: syntheticEnd,
         toolCalls: [],
+        synthetic: true,
       });
     }
   }
@@ -320,7 +327,7 @@ async function main(): Promise<void> {
     updatedState[input.session_id].current_turn_run_id = undefined;
     updatedState[input.session_id].pending_subagent_traces = [];
     updatedState[input.session_id].traced_tool_use_ids = [];
-    return updatedState;
+    return pruneOldSessions(updatedState);
   });
 
   // Flush pending batches to ensure all traces are sent before hook exits.

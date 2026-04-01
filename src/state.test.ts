@@ -8,6 +8,7 @@ import {
   getSessionState,
   updateSessionState,
   atomicUpdateState,
+  pruneOldSessions,
 } from "./state.js";
 
 let tmpDir: string;
@@ -130,6 +131,49 @@ describe("atomicUpdateState", () => {
       s1: { ...state.s1, last_line: 99 },
     }));
     expect(loadState(path).s1.last_line).toBe(99);
+  });
+});
+
+describe("pruneOldSessions", () => {
+  const now = Date.now();
+  const eightDaysAgo = new Date(now - 8 * 24 * 60 * 60 * 1000).toISOString();
+  const oneHourAgo = new Date(now - 60 * 60 * 1000).toISOString();
+
+  it("removes sessions older than 7 days", () => {
+    const state = {
+      old: { last_line: 5, turn_count: 1, updated: eightDaysAgo },
+      recent: { last_line: 10, turn_count: 2, updated: oneHourAgo },
+    };
+    const result = pruneOldSessions(state, now);
+    expect(result).not.toHaveProperty("old");
+    expect(result).toHaveProperty("recent");
+  });
+
+  it("removes sessions with empty updated field", () => {
+    const state = {
+      noTimestamp: { last_line: 0, turn_count: 0, updated: "" },
+      recent: { last_line: 1, turn_count: 1, updated: oneHourAgo },
+    };
+    const result = pruneOldSessions(state, now);
+    expect(result).not.toHaveProperty("noTimestamp");
+    expect(result).toHaveProperty("recent");
+  });
+
+  it("returns empty object when all sessions are stale", () => {
+    const state = {
+      old1: { last_line: 0, turn_count: 0, updated: eightDaysAgo },
+      old2: { last_line: 0, turn_count: 0, updated: eightDaysAgo },
+    };
+    expect(pruneOldSessions(state, now)).toEqual({});
+  });
+
+  it("keeps all sessions when none are stale", () => {
+    const state = {
+      a: { last_line: 0, turn_count: 0, updated: oneHourAgo },
+      b: { last_line: 0, turn_count: 0, updated: oneHourAgo },
+    };
+    const result = pruneOldSessions(state, now);
+    expect(Object.keys(result)).toHaveLength(2);
   });
 });
 

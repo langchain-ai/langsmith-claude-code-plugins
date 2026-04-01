@@ -16,6 +16,12 @@ export {
 
 export { initClient, traceTurn, flushPendingTraces } from "./langsmith.js";
 
-export { loadState, saveState, getSessionState, updateSessionState } from "./state.js";
+export {
+  loadState,
+  saveState,
+  getSessionState,
+  updateSessionState,
+  pruneOldSessions,
+} from "./state.js";
 
 export type * from "./types.js";

@@ -94,6 +94,25 @@ export function getSessionState(state: TracingState, sessionId: string): Session
   );
 }
 
+// ─── Session pruning ───────────────────────────────────────────────────────
+
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/**
+ * Remove sessions whose `updated` timestamp is older than SESSION_MAX_AGE_MS.
+ */
+export function pruneOldSessions(state: TracingState, now: number = Date.now()): TracingState {
+  const cutoff = now - SESSION_MAX_AGE_MS;
+  const pruned: TracingState = {};
+  for (const [sessionId, session] of Object.entries(state)) {
+    const updatedMs = session.updated ? new Date(session.updated).getTime() : 0;
+    if (updatedMs >= cutoff) {
+      pruned[sessionId] = session;
+    }
+  }
+  return pruned;
+}
+
 export function updateSessionState(
   state: TracingState,
   sessionId: string,

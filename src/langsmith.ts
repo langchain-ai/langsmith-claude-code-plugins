@@ -326,6 +326,7 @@ export async function traceTurn(
             model: llmCall.model,
           },
           usage_metadata: buildUsageMetadata(llmCall.usage),
+          ...(llmCall.synthetic ? { synthetic: true } : {}),
         },
       },
     });

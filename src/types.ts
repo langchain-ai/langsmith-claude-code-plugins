@@ -143,6 +143,8 @@ export interface LLMCall {
   endTime: string;
   /** Tool calls made in this response. */
   toolCalls: ToolCall[];
+  /** True if this LLM call was synthesized (not from the transcript). */
+  synthetic?: boolean;
 }
 
 /** A complete turn: one user prompt → one or more LLM calls. */
