@@ -1,4 +1,0 @@
-{"type": "user", "role": "user", "content": "Read file test.txt", "timestamp": "2025-12-23T00:38:30.200007Z"}
-{"type": "assistant", "message": {"id": "msg_ff5a77ea", "role": "assistant", "model": "claude-sonnet-4-5-20250929", "content": [{"type": "text", "text": "I'll read that file."}, {"type": "tool_use", "id": "tool_0d13cad9", "name": "Read", "input": {"file_path": "/test/test.txt"}}], "usage": {"input_tokens": 10, "output_tokens": 15}}, "timestamp": "2025-12-23T00:38:30.200018Z"}
-{"type": "user", "role": "user", "content": [{"type": "tool_result", "tool_use_id": "tool_0d13cad9", "content": "File content: hello world"}], "timestamp": "2025-12-23T00:38:30.200021Z"}
-{"type": "assistant", "message": {"id": "msg_c47e16d2", "role": "assistant", "model": "claude-sonnet-4-5-20250929", "content": [{"type": "text", "text": "The file says: hello world"}], "usage": {"input_tokens": 10, "output_tokens": 5}}, "timestamp": "2025-12-23T00:38:30.200026Z"}

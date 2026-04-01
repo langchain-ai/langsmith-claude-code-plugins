@@ -1,0 +1,550 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { Turn } from "./types.js";
+
+const mockCreateRun = vi.fn().mockResolvedValue(undefined);
+const mockUpdateRun = vi.fn().mockResolvedValue(undefined);
+const mockAwaitPendingTraceBatches = vi.fn().mockResolvedValue(undefined);
+
+vi.mock("langsmith", () => {
+  class MockClient {
+    createRun = mockCreateRun;
+    updateRun = mockUpdateRun;
+    awaitPendingTraceBatches = mockAwaitPendingTraceBatches;
+  }
+
+  return { Client: MockClient };
+});
+
+vi.mock("./logger.js", () => ({
+  log: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  initLogger: vi.fn(),
+}));
+
+import { initClient, traceTurn, generateDottedOrderSegment } from "./langsmith.js";
+
+// ─── generateDottedOrderSegment ─────────────────────────────────────────────
+
+describe("generateDottedOrderSegment", () => {
+  it("generates a segment with timestamp and run ID", () => {
+    const epoch = new Date("2025-01-01T00:00:00.000Z").getTime();
+    const runId = "abc-123";
+    const segment = generateDottedOrderSegment(epoch, runId, 1);
+    // Should be stripped ISO timestamp + padded execution order + Z + runId
+    expect(segment).toContain("abc-123");
+    expect(segment).toMatch(/^\d{8}T\d{12}Zabc-123$/);
+  });
+
+  it("pads execution order to 3 digits", () => {
+    const epoch = new Date("2025-01-01T00:00:00.000Z").getTime();
+    const seg1 = generateDottedOrderSegment(epoch, "id", 1);
+    const seg2 = generateDottedOrderSegment(epoch, "id", 12);
+    expect(seg1).toContain("001");
+    expect(seg2).toContain("012");
+  });
+});
+
+// ─── traceTurn ──────────────────────────────────────────────────────────────
+
+describe("traceTurn", () => {
+  beforeEach(() => {
+    mockCreateRun.mockClear();
+    mockUpdateRun.mockClear();
+    mockAwaitPendingTraceBatches.mockClear();
+    initClient("test-api-key", "https://test.api.com");
+  });
+
+  it("creates a standalone turn when no parentRunId given", async () => {
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Should create: turn run + assistant run = 2 createRun calls
+    expect(mockCreateRun).toHaveBeenCalledTimes(2);
+
+    // First call creates the standalone turn
+    const turnCall = mockCreateRun.mock.calls[0][0];
+    expect(turnCall.name).toBe("Claude Code");
+    expect(turnCall.run_type).toBe("chain");
+    expect(turnCall.trace_id).toBe(turnCall.id); // root trace
+    expect(turnCall.dotted_order).toBeTruthy();
+
+    // Second call creates the assistant LLM run
+    const llmCall = mockCreateRun.mock.calls[1][0];
+    expect(llmCall.name).toBe("Claude");
+    expect(llmCall.run_type).toBe("llm");
+    expect(llmCall.parent_run_id).toBe(turnCall.id);
+    expect(llmCall.trace_id).toBe(turnCall.id);
+    expect(llmCall.extra.metadata.ls_provider).toBe("anthropic");
+    expect(llmCall.extra.metadata.ls_model_name).toBe("claude-sonnet-4-5");
+
+    // Should update: assistant run + turn run = 2 updateRun calls
+    expect(mockUpdateRun).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses existing parentRunId and skips creating turn run", async () => {
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    const parentRunId = "parent-run-id";
+    const traceId = "trace-id";
+    const parentDottedOrder = "20250101T000000000Z001parent-run-id";
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+      parentRunId,
+      traceId,
+      parentDottedOrder,
+    });
+
+    // Should only create 1 run (assistant), NOT a turn run
+    expect(mockCreateRun).toHaveBeenCalledTimes(1);
+
+    const llmCall = mockCreateRun.mock.calls[0][0];
+    expect(llmCall.name).toBe("Claude");
+    expect(llmCall.run_type).toBe("llm");
+    expect(llmCall.parent_run_id).toBe(parentRunId);
+    expect(llmCall.trace_id).toBe(traceId);
+    expect(llmCall.dotted_order).toContain(parentDottedOrder);
+
+    // Should only update 1 run (assistant), no turn update
+    expect(mockUpdateRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws when parentRunId given without trace context", async () => {
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [],
+      isComplete: true,
+    };
+
+    await expect(
+      traceTurn({
+        turn,
+        sessionId: "session-123",
+        turnNum: 1,
+        project: "test-project",
+        parentRunId: "some-id",
+        // missing traceId and parentDottedOrder
+      }),
+    ).rejects.toThrow("Missing trace context");
+  });
+
+  it("creates tool runs as children of turn, not assistant", async () => {
+    const turn: Turn = {
+      userContent: "Read a file",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [
+            { type: "text", text: "I'll read that." },
+            { type: "tool_use", id: "tool_1", name: "Read", input: { file_path: "/test.txt" } },
+          ],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 15 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [
+            {
+              tool_use: {
+                type: "tool_use",
+                id: "tool_1",
+                name: "Read",
+                input: { file_path: "/test.txt" },
+              },
+              result: { content: "file contents", timestamp: "2025-01-01T00:00:03Z" },
+            },
+          ],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Should create: turn + assistant + tool = 3 createRun calls
+    expect(mockCreateRun).toHaveBeenCalledTimes(3);
+
+    const turnCall = mockCreateRun.mock.calls[0][0];
+    const llmCall = mockCreateRun.mock.calls[1][0];
+    const toolCall = mockCreateRun.mock.calls[2][0];
+
+    // Tool is child of turn, not assistant
+    expect(toolCall.parent_run_id).toBe(turnCall.id);
+    expect(toolCall.name).toBe("Read");
+    expect(toolCall.run_type).toBe("tool");
+    expect(toolCall.inputs).toEqual({ input: { file_path: "/test.txt" } });
+
+    // LLM is also child of turn
+    expect(llmCall.parent_run_id).toBe(turnCall.id);
+
+    // Should update: tool + assistant + turn = 3 updateRun calls
+    expect(mockUpdateRun).toHaveBeenCalledTimes(3);
+
+    // Tool update should have output
+    const toolUpdate = mockUpdateRun.mock.calls[0];
+    expect(toolUpdate[1].outputs).toEqual({ output: "file contents" });
+  });
+
+  it("handles multiple LLM calls in a turn", async () => {
+    const turn: Turn = {
+      userContent: "Do stuff",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [
+            { type: "text", text: "First." },
+            { type: "tool_use", id: "tool_1", name: "Read", input: {} },
+          ],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 10 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [
+            {
+              tool_use: { type: "tool_use", id: "tool_1", name: "Read", input: {} },
+              result: { content: "data", timestamp: "2025-01-01T00:00:03Z" },
+            },
+          ],
+        },
+        {
+          content: [{ type: "text", text: "Done." }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 20, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:04Z",
+          endTime: "2025-01-01T00:00:05Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Should create: turn + assistant1 + tool + assistant2 = 4 createRun calls
+    expect(mockCreateRun).toHaveBeenCalledTimes(4);
+
+    // Second assistant should include accumulated context in inputs
+    const assistant2Call = mockCreateRun.mock.calls[3][0];
+    expect(assistant2Call.inputs.messages).toHaveLength(3); // user + assistant1 + tool_result
+    expect(assistant2Call.inputs.messages[0].role).toBe("user");
+    expect(assistant2Call.inputs.messages[1].role).toBe("assistant");
+    expect(assistant2Call.inputs.messages[2].role).toBe("tool");
+  });
+
+  it("includes usage_metadata in assistant run update", async () => {
+    const turn: Turn = {
+      userContent: "Hi",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hello" }],
+          model: "claude-sonnet-4-5",
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 500,
+            cache_creation_input_tokens: 200,
+          },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // First updateRun call is the assistant run (before the turn update)
+    const assistantUpdateArgs = mockUpdateRun.mock.calls[0][1];
+    expect(assistantUpdateArgs.extra.metadata.usage_metadata).toEqual({
+      input_tokens: 800, // 100 + 200 + 500
+      output_tokens: 50,
+      input_token_details: {
+        cache_read: 500,
+        cache_creation: 200,
+      },
+    });
+  });
+
+  it("filters user messages from standalone turn outputs", async () => {
+    const turn: Turn = {
+      userContent: "Hi",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hello" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Last updateRun call is the turn completion (standalone turn)
+    const turnUpdateArgs = mockUpdateRun.mock.calls[mockUpdateRun.mock.calls.length - 1][1];
+    const outputRoles = turnUpdateArgs.outputs.messages.map(
+      (m: Record<string, unknown>) => m.role,
+    );
+    expect(outputRoles).not.toContain("user");
+  });
+
+  it("defaults tool result to 'No result' when missing", async () => {
+    const turn: Turn = {
+      userContent: "Run",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [
+            { type: "text", text: "Running." },
+            { type: "tool_use", id: "tool_1", name: "Bash", input: { command: "ls" } },
+          ],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 10 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [
+            {
+              tool_use: { type: "tool_use", id: "tool_1", name: "Bash", input: { command: "ls" } },
+              // no result
+            },
+          ],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Tool updateRun call should have "No result" output
+    // createRun: turn, assistant, tool (3 calls)
+    // updateRun: tool, assistant, turn (3 calls)
+    const toolUpdateArgs = mockUpdateRun.mock.calls[0][1];
+    expect(toolUpdateArgs.outputs).toEqual({ output: "No result" });
+  });
+
+  it("skips Task tools already in existingTaskRunMap", async () => {
+    const turn: Turn = {
+      userContent: "Use a subagent",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [
+            { type: "text", text: "I'll use a subagent." },
+            { type: "tool_use", id: "tool_1", name: "Task", input: { description: "do stuff" } },
+          ],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 15 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [
+            {
+              tool_use: {
+                type: "tool_use",
+                id: "tool_1",
+                name: "Task",
+                input: { description: "do stuff" },
+              },
+              result: { content: "done", timestamp: "2025-01-01T00:00:03Z" },
+              agentId: "agent-1",
+            },
+          ],
+        },
+      ],
+      isComplete: true,
+    };
+
+    const parentRunId = "parent-run-id";
+    const traceId = "trace-id";
+    const parentDottedOrder = "20250101T000000000Z001parent-run-id";
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+      parentRunId,
+      traceId,
+      parentDottedOrder,
+      existingTaskRunMap: {
+        "agent-1": { run_id: "existing-tool-run", dotted_order: "existing-dotted" },
+      },
+    });
+
+    // Should create only 1 run (assistant), NOT a tool run since it was already traced
+    expect(mockCreateRun).toHaveBeenCalledTimes(1);
+    expect(mockCreateRun.mock.calls[0][0].run_type).toBe("llm");
+  });
+
+  it("returns taskRunMap for Task tools with agentId", async () => {
+    const turn: Turn = {
+      userContent: "Use a subagent",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [
+            { type: "text", text: "Spawning." },
+            { type: "tool_use", id: "tool_1", name: "Task", input: { description: "do stuff" } },
+          ],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 15 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [
+            {
+              tool_use: {
+                type: "tool_use",
+                id: "tool_1",
+                name: "Task",
+                input: { description: "do stuff" },
+              },
+              result: { content: "done", timestamp: "2025-01-01T00:00:03Z" },
+              agentId: "agent-1",
+            },
+          ],
+        },
+      ],
+      isComplete: true,
+    };
+
+    const result = await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Should return a taskRunMap entry for the agent
+    expect(result["agent-1"]).toBeDefined();
+    expect(result["agent-1"].run_id).toBeTruthy();
+    expect(result["agent-1"].dotted_order).toBeTruthy();
+  });
+
+  it("marks interrupted turns with error when standalone", async () => {
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "I was interrupted" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: false, // interrupted
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Last updateRun call is the turn completion
+    const turnUpdateArgs = mockUpdateRun.mock.calls[mockUpdateRun.mock.calls.length - 1][1];
+    expect(turnUpdateArgs.error).toBe("Interrupted");
+  });
+
+  it("adds subagent tag when isSubagent is true", async () => {
+    const turn: Turn = {
+      userContent: "Subagent task",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Done" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+      isSubagent: true,
+    });
+
+    // Standalone turn should have subagent tag in metadata
+    const turnCall = mockCreateRun.mock.calls[0][0];
+    expect(turnCall.extra.metadata.tags).toContain("subagent");
+  });
+});

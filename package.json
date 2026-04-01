@@ -1,0 +1,32 @@
+{
+  "name": "@langchain/langsmith-claude-code-plugin",
+  "version": "0.1.0",
+  "description": "Claude Code plugin for LangSmith tracing",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "postbuild": "chmod +x dist/hooks/user-prompt-submit.js dist/hooks/post-tool-use.js dist/hooks/stop.js dist/hooks/subagent-stop.js",
+    "dev": "tsc --watch",
+    "format": "oxfmt --write",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "langsmith": "^0.5.15"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "oxfmt": "^0.43.0",
+    "oxlint": "^1.58.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"
+}

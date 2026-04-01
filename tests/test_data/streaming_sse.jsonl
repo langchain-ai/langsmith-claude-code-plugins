@@ -1,5 +1,0 @@
-{"type": "user", "role": "user", "content": "Tell me a story", "timestamp": "2025-12-23T00:38:30.200150Z"}
-{"type": "assistant", "message": {"id": "msg_3cc4f9e4", "role": "assistant", "model": "claude-sonnet-4-5-20250929", "content": [{"type": "text", "text": "Once "}], "usage": {"input_tokens": 10, "output_tokens": 2}}, "timestamp": "2025-12-23T00:38:30.200157Z"}
-{"type": "assistant", "message": {"id": "msg_3cc4f9e4", "role": "assistant", "model": "claude-sonnet-4-5-20250929", "content": [{"type": "text", "text": "upon "}], "usage": {"input_tokens": 10, "output_tokens": 4}}, "timestamp": "2025-12-23T00:38:30.200159Z"}
-{"type": "assistant", "message": {"id": "msg_3cc4f9e4", "role": "assistant", "model": "claude-sonnet-4-5-20250929", "content": [{"type": "text", "text": "a "}], "usage": {"input_tokens": 10, "output_tokens": 6}}, "timestamp": "2025-12-23T00:38:30.200161Z"}
-{"type": "assistant", "message": {"id": "msg_3cc4f9e4", "role": "assistant", "model": "claude-sonnet-4-5-20250929", "content": [{"type": "text", "text": "time..."}], "usage": {"input_tokens": 10, "output_tokens": 8}}, "timestamp": "2025-12-23T00:38:30.200162Z"}
