@@ -2,6 +2,8 @@
 
 A Claude Code plugin that traces conversations, tool calls, subagent executions, and context compaction to [LangSmith](https://smith.langchain.com).
 
+![](./static/img/example_trace.png)
+
 ## Installation
 
 ### From source (development)
@@ -16,13 +18,14 @@ claude --plugin-dir /path/to/tracing-claude-code
 
 ### Environment variables
 
-| Variable               | Required | Default                           | Description                                           |
-| ---------------------- | -------- | --------------------------------- | ----------------------------------------------------- |
-| `TRACE_TO_LANGSMITH`   | Yes      | —                                 | Set to `"true"` to enable tracing                     |
-| `CC_LANGSMITH_API_KEY` | Yes      | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`) |
-| `CC_LANGSMITH_PROJECT` | No       | `"claude-code"`                   | LangSmith project name                                |
-| `LANGSMITH_ENDPOINT`   | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                |
-| `CC_LANGSMITH_DEBUG`   | No       | `"false"`                         | Enable debug logging                                  |
+| Variable                           | Required | Default                           | Description                                                          |
+| ---------------------------------- | -------- | --------------------------------- | -------------------------------------------------------------------- |
+| `TRACE_TO_LANGSMITH`               | Yes      | —                                 | Set to `"true"` to enable tracing                                    |
+| `CC_LANGSMITH_API_KEY`             | Yes      | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`)                |
+| `CC_LANGSMITH_PROJECT`             | No       | `"claude-code"`                   | LangSmith project name                                               |
+| `LANGSMITH_ENDPOINT`               | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                               |
+| `CC_LANGSMITH_DEBUG`               | No       | `"false"`                         | Enable debug logging                                                 |
+| `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | —                                 | Dotted-order of an existing run to nest all Claude Code traces under |
 
 ### Setting environment variables
 
@@ -113,6 +116,58 @@ Each LLM run includes:
 Tool runs include the tool name, inputs, and output content.
 
 Interrupted turns (where the user cancels mid-response) are marked with status `"interrupted"` in LangSmith.
+
+## Nesting traces under an existing run
+
+Set `CC_LANGSMITH_PARENT_DOTTED_ORDER` to nest all Claude Code traces as children of an existing LangSmith run. This is useful when Claude Code is invoked programmatically as part of a larger traced workflow.
+
+**Python**
+
+```python
+import subprocess
+from langsmith import traceable, get_current_run_tree
+
+@traceable
+def run_claude(prompt: str):
+    run_tree = get_current_run_tree()
+    subprocess.run(
+        ["claude", "-p", prompt],
+        env={
+            **os.environ,
+            "CC_LANGSMITH_PARENT_DOTTED_ORDER": run_tree.dotted_order,
+        },
+    )
+```
+
+**TypeScript**
+
+```ts
+import { traceable, getCurrentRunTree } from "langsmith/traceable";
+import { execSync } from "node:child_process";
+
+const runClaude = traceable(
+  async (prompt: string) => {
+    const runTree = getCurrentRunTree();
+    execSync(`claude -p "${prompt}"`, {
+      env: {
+        ...process.env,
+        CC_LANGSMITH_PARENT_DOTTED_ORDER: runTree.dotted_order,
+      },
+    });
+  },
+  { name: "run_claude" },
+);
+```
+
+The resulting trace hierarchy looks like:
+
+```
+Your outer run (chain)
+└── Claude Code Turn (chain)
+    ├── Claude (llm)
+    ├── Read (tool)
+    └── Claude (llm)
+```
 
 ## Development
 

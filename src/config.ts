@@ -8,6 +8,8 @@ export interface Config {
   apiBaseUrl: string;
   stateFilePath: string;
   debug: boolean;
+  /** Dotted-order string of an existing LangSmith run to nest all traces under. */
+  parentDottedOrder?: string;
 }
 
 export function loadConfig(): Config {
@@ -22,5 +24,7 @@ export function loadConfig(): Config {
 
   const debug = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
 
-  return { apiKey, project, apiBaseUrl, stateFilePath, debug };
+  const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || undefined;
+
+  return { apiKey, project, apiBaseUrl, stateFilePath, debug, parentDottedOrder };
 }

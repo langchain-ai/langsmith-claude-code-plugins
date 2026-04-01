@@ -9,7 +9,12 @@
 
 import { randomUUID } from "node:crypto";
 import { debug, error } from "../logger.js";
-import { initClient, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
+import {
+  initClient,
+  generateDottedOrderSegment,
+  parseDottedOrder,
+  flushPendingTraces,
+} from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -49,7 +54,23 @@ async function main(): Promise<void> {
 
   const runId = randomUUID();
   const startTime = Date.now();
-  const dottedOrder = generateDottedOrderSegment(startTime, runId, 1);
+  const segment = generateDottedOrderSegment(startTime, runId);
+
+  // If a parent dotted_order is provided, nest this turn under the existing run.
+  let traceId: string;
+  let parentRunId: string | undefined;
+  let dottedOrder: string;
+  if (config.parentDottedOrder) {
+    const parsed = parseDottedOrder(config.parentDottedOrder);
+    traceId = parsed.traceId;
+    parentRunId = parsed.runId;
+    dottedOrder = `${config.parentDottedOrder}.${segment}`;
+    debug(`Nesting under parent run ${parentRunId} (trace ${traceId})`);
+  } else {
+    traceId = runId;
+    parentRunId = undefined;
+    dottedOrder = segment;
+  }
 
   await client.createRun({
     id: runId,
@@ -58,8 +79,9 @@ async function main(): Promise<void> {
     inputs: { messages: [{ role: "user", content: input.prompt }] },
     project_name: config.project,
     start_time: startTime,
-    trace_id: runId,
+    trace_id: traceId,
     dotted_order: dottedOrder,
+    ...(parentRunId ? { parent_run_id: parentRunId } : {}),
   });
 
   await flushPendingTraces();
@@ -72,7 +94,7 @@ async function main(): Promise<void> {
       [input.session_id]: {
         ...ss,
         current_turn_run_id: runId,
-        current_trace_id: runId,
+        current_trace_id: traceId,
         current_dotted_order: dottedOrder,
         current_turn_number: turnNum,
       },

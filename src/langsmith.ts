@@ -61,6 +61,27 @@ export function generateDottedOrderSegment(
   return stripped + runId;
 }
 
+/**
+ * Extract the run ID from a single dotted-order segment.
+ * Each segment is <stripped_timestamp><run_id> where the timestamp always ends
+ * with "Z". Works with both dashed UUIDs (our format) and compact hex (LangSmith SDK).
+ */
+function runIdFromSegment(segment: string): string {
+  const zIdx = segment.indexOf("Z");
+  return zIdx >= 0 ? segment.slice(zIdx + 1) : segment;
+}
+
+/**
+ * Parse a LangSmith dotted_order string into its trace ID and the run ID of
+ * the leaf (last) run. Useful for nesting new runs under an existing parent.
+ */
+export function parseDottedOrder(dottedOrder: string): { traceId: string; runId: string } {
+  const segments = dottedOrder.split(".");
+  const traceId = runIdFromSegment(segments[0]);
+  const runId = runIdFromSegment(segments[segments.length - 1]);
+  return { traceId, runId };
+}
+
 // ─── Content formatting ─────────────────────────────────────────────────────
 
 /** Convert ContentBlocks to LangSmith message format. */
