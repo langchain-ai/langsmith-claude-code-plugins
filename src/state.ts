@@ -3,9 +3,67 @@
  * transcript so the Stop hook only processes new messages.
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, openSync, closeSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import type { TracingState, SessionState } from "./types.js";
+
+// ─── Atomic read-modify-write ────────────────────────────────────────────────
+
+const LOCK_TIMEOUT_MS = 5_000;
+const LOCK_RETRY_MS = 20;
+
+function lockPath(stateFilePath: string): string {
+  return `${stateFilePath}.lock`;
+}
+
+function acquireLock(stateFilePath: string): void {
+  const lock = lockPath(stateFilePath);
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  mkdirSync(dirname(stateFilePath), { recursive: true });
+  while (Date.now() < deadline) {
+    try {
+      // O_EXCL | O_CREAT: fails atomically if the file already exists.
+      const fd = openSync(lock, "wx");
+      closeSync(fd);
+      return;
+    } catch {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, LOCK_RETRY_MS);
+    }
+  }
+  // Stale lock — remove it and proceed rather than deadlocking.
+  try {
+    unlinkSync(lock);
+  } catch {
+    /* ignore */
+  }
+}
+
+function releaseLock(stateFilePath: string): void {
+  try {
+    unlinkSync(lockPath(stateFilePath));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Atomically read state, apply `fn`, and write the result back.
+ * A file lock prevents concurrent PostToolUse hooks from clobbering each other.
+ */
+export function atomicUpdateState(
+  stateFilePath: string,
+  fn: (state: TracingState) => TracingState,
+): void {
+  acquireLock(stateFilePath);
+  try {
+    const state = loadState(stateFilePath);
+    writeFileSync(stateFilePath, JSON.stringify(fn(state), null, 2));
+  } finally {
+    releaseLock(stateFilePath);
+  }
+}
+
+// ─── State helpers ──────────────────────────────────────────────────────────
 
 export function loadState(stateFilePath: string): TracingState {
   try {

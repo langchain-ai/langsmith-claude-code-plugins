@@ -7,10 +7,11 @@
  * so SubagentStop can nest the subagent trace under it.
  */
 
-import { loadConfig } from "../config.js";
-import { initLogger, debug, error } from "../logger.js";
-import { initClient, generateDottedOrderSegment } from "../langsmith.js";
-import { loadState, saveState, getSessionState, updateSessionState } from "../state.js";
+import { debug, error } from "../logger.js";
+import { initClient, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
+import { loadState, atomicUpdateState, getSessionState } from "../state.js";
+import { initHook } from "../utils/hook-init.js";
+import { readStdin } from "../utils/stdin.js";
 
 interface PostToolUseHookInput {
   session_id: string;
@@ -27,22 +28,10 @@ interface PostToolUseHookInput {
 }
 
 async function main(): Promise<void> {
-  const hookStartTime = Date.now();
   const input: PostToolUseHookInput = await readStdin();
 
-  const config = loadConfig();
-  initLogger(config.debug);
-
-  debug(`PostToolUse hook for ${input.tool_name}`);
-
-  if (!process.env.TRACE_TO_LANGSMITH || process.env.TRACE_TO_LANGSMITH.toLowerCase() !== "true") {
-    return;
-  }
-
-  if (!config.apiKey) {
-    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY)");
-    return;
-  }
+  const config = initHook();
+  if (!config) return;
 
   const client = initClient(config.apiKey, config.apiBaseUrl);
 
@@ -68,79 +57,75 @@ async function main(): Promise<void> {
   const toolDottedOrderSegment = generateDottedOrderSegment(startTime, toolRunId, 1);
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
 
-  // For Task/Agent tools, prefer the subagent_type from tool_input (e.g., "general-purpose"),
-  // then fall back to tool_name.
-  const subagentType = input.tool_input?.subagent_type as string | undefined;
-  const toolName = subagentType || input.tool_name;
-
-  // Create the tool run using Client API
-  await client.createRun({
-    id: toolRunId,
-    name: toolName,
-    run_type: "tool",
-    inputs: { input: input.tool_input },
-    project_name: config.project,
-    start_time: startTime,
-    parent_run_id: parentRunId,
-    trace_id: traceId,
-    dotted_order: toolDottedOrder,
-    extra: {
-      metadata: {
-        thread_id: input.session_id,
-        tool_name: input.tool_name,
-        ...(input.agent_type ? { agent_type: input.agent_type, agent_id: input.agent_id } : {}),
-      },
-    },
-  });
-
-  // Update the run with outputs (tool execution already completed)
-  await client.updateRun(toolRunId, {
-    trace_id: traceId,
-    dotted_order: toolDottedOrder,
-    end_time: Date.now(),
-    outputs: { output: input.tool_response },
-  });
-
-  debug(`Created tool run ${toolRunId} for ${input.tool_name}`);
-
-  // If this is an Agent tool, store the mapping for subagent linking
   const agentId = (input.tool_response as { agentId?: string }).agentId;
+  const toolEndTime = Date.now();
+
   if (agentId) {
-    debug(`Agent tool detected, storing mapping ${agentId} -> ${toolRunId}`);
-    const taskRunMap = { 
-      [agentId]: { 
-        run_id: toolRunId, 
-        dotted_order: toolDottedOrder 
-      } 
-    };
-    const updatedState = updateSessionState(
-      state,
-      input.session_id,
-      sessionState.last_line,
-      sessionState.turn_count,
-      taskRunMap,
-    );
-    saveState(config.stateFilePath, updatedState);
+    // Agent tool: defer LangSmith run creation to the Stop hook, which will
+    // have the actual subagent type from SubagentStop's pending_subagent_traces.
+    debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
+  } else {
+    // Regular tool: create and complete the run immediately.
+    await client.createRun({
+      id: toolRunId,
+      name: input.tool_name,
+      run_type: "tool",
+      inputs: { input: input.tool_input },
+      outputs: { output: input.tool_response },
+      project_name: config.project,
+      start_time: startTime,
+      end_time: toolEndTime,
+      parent_run_id: parentRunId,
+      trace_id: traceId,
+      dotted_order: toolDottedOrder,
+      extra: {
+        metadata: {
+          thread_id: input.session_id,
+          tool_name: input.tool_name,
+        },
+      },
+    });
   }
 
-  const duration = ((Date.now() - hookStartTime) / 1000).toFixed(1);
-  debug(`PostToolUse hook completed in ${duration}s`);
-}
-
-function readStdin(): Promise<PostToolUseHookInput> {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => (data += chunk));
-    process.stdin.on("end", () => {
-      try {
-        resolve(JSON.parse(data));
-      } catch (err) {
-        reject(new Error(`Failed to parse hook input: ${err}`));
-      }
-    });
-    process.stdin.on("error", reject);
+  // Save state atomically so concurrent PostToolUse hooks don't clobber each other.
+  atomicUpdateState(config.stateFilePath, (freshState) => {
+    const freshSession = getSessionState(freshState, input.session_id);
+    return {
+      ...freshState,
+      [input.session_id]: {
+        ...freshSession,
+        last_tool_end_time: toolEndTime,
+        ...(agentId
+          ? {
+              task_run_map: {
+                ...freshSession.task_run_map,
+                [agentId]: {
+                  run_id: toolRunId,
+                  dotted_order: toolDottedOrder,
+                  deferred: {
+                    trace_id: traceId!,
+                    parent_run_id: parentRunId!,
+                    start_time: startTime,
+                    end_time: toolEndTime,
+                    inputs: input.tool_input,
+                    outputs: input.tool_response,
+                    project_name: config.project,
+                  },
+                },
+              },
+            }
+          : {
+              // Record tool_use_id so traceTurn skips it (avoids double-tracing).
+              traced_tool_use_ids: [...(freshSession.traced_tool_use_ids ?? []), input.tool_use_id],
+            }),
+      },
+    };
   });
+
+  // Flush pending batches so traces are sent before this async hook exits.
+  if (!agentId) {
+    await flushPendingTraces();
+  }
 }
 
 main().catch((err) => {
@@ -149,5 +134,5 @@ main().catch((err) => {
   } catch {
     // Last resort
   }
-  process.exit(1);
+  process.exit(0); // Always exit 0 so Claude Code isn't affected.
 });

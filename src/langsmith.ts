@@ -78,14 +78,21 @@ function formatContent(blocks: ContentBlock[]): Array<Record<string, unknown>> {
   });
 }
 
-/** Build usage_metadata from Usage for LangSmith. */
+/** Build usage_metadata from Usage for LangSmith. Returns undefined if there are no tokens. */
 function buildUsageMetadata(usage: Usage) {
+  const input_tokens =
+    (usage.input_tokens ?? 0) +
+    (usage.cache_creation_input_tokens ?? 0) +
+    (usage.cache_read_input_tokens ?? 0);
+  const output_tokens = usage.output_tokens ?? 0;
+
+  if (input_tokens === 0 && output_tokens === 0) {
+    return undefined;
+  }
+
   return {
-    input_tokens:
-      (usage.input_tokens ?? 0) +
-      (usage.cache_creation_input_tokens ?? 0) +
-      (usage.cache_read_input_tokens ?? 0),
-    output_tokens: usage.output_tokens ?? 0,
+    input_tokens,
+    output_tokens,
     input_token_details: {
       cache_read: usage.cache_read_input_tokens ?? 0,
       cache_creation: usage.cache_creation_input_tokens ?? 0,
@@ -114,6 +121,8 @@ export interface TraceTurnOptions {
   isSubagent?: boolean;
   parentRunId?: string;
   existingTaskRunMap?: Record<string, { run_id: string; dotted_order: string }>;
+  /** tool_use_ids already traced by PostToolUse — skip creating runs for these */
+  tracedToolUseIds?: Set<string>;
   traceId?: string;
   parentDottedOrder?: string;
 }
@@ -133,6 +142,7 @@ export async function traceTurn(
     isSubagent = false,
     parentRunId,
     existingTaskRunMap,
+    tracedToolUseIds,
     traceId: providedTraceId,
     parentDottedOrder: providedParentDottedOrder,
   } = options;
@@ -181,7 +191,7 @@ export async function traceTurn(
     debug(`Creating new standalone turn run ${turnRunId}`);
     await client.createRun({
       id: turnRunId,
-      name: "Claude Code",
+      name: "Claude Code Turn",
       run_type: "chain",
       inputs: { messages: [{ role: "user", content: userContent }] },
       project_name: project,
@@ -193,7 +203,6 @@ export async function traceTurn(
           thread_id: sessionId,
           tags,
           turn_number: turnNum,
-          ...(isSubagent ? { ls_subagent: true } : {}),
         },
       },
     });
@@ -205,7 +214,9 @@ export async function traceTurn(
   ];
 
   // Track Task tool runs for subagent linking (merge with existing)
-  const taskRunMap: Record<string, { run_id: string; dotted_order: string }> = { ...existingTaskRunMap };
+  const taskRunMap: Record<string, { run_id: string; dotted_order: string }> = {
+    ...existingTaskRunMap,
+  };
 
   let lastEndTime = turn.userTimestamp;
   let childCounter = 0;
@@ -250,9 +261,14 @@ export async function traceTurn(
 
     // 3. Create tool runs (siblings of assistant, children of turn).
     for (const toolCall of llmCall.toolCalls) {
-      // Skip Task tools that were already traced by PostToolUse hook
+      // Skip tools already traced by PostToolUse (agent tools via existingTaskRunMap,
+      // regular tools via tracedToolUseIds).
       if (toolCall.agentId && existingTaskRunMap?.[toolCall.agentId]) {
         debug(`Skipping Task tool for agent ${toolCall.agentId} - already traced by PostToolUse`);
+        lastEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
+        continue;
+      }
+      if (!toolCall.agentId && tracedToolUseIds?.has(toolCall.tool_use.id)) {
         lastEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
         continue;
       }
@@ -271,31 +287,23 @@ export async function traceTurn(
       );
       const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
 
-      // Create tool run as child of turn using Client API
+      // Create and complete tool run in a single call.
       await client.createRun({
         id: toolRunId,
         name: toolCall.tool_use.name,
         run_type: "tool",
         inputs: { input: toolCall.tool_use.input },
+        outputs: { output: toolCall.result?.content ?? "No result" },
         project_name: project,
         start_time: toolStartTimeMs,
+        end_time: isoToMillis(toolEndTime),
         parent_run_id: turnRunId,
         trace_id: traceId,
         dotted_order: toolDottedOrder,
         extra: {
-          metadata: {
-            thread_id: sessionId,
-          },
+          metadata: { thread_id: sessionId },
           tags: ["tool"],
         },
-      });
-
-      // Update tool run with output
-      await client.updateRun(toolRunId, {
-        trace_id: traceId,
-        dotted_order: toolDottedOrder,
-        end_time: Math.max(isoToMillis(toolEndTime), toolStartTimeMs + 1),
-        outputs: { output: toolCall.result?.content ?? "No result" },
       });
 
       // If this is a Task tool, store the run ID and dotted_order for subagent linking
@@ -314,17 +322,17 @@ export async function traceTurn(
 
     // Complete the assistant run.
     const assistantEndTime = llmCall.toolCalls.length > 0 ? lastEndTime : llmCall.endTime;
-    const assistantEndTimeMs = Math.max(isoToMillis(assistantEndTime), assistantStartTime + 1);
 
     await client.updateRun(assistantRunId, {
       trace_id: traceId,
       dotted_order: assistantDottedOrder,
-      end_time: assistantEndTimeMs,
+      end_time: isoToMillis(assistantEndTime),
       outputs: {
         messages: [{ role: "assistant", content: assistantContent }],
       },
       extra: {
         metadata: {
+          thread_id: sessionId,
           usage_metadata: buildUsageMetadata(llmCall.usage),
         },
       },

@@ -2,6 +2,8 @@
  * Types for Claude Code hook inputs and JSONL transcript messages.
  */
 
+import type { RunTree } from "langsmith";
+
 // ─── Hook Input Types ───────────────────────────────────────────────────────
 
 /** Common fields present in all hook inputs (delivered via stdin JSON). */
@@ -152,31 +154,6 @@ export interface Turn {
   isComplete: boolean;
 }
 
-// ─── LangSmith Run Types ───────────────────────────────────────────────────
-
-export interface RunCreate {
-  id: string;
-  trace_id: string;
-  parent_run_id?: string;
-  name: string;
-  run_type: "chain" | "llm" | "tool";
-  inputs: Record<string, unknown>;
-  start_time: string;
-  dotted_order: string;
-  session_name: string;
-  extra?: Record<string, unknown>;
-  tags?: string[];
-}
-
-export interface RunUpdate {
-  id: string;
-  trace_id: string;
-  parent_run_id?: string;
-  dotted_order: string;
-  outputs: Record<string, unknown>;
-  end_time: string;
-}
-
 // ─── Tracing State ─────────────────────────────────────────────────────────
 
 export interface SessionState {
@@ -191,8 +168,22 @@ export interface SessionState {
   current_dotted_order?: string;
   /** Current turn start time for duration calculation */
   current_turn_start?: number;
-  /** Maps agent_id -> parent tool run info (ID and dotted_order) for linking subagent traces */
-  task_run_map?: Record<string, { run_id: string; dotted_order: string }>;
+  /** Wall-clock time (ms) when the last tool finished, set by PostToolUse */
+  last_tool_end_time?: number;
+  /** Maps agent_id -> parent tool run info for linking subagent traces.
+   *  For Agent tools, also stores deferred creation info so the Stop hook
+   *  can create the run with the correct subagent name. */
+  task_run_map?: Record<
+    string,
+    {
+      run_id: string;
+      dotted_order: string;
+      /** Deferred Agent tool creation info (set by PostToolUse, used by Stop) */
+      deferred?: Partial<RunTree>;
+    }
+  >;
+  /** tool_use_ids of regular tools already traced by PostToolUse (prevents double-tracing in traceTurn) */
+  traced_tool_use_ids?: string[];
   /** Pending subagent traces to process (set by SubagentStop, processed by Stop) */
   pending_subagent_traces?: Array<{
     agent_id: string;

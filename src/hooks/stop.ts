@@ -8,10 +8,16 @@
  */
 
 import { readTranscript, groupIntoTurns } from "../transcript.js";
-import { loadConfig } from "../config.js";
-import { initLogger, log, warn, debug, error } from "../logger.js";
+import { log, warn, debug, error } from "../logger.js";
 import { loadState, saveState, getSessionState, updateSessionState } from "../state.js";
-import { initClient, traceTurn, flushPendingTraces } from "../langsmith.js";
+import {
+  initClient,
+  traceTurn,
+  flushPendingTraces,
+  generateDottedOrderSegment,
+} from "../langsmith.js";
+import { initHook, expandHome } from "../utils/hook-init.js";
+import { readStdin } from "../utils/stdin.js";
 import type { StopHookInput } from "../types.js";
 
 async function main(): Promise<void> {
@@ -20,16 +26,10 @@ async function main(): Promise<void> {
   // Read hook input from stdin.
   const input: StopHookInput = await readStdin();
 
-  const config = loadConfig();
-  initLogger(config.debug);
+  const config = initHook();
+  if (!config) return;
 
   debug(`Stop hook started, session=${input.session_id}`);
-
-  // Skip if tracing is disabled.
-  if (!process.env.TRACE_TO_LANGSMITH || process.env.TRACE_TO_LANGSMITH.toLowerCase() !== "true") {
-    debug("Tracing disabled (TRACE_TO_LANGSMITH !== true), exiting");
-    return;
-  }
 
   // Skip recursive hook calls.
   if (input.stop_hook_active) {
@@ -37,20 +37,14 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Validate config.
-  if (!config.apiKey) {
-    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY)");
-    return;
-  }
-
   // Validate input.
-  const transcriptPath = input.transcript_path?.replace(/^~/, process.env.HOME ?? "");
+  const transcriptPath = expandHome(input.transcript_path);
   if (!input.session_id || !transcriptPath) {
     warn(`Invalid input: session=${input.session_id}, transcript=${transcriptPath}`);
     return;
   }
 
-  initClient(config.apiKey, config.apiBaseUrl);
+  const client = initClient(config.apiKey, config.apiBaseUrl);
 
   // Load state and read new messages.
   const state = loadState(config.stateFilePath);
@@ -61,6 +55,13 @@ async function main(): Promise<void> {
   const { messages, lastLine } = readTranscript(transcriptPath, sessionState.last_line);
   if (messages.length === 0) {
     debug("No new messages");
+    // Clear stale current_turn_run_id so the next invocation doesn't try to complete it.
+    if (sessionState.current_turn_run_id) {
+      saveState(config.stateFilePath, {
+        ...state,
+        [input.session_id]: { ...sessionState, current_turn_run_id: undefined },
+      });
+    }
     return;
   }
 
@@ -74,19 +75,23 @@ async function main(): Promise<void> {
   // subsequent LLM call, the final assistant response is missing from
   // the transcript. Patch it using last_assistant_message from the hook
   // input, which Claude Code guarantees is the complete final text.
+  // Use real wall-clock times: last_tool_end_time (from PostToolUse) as
+  // start, and Date.now() (Stop hook firing time) as end.
   if (turns.length > 0 && input.last_assistant_message) {
     const lastTurn = turns[turns.length - 1];
     const lastLlm = lastTurn.llmCalls[lastTurn.llmCalls.length - 1];
     if (lastLlm && lastLlm.toolCalls.length > 0) {
       debug("Final LLM response missing from transcript, synthesizing from last_assistant_message");
-      const lastToolResult = lastLlm.toolCalls[lastLlm.toolCalls.length - 1];
-      const syntheticStartTime = lastToolResult.result?.timestamp ?? lastLlm.endTime;
+      const syntheticStart = sessionState.last_tool_end_time
+        ? new Date(sessionState.last_tool_end_time).toISOString()
+        : (lastLlm.toolCalls[lastLlm.toolCalls.length - 1].result?.timestamp ?? lastLlm.endTime);
+      const syntheticEnd = new Date(startTime).toISOString(); // startTime = Date.now() at top of Stop hook
       lastTurn.llmCalls.push({
         content: [{ type: "text", text: input.last_assistant_message }],
         model: lastLlm.model,
         usage: { input_tokens: 0, output_tokens: 0 },
-        startTime: syntheticStartTime,
-        endTime: new Date().toISOString(),
+        startTime: syntheticStart,
+        endTime: syntheticEnd,
         toolCalls: [],
       });
     }
@@ -116,8 +121,12 @@ async function main(): Promise<void> {
     const traceId = isLastTurn ? currentTraceId : undefined;
     const dottedOrder = isLastTurn ? currentDottedOrder : undefined;
 
-    // Pass existing task_run_map so we don't duplicate Task tools traced by PostToolUse
+    // Pass existing task_run_map and traced_tool_use_ids so we don't duplicate
+    // tools already traced by PostToolUse.
     const existingTaskRunMap = isLastTurn ? sessionState.task_run_map : undefined;
+    const tracedToolUseIds = isLastTurn
+      ? new Set(sessionState.traced_tool_use_ids ?? [])
+      : undefined;
 
     try {
       const taskRunMap = await traceTurn({
@@ -128,6 +137,7 @@ async function main(): Promise<void> {
         isSubagent,
         parentRunId,
         existingTaskRunMap,
+        tracedToolUseIds,
         traceId,
         parentDottedOrder: dottedOrder,
       });
@@ -141,8 +151,6 @@ async function main(): Promise<void> {
   // Complete the Turn run created by UserPromptSubmit
   if (currentRunId) {
     debug(`Completing Turn run ${currentRunId}`);
-
-    const client = initClient(config.apiKey, config.apiBaseUrl);
 
     // We need to patch the existing run with end time
     // LangSmith SDK doesn't have a direct "patch" method, but we can call the API
@@ -184,10 +192,43 @@ async function main(): Promise<void> {
 
         const parentToolRunId = taskRunInfo.run_id;
         const agentToolDottedOrder = taskRunInfo.dotted_order;
-        // Use current_trace_id from fresh state (still valid — set by UserPromptSubmit)
         const parentTraceId = freshSession.current_trace_id;
+        const toolName = subagent.agent_type || "Agent";
 
-        debug(`Processing subagent ${subagent.agent_type} (${subagent.agent_id}) under run ${parentToolRunId}`);
+        // Get deferred creation info from the fresh session state (PostToolUse writes it there)
+        const freshTaskRunInfo = freshSession.task_run_map?.[subagent.agent_id];
+        const deferred = freshTaskRunInfo?.deferred;
+
+        debug(
+          `Processing subagent ${toolName} (${subagent.agent_id}) under run ${parentToolRunId}`,
+        );
+
+        // PostToolUse deferred the Agent tool run creation so we can use the
+        // real subagent name. Create it now with the correct name.
+        if (deferred) {
+          const d = deferred;
+          await client.createRun({
+            id: parentToolRunId,
+            name: "Agent",
+            run_type: "tool",
+            inputs: { input: d.inputs },
+            outputs: { output: d.outputs },
+            project_name: d.project_name,
+            start_time: d.start_time,
+            end_time: d.end_time,
+            parent_run_id: d.parent_run_id,
+            trace_id: d.trace_id,
+            dotted_order: agentToolDottedOrder,
+            extra: {
+              metadata: {
+                thread_id: input.session_id,
+                tool_name: "Agent",
+                agent_type: toolName,
+                agent_id: subagent.agent_id,
+              },
+            },
+          });
+        }
 
         // Read subagent transcript (JSONL format, same as main transcript)
         const { messages: subagentMessages } = readTranscript(subagent.agent_transcript_path, -1);
@@ -198,21 +239,51 @@ async function main(): Promise<void> {
 
         const subagentTurns = groupIntoTurns(subagentMessages);
 
+        // Create an intermediate chain run named "${toolName} Subagent" as a child
+        // of the Agent tool run, then nest all subagent turns under it.
+        const { randomUUID } = await import("crypto");
+        const subagentChainId = randomUUID();
+        const subagentChainStartTime = deferred?.start_time ?? Date.now();
+        const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentChainStartTime, subagentChainId, 1)}`;
+
+        await client.createRun({
+          id: subagentChainId,
+          name: `${toolName} Subagent`,
+          run_type: "chain",
+          inputs: {},
+          outputs: { output: deferred?.outputs },
+          project_name: config.project,
+          start_time: subagentChainStartTime,
+          end_time: deferred?.end_time ?? Date.now(),
+          parent_run_id: parentToolRunId,
+          trace_id: parentTraceId,
+          dotted_order: subagentChainDottedOrder,
+          extra: {
+            metadata: {
+              thread_id: input.session_id,
+              agent_type: toolName,
+              agent_id: subagent.agent_id,
+            },
+          },
+        });
+
         for (let i = 0; i < subagentTurns.length; i++) {
           await traceTurn({
             turn: subagentTurns[i],
-            sessionId: subagent.session_id,
+            sessionId: input.session_id,
             turnNum: i + 1,
             project: config.project,
             isSubagent: true,
-            parentRunId: parentToolRunId,
+            parentRunId: subagentChainId,
             existingTaskRunMap: undefined,
             traceId: parentTraceId,
-            parentDottedOrder: agentToolDottedOrder,
+            parentDottedOrder: subagentChainDottedOrder,
           });
         }
 
-        log(`Traced subagent ${subagent.agent_type} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`);
+        log(
+          `Traced subagent ${subagent.agent_type} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`,
+        );
       } catch (err) {
         error(`Failed to trace subagent ${subagent.agent_id}: ${err}`);
       }
@@ -221,9 +292,7 @@ async function main(): Promise<void> {
 
   // Flush pending batches to ensure traces are sent before exiting.
   if (tracedTurns > 0 || pendingSubagents.length > 0) {
-    debug("Flushing pending trace batches...");
     await flushPendingTraces();
-    debug("Flush complete");
   }
 
   // Save updated state — use freshState as base so we don't clobber
@@ -238,6 +307,7 @@ async function main(): Promise<void> {
   // Clear fields that are no longer needed
   updatedState[input.session_id].current_turn_run_id = undefined;
   updatedState[input.session_id].pending_subagent_traces = [];
+  updatedState[input.session_id].traced_tool_use_ids = [];
   saveState(config.stateFilePath, updatedState);
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -246,23 +316,6 @@ async function main(): Promise<void> {
   if (Date.now() - startTime > 180_000) {
     warn(`Hook took ${duration}s (>3min), consider optimizing`);
   }
-}
-
-/** Read all of stdin as JSON. */
-function readStdin(): Promise<StopHookInput> {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => (data += chunk));
-    process.stdin.on("end", () => {
-      try {
-        resolve(JSON.parse(data));
-      } catch (err) {
-        reject(new Error(`Failed to parse hook input: ${err}`));
-      }
-    });
-    process.stdin.on("error", reject);
-  });
 }
 
 main().catch((err) => {

@@ -85,7 +85,7 @@ describe("traceTurn", () => {
 
     // First call creates the standalone turn
     const turnCall = mockCreateRun.mock.calls[0][0];
-    expect(turnCall.name).toBe("Claude Code");
+    expect(turnCall.name).toBe("Claude Code Turn");
     expect(turnCall.run_type).toBe("chain");
     expect(turnCall.trace_id).toBe(turnCall.id); // root trace
     expect(turnCall.dotted_order).toBeTruthy();
@@ -347,9 +347,7 @@ describe("traceTurn", () => {
 
     // Last updateRun call is the turn completion (standalone turn)
     const turnUpdateArgs = mockUpdateRun.mock.calls[mockUpdateRun.mock.calls.length - 1][1];
-    const outputRoles = turnUpdateArgs.outputs.messages.map(
-      (m: Record<string, unknown>) => m.role,
-    );
+    const outputRoles = turnUpdateArgs.outputs.messages.map((m: Record<string, unknown>) => m.role);
     expect(outputRoles).not.toContain("user");
   });
 

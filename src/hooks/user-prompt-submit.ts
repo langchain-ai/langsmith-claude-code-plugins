@@ -7,10 +7,11 @@
  * for the Stop hook to use as the parent for all LLM and tool runs.
  */
 
-import { loadConfig } from "../config.js";
-import { initLogger, debug, error } from "../logger.js";
+import { debug, error } from "../logger.js";
 import { initClient, generateDottedOrderSegment } from "../langsmith.js";
 import { loadState, saveState, getSessionState } from "../state.js";
+import { initHook } from "../utils/hook-init.js";
+import { readStdin } from "../utils/stdin.js";
 
 interface UserPromptSubmitHookInput {
   session_id: string;
@@ -27,19 +28,10 @@ async function main(): Promise<void> {
   const hookStartTime = Date.now();
   const input: UserPromptSubmitHookInput = await readStdin();
 
-  const config = loadConfig();
-  initLogger(config.debug);
+  const config = initHook();
+  if (!config) return;
 
   debug(`UserPromptSubmit hook started, session=${input.session_id}`);
-
-  if (!process.env.TRACE_TO_LANGSMITH || process.env.TRACE_TO_LANGSMITH.toLowerCase() !== "true") {
-    return;
-  }
-
-  if (!config.apiKey) {
-    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY)");
-    return;
-  }
 
   const client = initClient(config.apiKey, config.apiBaseUrl);
 
@@ -103,7 +95,7 @@ async function main(): Promise<void> {
         thread_id: input.session_id,
         tags,
         turn_number: turnNum,
-        is_subagent: isSubagent,
+        ...(!isSubagent ? { ls_agent_type: "agent" } : {}),
       },
     },
   });
@@ -127,27 +119,11 @@ async function main(): Promise<void> {
   debug(`UserPromptSubmit hook completed in ${duration}s`);
 }
 
-function readStdin(): Promise<UserPromptSubmitHookInput> {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => (data += chunk));
-    process.stdin.on("end", () => {
-      try {
-        resolve(JSON.parse(data));
-      } catch (err) {
-        reject(new Error(`Failed to parse hook input: ${err}`));
-      }
-    });
-    process.stdin.on("error", reject);
-  });
-}
-
 main().catch((err) => {
   try {
     error(`UserPromptSubmit hook fatal error: ${err}`);
   } catch {
     // Last resort
   }
-  process.exit(1);
+  process.exit(0); // Always exit 0 so Claude Code isn't affected.
 });

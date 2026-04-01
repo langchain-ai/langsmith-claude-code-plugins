@@ -12,29 +12,21 @@
  * `task_run_map`, so there's no race condition.
  */
 
-import { loadConfig } from "../config.js";
-import { initLogger, debug, error } from "../logger.js";
+import { debug, error } from "../logger.js";
 import { loadState, saveState, getSessionState } from "../state.js";
+import { initHook, expandHome } from "../utils/hook-init.js";
+import { readStdin } from "../utils/stdin.js";
 import type { SubagentStopHookInput } from "../types.js";
 
 async function main(): Promise<void> {
   const input: SubagentStopHookInput = await readStdin();
 
-  const config = loadConfig();
-  initLogger(config.debug);
+  const config = initHook();
+  if (!config) return;
 
   debug(`SubagentStop hook: agent_id=${input.agent_id}, type=${input.agent_type}`);
 
-  if (!process.env.TRACE_TO_LANGSMITH || process.env.TRACE_TO_LANGSMITH.toLowerCase() !== "true") {
-    return;
-  }
-
-  if (!config.apiKey) {
-    error("No API key set");
-    return;
-  }
-
-  const agentTranscriptPath = input.agent_transcript_path?.replace(/^~/, process.env.HOME ?? "");
+  const agentTranscriptPath = expandHome(input.agent_transcript_path);
 
   if (!agentTranscriptPath) {
     debug("No agent_transcript_path provided, skipping");
@@ -62,23 +54,9 @@ async function main(): Promise<void> {
     },
   });
 
-  debug(`Queued subagent trace for ${input.agent_type} (${input.agent_id}) - will be processed by Stop hook`);
-}
-
-function readStdin(): Promise<SubagentStopHookInput> {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => (data += chunk));
-    process.stdin.on("end", () => {
-      try {
-        resolve(JSON.parse(data));
-      } catch (err) {
-        reject(new Error(`Failed to parse hook input: ${err}`));
-      }
-    });
-    process.stdin.on("error", reject);
-  });
+  debug(
+    `Queued subagent trace for ${input.agent_type} (${input.agent_id}) - will be processed by Stop hook`,
+  );
 }
 
 main().catch((err) => {
