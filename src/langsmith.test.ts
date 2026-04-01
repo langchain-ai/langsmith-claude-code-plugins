@@ -517,5 +517,4 @@ describe("traceTurn", () => {
     const turnUpdateArgs = mockUpdateRun.mock.calls[mockUpdateRun.mock.calls.length - 1][1];
     expect(turnUpdateArgs.error).toBe("Interrupted");
   });
-
 });

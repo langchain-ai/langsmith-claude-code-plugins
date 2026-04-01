@@ -2,7 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { loadState, saveState, getSessionState, updateSessionState } from "./state.js";
+import {
+  loadState,
+  saveState,
+  getSessionState,
+  updateSessionState,
+  atomicUpdateState,
+} from "./state.js";
 
 let tmpDir: string;
 
@@ -62,6 +68,68 @@ describe("getSessionState", () => {
       "session-1": { last_line: 42, turn_count: 7, updated: "2025-01-01T00:00:00Z" },
     };
     expect(getSessionState(state, "session-1")).toEqual(state["session-1"]);
+  });
+});
+
+describe("atomicUpdateState", () => {
+  it("reads, transforms, and writes state atomically", async () => {
+    const path = join(tmpDir, "state.json");
+    saveState(path, { s1: { last_line: 0, turn_count: 0, updated: "" } });
+
+    await atomicUpdateState(path, (state) => ({
+      ...state,
+      s1: { ...state.s1, last_line: 42 },
+    }));
+
+    expect(loadState(path).s1.last_line).toBe(42);
+  });
+
+  it("creates the file if it does not exist", async () => {
+    const path = join(tmpDir, "new-state.json");
+
+    await atomicUpdateState(path, (state) => ({
+      ...state,
+      s1: { last_line: 1, turn_count: 0, updated: "" },
+    }));
+
+    expect(loadState(path).s1.last_line).toBe(1);
+  });
+
+  it("serializes concurrent writers so no update is lost", async () => {
+    const path = join(tmpDir, "concurrent.json");
+    saveState(path, { counter: { last_line: 0, turn_count: 0, updated: "" } });
+
+    // Fire 20 concurrent increments — without locking, race conditions would
+    // cause lost updates; with the lock every increment must land.
+    const N = 20;
+    await Promise.all(
+      Array.from({ length: N }, () =>
+        atomicUpdateState(path, (state) => ({
+          ...state,
+          counter: { ...state.counter, last_line: state.counter.last_line + 1 },
+        })),
+      ),
+    );
+
+    expect(loadState(path).counter.last_line).toBe(N);
+  });
+
+  it("releases the lock even when the transform throws", async () => {
+    const path = join(tmpDir, "throw.json");
+    saveState(path, { s1: { last_line: 0, turn_count: 0, updated: "" } });
+
+    await expect(
+      atomicUpdateState(path, () => {
+        throw new Error("transform error");
+      }),
+    ).rejects.toThrow("transform error");
+
+    // Lock should be gone — a subsequent call must succeed
+    await atomicUpdateState(path, (state) => ({
+      ...state,
+      s1: { ...state.s1, last_line: 99 },
+    }));
+    expect(loadState(path).s1.last_line).toBe(99);
   });
 });
 
