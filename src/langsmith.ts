@@ -312,6 +312,7 @@ export async function traceTurn(
     await client.updateRun(assistantRunId, {
       trace_id: traceId,
       dotted_order: assistantDottedOrder,
+      parent_run_id: turnRunId,
       end_time: isoToMillis(assistantEndTime),
       outputs: {
         messages: [{ role: "assistant", content: assistantContent }],

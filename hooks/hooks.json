@@ -30,8 +30,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/stop.js\"",
-            "timeout": 120,
-            "async": true
+            "timeout": 120
           }
         ]
       }

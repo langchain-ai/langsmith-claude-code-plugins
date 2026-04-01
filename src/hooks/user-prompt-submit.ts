@@ -90,6 +90,7 @@ async function main(): Promise<void> {
         current_turn_run_id: runId,
         current_trace_id: traceId,
         current_dotted_order: dottedOrder,
+        current_parent_run_id: parentRunId,
         current_turn_number: turnNum,
       },
     };

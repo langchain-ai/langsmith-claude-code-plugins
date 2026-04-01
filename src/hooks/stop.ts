@@ -112,13 +112,14 @@ async function main(): Promise<void> {
   let tracedTurns = 0;
 
   // Collect task run mappings for subagent linking
-  const allTaskRunMaps: Record<string, { run_id: string; dotted_order: string }> = {};
+  let allTaskRunMaps: Record<string, { run_id: string; dotted_order: string }> = {};
 
   // The current_turn_run_id from state is for the LAST turn (the one that just completed)
   // Earlier turns (from interruptions) are traced standalone
   const currentRunId = sessionState.current_turn_run_id;
   const currentTraceId = sessionState.current_trace_id;
   const currentDottedOrder = sessionState.current_dotted_order;
+  const currentParentRunId = sessionState.current_parent_run_id;
 
   for (let i = 0; i < turns.length; i++) {
     const turn = turns[i];
@@ -150,7 +151,7 @@ async function main(): Promise<void> {
         traceId,
         parentDottedOrder: dottedOrder,
       });
-      Object.assign(allTaskRunMaps, taskRunMap);
+      allTaskRunMaps = { ...allTaskRunMaps, ...taskRunMap };
       tracedTurns++;
     } catch (err) {
       error(`Failed to trace turn ${turnNum}: ${err}`);
@@ -166,6 +167,7 @@ async function main(): Promise<void> {
       await client.updateRun(currentRunId, {
         trace_id: currentTraceId,
         dotted_order: currentDottedOrder,
+        parent_run_id: currentParentRunId,
         end_time: Date.now(),
         outputs: {
           messages: [{ role: "assistant", content: input.last_assistant_message }],

@@ -127,6 +127,11 @@ Set `CC_LANGSMITH_PARENT_DOTTED_ORDER` to nest all Claude Code traces as childre
 import subprocess
 from langsmith import traceable, get_current_run_tree
 
+
+os.environ["LANGSMITH_TRACING"] = "true"
+os.environ["LANGSMITH_API_KEY"] = "..."
+os.environ["LANGSMITH_PROJECT"] = "claude-code"
+
 @traceable
 def run_claude(prompt: str):
     run_tree = get_current_run_tree()
@@ -134,6 +139,9 @@ def run_claude(prompt: str):
         ["claude", "-p", prompt],
         env={
             **os.environ,
+            "TRACE_TO_LANGSMITH": "true",
+            "CC_LANGSMITH_API_KEY": "...",
+            "CC_LANGSMITH_PROJECT": "claude-code",
             "CC_LANGSMITH_PARENT_DOTTED_ORDER": run_tree.dotted_order,
         },
     )
@@ -145,15 +153,24 @@ def run_claude(prompt: str):
 import { traceable, getCurrentRunTree } from "langsmith/traceable";
 import { execSync } from "node:child_process";
 
+process.env.LANGSMITH_TRACING = "true";
+process.env.LANGSMITH_API_KEY = "...";
+process.env.LANGSMITH_PROJECT = "claude-code";
+
 const runClaude = traceable(
   async (prompt: string) => {
     const runTree = getCurrentRunTree();
-    execSync(`claude -p "${prompt}"`, {
+    const pluginDir = new URL(".", import.meta.url).pathname;
+    const res = execSync(`claude -p "${prompt}" --plugin-dir '${pluginDir}'`, {
       env: {
         ...process.env,
+        TRACE_TO_LANGSMITH: "true",
+        CC_LANGSMITH_API_KEY: "...",
+        CC_LANGSMITH_PROJECT: "claude-code",
         CC_LANGSMITH_PARENT_DOTTED_ORDER: runTree.dotted_order,
       },
     });
+    return res.toString();
   },
   { name: "run_claude" },
 );
