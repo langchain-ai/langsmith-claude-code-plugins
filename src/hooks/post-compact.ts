@@ -6,7 +6,7 @@
  * Creates a LangSmith run capturing the compaction event and summary.
  */
 
-import { randomUUID } from "node:crypto";
+import { uuid7 } from "langsmith";
 import { debug, error } from "../logger.js";
 import { initClient, flushPendingTraces, generateDottedOrderSegment } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
@@ -38,8 +38,8 @@ async function main(): Promise<void> {
   const endTime = Date.now();
   const startTime = sessionState.compaction_start_time ?? endTime;
 
-  const runId = randomUUID();
-  const dottedOrder = generateDottedOrderSegment(startTime, runId, 1);
+  const runId = uuid7();
+  const dottedOrder = generateDottedOrderSegment(startTime, runId);
 
   try {
     await client.createRun({

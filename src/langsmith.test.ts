@@ -12,7 +12,10 @@ vi.mock("langsmith", () => {
     awaitPendingTraceBatches = mockAwaitPendingTraceBatches;
   }
 
-  return { Client: MockClient };
+  return {
+    Client: MockClient,
+    uuid7: () => `test-uuid-${Math.random().toString(36).slice(2, 15)}`,
+  };
 });
 
 vi.mock("./logger.js", () => ({
@@ -31,18 +34,20 @@ describe("generateDottedOrderSegment", () => {
   it("generates a segment with timestamp and run ID", () => {
     const epoch = new Date("2025-01-01T00:00:00.000Z").getTime();
     const runId = "abc-123";
-    const segment = generateDottedOrderSegment(epoch, runId, 1);
-    // Should be stripped ISO timestamp + padded execution order + Z + runId
+    const segment = generateDottedOrderSegment(epoch, runId);
+    // Should be stripped ISO timestamp + microseconds (000) + Z + runId
     expect(segment).toContain("abc-123");
     expect(segment).toMatch(/^\d{8}T\d{12}Zabc-123$/);
   });
 
-  it("pads execution order to 3 digits", () => {
+  it("uses microseconds of 000 for consistent ordering", () => {
     const epoch = new Date("2025-01-01T00:00:00.000Z").getTime();
-    const seg1 = generateDottedOrderSegment(epoch, "id", 1);
-    const seg2 = generateDottedOrderSegment(epoch, "id", 12);
-    expect(seg1).toContain("001");
-    expect(seg2).toContain("012");
+    const seg1 = generateDottedOrderSegment(epoch, "id1");
+    const seg2 = generateDottedOrderSegment(epoch, "id2");
+    // Both should have same timestamp prefix with 000 microseconds
+    expect(seg1).toContain("000Z");
+    expect(seg2).toContain("000Z");
+    expect(seg1.split("Z")[0]).toBe(seg2.split("Z")[0]);
   });
 });
 
@@ -317,6 +322,7 @@ describe("traceTurn", () => {
     expect(assistantUpdateArgs.extra.metadata.usage_metadata).toEqual({
       input_tokens: 800, // 100 + 200 + 500
       output_tokens: 50,
+      total_tokens: 850,
       input_token_details: {
         cache_read: 500,
         cache_creation: 200,

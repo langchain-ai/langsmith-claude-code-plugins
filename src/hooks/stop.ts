@@ -7,7 +7,7 @@
  * groups them into turns, and sends traces to LangSmith.
  */
 
-import { randomUUID } from "node:crypto";
+import { uuid7 } from "langsmith";
 import { readTranscript, groupIntoTurns } from "../transcript.js";
 import { log, warn, debug, error } from "../logger.js";
 import { loadState, atomicUpdateState, getSessionState, updateSessionState } from "../state.js";
@@ -155,7 +155,6 @@ async function main(): Promise<void> {
     debug(`Completing Turn run ${currentRunId}`);
 
     // We need to patch the existing run with end time
-    // LangSmith SDK doesn't have a direct "patch" method, but we can call the API
     try {
       await client.updateRun(currentRunId, {
         trace_id: currentTraceId,
@@ -216,18 +215,17 @@ async function main(): Promise<void> {
         // PostToolUse deferred the Agent tool run creation so we can use the
         // real subagent name. Create it now with the correct name.
         if (deferred) {
-          const d = deferred;
           await client.createRun({
             id: parentToolRunId,
             name: "Agent",
             run_type: "tool",
-            inputs: { input: d.inputs },
-            outputs: { output: d.outputs },
-            project_name: d.project_name,
-            start_time: d.start_time,
-            end_time: d.end_time,
-            parent_run_id: d.parent_run_id,
-            trace_id: d.trace_id,
+            inputs: { input: deferred.inputs },
+            outputs: { output: deferred.outputs },
+            project_name: deferred.project_name,
+            start_time: deferred.start_time,
+            end_time: deferred.end_time,
+            parent_run_id: deferred.parent_run_id,
+            trace_id: deferred.trace_id,
             dotted_order: agentToolDottedOrder,
             extra: {
               metadata: {
@@ -252,9 +250,9 @@ async function main(): Promise<void> {
 
         // Create an intermediate chain run named "${toolName} Subagent" as a child
         // of the Agent tool run, then nest all subagent turns under it.
-        const subagentChainId = randomUUID();
+        const subagentChainId = uuid7();
         const subagentChainStartTime = deferred?.start_time ?? Date.now();
-        const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentChainStartTime, subagentChainId, 1)}`;
+        const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentChainStartTime, subagentChainId)}`;
 
         await client.createRun({
           id: subagentChainId,
@@ -301,11 +299,6 @@ async function main(): Promise<void> {
     }
   }
 
-  // Flush pending batches to ensure traces are sent before exiting.
-  if (tracedTurns > 0 || pendingSubagents.length > 0) {
-    await flushPendingTraces();
-  }
-
   // Save updated state — re-read inside the lock so we don't clobber
   // concurrent writes from PostToolUse/SubagentStop.
   //
@@ -329,6 +322,9 @@ async function main(): Promise<void> {
     updatedState[input.session_id].traced_tool_use_ids = [];
     return updatedState;
   });
+
+  // Flush pending batches to ensure all traces are sent before hook exits.
+  await flushPendingTraces();
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
   log(`Processed ${tracedTurns} turns in ${duration}s`);

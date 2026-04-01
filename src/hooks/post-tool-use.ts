@@ -7,7 +7,7 @@
  * so SubagentStop can nest the subagent trace under it.
  */
 
-import { randomUUID } from "node:crypto";
+import { uuid7 } from "langsmith";
 import { debug, error } from "../logger.js";
 import { initClient, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
@@ -57,11 +57,11 @@ async function main(): Promise<void> {
   }
 
   // Generate run ID and dotted order for this tool
-  const toolRunId = randomUUID();
+  const toolRunId = uuid7();
   const startTime = Date.now();
 
   // Generate proper dotted order segment
-  const toolDottedOrderSegment = generateDottedOrderSegment(startTime, toolRunId, 1);
+  const toolDottedOrderSegment = generateDottedOrderSegment(startTime, toolRunId);
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
 
   const agentId = (input.tool_response as { agentId?: string }).agentId;

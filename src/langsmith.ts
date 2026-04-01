@@ -6,8 +6,7 @@
  * serialization, retries, and auth automatically.
  */
 
-import { randomUUID } from "node:crypto";
-import { Client } from "langsmith";
+import { Client, uuid7 } from "langsmith";
 import type { Turn, ContentBlock, Usage } from "./types.js";
 import * as logger from "./logger.js";
 import { debug } from "./logger.js";
@@ -48,14 +47,9 @@ function isoToMillis(iso: string): number {
  * Format: stripNonAlphanumeric(ISO_timestamp_with_execution_order) + runId
  * Based on LangSmith's convertToDottedOrderFormat function.
  */
-export function generateDottedOrderSegment(
-  epoch: number,
-  runId: string,
-  executionOrder: number = 1,
-): string {
+export function generateDottedOrderSegment(epoch: number, runId: string): string {
   // Add microsecond precision using execution order
-  const paddedOrder = executionOrder.toFixed(0).slice(0, 3).padStart(3, "0");
-  const isoWithMicroseconds = `${new Date(epoch).toISOString().slice(0, -1)}${paddedOrder}Z`;
+  const isoWithMicroseconds = `${new Date(epoch).toISOString().slice(0, -1)}000Z`;
   // Strip non-alphanumeric characters
   const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
   return stripped + runId;
@@ -64,7 +58,7 @@ export function generateDottedOrderSegment(
 /**
  * Extract the run ID from a single dotted-order segment.
  * Each segment is <stripped_timestamp><run_id> where the timestamp always ends
- * with "Z". Works with both dashed UUIDs (our format) and compact hex (LangSmith SDK).
+ * with "Z". Returns everything after the "Z".
  */
 function runIdFromSegment(segment: string): string {
   const zIdx = segment.indexOf("Z");
@@ -107,14 +101,16 @@ function buildUsageMetadata(usage: Usage) {
     (usage.cache_creation_input_tokens ?? 0) +
     (usage.cache_read_input_tokens ?? 0);
   const output_tokens = usage.output_tokens ?? 0;
+  const total_tokens = input_tokens + output_tokens;
 
-  if (input_tokens === 0 && output_tokens === 0) {
+  if (total_tokens === 0) {
     return undefined;
   }
 
   return {
     input_tokens,
     output_tokens,
+    total_tokens,
     input_token_details: {
       cache_read: usage.cache_read_input_tokens ?? 0,
       cache_creation: usage.cache_creation_input_tokens ?? 0,
@@ -195,11 +191,11 @@ export async function traceTurn(
   } else {
     // Create a new turn run for interrupted/standalone turns
     shouldCreateTurn = true;
-    turnRunId = randomUUID();
+    turnRunId = uuid7();
     traceId = turnRunId; // This turn is its own trace root
 
     const turnStartTime = isoToMillis(turn.userTimestamp);
-    parentDottedOrder = generateDottedOrderSegment(turnStartTime, turnRunId, 1);
+    parentDottedOrder = generateDottedOrderSegment(turnStartTime, turnRunId);
 
     debug(`Creating new standalone turn run ${turnRunId}`);
     await client.createRun({
@@ -231,7 +227,7 @@ export async function traceTurn(
     const assistantContent = formatContent(llmCall.content);
 
     // Generate run ID for this LLM call
-    const assistantRunId = randomUUID();
+    const assistantRunId = uuid7();
     const assistantStartTime = isoToMillis(llmCall.startTime);
     const assistantDottedOrderSegment = generateDottedOrderSegment(
       assistantStartTime,
@@ -273,7 +269,7 @@ export async function traceTurn(
         isoToMillis(llmCall.endTime) <= isoToMillis(toolEndTime) ? llmCall.endTime : toolEndTime;
 
       // Generate run ID for this tool
-      const toolRunId = randomUUID();
+      const toolRunId = uuid7();
       const toolStartTimeMs = isoToMillis(toolStartTime);
       const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTimeMs, toolRunId);
       const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;

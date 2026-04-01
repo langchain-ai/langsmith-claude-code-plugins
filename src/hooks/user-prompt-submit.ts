@@ -7,14 +7,9 @@
  * for the Stop hook to use as the parent for all LLM and tool runs.
  */
 
-import { randomUUID } from "node:crypto";
+import { uuid7 } from "langsmith";
 import { debug, error } from "../logger.js";
-import {
-  initClient,
-  generateDottedOrderSegment,
-  parseDottedOrder,
-  flushPendingTraces,
-} from "../langsmith.js";
+import { initClient, generateDottedOrderSegment, parseDottedOrder } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -52,7 +47,7 @@ async function main(): Promise<void> {
   const sessionState = getSessionState(state, input.session_id);
   const turnNum = sessionState.turn_count + 1;
 
-  const runId = randomUUID();
+  const runId = uuid7();
   const startTime = Date.now();
   const segment = generateDottedOrderSegment(startTime, runId);
 
@@ -84,7 +79,6 @@ async function main(): Promise<void> {
     ...(parentRunId ? { parent_run_id: parentRunId } : {}),
   });
 
-  await flushPendingTraces();
   debug(`Created initial run ${runId} for turn ${turnNum}`);
 
   await atomicUpdateState(config.stateFilePath, (s) => {
