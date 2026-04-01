@@ -40,23 +40,7 @@ Add to `~/.claude/settings.local.json`:
 }
 ```
 
-Then start Claude Code normally:
-
-```bash
-claude --plugin-dir /path/to/tracing-claude-code
-```
-
-**Option 2: Export in shell (temporary, for current session)**
-
-```bash
-export TRACE_TO_LANGSMITH="true"
-export CC_LANGSMITH_API_KEY="lsv2_pt_..."
-export CC_LANGSMITH_PROJECT="my-project"
-
-claude --plugin-dir /path/to/tracing-claude-code
-```
-
-**Option 3: Shell profile (persistent, all sessions)**
+**Option 2: Export to shell**
 
 Add to your `~/.zshrc`, `~/.bashrc`, or `~/.bash_profile`:
 
@@ -64,32 +48,6 @@ Add to your `~/.zshrc`, `~/.bashrc`, or `~/.bash_profile`:
 export TRACE_TO_LANGSMITH="true"
 export CC_LANGSMITH_API_KEY="lsv2_pt_..."
 export CC_LANGSMITH_PROJECT="my-project"
-```
-
-Then reload: `source ~/.zshrc` (or restart your terminal).
-
-**Option 4: `.env` file**
-
-Create a `.env` file in your home directory or project directory:
-
-```bash
-# ~/.env or /path/to/project/.env
-TRACE_TO_LANGSMITH=true
-CC_LANGSMITH_API_KEY=lsv2_pt_...
-CC_LANGSMITH_PROJECT=my-project
-```
-
-Then source it before running Claude Code:
-
-```bash
-source ~/.env
-claude --plugin-dir /path/to/tracing-claude-code
-```
-
-**Option 5: Inline (one-time, for testing)**
-
-```bash
-TRACE_TO_LANGSMITH=true CC_LANGSMITH_API_KEY=lsv2_pt_... claude --plugin-dir /path/to/tracing-claude-code
 ```
 
 ### Getting your LangSmith API key

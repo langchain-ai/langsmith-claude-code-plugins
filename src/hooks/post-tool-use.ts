@@ -51,7 +51,7 @@ async function main(): Promise<void> {
   const traceId = sessionState.current_trace_id;
   const parentDottedOrder = sessionState.current_dotted_order;
 
-  if (!parentRunId || !traceId) {
+  if (!parentRunId || !traceId || !parentDottedOrder) {
     error("No current_turn_run_id or trace_id in state - UserPromptSubmit hook may not have run");
     return;
   }

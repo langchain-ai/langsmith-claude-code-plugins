@@ -177,7 +177,7 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
     // Check if turn is complete
     const assistantMessages = Array.from(assistantChunks.values()).flat();
     const hasStopReasonField = assistantMessages.some((m) => m.message.stop_reason !== undefined);
-    const isComplete = !hasStopReasonField || hasStopReasonEndTurn || forceIncomplete;
+    const isComplete = !forceIncomplete && (!hasStopReasonField || hasStopReasonEndTurn);
 
     const llmCalls: LLMCall[] = [];
 
