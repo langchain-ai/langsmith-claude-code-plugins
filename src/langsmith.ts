@@ -190,13 +190,6 @@ export async function traceTurn(
       start_time: turnStartTime,
       trace_id: traceId,
       dotted_order: parentDottedOrder,
-      extra: {
-        metadata: {
-          thread_id: sessionId,
-          ls_integration: "claude-code",
-          turn_number: turnNum,
-        },
-      },
     });
   }
 
@@ -236,20 +229,6 @@ export async function traceTurn(
       parent_run_id: turnRunId,
       trace_id: traceId,
       dotted_order: assistantDottedOrder,
-      extra: {
-        metadata: {
-          thread_id: sessionId,
-          ls_integration: "claude-code",
-          ls_provider: "anthropic",
-          ls_model_name: llmCall.model,
-          ls_invocation_params: {
-            model: llmCall.model,
-            ...(llmCall.stopReason != null ? { stop_reason: llmCall.stopReason } : {}),
-          },
-          usage_metadata: buildUsageMetadata(llmCall.usage),
-        },
-        tags: [llmCall.model],
-      },
     });
 
     // 3. Create tool runs (siblings of assistant, children of turn).
@@ -293,7 +272,6 @@ export async function traceTurn(
         dotted_order: toolDottedOrder,
         extra: {
           metadata: { thread_id: sessionId, ls_integration: "claude-code" },
-          tags: ["tool"],
         },
       });
 
@@ -325,6 +303,12 @@ export async function traceTurn(
         metadata: {
           thread_id: sessionId,
           ls_integration: "claude-code",
+          ls_provider: "anthropic",
+          ls_model_name: llmCall.model,
+          ls_invocation_params: {
+            model: llmCall.model,
+            ...(llmCall.stopReason != null ? { stop_reason: llmCall.stopReason } : {}),
+          },
           usage_metadata: buildUsageMetadata(llmCall.usage),
         },
       },
@@ -360,6 +344,7 @@ export async function traceTurn(
         metadata: {
           thread_id: sessionId,
           ls_integration: "claude-code",
+          turn_number: turnNum,
         },
       },
     });

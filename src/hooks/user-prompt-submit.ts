@@ -60,14 +60,6 @@ async function main(): Promise<void> {
     start_time: startTime,
     trace_id: runId,
     dotted_order: dottedOrder,
-    extra: {
-      metadata: {
-        thread_id: input.session_id,
-        ls_integration: "claude-code",
-        turn_number: turnNum,
-        ls_agent_type: "agent",
-      },
-    },
   });
 
   debug(`Created initial run ${runId} for turn ${turnNum}`);
@@ -81,6 +73,7 @@ async function main(): Promise<void> {
         current_turn_run_id: runId,
         current_trace_id: runId,
         current_dotted_order: dottedOrder,
+        current_turn_number: turnNum,
       },
     };
   });

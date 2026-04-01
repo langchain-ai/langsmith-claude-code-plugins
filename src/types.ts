@@ -168,6 +168,8 @@ export interface SessionState {
   current_trace_id?: string;
   /** Current turn's dotted order prefix for child runs */
   current_dotted_order?: string;
+  /** Current turn number (1-based), set by UserPromptSubmit for Stop to use */
+  current_turn_number?: number;
   /** Current turn start time for duration calculation */
   current_turn_start?: number;
   /** Wall-clock time (ms) when the last tool finished, set by PostToolUse */
