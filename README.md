@@ -114,26 +114,6 @@ Tool runs include the tool name, inputs, and output content.
 
 Interrupted turns (where the user cancels mid-response) are marked with status `"interrupted"` in LangSmith.
 
-## Architecture
-
-```
-src/
-├── types.ts          # TypeScript types for hook inputs, transcript messages, runs
-├── config.ts         # Environment variable configuration
-├── logger.ts         # File-based logger (writes to ~/.claude/state/hook.log)
-├── state.ts          # Persistent state with file locking (tracks transcript position per session)
-├── transcript.ts     # JSONL transcript parser — groups messages into Turns
-├── langsmith.ts      # LangSmith run construction using the official JS SDK
-├── index.ts          # Public API re-exports
-└── hooks/
-    ├── user-prompt-submit.ts  # UserPromptSubmit hook
-    ├── post-tool-use.ts       # PostToolUse hook
-    ├── stop.ts                # Stop hook
-    ├── subagent-stop.ts       # SubagentStop hook
-    ├── pre-compact.ts         # PreCompact hook
-    └── post-compact.ts        # PostCompact hook
-```
-
 ## Development
 
 ```bash
