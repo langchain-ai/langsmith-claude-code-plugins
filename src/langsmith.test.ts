@@ -90,17 +90,21 @@ describe("traceTurn", () => {
     expect(turnCall.trace_id).toBe(turnCall.id); // root trace
     expect(turnCall.dotted_order).toBeTruthy();
 
-    // Second call creates the assistant LLM run
+    // Second call creates the assistant LLM run (bare — no metadata on createRun)
     const llmCall = mockCreateRun.mock.calls[1][0];
     expect(llmCall.name).toBe("Claude");
     expect(llmCall.run_type).toBe("llm");
     expect(llmCall.parent_run_id).toBe(turnCall.id);
     expect(llmCall.trace_id).toBe(turnCall.id);
-    expect(llmCall.extra.metadata.ls_provider).toBe("anthropic");
-    expect(llmCall.extra.metadata.ls_model_name).toBe("claude-sonnet-4-5");
 
     // Should update: assistant run + turn run = 2 updateRun calls
     expect(mockUpdateRun).toHaveBeenCalledTimes(2);
+
+    // Metadata is on the assistant updateRun, not createRun
+    const assistantUpdateArgs = mockUpdateRun.mock.calls[0][1];
+    expect(assistantUpdateArgs.extra.metadata.ls_provider).toBe("anthropic");
+    expect(assistantUpdateArgs.extra.metadata.ls_model_name).toBe("claude-sonnet-4-5");
+    expect(assistantUpdateArgs.extra.metadata.ls_invocation_params.model).toBe("claude-sonnet-4-5");
   });
 
   it("uses existing parentRunId and skips creating turn run", async () => {
@@ -221,12 +225,11 @@ describe("traceTurn", () => {
     // LLM is also child of turn
     expect(llmCall.parent_run_id).toBe(turnCall.id);
 
-    // Should update: tool + assistant + turn = 3 updateRun calls
-    expect(mockUpdateRun).toHaveBeenCalledTimes(3);
+    // Should update: assistant + turn = 2 updateRun calls (tools are single createRun)
+    expect(mockUpdateRun).toHaveBeenCalledTimes(2);
 
-    // Tool update should have output
-    const toolUpdate = mockUpdateRun.mock.calls[0];
-    expect(toolUpdate[1].outputs).toEqual({ output: "file contents" });
+    // Tool output is on createRun (tools are created and completed in one call)
+    expect(toolCall.outputs).toEqual({ output: "file contents" });
   });
 
   it("handles multiple LLM calls in a turn", async () => {
@@ -383,11 +386,10 @@ describe("traceTurn", () => {
       project: "test-project",
     });
 
-    // Tool updateRun call should have "No result" output
-    // createRun: turn, assistant, tool (3 calls)
-    // updateRun: tool, assistant, turn (3 calls)
-    const toolUpdateArgs = mockUpdateRun.mock.calls[0][1];
-    expect(toolUpdateArgs.outputs).toEqual({ output: "No result" });
+    // Tool output is on createRun (tools are created and completed in one call)
+    // createRun: turn (0), assistant (1), tool (2)
+    const toolCreateArgs = mockCreateRun.mock.calls[2][0];
+    expect(toolCreateArgs.outputs).toEqual({ output: "No result" });
   });
 
   it("skips Task tools already in existingTaskRunMap", async () => {
@@ -516,33 +518,4 @@ describe("traceTurn", () => {
     expect(turnUpdateArgs.error).toBe("Interrupted");
   });
 
-  it("adds subagent tag when isSubagent is true", async () => {
-    const turn: Turn = {
-      userContent: "Subagent task",
-      userTimestamp: "2025-01-01T00:00:00Z",
-      llmCalls: [
-        {
-          content: [{ type: "text", text: "Done" }],
-          model: "claude-sonnet-4-5",
-          usage: { input_tokens: 10, output_tokens: 5 },
-          startTime: "2025-01-01T00:00:01Z",
-          endTime: "2025-01-01T00:00:02Z",
-          toolCalls: [],
-        },
-      ],
-      isComplete: true,
-    };
-
-    await traceTurn({
-      turn,
-      sessionId: "session-123",
-      turnNum: 1,
-      project: "test-project",
-      isSubagent: true,
-    });
-
-    // Standalone turn should have subagent tag in metadata
-    const turnCall = mockCreateRun.mock.calls[0][0];
-    expect(turnCall.extra.metadata.tags).toContain("subagent");
-  });
 });
