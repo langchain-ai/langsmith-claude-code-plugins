@@ -75,7 +75,6 @@ function mergeAssistantChunks(chunks: AssistantMessage[]): {
   usage: Usage;
   startTime: string;
   endTime: string;
-  stopReason?: string | null;
 } {
   if (chunks.length === 0) {
     throw new Error("Cannot merge zero chunks");
@@ -94,7 +93,6 @@ function mergeAssistantChunks(chunks: AssistantMessage[]): {
     usage: last.message.usage, // SSE usage is cumulative; last chunk has final totals.
     startTime: first.timestamp,
     endTime: last.timestamp,
-    stopReason: last.message.stop_reason,
   };
 }
 
@@ -208,7 +206,6 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         startTime: merged.startTime,
         endTime: merged.endTime,
         toolCalls,
-        stopReason: merged.stopReason,
       });
     }
 

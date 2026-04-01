@@ -143,8 +143,6 @@ export interface LLMCall {
   endTime: string;
   /** Tool calls made in this response. */
   toolCalls: ToolCall[];
-  /** Stop reason from the final chunk (e.g. "end_turn", "tool_use", "max_tokens"). */
-  stopReason?: string | null;
 }
 
 /** A complete turn: one user prompt → one or more LLM calls. */
