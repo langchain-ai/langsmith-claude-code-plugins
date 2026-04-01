@@ -177,7 +177,12 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
     // Check if turn is complete
     const assistantMessages = Array.from(assistantChunks.values()).flat();
     const hasStopReasonField = assistantMessages.some((m) => m.message.stop_reason !== undefined);
-    const isComplete = !forceIncomplete && (!hasStopReasonField || hasStopReasonEndTurn);
+    // A turn is complete if it explicitly ended with end_turn, OR if there's no
+    // stop_reason field at all (old transcript format — assume complete).
+    // For the last turn in the transcript (forceIncomplete=true) we don't apply the
+    // no-stop-reason shortcut: if it's the last thing we read and has no stop_reason,
+    // it may have been interrupted mid-stream.
+    const isComplete = hasStopReasonEndTurn || (!forceIncomplete && !hasStopReasonField);
 
     const llmCalls: LLMCall[] = [];
 

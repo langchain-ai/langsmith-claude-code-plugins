@@ -9,7 +9,7 @@
 
 import { randomUUID } from "node:crypto";
 import { debug, error } from "../logger.js";
-import { initClient, generateDottedOrderSegment } from "../langsmith.js";
+import { initClient, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -62,6 +62,7 @@ async function main(): Promise<void> {
     dotted_order: dottedOrder,
   });
 
+  await flushPendingTraces();
   debug(`Created initial run ${runId} for turn ${turnNum}`);
 
   await atomicUpdateState(config.stateFilePath, (s) => {

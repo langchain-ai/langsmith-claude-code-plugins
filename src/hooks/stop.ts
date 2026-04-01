@@ -53,6 +53,10 @@ async function main(): Promise<void> {
 
   debug(`Last line: ${sessionState.last_line}, turn count: ${sessionState.turn_count}`);
 
+  // Wait briefly for the transcript writer to flush. Stop fires as soon as the
+  // model finishes generating, but the JSONL file write may still be in flight.
+  await new Promise((r) => setTimeout(r, 200));
+
   const { messages, lastLine } = readTranscript(transcriptPath, sessionState.last_line);
   if (messages.length === 0) {
     debug("No new messages");
@@ -304,11 +308,18 @@ async function main(): Promise<void> {
 
   // Save updated state — re-read inside the lock so we don't clobber
   // concurrent writes from PostToolUse/SubagentStop.
+  //
+  // If we traced 0 turns, don't advance last_line. This handles the race
+  // condition where Stop fires before the transcript contains the assistant
+  // response (e.g. only a file-history-snapshot + user message are on disk).
+  // Keeping last_line at its previous value lets the next Stop re-read from
+  // the same position and pick up the complete turn.
+  const savedLastLine = tracedTurns > 0 ? lastLine : sessionState.last_line;
   await atomicUpdateState(config.stateFilePath, (latestState) => {
     const updatedState = updateSessionState(
       latestState,
       input.session_id,
-      lastLine,
+      savedLastLine,
       sessionState.turn_count + tracedTurns,
       { ...getSessionState(latestState, input.session_id).task_run_map, ...allTaskRunMaps },
     );
