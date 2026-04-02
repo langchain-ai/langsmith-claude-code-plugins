@@ -4,6 +4,10 @@ A Claude Code plugin that traces conversations, tool calls, subagent executions,
 
 ![](./static/img/example_trace.png)
 
+## Prerequisites
+
+- [Node.js](https://nodejs.org/) v18+ (hooks run via `node`)
+
 ## Installation
 
 ### From source (development)
