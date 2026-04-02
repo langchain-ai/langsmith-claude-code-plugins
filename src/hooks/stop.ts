@@ -212,12 +212,15 @@ async function main(): Promise<void> {
   // the same position and pick up the complete turn.
   const savedLastLine = tracedTurns > 0 ? lastLine : sessionState.last_line;
   await atomicUpdateState(config.stateFilePath, (latestState) => {
+    const latestSession = getSessionState(latestState, input.session_id);
     const updatedState = updateSessionState(
       latestState,
       input.session_id,
       savedLastLine,
-      sessionState.turn_count + tracedTurns,
-      allTaskRunMaps, // Only keep current turn's entries; old ones are fully resolved.
+      latestSession.turn_count + tracedTurns,
+      // Merge any late PostToolUse writes with our traced entries. allTaskRunMaps
+      // wins on conflicts since it has the fully resolved data from traceTurn.
+      { ...latestSession.task_run_map, ...allTaskRunMaps },
     );
     // Clear fields that are no longer needed
     updatedState[input.session_id].current_turn_run_id = undefined;
