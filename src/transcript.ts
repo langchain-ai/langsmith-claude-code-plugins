@@ -3,7 +3,7 @@
  * messages into Turns (user prompt → LLM calls → tool results).
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
 import type {
   TranscriptMessage,
   AssistantMessage,
@@ -19,28 +19,147 @@ import type {
 
 // ─── Low-level parsing ─────────────────────────────────────────────────────
 
+/**
+ * Maximum transcript file size (in bytes) to read in full via readFileSync.
+ * Larger files are read in streaming chunks to avoid OOM.
+ */
+const MAX_FULL_READ_BYTES = 50 * 1024 * 1024; // 50 MB
+
 /** Read a JSONL file and return parsed lines starting after `afterLine`. */
 export function readTranscript(
   filePath: string,
   afterLine: number = -1,
 ): { messages: TranscriptMessage[]; lastLine: number } {
-  const raw = readFileSync(filePath, "utf-8");
-  const lines = raw.split("\n").filter((l) => l.trim() !== "");
-
-  const messages: TranscriptMessage[] = [];
-  let lastLine = afterLine;
-
-  for (let i = 0; i < lines.length; i++) {
-    lastLine = i;
-    if (i <= afterLine) continue;
-    try {
-      messages.push(JSON.parse(lines[i]) as TranscriptMessage);
-    } catch {
-      // Skip malformed lines.
-    }
+  let size: number;
+  try {
+    size = statSync(filePath).size;
+  } catch {
+    return { messages: [], lastLine: afterLine };
   }
 
-  return { messages, lastLine };
+  // For small-to-moderate files, read the whole thing (simple, fast).
+  if (size <= MAX_FULL_READ_BYTES) {
+    const raw = readFileSync(filePath, "utf-8");
+    const lines = raw.split("\n").filter((l) => l.trim() !== "");
+
+    const messages: TranscriptMessage[] = [];
+    let lastLine = afterLine;
+
+    for (let i = 0; i < lines.length; i++) {
+      lastLine = i;
+      if (i <= afterLine) continue;
+      try {
+        messages.push(JSON.parse(lines[i]) as TranscriptMessage);
+      } catch {
+        // Skip malformed lines.
+      }
+    }
+    return { messages, lastLine };
+  }
+
+  // Large file: stream through in chunks to avoid loading everything at once.
+  // We still need accurate line indices, but we only parse lines after afterLine.
+  const fd = openSync(filePath, "r");
+  try {
+    const chunkSize = 2 * 1024 * 1024; // 2 MB
+    const buf = Buffer.alloc(chunkSize);
+    const messages: TranscriptMessage[] = [];
+    let lastLine = afterLine;
+    let lineIndex = -1; // current line number (0-based)
+    let partial = ""; // leftover from previous chunk
+    let bytesRead: number;
+    let pos = 0;
+
+    while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
+      const chunk = partial + buf.toString("utf-8", 0, bytesRead);
+      partial = "";
+      const lines = chunk.split("\n");
+
+      // Last element may be incomplete — save for next iteration.
+      partial = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed === "") continue;
+        lineIndex++;
+        lastLine = lineIndex;
+        if (lineIndex <= afterLine) continue;
+        try {
+          messages.push(JSON.parse(trimmed) as TranscriptMessage);
+        } catch {
+          // Skip malformed lines.
+        }
+      }
+      pos += bytesRead;
+    }
+
+    // Handle final partial line (if file doesn't end with newline).
+    if (partial.trim() !== "") {
+      lineIndex++;
+      lastLine = lineIndex;
+      if (lineIndex > afterLine) {
+        try {
+          messages.push(JSON.parse(partial.trim()) as TranscriptMessage);
+        } catch {
+          // Skip malformed lines.
+        }
+      }
+    }
+
+    return { messages, lastLine };
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Return the index of the last line in a transcript file, without parsing
+ * all the content. Used by UserPromptSubmit to skip to the end of a
+ * pre-existing transcript when state is fresh (last_line === -1).
+ *
+ * Counts newlines in streaming chunks to avoid loading large files into memory.
+ */
+export function getTranscriptEndLine(filePath: string): number {
+  try {
+    const size = statSync(filePath).size;
+    if (size === 0) return -1;
+
+    // Small files: simple read.
+    if (size <= MAX_FULL_READ_BYTES) {
+      const raw = readFileSync(filePath, "utf-8");
+      const lines = raw.split("\n").filter((l) => l.trim() !== "");
+      return lines.length > 0 ? lines.length - 1 : -1;
+    }
+
+    // Large files: count non-empty lines by streaming chunks.
+    const fd = openSync(filePath, "r");
+    try {
+      const chunkSize = 1024 * 1024; // 1 MB
+      const buf = Buffer.alloc(chunkSize);
+      let lineCount = 0;
+      let bytesRead: number;
+      let pos = 0;
+      let partial = "";
+
+      while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
+        const chunk = partial + buf.toString("utf-8", 0, bytesRead);
+        partial = "";
+        const lines = chunk.split("\n");
+        partial = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.trim() !== "") lineCount++;
+        }
+        pos += bytesRead;
+      }
+      if (partial.trim() !== "") lineCount++;
+
+      return lineCount > 0 ? lineCount - 1 : -1;
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return -1;
+  }
 }
 
 /** Check if a message is a human user prompt (string content, or array content without tool_result blocks — e.g. images). */

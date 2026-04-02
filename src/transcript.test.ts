@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   readTranscript,
+  getTranscriptEndLine,
   isHumanMessage,
   isToolResult,
   isAssistantMessage,
@@ -145,6 +146,55 @@ describe("readTranscript", () => {
     writeFileSync(path, "\n\n\n");
     const { messages } = readTranscript(path);
     expect(messages).toHaveLength(0);
+  });
+});
+
+// ─── getTranscriptEndLine ──────────────────────────────────────────────────
+
+describe("getTranscriptEndLine", () => {
+  it("returns last line index for a non-empty transcript", () => {
+    const path = writeJsonl("test.jsonl", [
+      makeUser("Hello"),
+      makeAssistant("msg_1", "Hi"),
+      makeUser("Second"),
+    ]);
+    expect(getTranscriptEndLine(path)).toBe(2);
+  });
+
+  it("returns -1 for an empty file", () => {
+    const path = join(tmpDir, "empty.jsonl");
+    writeFileSync(path, "");
+    expect(getTranscriptEndLine(path)).toBe(-1);
+  });
+
+  it("returns -1 for a non-existent file", () => {
+    expect(getTranscriptEndLine(join(tmpDir, "nope.jsonl"))).toBe(-1);
+  });
+
+  it("works with stale-state recovery: skip to end then read new messages", () => {
+    // Simulate: transcript has 1000 old messages, state was lost (last_line=-1).
+    // UserPromptSubmit calls getTranscriptEndLine to skip to end,
+    // then Stop calls readTranscript(path, endLine) to read only new messages.
+    const oldMessages = Array.from({ length: 100 }, (_, i) => makeUser(`Old ${i}`));
+    const path = writeJsonl("stale.jsonl", oldMessages);
+
+    // UserPromptSubmit would do this:
+    const endLine = getTranscriptEndLine(path);
+    expect(endLine).toBe(99);
+
+    // Later, new messages are appended (simulated by rewriting with extras)
+    const allMessages = [
+      ...oldMessages,
+      makeUser("New prompt"),
+      makeAssistant("msg_new", "New response"),
+    ];
+    writeFileSync(path, allMessages.map((l) => JSON.stringify(l)).join("\n") + "\n");
+
+    // Stop hook reads from the saved endLine — only sees the 2 new messages
+    const { messages, lastLine } = readTranscript(path, endLine);
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toMatchObject({ type: "user", message: { content: "New prompt" } });
+    expect(lastLine).toBe(101);
   });
 });
 

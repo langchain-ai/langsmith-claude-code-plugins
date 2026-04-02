@@ -217,7 +217,7 @@ async function main(): Promise<void> {
       input.session_id,
       savedLastLine,
       sessionState.turn_count + tracedTurns,
-      { ...getSessionState(latestState, input.session_id).task_run_map, ...allTaskRunMaps },
+      allTaskRunMaps, // Only keep current turn's entries; old ones are fully resolved.
     );
     // Clear fields that are no longer needed
     updatedState[input.session_id].current_turn_run_id = undefined;

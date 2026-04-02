@@ -20,6 +20,7 @@ import {
   parseDottedOrder,
 } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
+import { getTranscriptEndLine } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 
@@ -55,9 +56,22 @@ async function main(): Promise<void> {
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
 
+  // If state is fresh (last_line === -1) but the transcript already has content,
+  // skip to the end. This avoids replaying thousands of old messages (which would
+  // be rejected by LangSmith's ±24h timestamp window) when state is lost due to
+  // file deletion, corruption, or session pruning.
+  let interruptedLastLine = sessionState.last_line;
+  if (interruptedLastLine === -1 && input.transcript_path) {
+    const transcriptPath = expandHome(input.transcript_path)!;
+    const endLine = getTranscriptEndLine(transcriptPath);
+    if (endLine > 0) {
+      debug(`Fresh state but transcript has ${endLine + 1} lines — skipping to end`);
+      interruptedLastLine = endLine;
+    }
+  }
+
   // If there's a stale turn run, the previous turn was interrupted (Stop never fired).
   // Trace the interrupted turn's content then close the parent run.
-  let interruptedLastLine = sessionState.last_line;
   let interruptedTurnsTraced = 0;
 
   if (sessionState.current_turn_run_id) {

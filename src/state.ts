@@ -100,11 +100,18 @@ const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /**
  * Remove sessions whose `updated` timestamp is older than SESSION_MAX_AGE_MS.
+ * Sessions with an active turn (current_turn_run_id set) are never pruned,
+ * since pruning would reset last_line and cause a full transcript replay.
  */
 export function pruneOldSessions(state: TracingState, now: number = Date.now()): TracingState {
   const cutoff = now - SESSION_MAX_AGE_MS;
   const pruned: TracingState = {};
   for (const [sessionId, session] of Object.entries(state)) {
+    // Never prune a session with an active turn — its state is in use.
+    if (session.current_turn_run_id) {
+      pruned[sessionId] = session;
+      continue;
+    }
     const updatedMs = session.updated ? new Date(session.updated).getTime() : 0;
     if (updatedMs >= cutoff) {
       pruned[sessionId] = session;
@@ -135,9 +142,7 @@ export function updateSessionState(
       last_line: lastLine,
       turn_count: turnCount,
       updated: new Date().toISOString(),
-      task_run_map: taskRunMap
-        ? { ...existingSession.task_run_map, ...taskRunMap }
-        : existingSession.task_run_map,
+      task_run_map: taskRunMap ?? existingSession.task_run_map,
       current_turn_run_id:
         currentTurnRunId !== undefined ? currentTurnRunId : existingSession.current_turn_run_id,
     },

@@ -175,6 +175,21 @@ describe("pruneOldSessions", () => {
     const result = pruneOldSessions(state, now);
     expect(Object.keys(result)).toHaveLength(2);
   });
+
+  it("preserves old sessions with an active turn (current_turn_run_id set)", () => {
+    const state = {
+      active: {
+        last_line: 500,
+        turn_count: 50,
+        updated: eightDaysAgo,
+        current_turn_run_id: "run-abc-123",
+      },
+      inactive: { last_line: 5, turn_count: 1, updated: eightDaysAgo },
+    };
+    const result = pruneOldSessions(state, now);
+    expect(result).toHaveProperty("active");
+    expect(result).not.toHaveProperty("inactive");
+  });
 });
 
 describe("updateSessionState", () => {
