@@ -61,50 +61,6 @@ export CC_LANGSMITH_PROJECT="my-project"
 4. Click **Create API Key**
 5. Copy the key (starts with `lsv2_pt_...`)
 
-## How it works
-
-The plugin registers hooks that fire at different points in a Claude Code session.
-
-### `UserPromptSubmit` hook
-
-Fires when you submit a prompt. Creates the top-level Turn run in LangSmith so tool traces can be nested under it in real time.
-
-### `PostToolUse` hook
-
-Fires immediately after each tool executes. Creates a tool run in LangSmith while the session is still ongoing, so traces appear progressively rather than all at once at the end.
-
-### `Stop` hook
-
-Fires when the main agent finishes responding. Reads the JSONL transcript, reconciles any LLM calls not yet traced, completes the Turn run, and processes any pending subagent traces.
-
-**Trace hierarchy:**
-
-```
-Turn (chain)
-├── Claude (llm) — first LLM call
-├── Read (tool)
-├── Edit (tool)
-├── Claude (llm) — second LLM call (after tool results)
-└── Bash (tool)
-```
-
-### `SubagentStop` hook
-
-Fires when a subagent (spawned via the Agent tool) finishes. Queues the subagent's transcript for processing by the Stop hook, which nests it under the Agent tool run that spawned it.
-
-```
-Turn (chain)
-└── Agent (tool)
-    └── general-purpose Subagent (chain)
-        ├── Claude (llm)
-        ├── Bash (tool)
-        └── Claude (llm)
-```
-
-### `PreCompact` / `PostCompact` hooks
-
-Fire before and after a context compaction operation. Creates a standalone LangSmith run capturing the compaction trigger and summary, linked to the session via `thread_id`.
-
 ## What gets traced
 
 Each LLM run includes:
