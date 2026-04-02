@@ -5,13 +5,24 @@
  * Invoked when a user submits a prompt, before Claude processes it.
  * Creates the initial RunTree for the turn and stores the run ID
  * for the Stop hook to use as the parent for all LLM and tool runs.
+ *
+ * Also handles interrupted turns: if Stop never fired for the previous turn
+ * (user pressed Escape), traces the interrupted turn's content from the
+ * transcript before closing it with "User interrupt".
  */
 
 import { uuid7 } from "langsmith";
 import { debug, error } from "../logger.js";
-import { initClient, generateDottedOrderSegment, parseDottedOrder } from "../langsmith.js";
+import {
+  initClient,
+  traceTurn,
+  tracePendingSubagents,
+  generateDottedOrderSegment,
+  parseDottedOrder,
+} from "../langsmith.js";
+import { readTranscript, groupIntoTurns } from "../transcript.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
-import { initHook } from "../utils/hook-init.js";
+import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 
 interface UserPromptSubmitHookInput {
@@ -47,9 +58,59 @@ async function main(): Promise<void> {
   const sessionState = getSessionState(state, input.session_id);
 
   // If there's a stale turn run, the previous turn was interrupted (Stop never fired).
-  // Close it out so its child tool runs become visible in LangSmith.
+  // Trace the interrupted turn's content then close the parent run.
+  let interruptedLastLine = sessionState.last_line;
+  let interruptedTurnsTraced = 0;
+
   if (sessionState.current_turn_run_id) {
-    debug(`Closing interrupted turn run ${sessionState.current_turn_run_id}`);
+    debug(`Tracing interrupted turn ${sessionState.current_turn_run_id}`);
+    const taskRunMap = sessionState.task_run_map ?? {};
+
+    // Trace LLM calls from the transcript.
+    const transcriptPath = expandHome(input.transcript_path);
+    if (transcriptPath) {
+      try {
+        const { messages, lastLine } = readTranscript(transcriptPath, sessionState.last_line);
+        if (messages.length > 0) {
+          const turns = groupIntoTurns(messages);
+          if (turns.length > 0) {
+            await traceTurn({
+              turn: turns[turns.length - 1],
+              sessionId: input.session_id,
+              turnNum: sessionState.turn_count + 1,
+              project: config.project,
+              parentRunId: sessionState.current_turn_run_id,
+              existingTaskRunMap: taskRunMap,
+              tracedToolUseIds: new Set(sessionState.traced_tool_use_ids ?? []),
+              traceId: sessionState.current_trace_id,
+              parentDottedOrder: sessionState.current_dotted_order,
+            });
+            interruptedLastLine = lastLine;
+            interruptedTurnsTraced = 1;
+          }
+        }
+      } catch (err) {
+        error(`Failed to trace interrupted turn transcript: ${err}`);
+      }
+    }
+
+    // Trace any pending subagents (SubagentStop already queued them).
+    const pendingSubagents = sessionState.pending_subagent_traces ?? [];
+    if (pendingSubagents.length > 0) {
+      try {
+        await tracePendingSubagents({
+          sessionId: input.session_id,
+          pendingSubagents,
+          taskRunMap,
+          parentTraceId: sessionState.current_trace_id,
+          project: config.project,
+        });
+      } catch (err) {
+        error(`Failed to trace pending subagents: ${err}`);
+      }
+    }
+
+    // Close the parent turn run.
     try {
       await client.updateRun(sessionState.current_turn_run_id, {
         trace_id: sessionState.current_trace_id,
@@ -70,7 +131,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const turnNum = sessionState.turn_count + 1;
+  const turnNum = sessionState.turn_count + interruptedTurnsTraced + 1;
 
   const runId = uuid7();
   const startTime = Date.now();
@@ -117,6 +178,13 @@ async function main(): Promise<void> {
         current_dotted_order: dottedOrder,
         current_parent_run_id: parentRunId,
         current_turn_number: turnNum,
+        // Advance past the interrupted turn's messages so Stop doesn't re-trace them
+        last_line: interruptedLastLine,
+        turn_count: ss.turn_count + interruptedTurnsTraced,
+        // Clear interrupted turn's stale data
+        task_run_map: {},
+        traced_tool_use_ids: [],
+        pending_subagent_traces: [],
       },
     };
   });

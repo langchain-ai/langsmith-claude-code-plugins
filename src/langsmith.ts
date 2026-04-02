@@ -8,6 +8,7 @@
 
 import { Client, uuid7 } from "langsmith";
 import type { Turn, ContentBlock, Usage } from "./types.js";
+import { readTranscript, groupIntoTurns } from "./transcript.js";
 import * as logger from "./logger.js";
 import { debug } from "./logger.js";
 
@@ -377,4 +378,138 @@ export async function traceTurn(
   );
 
   return taskRunMap;
+}
+
+// ─── Subagent tracing ────────────────────────────────────────────────────────
+
+export interface PendingSubagent {
+  agent_id: string;
+  agent_type: string;
+  agent_transcript_path: string;
+  session_id: string;
+}
+
+export interface TaskRunEntry {
+  run_id: string;
+  dotted_order: string;
+  deferred?: Record<string, unknown>;
+}
+
+/**
+ * Trace pending subagents queued by SubagentStop.
+ * Used by both the Stop hook (normal completion) and UserPromptSubmit
+ * (interrupted turn recovery).
+ */
+export async function tracePendingSubagents(options: {
+  sessionId: string;
+  pendingSubagents: PendingSubagent[];
+  taskRunMap: Record<string, TaskRunEntry>;
+  parentTraceId: string | undefined;
+  project: string;
+}): Promise<void> {
+  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project } = options;
+
+  if (!client) {
+    throw new Error("LangSmith client not initialized — call initClient() first");
+  }
+
+  for (const subagent of pendingSubagents) {
+    try {
+      const taskRunInfo = taskRunMap[subagent.agent_id];
+      if (!taskRunInfo) {
+        logger.error(`No Agent tool run found for ${subagent.agent_id} - cannot trace subagent`);
+        continue;
+      }
+
+      const parentToolRunId = taskRunInfo.run_id;
+      const agentToolDottedOrder = taskRunInfo.dotted_order;
+      const toolName = subagent.agent_type || "Agent";
+      const deferred = taskRunInfo.deferred;
+
+      debug(`Processing subagent ${toolName} (${subagent.agent_id}) under run ${parentToolRunId}`);
+
+      // PostToolUse deferred the Agent tool run creation so we can use the
+      // real subagent name. Create it now with the correct name.
+      if (deferred) {
+        await client.createRun({
+          id: parentToolRunId,
+          name: "Agent",
+          run_type: "tool",
+          inputs: { input: deferred.inputs },
+          outputs: { output: deferred.outputs },
+          project_name: deferred.project_name as string | undefined,
+          start_time: deferred.start_time as number,
+          end_time: deferred.end_time as number,
+          parent_run_id: deferred.parent_run_id as string,
+          trace_id: deferred.trace_id as string,
+          dotted_order: agentToolDottedOrder,
+          extra: {
+            metadata: {
+              thread_id: sessionId,
+              ls_integration: "claude-code",
+              tool_name: "Agent",
+              agent_type: toolName,
+              agent_id: subagent.agent_id,
+            },
+          },
+        });
+      }
+
+      // Read subagent transcript and trace its turns.
+      const { messages: subagentMessages } = readTranscript(subagent.agent_transcript_path, -1);
+      if (subagentMessages.length === 0) {
+        debug(`Empty subagent transcript: ${subagent.agent_transcript_path}`);
+        continue;
+      }
+
+      const subagentTurns = groupIntoTurns(subagentMessages);
+
+      // Create an intermediate chain run as a child of the Agent tool run,
+      // then nest all subagent turns under it.
+      const subagentChainId = uuid7();
+      const subagentChainStartTime = (deferred?.start_time as number | undefined) ?? Date.now();
+      const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentChainStartTime, subagentChainId)}`;
+
+      await client.createRun({
+        id: subagentChainId,
+        name: `${toolName} Subagent`,
+        run_type: "chain",
+        inputs: deferred?.inputs ?? {},
+        outputs: { output: deferred?.outputs },
+        project_name: project,
+        start_time: subagentChainStartTime,
+        end_time: (deferred?.end_time as number | undefined) ?? Date.now(),
+        parent_run_id: parentToolRunId,
+        trace_id: parentTraceId,
+        dotted_order: subagentChainDottedOrder,
+        extra: {
+          metadata: {
+            thread_id: sessionId,
+            ls_integration: "claude-code",
+            agent_type: toolName,
+            agent_id: subagent.agent_id,
+          },
+        },
+      });
+
+      for (let i = 0; i < subagentTurns.length; i++) {
+        await traceTurn({
+          turn: subagentTurns[i],
+          sessionId,
+          turnNum: i + 1,
+          project,
+          parentRunId: subagentChainId,
+          existingTaskRunMap: undefined,
+          traceId: parentTraceId,
+          parentDottedOrder: subagentChainDottedOrder,
+        });
+      }
+
+      logger.log(
+        `Traced subagent ${toolName} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`,
+      );
+    } catch (err) {
+      logger.error(`Failed to trace subagent ${subagent.agent_id}: ${err}`);
+    }
+  }
 }

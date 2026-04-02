@@ -39,7 +39,14 @@ async function main(): Promise<void> {
   const startTime = sessionState.compaction_start_time ?? endTime;
 
   const runId = uuid7();
-  const dottedOrder = generateDottedOrderSegment(startTime, runId);
+  const segment = generateDottedOrderSegment(startTime, runId);
+
+  // Nest under the current turn's trace if one is active, otherwise standalone.
+  const parentRunId = sessionState.current_turn_run_id;
+  const traceId = sessionState.current_trace_id ?? runId;
+  const dottedOrder = sessionState.current_dotted_order
+    ? `${sessionState.current_dotted_order}.${segment}`
+    : segment;
 
   try {
     await client.createRun({
@@ -51,8 +58,9 @@ async function main(): Promise<void> {
       project_name: config.project,
       start_time: startTime,
       end_time: endTime,
-      trace_id: runId,
+      trace_id: traceId,
       dotted_order: dottedOrder,
+      ...(parentRunId ? { parent_run_id: parentRunId } : {}),
       extra: {
         metadata: {
           thread_id: input.session_id,

@@ -7,7 +7,6 @@
  * groups them into turns, and sends traces to LangSmith.
  */
 
-import { uuid7 } from "langsmith";
 import { readTranscript, groupIntoTurns } from "../transcript.js";
 import { log, warn, debug, error } from "../logger.js";
 import {
@@ -17,12 +16,7 @@ import {
   updateSessionState,
   pruneOldSessions,
 } from "../state.js";
-import {
-  initClient,
-  traceTurn,
-  flushPendingTraces,
-  generateDottedOrderSegment,
-} from "../langsmith.js";
+import { initClient, traceTurn, tracePendingSubagents, flushPendingTraces } from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import type { StopHookInput } from "../types.js";
@@ -199,113 +193,13 @@ async function main(): Promise<void> {
   const pendingSubagents = freshSession.pending_subagent_traces || [];
   if (pendingSubagents.length > 0) {
     debug(`Processing ${pendingSubagents.length} pending subagent trace(s)`);
-
-    for (const subagent of pendingSubagents) {
-      try {
-        const taskRunInfo = mergedTaskRunMap[subagent.agent_id];
-        if (!taskRunInfo) {
-          error(`No Agent tool run found for ${subagent.agent_id} - cannot trace subagent`);
-          continue;
-        }
-
-        const parentToolRunId = taskRunInfo.run_id;
-        const agentToolDottedOrder = taskRunInfo.dotted_order;
-        const parentTraceId = freshSession.current_trace_id;
-        const toolName = subagent.agent_type || "Agent";
-
-        // Get deferred creation info from the fresh session state (PostToolUse writes it there)
-        const freshTaskRunInfo = freshSession.task_run_map?.[subagent.agent_id];
-        const deferred = freshTaskRunInfo?.deferred;
-
-        debug(
-          `Processing subagent ${toolName} (${subagent.agent_id}) under run ${parentToolRunId}`,
-        );
-
-        // PostToolUse deferred the Agent tool run creation so we can use the
-        // real subagent name. Create it now with the correct name.
-        if (deferred) {
-          await client.createRun({
-            id: parentToolRunId,
-            name: "Agent",
-            run_type: "tool",
-            inputs: { input: deferred.inputs },
-            outputs: { output: deferred.outputs },
-            project_name: deferred.project_name,
-            start_time: deferred.start_time,
-            end_time: deferred.end_time,
-            parent_run_id: deferred.parent_run_id,
-            trace_id: deferred.trace_id,
-            dotted_order: agentToolDottedOrder,
-            extra: {
-              metadata: {
-                thread_id: input.session_id,
-                ls_integration: "claude-code",
-                tool_name: "Agent",
-                agent_type: toolName,
-                agent_id: subagent.agent_id,
-              },
-            },
-          });
-        }
-
-        // Read subagent transcript (JSONL format, same as main transcript)
-        const { messages: subagentMessages } = readTranscript(subagent.agent_transcript_path, -1);
-        if (subagentMessages.length === 0) {
-          debug(`Empty subagent transcript: ${subagent.agent_transcript_path}`);
-          continue;
-        }
-
-        const subagentTurns = groupIntoTurns(subagentMessages);
-
-        // Create an intermediate chain run named "${toolName} Subagent" as a child
-        // of the Agent tool run, then nest all subagent turns under it.
-        const subagentChainId = uuid7();
-        const subagentChainStartTime = deferred?.start_time ?? Date.now();
-        const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentChainStartTime, subagentChainId)}`;
-
-        await client.createRun({
-          id: subagentChainId,
-          name: `${toolName} Subagent`,
-          run_type: "chain",
-          inputs: deferred?.inputs ?? {},
-          outputs: { output: deferred?.outputs },
-          project_name: config.project,
-          start_time: subagentChainStartTime,
-          end_time: deferred?.end_time ?? Date.now(),
-          parent_run_id: parentToolRunId,
-          trace_id: parentTraceId,
-          dotted_order: subagentChainDottedOrder,
-          extra: {
-            metadata: {
-              thread_id: input.session_id,
-              ls_integration: "claude-code",
-              agent_type: toolName,
-              agent_id: subagent.agent_id,
-            },
-          },
-        });
-
-        for (let i = 0; i < subagentTurns.length; i++) {
-          await traceTurn({
-            turn: subagentTurns[i],
-            sessionId: input.session_id,
-            turnNum: i + 1,
-            project: config.project,
-
-            parentRunId: subagentChainId,
-            existingTaskRunMap: undefined,
-            traceId: parentTraceId,
-            parentDottedOrder: subagentChainDottedOrder,
-          });
-        }
-
-        log(
-          `Traced subagent ${subagent.agent_type} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`,
-        );
-      } catch (err) {
-        error(`Failed to trace subagent ${subagent.agent_id}: ${err}`);
-      }
-    }
+    await tracePendingSubagents({
+      sessionId: input.session_id,
+      pendingSubagents,
+      taskRunMap: mergedTaskRunMap,
+      parentTraceId: freshSession.current_trace_id,
+      project: config.project,
+    });
   }
 
   // Save updated state — re-read inside the lock so we don't clobber
