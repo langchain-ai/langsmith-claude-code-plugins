@@ -1,6 +1,7 @@
 # Node.js
 node_modules/
 dist/
+# bundle/ is checked in so the plugin works without a build step
 
 # IDE
 .idea/

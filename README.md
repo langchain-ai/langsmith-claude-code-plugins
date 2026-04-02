@@ -6,7 +6,7 @@ A Claude Code plugin that traces conversations, tool calls, subagent executions,
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) v18+ (hooks run via `node`)
+- [Node.js](https://nodejs.org/) v18+
 
 ## Installation
 
@@ -17,6 +17,7 @@ From within Claude Code, run:
 ```
 /plugin marketplace add langchain-ai/langsmith-claude-code-plugins
 /plugin install langsmith-tracing@langsmith-claude-code-plugins
+/reload-plugins
 ```
 
 ### From source (development)

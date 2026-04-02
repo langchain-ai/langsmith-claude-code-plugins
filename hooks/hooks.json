@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/user-prompt-submit.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/user-prompt-submit.js\"",
             "timeout": 30
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/pre-tool-use.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/pre-tool-use.js\"",
             "timeout": 10
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/post-tool-use.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/post-tool-use.js\"",
             "timeout": 30,
             "async": true
           }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/stop.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/stop.js\"",
             "timeout": 120
           }
         ]
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/stop-failure.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/stop-failure.js\"",
             "timeout": 30
           }
         ]
@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/subagent-stop.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/subagent-stop.js\"",
             "timeout": 60,
             "async": true
           }
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/pre-compact.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/pre-compact.js\"",
             "timeout": 10
           }
         ]
@@ -85,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/post-compact.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/post-compact.js\"",
             "timeout": 30,
             "async": true
           }
@@ -97,7 +97,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/session-end.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/session-end.js\"",
             "timeout": 10
           }
         ]
