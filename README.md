@@ -10,26 +10,22 @@ A Claude Code plugin that traces conversations, tool calls, subagent executions,
 
 ## Installation
 
+### As a Claude Code plugin
+
+From within Claude Code, run:
+
+```
+/plugin marketplace add langchain-ai/langsmith-claude-code-plugins
+/plugin install langsmith-tracing@langsmith-claude-code-plugins
+```
+
 ### From source (development)
 
 ```bash
 pnpm install
 pnpm build
-claude --plugin-dir /path/to/tracing-claude-code
+claude --plugin-dir /path/to/langsmith-claude-code-plugins
 ```
-
-## Configuration
-
-### Environment variables
-
-| Variable                           | Required | Default                           | Description                                                          |
-| ---------------------------------- | -------- | --------------------------------- | -------------------------------------------------------------------- |
-| `TRACE_TO_LANGSMITH`               | Yes      | —                                 | Set to `"true"` to enable tracing                                    |
-| `CC_LANGSMITH_API_KEY`             | Yes      | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`)                |
-| `CC_LANGSMITH_PROJECT`             | No       | `"claude-code"`                   | LangSmith project name                                               |
-| `LANGSMITH_ENDPOINT`               | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                               |
-| `CC_LANGSMITH_DEBUG`               | No       | `"false"`                         | Enable debug logging                                                 |
-| `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | —                                 | Dotted-order of an existing run to nest all Claude Code traces under |
 
 ### Setting environment variables
 
@@ -76,6 +72,19 @@ Each LLM run includes:
 Tool runs include the tool name, inputs, and output content.
 
 Interrupted turns (where the user cancels mid-response) are marked with status `"interrupted"` in LangSmith.
+
+## Environment variables
+
+The plugin respects the following environment variables:
+
+| Variable                           | Required | Default                           | Description                                                          |
+| ---------------------------------- | -------- | --------------------------------- | -------------------------------------------------------------------- |
+| `TRACE_TO_LANGSMITH`               | Yes      | —                                 | Set to `"true"` to enable tracing                                    |
+| `CC_LANGSMITH_API_KEY`             | Yes      | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`)                |
+| `CC_LANGSMITH_PROJECT`             | No       | `"claude-code"`                   | LangSmith project name                                               |
+| `LANGSMITH_ENDPOINT`               | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                               |
+| `CC_LANGSMITH_DEBUG`               | No       | `"false"`                         | Enable debug logging                                                 |
+| `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | —                                 | Dotted-order of an existing run to nest all Claude Code traces under |
 
 ## Nesting traces under an existing run
 
