@@ -5,36 +5,25 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __commonJS = (cb, mod) =>
-  function __require() {
-    return (
-      mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports
-    );
-  };
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toESM = (mod, isNodeMode, target) => (
-  (target = mod != null ? __create(__getProtoOf(mod)) : {}),
-  __copyProps(
-    // If the importer is in node compatibility mode or this is not an ESM
-    // file that has been converted to a CommonJS file using a Babel-
-    // compatible transform (i.e. "__esModule" has not been set), then set
-    // "default" to the CommonJS "module.exports" for node compatibility.
-    isNodeMode || !mod || !mod.__esModule
-      ? __defProp(target, "default", { value: mod, enumerable: true })
-      : target,
-    mod,
-  )
-);
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 
 // node_modules/.pnpm/eventemitter3@4.0.7/node_modules/eventemitter3/index.js
 var require_eventemitter3 = __commonJS({
@@ -42,7 +31,8 @@ var require_eventemitter3 = __commonJS({
     "use strict";
     var has = Object.prototype.hasOwnProperty;
     var prefix = "~";
-    function Events() {}
+    function Events() {
+    }
     if (Object.create) {
       Events.prototype = /* @__PURE__ */ Object.create(null);
       if (!new Events().__proto__) prefix = false;
@@ -56,9 +46,8 @@ var require_eventemitter3 = __commonJS({
       if (typeof fn !== "function") {
         throw new TypeError("The listener must be a function");
       }
-      var listener = new EE(fn, context || emitter, once),
-        evt = prefix ? prefix + event : event;
-      if (!emitter._events[evt]) ((emitter._events[evt] = listener), emitter._eventsCount++);
+      var listener = new EE(fn, context || emitter, once), evt = prefix ? prefix + event : event;
+      if (!emitter._events[evt]) emitter._events[evt] = listener, emitter._eventsCount++;
       else if (!emitter._events[evt].fn) emitter._events[evt].push(listener);
       else emitter._events[evt] = [emitter._events[evt], listener];
       return emitter;
@@ -72,11 +61,9 @@ var require_eventemitter3 = __commonJS({
       this._eventsCount = 0;
     }
     EventEmitter.prototype.eventNames = function eventNames() {
-      var names = [],
-        events,
-        name;
+      var names = [], events, name;
       if (this._eventsCount === 0) return names;
-      for (name in (events = this._events)) {
+      for (name in events = this._events) {
         if (has.call(events, name)) names.push(prefix ? name.slice(1) : name);
       }
       if (Object.getOwnPropertySymbols) {
@@ -85,8 +72,7 @@ var require_eventemitter3 = __commonJS({
       return names;
     };
     EventEmitter.prototype.listeners = function listeners(event) {
-      var evt = prefix ? prefix + event : event,
-        handlers = this._events[evt];
+      var evt = prefix ? prefix + event : event, handlers = this._events[evt];
       if (!handlers) return [];
       if (handlers.fn) return [handlers.fn];
       for (var i = 0, l = handlers.length, ee = new Array(l); i < l; i++) {
@@ -95,8 +81,7 @@ var require_eventemitter3 = __commonJS({
       return ee;
     };
     EventEmitter.prototype.listenerCount = function listenerCount(event) {
-      var evt = prefix ? prefix + event : event,
-        listeners = this._events[evt];
+      var evt = prefix ? prefix + event : event, listeners = this._events[evt];
       if (!listeners) return 0;
       if (listeners.fn) return 1;
       return listeners.length;
@@ -104,33 +89,29 @@ var require_eventemitter3 = __commonJS({
     EventEmitter.prototype.emit = function emit(event, a1, a2, a3, a4, a5) {
       var evt = prefix ? prefix + event : event;
       if (!this._events[evt]) return false;
-      var listeners = this._events[evt],
-        len = arguments.length,
-        args,
-        i;
+      var listeners = this._events[evt], len = arguments.length, args, i;
       if (listeners.fn) {
         if (listeners.once) this.removeListener(event, listeners.fn, void 0, true);
         switch (len) {
           case 1:
-            return (listeners.fn.call(listeners.context), true);
+            return listeners.fn.call(listeners.context), true;
           case 2:
-            return (listeners.fn.call(listeners.context, a1), true);
+            return listeners.fn.call(listeners.context, a1), true;
           case 3:
-            return (listeners.fn.call(listeners.context, a1, a2), true);
+            return listeners.fn.call(listeners.context, a1, a2), true;
           case 4:
-            return (listeners.fn.call(listeners.context, a1, a2, a3), true);
+            return listeners.fn.call(listeners.context, a1, a2, a3), true;
           case 5:
-            return (listeners.fn.call(listeners.context, a1, a2, a3, a4), true);
+            return listeners.fn.call(listeners.context, a1, a2, a3, a4), true;
           case 6:
-            return (listeners.fn.call(listeners.context, a1, a2, a3, a4, a5), true);
+            return listeners.fn.call(listeners.context, a1, a2, a3, a4, a5), true;
         }
         for (i = 1, args = new Array(len - 1); i < len; i++) {
           args[i - 1] = arguments[i];
         }
         listeners.fn.apply(listeners.context, args);
       } else {
-        var length = listeners.length,
-          j;
+        var length = listeners.length, j;
         for (i = 0; i < length; i++) {
           if (listeners[i].once) this.removeListener(event, listeners[i].fn, void 0, true);
           switch (len) {
@@ -147,10 +128,9 @@ var require_eventemitter3 = __commonJS({
               listeners[i].fn.call(listeners[i].context, a1, a2, a3);
               break;
             default:
-              if (!args)
-                for (j = 1, args = new Array(len - 1); j < len; j++) {
-                  args[j - 1] = arguments[j];
-                }
+              if (!args) for (j = 1, args = new Array(len - 1); j < len; j++) {
+                args[j - 1] = arguments[j];
+              }
               listeners[i].fn.apply(listeners[i].context, args);
           }
         }
@@ -172,20 +152,12 @@ var require_eventemitter3 = __commonJS({
       }
       var listeners = this._events[evt];
       if (listeners.fn) {
-        if (
-          listeners.fn === fn &&
-          (!once || listeners.once) &&
-          (!context || listeners.context === context)
-        ) {
+        if (listeners.fn === fn && (!once || listeners.once) && (!context || listeners.context === context)) {
           clearEvent(this, evt);
         }
       } else {
         for (var i = 0, events = [], length = listeners.length; i < length; i++) {
-          if (
-            listeners[i].fn !== fn ||
-            (once && !listeners[i].once) ||
-            (context && listeners[i].context !== context)
-          ) {
+          if (listeners[i].fn !== fn || once && !listeners[i].once || context && listeners[i].context !== context) {
             events.push(listeners[i]);
           }
         }
@@ -212,7 +184,7 @@ var require_eventemitter3 = __commonJS({
     if ("undefined" !== typeof module) {
       module.exports = EventEmitter;
     }
-  },
+  }
 });
 
 // node_modules/.pnpm/p-finally@1.0.0/node_modules/p-finally/index.js
@@ -220,21 +192,20 @@ var require_p_finally = __commonJS({
   "node_modules/.pnpm/p-finally@1.0.0/node_modules/p-finally/index.js"(exports, module) {
     "use strict";
     module.exports = (promise, onFinally) => {
-      onFinally = onFinally || (() => {});
+      onFinally = onFinally || (() => {
+      });
       return promise.then(
-        (val) =>
-          new Promise((resolve) => {
-            resolve(onFinally());
-          }).then(() => val),
-        (err) =>
-          new Promise((resolve) => {
-            resolve(onFinally());
-          }).then(() => {
-            throw err;
-          }),
+        (val) => new Promise((resolve) => {
+          resolve(onFinally());
+        }).then(() => val),
+        (err) => new Promise((resolve) => {
+          resolve(onFinally());
+        }).then(() => {
+          throw err;
+        })
       );
     };
-  },
+  }
 });
 
 // node_modules/.pnpm/p-timeout@3.2.0/node_modules/p-timeout/index.js
@@ -248,46 +219,42 @@ var require_p_timeout = __commonJS({
         this.name = "TimeoutError";
       }
     };
-    var pTimeout = (promise, milliseconds, fallback) =>
-      new Promise((resolve, reject) => {
-        if (typeof milliseconds !== "number" || milliseconds < 0) {
-          throw new TypeError("Expected `milliseconds` to be a positive number");
-        }
-        if (milliseconds === Infinity) {
-          resolve(promise);
+    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve, reject) => {
+      if (typeof milliseconds !== "number" || milliseconds < 0) {
+        throw new TypeError("Expected `milliseconds` to be a positive number");
+      }
+      if (milliseconds === Infinity) {
+        resolve(promise);
+        return;
+      }
+      const timer = setTimeout(() => {
+        if (typeof fallback === "function") {
+          try {
+            resolve(fallback());
+          } catch (error2) {
+            reject(error2);
+          }
           return;
         }
-        const timer = setTimeout(() => {
-          if (typeof fallback === "function") {
-            try {
-              resolve(fallback());
-            } catch (error2) {
-              reject(error2);
-            }
-            return;
-          }
-          const message =
-            typeof fallback === "string"
-              ? fallback
-              : `Promise timed out after ${milliseconds} milliseconds`;
-          const timeoutError = fallback instanceof Error ? fallback : new TimeoutError(message);
-          if (typeof promise.cancel === "function") {
-            promise.cancel();
-          }
-          reject(timeoutError);
-        }, milliseconds);
-        pFinally(
-          // eslint-disable-next-line promise/prefer-await-to-then
-          promise.then(resolve, reject),
-          () => {
-            clearTimeout(timer);
-          },
-        );
-      });
+        const message = typeof fallback === "string" ? fallback : `Promise timed out after ${milliseconds} milliseconds`;
+        const timeoutError = fallback instanceof Error ? fallback : new TimeoutError(message);
+        if (typeof promise.cancel === "function") {
+          promise.cancel();
+        }
+        reject(timeoutError);
+      }, milliseconds);
+      pFinally(
+        // eslint-disable-next-line promise/prefer-await-to-then
+        promise.then(resolve, reject),
+        () => {
+          clearTimeout(timer);
+        }
+      );
+    });
     module.exports = pTimeout;
     module.exports.default = pTimeout;
     module.exports.TimeoutError = TimeoutError;
-  },
+  }
 });
 
 // node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/lower-bound.js
@@ -299,7 +266,7 @@ var require_lower_bound = __commonJS({
       let first = 0;
       let count = array.length;
       while (count > 0) {
-        const step = (count / 2) | 0;
+        const step = count / 2 | 0;
         let it = first + step;
         if (comparator(array[it], value) <= 0) {
           first = ++it;
@@ -311,7 +278,7 @@ var require_lower_bound = __commonJS({
       return first;
     }
     exports.default = lowerBound;
-  },
+  }
 });
 
 // node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/priority-queue.js
@@ -328,17 +295,13 @@ var require_priority_queue = __commonJS({
         options = Object.assign({ priority: 0 }, options);
         const element = {
           priority: options.priority,
-          run,
+          run
         };
         if (this.size && this._queue[this.size - 1].priority >= options.priority) {
           this._queue.push(element);
           return;
         }
-        const index = lower_bound_1.default(
-          this._queue,
-          element,
-          (a, b) => b.priority - a.priority,
-        );
+        const index = lower_bound_1.default(this._queue, element, (a, b) => b.priority - a.priority);
         this._queue.splice(index, 0, element);
       }
       dequeue() {
@@ -346,16 +309,14 @@ var require_priority_queue = __commonJS({
         return item === null || item === void 0 ? void 0 : item.run;
       }
       filter(options) {
-        return this._queue
-          .filter((element) => element.priority === options.priority)
-          .map((element) => element.run);
+        return this._queue.filter((element) => element.priority === options.priority).map((element) => element.run);
       }
       get size() {
         return this._queue.length;
       }
     };
     exports.default = PriorityQueue;
-  },
+  }
 });
 
 // node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/index.js
@@ -366,7 +327,8 @@ var require_dist = __commonJS({
     var EventEmitter = require_eventemitter3();
     var p_timeout_1 = require_p_timeout();
     var priority_queue_1 = require_priority_queue();
-    var empty = () => {};
+    var empty = () => {
+    };
     var timeoutError = new p_timeout_1.TimeoutError();
     var PQueue2 = class extends EventEmitter {
       constructor(options) {
@@ -377,29 +339,12 @@ var require_dist = __commonJS({
         this._pendingCount = 0;
         this._resolveEmpty = empty;
         this._resolveIdle = empty;
-        options = Object.assign(
-          {
-            carryoverConcurrencyCount: false,
-            intervalCap: Infinity,
-            interval: 0,
-            concurrency: Infinity,
-            autoStart: true,
-            queueClass: priority_queue_1.default,
-          },
-          options,
-        );
+        options = Object.assign({ carryoverConcurrencyCount: false, intervalCap: Infinity, interval: 0, concurrency: Infinity, autoStart: true, queueClass: priority_queue_1.default }, options);
         if (!(typeof options.intervalCap === "number" && options.intervalCap >= 1)) {
-          throw new TypeError(
-            `Expected \`intervalCap\` to be a number from 1 and up, got \`${(_b = (_a = options.intervalCap) === null || _a === void 0 ? void 0 : _a.toString()) !== null && _b !== void 0 ? _b : ""}\` (${typeof options.intervalCap})`,
-          );
+          throw new TypeError(`Expected \`intervalCap\` to be a number from 1 and up, got \`${(_b = (_a = options.intervalCap) === null || _a === void 0 ? void 0 : _a.toString()) !== null && _b !== void 0 ? _b : ""}\` (${typeof options.intervalCap})`);
         }
-        if (
-          options.interval === void 0 ||
-          !(Number.isFinite(options.interval) && options.interval >= 0)
-        ) {
-          throw new TypeError(
-            `Expected \`interval\` to be a finite number >= 0, got \`${(_d = (_c = options.interval) === null || _c === void 0 ? void 0 : _c.toString()) !== null && _d !== void 0 ? _d : ""}\` (${typeof options.interval})`,
-          );
+        if (options.interval === void 0 || !(Number.isFinite(options.interval) && options.interval >= 0)) {
+          throw new TypeError(`Expected \`interval\` to be a finite number >= 0, got \`${(_d = (_c = options.interval) === null || _c === void 0 ? void 0 : _c.toString()) !== null && _d !== void 0 ? _d : ""}\` (${typeof options.interval})`);
         }
         this._carryoverConcurrencyCount = options.carryoverConcurrencyCount;
         this._isIntervalIgnored = options.intervalCap === Infinity || options.interval === 0;
@@ -501,16 +446,15 @@ var require_dist = __commonJS({
       Executes all queued functions until it reaches the limit.
       */
       _processQueue() {
-        while (this._tryToStartAnother()) {}
+        while (this._tryToStartAnother()) {
+        }
       }
       get concurrency() {
         return this._concurrency;
       }
       set concurrency(newConcurrency) {
         if (!(typeof newConcurrency === "number" && newConcurrency >= 1)) {
-          throw new TypeError(
-            `Expected \`concurrency\` to be a number from 1 and up, got \`${newConcurrency}\` (${typeof newConcurrency})`,
-          );
+          throw new TypeError(`Expected \`concurrency\` to be a number from 1 and up, got \`${newConcurrency}\` (${typeof newConcurrency})`);
         }
         this._concurrency = newConcurrency;
         this._processQueue();
@@ -524,23 +468,12 @@ var require_dist = __commonJS({
             this._pendingCount++;
             this._intervalCount++;
             try {
-              const operation =
-                this._timeout === void 0 && options.timeout === void 0
-                  ? fn()
-                  : p_timeout_1.default(
-                      Promise.resolve(fn()),
-                      options.timeout === void 0 ? this._timeout : options.timeout,
-                      () => {
-                        if (
-                          options.throwOnTimeout === void 0
-                            ? this._throwOnTimeout
-                            : options.throwOnTimeout
-                        ) {
-                          reject(timeoutError);
-                        }
-                        return void 0;
-                      },
-                    );
+              const operation = this._timeout === void 0 && options.timeout === void 0 ? fn() : p_timeout_1.default(Promise.resolve(fn()), options.timeout === void 0 ? this._timeout : options.timeout, () => {
+                if (options.throwOnTimeout === void 0 ? this._throwOnTimeout : options.throwOnTimeout) {
+                  reject(timeoutError);
+                }
+                return void 0;
+              });
               resolve(await operation);
             } catch (error2) {
               reject(error2);
@@ -654,7 +587,7 @@ var require_dist = __commonJS({
       }
     };
     exports.default = PQueue2;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/internal/constants.js
@@ -663,7 +596,8 @@ var require_constants = __commonJS({
     "use strict";
     var SEMVER_SPEC_VERSION = "2.0.0";
     var MAX_LENGTH = 256;
-    var MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER /* istanbul ignore next */ || 9007199254740991;
+    var MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER || /* istanbul ignore next */
+    9007199254740991;
     var MAX_SAFE_COMPONENT_LENGTH = 16;
     var MAX_SAFE_BUILD_LENGTH = MAX_LENGTH - 6;
     var RELEASE_TYPES = [
@@ -673,7 +607,7 @@ var require_constants = __commonJS({
       "preminor",
       "patch",
       "prepatch",
-      "prerelease",
+      "prerelease"
     ];
     module.exports = {
       MAX_LENGTH,
@@ -683,52 +617,47 @@ var require_constants = __commonJS({
       RELEASE_TYPES,
       SEMVER_SPEC_VERSION,
       FLAG_INCLUDE_PRERELEASE: 1,
-      FLAG_LOOSE: 2,
+      FLAG_LOOSE: 2
     };
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/internal/debug.js
 var require_debug = __commonJS({
   "node_modules/.pnpm/semver@7.7.4/node_modules/semver/internal/debug.js"(exports, module) {
     "use strict";
-    var debug2 =
-      typeof process === "object" &&
-      process.env &&
-      process.env.NODE_DEBUG &&
-      /\bsemver\b/i.test(process.env.NODE_DEBUG)
-        ? (...args) => console.error("SEMVER", ...args)
-        : () => {};
+    var debug2 = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => {
+    };
     module.exports = debug2;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/internal/re.js
 var require_re = __commonJS({
   "node_modules/.pnpm/semver@7.7.4/node_modules/semver/internal/re.js"(exports, module) {
     "use strict";
-    var { MAX_SAFE_COMPONENT_LENGTH, MAX_SAFE_BUILD_LENGTH, MAX_LENGTH } = require_constants();
+    var {
+      MAX_SAFE_COMPONENT_LENGTH,
+      MAX_SAFE_BUILD_LENGTH,
+      MAX_LENGTH
+    } = require_constants();
     var debug2 = require_debug();
     exports = module.exports = {};
-    var re = (exports.re = []);
-    var safeRe = (exports.safeRe = []);
-    var src = (exports.src = []);
-    var safeSrc = (exports.safeSrc = []);
-    var t = (exports.t = {});
+    var re = exports.re = [];
+    var safeRe = exports.safeRe = [];
+    var src = exports.src = [];
+    var safeSrc = exports.safeSrc = [];
+    var t = exports.t = {};
     var R = 0;
     var LETTERDASHNUMBER = "[a-zA-Z0-9-]";
     var safeRegexReplacements = [
       ["\\s", 1],
       ["\\d", MAX_LENGTH],
-      [LETTERDASHNUMBER, MAX_SAFE_BUILD_LENGTH],
+      [LETTERDASHNUMBER, MAX_SAFE_BUILD_LENGTH]
     ];
     var makeSafeRegex = (value) => {
       for (const [token, max] of safeRegexReplacements) {
-        value = value
-          .split(`${token}*`)
-          .join(`${token}{0,${max}}`)
-          .split(`${token}+`)
-          .join(`${token}{1,${max}}`);
+        value = value.split(`${token}*`).join(`${token}{0,${max}}`).split(`${token}+`).join(`${token}{1,${max}}`);
       }
       return value;
     };
@@ -745,61 +674,28 @@ var require_re = __commonJS({
     createToken("NUMERICIDENTIFIER", "0|[1-9]\\d*");
     createToken("NUMERICIDENTIFIERLOOSE", "\\d+");
     createToken("NONNUMERICIDENTIFIER", `\\d*[a-zA-Z-]${LETTERDASHNUMBER}*`);
-    createToken(
-      "MAINVERSION",
-      `(${src[t.NUMERICIDENTIFIER]})\\.(${src[t.NUMERICIDENTIFIER]})\\.(${src[t.NUMERICIDENTIFIER]})`,
-    );
-    createToken(
-      "MAINVERSIONLOOSE",
-      `(${src[t.NUMERICIDENTIFIERLOOSE]})\\.(${src[t.NUMERICIDENTIFIERLOOSE]})\\.(${src[t.NUMERICIDENTIFIERLOOSE]})`,
-    );
-    createToken(
-      "PRERELEASEIDENTIFIER",
-      `(?:${src[t.NONNUMERICIDENTIFIER]}|${src[t.NUMERICIDENTIFIER]})`,
-    );
-    createToken(
-      "PRERELEASEIDENTIFIERLOOSE",
-      `(?:${src[t.NONNUMERICIDENTIFIER]}|${src[t.NUMERICIDENTIFIERLOOSE]})`,
-    );
-    createToken(
-      "PRERELEASE",
-      `(?:-(${src[t.PRERELEASEIDENTIFIER]}(?:\\.${src[t.PRERELEASEIDENTIFIER]})*))`,
-    );
-    createToken(
-      "PRERELEASELOOSE",
-      `(?:-?(${src[t.PRERELEASEIDENTIFIERLOOSE]}(?:\\.${src[t.PRERELEASEIDENTIFIERLOOSE]})*))`,
-    );
+    createToken("MAINVERSION", `(${src[t.NUMERICIDENTIFIER]})\\.(${src[t.NUMERICIDENTIFIER]})\\.(${src[t.NUMERICIDENTIFIER]})`);
+    createToken("MAINVERSIONLOOSE", `(${src[t.NUMERICIDENTIFIERLOOSE]})\\.(${src[t.NUMERICIDENTIFIERLOOSE]})\\.(${src[t.NUMERICIDENTIFIERLOOSE]})`);
+    createToken("PRERELEASEIDENTIFIER", `(?:${src[t.NONNUMERICIDENTIFIER]}|${src[t.NUMERICIDENTIFIER]})`);
+    createToken("PRERELEASEIDENTIFIERLOOSE", `(?:${src[t.NONNUMERICIDENTIFIER]}|${src[t.NUMERICIDENTIFIERLOOSE]})`);
+    createToken("PRERELEASE", `(?:-(${src[t.PRERELEASEIDENTIFIER]}(?:\\.${src[t.PRERELEASEIDENTIFIER]})*))`);
+    createToken("PRERELEASELOOSE", `(?:-?(${src[t.PRERELEASEIDENTIFIERLOOSE]}(?:\\.${src[t.PRERELEASEIDENTIFIERLOOSE]})*))`);
     createToken("BUILDIDENTIFIER", `${LETTERDASHNUMBER}+`);
     createToken("BUILD", `(?:\\+(${src[t.BUILDIDENTIFIER]}(?:\\.${src[t.BUILDIDENTIFIER]})*))`);
     createToken("FULLPLAIN", `v?${src[t.MAINVERSION]}${src[t.PRERELEASE]}?${src[t.BUILD]}?`);
     createToken("FULL", `^${src[t.FULLPLAIN]}$`);
-    createToken(
-      "LOOSEPLAIN",
-      `[v=\\s]*${src[t.MAINVERSIONLOOSE]}${src[t.PRERELEASELOOSE]}?${src[t.BUILD]}?`,
-    );
+    createToken("LOOSEPLAIN", `[v=\\s]*${src[t.MAINVERSIONLOOSE]}${src[t.PRERELEASELOOSE]}?${src[t.BUILD]}?`);
     createToken("LOOSE", `^${src[t.LOOSEPLAIN]}$`);
     createToken("GTLT", "((?:<|>)?=?)");
     createToken("XRANGEIDENTIFIERLOOSE", `${src[t.NUMERICIDENTIFIERLOOSE]}|x|X|\\*`);
     createToken("XRANGEIDENTIFIER", `${src[t.NUMERICIDENTIFIER]}|x|X|\\*`);
-    createToken(
-      "XRANGEPLAIN",
-      `[v=\\s]*(${src[t.XRANGEIDENTIFIER]})(?:\\.(${src[t.XRANGEIDENTIFIER]})(?:\\.(${src[t.XRANGEIDENTIFIER]})(?:${src[t.PRERELEASE]})?${src[t.BUILD]}?)?)?`,
-    );
-    createToken(
-      "XRANGEPLAINLOOSE",
-      `[v=\\s]*(${src[t.XRANGEIDENTIFIERLOOSE]})(?:\\.(${src[t.XRANGEIDENTIFIERLOOSE]})(?:\\.(${src[t.XRANGEIDENTIFIERLOOSE]})(?:${src[t.PRERELEASELOOSE]})?${src[t.BUILD]}?)?)?`,
-    );
+    createToken("XRANGEPLAIN", `[v=\\s]*(${src[t.XRANGEIDENTIFIER]})(?:\\.(${src[t.XRANGEIDENTIFIER]})(?:\\.(${src[t.XRANGEIDENTIFIER]})(?:${src[t.PRERELEASE]})?${src[t.BUILD]}?)?)?`);
+    createToken("XRANGEPLAINLOOSE", `[v=\\s]*(${src[t.XRANGEIDENTIFIERLOOSE]})(?:\\.(${src[t.XRANGEIDENTIFIERLOOSE]})(?:\\.(${src[t.XRANGEIDENTIFIERLOOSE]})(?:${src[t.PRERELEASELOOSE]})?${src[t.BUILD]}?)?)?`);
     createToken("XRANGE", `^${src[t.GTLT]}\\s*${src[t.XRANGEPLAIN]}$`);
     createToken("XRANGELOOSE", `^${src[t.GTLT]}\\s*${src[t.XRANGEPLAINLOOSE]}$`);
-    createToken(
-      "COERCEPLAIN",
-      `${"(^|[^\\d])(\\d{1,"}${MAX_SAFE_COMPONENT_LENGTH}})(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?`,
-    );
+    createToken("COERCEPLAIN", `${"(^|[^\\d])(\\d{1,"}${MAX_SAFE_COMPONENT_LENGTH}})(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?`);
     createToken("COERCE", `${src[t.COERCEPLAIN]}(?:$|[^\\d])`);
-    createToken(
-      "COERCEFULL",
-      src[t.COERCEPLAIN] + `(?:${src[t.PRERELEASE]})?(?:${src[t.BUILD]})?(?:$|[^\\d])`,
-    );
+    createToken("COERCEFULL", src[t.COERCEPLAIN] + `(?:${src[t.PRERELEASE]})?(?:${src[t.BUILD]})?(?:$|[^\\d])`);
     createToken("COERCERTL", src[t.COERCE], true);
     createToken("COERCERTLFULL", src[t.COERCEFULL], true);
     createToken("LONETILDE", "(?:~>?)");
@@ -814,21 +710,14 @@ var require_re = __commonJS({
     createToken("CARETLOOSE", `^${src[t.LONECARET]}${src[t.XRANGEPLAINLOOSE]}$`);
     createToken("COMPARATORLOOSE", `^${src[t.GTLT]}\\s*(${src[t.LOOSEPLAIN]})$|^$`);
     createToken("COMPARATOR", `^${src[t.GTLT]}\\s*(${src[t.FULLPLAIN]})$|^$`);
-    createToken(
-      "COMPARATORTRIM",
-      `(\\s*)${src[t.GTLT]}\\s*(${src[t.LOOSEPLAIN]}|${src[t.XRANGEPLAIN]})`,
-      true,
-    );
+    createToken("COMPARATORTRIM", `(\\s*)${src[t.GTLT]}\\s*(${src[t.LOOSEPLAIN]}|${src[t.XRANGEPLAIN]})`, true);
     exports.comparatorTrimReplace = "$1$2$3";
     createToken("HYPHENRANGE", `^\\s*(${src[t.XRANGEPLAIN]})\\s+-\\s+(${src[t.XRANGEPLAIN]})\\s*$`);
-    createToken(
-      "HYPHENRANGELOOSE",
-      `^\\s*(${src[t.XRANGEPLAINLOOSE]})\\s+-\\s+(${src[t.XRANGEPLAINLOOSE]})\\s*$`,
-    );
+    createToken("HYPHENRANGELOOSE", `^\\s*(${src[t.XRANGEPLAINLOOSE]})\\s+-\\s+(${src[t.XRANGEPLAINLOOSE]})\\s*$`);
     createToken("STAR", "(<|>)?=?\\s*\\*");
     createToken("GTE0", "^\\s*>=\\s*0\\.0\\.0\\s*$");
     createToken("GTE0PRE", "^\\s*>=\\s*0\\.0\\.0-0\\s*$");
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/internal/parse-options.js
@@ -847,7 +736,7 @@ var require_parse_options = __commonJS({
       return options;
     };
     module.exports = parseOptions;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/internal/identifiers.js
@@ -870,9 +759,9 @@ var require_identifiers = __commonJS({
     var rcompareIdentifiers = (a, b) => compareIdentifiers(b, a);
     module.exports = {
       compareIdentifiers,
-      rcompareIdentifiers,
+      rcompareIdentifiers
     };
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/classes/semver.js
@@ -888,10 +777,7 @@ var require_semver = __commonJS({
       constructor(version, options) {
         options = parseOptions(options);
         if (version instanceof _SemVer) {
-          if (
-            version.loose === !!options.loose &&
-            version.includePrerelease === !!options.includePrerelease
-          ) {
+          if (version.loose === !!options.loose && version.includePrerelease === !!options.includePrerelease) {
             return version;
           } else {
             version = version.version;
@@ -900,7 +786,9 @@ var require_semver = __commonJS({
           throw new TypeError(`Invalid version. Must be a string. Got type "${typeof version}".`);
         }
         if (version.length > MAX_LENGTH) {
-          throw new TypeError(`version is longer than ${MAX_LENGTH} characters`);
+          throw new TypeError(
+            `version is longer than ${MAX_LENGTH} characters`
+          );
         }
         debug2("SemVer", version, options);
         this.options = options;
@@ -1045,9 +933,7 @@ var require_semver = __commonJS({
             throw new Error("invalid increment argument: identifier is empty");
           }
           if (identifier) {
-            const match = `-${identifier}`.match(
-              this.options.loose ? re[t.PRERELEASELOOSE] : re[t.PRERELEASE],
-            );
+            const match = `-${identifier}`.match(this.options.loose ? re[t.PRERELEASELOOSE] : re[t.PRERELEASE]);
             if (!match || match[1] !== identifier) {
               throw new Error(`invalid identifier: ${identifier}`);
             }
@@ -1154,7 +1040,7 @@ var require_semver = __commonJS({
       }
     };
     module.exports = SemVer;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/parse.js
@@ -1176,7 +1062,7 @@ var require_parse = __commonJS({
       }
     };
     module.exports = parse2;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/valid.js
@@ -1189,7 +1075,7 @@ var require_valid = __commonJS({
       return v ? v.version : null;
     };
     module.exports = valid;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/clean.js
@@ -1202,7 +1088,7 @@ var require_clean = __commonJS({
       return s ? s.version : null;
     };
     module.exports = clean;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/inc.js
@@ -1217,17 +1103,16 @@ var require_inc = __commonJS({
         options = void 0;
       }
       try {
-        return new SemVer(version instanceof SemVer ? version.version : version, options).inc(
-          release,
-          identifier,
-          identifierBase,
-        ).version;
+        return new SemVer(
+          version instanceof SemVer ? version.version : version,
+          options
+        ).inc(release, identifier, identifierBase).version;
       } catch (er) {
         return null;
       }
     };
     module.exports = inc;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/diff.js
@@ -1271,7 +1156,7 @@ var require_diff = __commonJS({
       return "prerelease";
     };
     module.exports = diff;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/major.js
@@ -1281,7 +1166,7 @@ var require_major = __commonJS({
     var SemVer = require_semver();
     var major = (a, loose) => new SemVer(a, loose).major;
     module.exports = major;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/minor.js
@@ -1291,7 +1176,7 @@ var require_minor = __commonJS({
     var SemVer = require_semver();
     var minor = (a, loose) => new SemVer(a, loose).minor;
     module.exports = minor;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/patch.js
@@ -1301,7 +1186,7 @@ var require_patch = __commonJS({
     var SemVer = require_semver();
     var patch = (a, loose) => new SemVer(a, loose).patch;
     module.exports = patch;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/prerelease.js
@@ -1314,7 +1199,7 @@ var require_prerelease = __commonJS({
       return parsed && parsed.prerelease.length ? parsed.prerelease : null;
     };
     module.exports = prerelease;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/compare.js
@@ -1324,7 +1209,7 @@ var require_compare = __commonJS({
     var SemVer = require_semver();
     var compare = (a, b, loose) => new SemVer(a, loose).compare(new SemVer(b, loose));
     module.exports = compare;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/rcompare.js
@@ -1334,28 +1219,22 @@ var require_rcompare = __commonJS({
     var compare = require_compare();
     var rcompare = (a, b, loose) => compare(b, a, loose);
     module.exports = rcompare;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/compare-loose.js
 var require_compare_loose = __commonJS({
-  "node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/compare-loose.js"(
-    exports,
-    module,
-  ) {
+  "node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/compare-loose.js"(exports, module) {
     "use strict";
     var compare = require_compare();
     var compareLoose = (a, b) => compare(a, b, true);
     module.exports = compareLoose;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/compare-build.js
 var require_compare_build = __commonJS({
-  "node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/compare-build.js"(
-    exports,
-    module,
-  ) {
+  "node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/compare-build.js"(exports, module) {
     "use strict";
     var SemVer = require_semver();
     var compareBuild = (a, b, loose) => {
@@ -1364,7 +1243,7 @@ var require_compare_build = __commonJS({
       return versionA.compare(versionB) || versionA.compareBuild(versionB);
     };
     module.exports = compareBuild;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/sort.js
@@ -1374,7 +1253,7 @@ var require_sort = __commonJS({
     var compareBuild = require_compare_build();
     var sort = (list, loose) => list.sort((a, b) => compareBuild(a, b, loose));
     module.exports = sort;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/rsort.js
@@ -1384,7 +1263,7 @@ var require_rsort = __commonJS({
     var compareBuild = require_compare_build();
     var rsort = (list, loose) => list.sort((a, b) => compareBuild(b, a, loose));
     module.exports = rsort;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/gt.js
@@ -1394,7 +1273,7 @@ var require_gt = __commonJS({
     var compare = require_compare();
     var gt = (a, b, loose) => compare(a, b, loose) > 0;
     module.exports = gt;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/lt.js
@@ -1404,7 +1283,7 @@ var require_lt = __commonJS({
     var compare = require_compare();
     var lt = (a, b, loose) => compare(a, b, loose) < 0;
     module.exports = lt;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/eq.js
@@ -1414,7 +1293,7 @@ var require_eq = __commonJS({
     var compare = require_compare();
     var eq = (a, b, loose) => compare(a, b, loose) === 0;
     module.exports = eq;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/neq.js
@@ -1424,7 +1303,7 @@ var require_neq = __commonJS({
     var compare = require_compare();
     var neq = (a, b, loose) => compare(a, b, loose) !== 0;
     module.exports = neq;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/gte.js
@@ -1434,7 +1313,7 @@ var require_gte = __commonJS({
     var compare = require_compare();
     var gte = (a, b, loose) => compare(a, b, loose) >= 0;
     module.exports = gte;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/lte.js
@@ -1444,7 +1323,7 @@ var require_lte = __commonJS({
     var compare = require_compare();
     var lte = (a, b, loose) => compare(a, b, loose) <= 0;
     module.exports = lte;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/cmp.js
@@ -1494,7 +1373,7 @@ var require_cmp = __commonJS({
       }
     };
     module.exports = cmp;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/coerce.js
@@ -1521,10 +1400,7 @@ var require_coerce = __commonJS({
       } else {
         const coerceRtlRegex = options.includePrerelease ? re[t.COERCERTLFULL] : re[t.COERCERTL];
         let next;
-        while (
-          (next = coerceRtlRegex.exec(version)) &&
-          (!match || match.index + match[0].length !== version.length)
-        ) {
+        while ((next = coerceRtlRegex.exec(version)) && (!match || match.index + match[0].length !== version.length)) {
           if (!match || next.index + next[0].length !== match.index + match[0].length) {
             match = next;
           }
@@ -1543,7 +1419,7 @@ var require_coerce = __commonJS({
       return parse2(`${major}.${minor}.${patch}${prerelease}${build}`, options);
     };
     module.exports = coerce;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/internal/lrucache.js
@@ -1581,7 +1457,7 @@ var require_lrucache = __commonJS({
       }
     };
     module.exports = LRUCache;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/classes/range.js
@@ -1593,10 +1469,7 @@ var require_range = __commonJS({
       constructor(range, options) {
         options = parseOptions(options);
         if (range instanceof _Range) {
-          if (
-            range.loose === !!options.loose &&
-            range.includePrerelease === !!options.includePrerelease
-          ) {
+          if (range.loose === !!options.loose && range.includePrerelease === !!options.includePrerelease) {
             return range;
           } else {
             return new _Range(range.raw, options);
@@ -1612,10 +1485,7 @@ var require_range = __commonJS({
         this.loose = !!options.loose;
         this.includePrerelease = !!options.includePrerelease;
         this.raw = range.trim().replace(SPACE_CHARACTERS, " ");
-        this.set = this.raw
-          .split("||")
-          .map((r) => this.parseRange(r.trim()))
-          .filter((c) => c.length);
+        this.set = this.raw.split("||").map((r) => this.parseRange(r.trim())).filter((c) => c.length);
         if (!this.set.length) {
           throw new TypeError(`Invalid SemVer Range: ${this.raw}`);
         }
@@ -1660,9 +1530,7 @@ var require_range = __commonJS({
         return this.range;
       }
       parseRange(range) {
-        const memoOpts =
-          (this.options.includePrerelease && FLAG_INCLUDE_PRERELEASE) |
-          (this.options.loose && FLAG_LOOSE);
+        const memoOpts = (this.options.includePrerelease && FLAG_INCLUDE_PRERELEASE) | (this.options.loose && FLAG_LOOSE);
         const memoKey = memoOpts + ":" + range;
         const cached = cache.get(memoKey);
         if (cached) {
@@ -1678,12 +1546,7 @@ var require_range = __commonJS({
         debug2("tilde trim", range);
         range = range.replace(re[t.CARETTRIM], caretTrimReplace);
         debug2("caret trim", range);
-        let rangeList = range
-          .split(" ")
-          .map((comp) => parseComparator(comp, this.options))
-          .join(" ")
-          .split(/\s+/)
-          .map((comp) => replaceGTE0(comp, this.options));
+        let rangeList = range.split(" ").map((comp) => parseComparator(comp, this.options)).join(" ").split(/\s+/).map((comp) => replaceGTE0(comp, this.options));
         if (loose) {
           rangeList = rangeList.filter((comp) => {
             debug2("loose invalid filter", comp, this.options);
@@ -1711,19 +1574,13 @@ var require_range = __commonJS({
           throw new TypeError("a Range is required");
         }
         return this.set.some((thisComparators) => {
-          return (
-            isSatisfiable(thisComparators, options) &&
-            range.set.some((rangeComparators) => {
-              return (
-                isSatisfiable(rangeComparators, options) &&
-                thisComparators.every((thisComparator) => {
-                  return rangeComparators.every((rangeComparator) => {
-                    return thisComparator.intersects(rangeComparator, options);
-                  });
-                })
-              );
-            })
-          );
+          return isSatisfiable(thisComparators, options) && range.set.some((rangeComparators) => {
+            return isSatisfiable(rangeComparators, options) && thisComparators.every((thisComparator) => {
+              return rangeComparators.every((rangeComparator) => {
+                return thisComparator.intersects(rangeComparator, options);
+              });
+            });
+          });
         });
       }
       // if ANY of the sets match ALL of its comparators, then pass
@@ -1753,7 +1610,13 @@ var require_range = __commonJS({
     var Comparator = require_comparator();
     var debug2 = require_debug();
     var SemVer = require_semver();
-    var { safeRe: re, t, comparatorTrimReplace, tildeTrimReplace, caretTrimReplace } = require_re();
+    var {
+      safeRe: re,
+      t,
+      comparatorTrimReplace,
+      tildeTrimReplace,
+      caretTrimReplace
+    } = require_re();
     var { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = require_constants();
     var isNullSet = (c) => c.value === "<0.0.0-0";
     var isAny = (c) => c.value === "";
@@ -1784,11 +1647,7 @@ var require_range = __commonJS({
     };
     var isX = (id) => !id || id.toLowerCase() === "x" || id === "*";
     var replaceTildes = (comp, options) => {
-      return comp
-        .trim()
-        .split(/\s+/)
-        .map((c) => replaceTilde(c, options))
-        .join(" ");
+      return comp.trim().split(/\s+/).map((c) => replaceTilde(c, options)).join(" ");
     };
     var replaceTilde = (comp, options) => {
       const r = options.loose ? re[t.TILDELOOSE] : re[t.TILDE];
@@ -1812,11 +1671,7 @@ var require_range = __commonJS({
       });
     };
     var replaceCarets = (comp, options) => {
-      return comp
-        .trim()
-        .split(/\s+/)
-        .map((c) => replaceCaret(c, options))
-        .join(" ");
+      return comp.trim().split(/\s+/).map((c) => replaceCaret(c, options)).join(" ");
     };
     var replaceCaret = (comp, options) => {
       debug2("caret", comp, options);
@@ -1864,10 +1719,7 @@ var require_range = __commonJS({
     };
     var replaceXRanges = (comp, options) => {
       debug2("replaceXRanges", comp, options);
-      return comp
-        .split(/\s+/)
-        .map((c) => replaceXRange(c, options))
-        .join(" ");
+      return comp.split(/\s+/).map((c) => replaceXRange(c, options)).join(" ");
     };
     var replaceXRange = (comp, options) => {
       comp = comp.trim();
@@ -1973,11 +1825,7 @@ var require_range = __commonJS({
           }
           if (set[i].semver.prerelease.length > 0) {
             const allowed = set[i].semver;
-            if (
-              allowed.major === version.major &&
-              allowed.minor === version.minor &&
-              allowed.patch === version.patch
-            ) {
+            if (allowed.major === version.major && allowed.minor === version.minor && allowed.patch === version.patch) {
               return true;
             }
           }
@@ -1986,7 +1834,7 @@ var require_range = __commonJS({
       }
       return true;
     };
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/classes/comparator.js
@@ -2071,10 +1919,7 @@ var require_comparator = __commonJS({
         if (options.includePrerelease && (this.value === "<0.0.0-0" || comp.value === "<0.0.0-0")) {
           return false;
         }
-        if (
-          !options.includePrerelease &&
-          (this.value.startsWith("<0.0.0") || comp.value.startsWith("<0.0.0"))
-        ) {
+        if (!options.includePrerelease && (this.value.startsWith("<0.0.0") || comp.value.startsWith("<0.0.0"))) {
           return false;
         }
         if (this.operator.startsWith(">") && comp.operator.startsWith(">")) {
@@ -2083,25 +1928,13 @@ var require_comparator = __commonJS({
         if (this.operator.startsWith("<") && comp.operator.startsWith("<")) {
           return true;
         }
-        if (
-          this.semver.version === comp.semver.version &&
-          this.operator.includes("=") &&
-          comp.operator.includes("=")
-        ) {
+        if (this.semver.version === comp.semver.version && this.operator.includes("=") && comp.operator.includes("=")) {
           return true;
         }
-        if (
-          cmp(this.semver, "<", comp.semver, options) &&
-          this.operator.startsWith(">") &&
-          comp.operator.startsWith("<")
-        ) {
+        if (cmp(this.semver, "<", comp.semver, options) && this.operator.startsWith(">") && comp.operator.startsWith("<")) {
           return true;
         }
-        if (
-          cmp(this.semver, ">", comp.semver, options) &&
-          this.operator.startsWith("<") &&
-          comp.operator.startsWith(">")
-        ) {
+        if (cmp(this.semver, ">", comp.semver, options) && this.operator.startsWith("<") && comp.operator.startsWith(">")) {
           return true;
         }
         return false;
@@ -2114,7 +1947,7 @@ var require_comparator = __commonJS({
     var debug2 = require_debug();
     var SemVer = require_semver();
     var Range = require_range();
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/functions/satisfies.js
@@ -2131,7 +1964,7 @@ var require_satisfies = __commonJS({
       return range.test(version);
     };
     module.exports = satisfies;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/ranges/to-comparators.js
@@ -2139,16 +1972,9 @@ var require_to_comparators = __commonJS({
   "node_modules/.pnpm/semver@7.7.4/node_modules/semver/ranges/to-comparators.js"(exports, module) {
     "use strict";
     var Range = require_range();
-    var toComparators = (range, options) =>
-      new Range(range, options).set.map((comp) =>
-        comp
-          .map((c) => c.value)
-          .join(" ")
-          .trim()
-          .split(" "),
-      );
+    var toComparators = (range, options) => new Range(range, options).set.map((comp) => comp.map((c) => c.value).join(" ").trim().split(" "));
     module.exports = toComparators;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/ranges/max-satisfying.js
@@ -2177,7 +2003,7 @@ var require_max_satisfying = __commonJS({
       return max;
     };
     module.exports = maxSatisfying;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/ranges/min-satisfying.js
@@ -2206,7 +2032,7 @@ var require_min_satisfying = __commonJS({
       return min;
     };
     module.exports = minSatisfying;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/ranges/min-version.js
@@ -2265,7 +2091,7 @@ var require_min_version = __commonJS({
       return null;
     };
     module.exports = minVersion;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/ranges/valid.js
@@ -2281,7 +2107,7 @@ var require_valid2 = __commonJS({
       }
     };
     module.exports = validRange;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/ranges/outside.js
@@ -2350,7 +2176,7 @@ var require_outside = __commonJS({
       return true;
     };
     module.exports = outside;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/ranges/gtr.js
@@ -2360,7 +2186,7 @@ var require_gtr = __commonJS({
     var outside = require_outside();
     var gtr = (version, range, options) => outside(version, range, ">", options);
     module.exports = gtr;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/ranges/ltr.js
@@ -2370,7 +2196,7 @@ var require_ltr = __commonJS({
     var outside = require_outside();
     var ltr = (version, range, options) => outside(version, range, "<", options);
     module.exports = ltr;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/ranges/intersects.js
@@ -2384,7 +2210,7 @@ var require_intersects = __commonJS({
       return r1.intersects(r2, options);
     };
     module.exports = intersects;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/ranges/simplify.js
@@ -2434,7 +2260,7 @@ var require_simplify = __commonJS({
       const original = typeof range.raw === "string" ? range.raw : String(range);
       return simplified.length < original.length ? simplified : range;
     };
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/ranges/subset.js
@@ -2528,16 +2354,9 @@ var require_subset = __commonJS({
       }
       let higher, lower;
       let hasDomLT, hasDomGT;
-      let needDomLTPre =
-        lt && !options.includePrerelease && lt.semver.prerelease.length ? lt.semver : false;
-      let needDomGTPre =
-        gt && !options.includePrerelease && gt.semver.prerelease.length ? gt.semver : false;
-      if (
-        needDomLTPre &&
-        needDomLTPre.prerelease.length === 1 &&
-        lt.operator === "<" &&
-        needDomLTPre.prerelease[0] === 0
-      ) {
+      let needDomLTPre = lt && !options.includePrerelease && lt.semver.prerelease.length ? lt.semver : false;
+      let needDomGTPre = gt && !options.includePrerelease && gt.semver.prerelease.length ? gt.semver : false;
+      if (needDomLTPre && needDomLTPre.prerelease.length === 1 && lt.operator === "<" && needDomLTPre.prerelease[0] === 0) {
         needDomLTPre = false;
       }
       for (const c of dom) {
@@ -2545,13 +2364,7 @@ var require_subset = __commonJS({
         hasDomLT = hasDomLT || c.operator === "<" || c.operator === "<=";
         if (gt) {
           if (needDomGTPre) {
-            if (
-              c.semver.prerelease &&
-              c.semver.prerelease.length &&
-              c.semver.major === needDomGTPre.major &&
-              c.semver.minor === needDomGTPre.minor &&
-              c.semver.patch === needDomGTPre.patch
-            ) {
+            if (c.semver.prerelease && c.semver.prerelease.length && c.semver.major === needDomGTPre.major && c.semver.minor === needDomGTPre.minor && c.semver.patch === needDomGTPre.patch) {
               needDomGTPre = false;
             }
           }
@@ -2566,13 +2379,7 @@ var require_subset = __commonJS({
         }
         if (lt) {
           if (needDomLTPre) {
-            if (
-              c.semver.prerelease &&
-              c.semver.prerelease.length &&
-              c.semver.major === needDomLTPre.major &&
-              c.semver.minor === needDomLTPre.minor &&
-              c.semver.patch === needDomLTPre.patch
-            ) {
+            if (c.semver.prerelease && c.semver.prerelease.length && c.semver.major === needDomLTPre.major && c.semver.minor === needDomLTPre.minor && c.semver.patch === needDomLTPre.patch) {
               needDomLTPre = false;
             }
           }
@@ -2615,7 +2422,7 @@ var require_subset = __commonJS({
       return comp < 0 ? a : comp > 0 ? b : b.operator === "<" && a.operator === "<=" ? b : a;
     };
     module.exports = subset;
-  },
+  }
 });
 
 // node_modules/.pnpm/semver@7.7.4/node_modules/semver/index.js
@@ -2708,9 +2515,9 @@ var require_semver2 = __commonJS({
       SEMVER_SPEC_VERSION: constants.SEMVER_SPEC_VERSION,
       RELEASE_TYPES: constants.RELEASE_TYPES,
       compareIdentifiers: identifiers.compareIdentifiers,
-      rcompareIdentifiers: identifiers.rcompareIdentifiers,
+      rcompareIdentifiers: identifiers.rcompareIdentifiers
     };
-  },
+  }
 });
 
 // dist/transcript.js
@@ -2730,10 +2537,12 @@ function readTranscript(filePath, afterLine = -1) {
     let lastLine = afterLine;
     for (let i = 0; i < lines.length; i++) {
       lastLine = i;
-      if (i <= afterLine) continue;
+      if (i <= afterLine)
+        continue;
       try {
         messages.push(JSON.parse(lines[i]));
-      } catch {}
+      } catch {
+      }
     }
     return { messages, lastLine };
   }
@@ -2754,13 +2563,16 @@ function readTranscript(filePath, afterLine = -1) {
       partial = lines.pop() ?? "";
       for (const line of lines) {
         const trimmed = line.trim();
-        if (trimmed === "") continue;
+        if (trimmed === "")
+          continue;
         lineIndex++;
         lastLine = lineIndex;
-        if (lineIndex <= afterLine) continue;
+        if (lineIndex <= afterLine)
+          continue;
         try {
           messages.push(JSON.parse(trimmed));
-        } catch {}
+        } catch {
+        }
       }
       pos += bytesRead;
     }
@@ -2770,7 +2582,8 @@ function readTranscript(filePath, afterLine = -1) {
       if (lineIndex > afterLine) {
         try {
           messages.push(JSON.parse(partial.trim()));
-        } catch {}
+        } catch {
+        }
       }
     }
     return { messages, lastLine };
@@ -2779,15 +2592,18 @@ function readTranscript(filePath, afterLine = -1) {
   }
 }
 function isHumanMessage(msg) {
-  if (msg.type !== "user") return false;
-  if (typeof msg.message.content === "string") return true;
+  if (msg.type !== "user")
+    return false;
+  if (typeof msg.message.content === "string")
+    return true;
   if (Array.isArray(msg.message.content)) {
     return !msg.message.content.some((b) => b.type === "tool_result");
   }
   return false;
 }
 function isToolResult(msg) {
-  if (msg.type !== "user" || !Array.isArray(msg.message.content)) return false;
+  if (msg.type !== "user" || !Array.isArray(msg.message.content))
+    return false;
   return msg.message.content.some((b) => b.type === "tool_result");
 }
 function isAssistantMessage(msg) {
@@ -2810,7 +2626,7 @@ function mergeAssistantChunks(chunks) {
     usage: last.message.usage,
     // SSE usage is cumulative; last chunk has final totals.
     startTime: first.timestamp,
-    endTime: last.timestamp,
+    endTime: last.timestamp
   };
 }
 function mergeAdjacentTextBlocks(blocks) {
@@ -2836,17 +2652,11 @@ function findToolResult(toolUseId, toolResults) {
   for (const msg of toolResults) {
     for (const block of msg.message.content) {
       if (block.type === "tool_result" && block.tool_use_id === toolUseId) {
-        const content =
-          typeof block.content === "string"
-            ? block.content
-            : block.content
-                .filter((c) => c.type === "text")
-                .map((c) => c.text)
-                .join(" ");
+        const content = typeof block.content === "string" ? block.content : block.content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
         return {
           content,
           timestamp: msg.timestamp,
-          agentId: msg.toolUseResult?.agentId,
+          agentId: msg.toolUseResult?.agentId
         };
       }
     }
@@ -2862,15 +2672,18 @@ function groupIntoTurns(messages) {
   let toolResults = [];
   let hasStopReasonEndTurn = false;
   function finalizeTurn(forceIncomplete = false) {
-    if (!currentUser) return;
-    if (assistantChunks.size === 0) return;
+    if (!currentUser)
+      return;
+    if (assistantChunks.size === 0)
+      return;
     const assistantMessages = Array.from(assistantChunks.values()).flat();
     const hasStopReasonField = assistantMessages.some((m) => m.message.stop_reason !== void 0);
-    const isComplete = hasStopReasonEndTurn || (!forceIncomplete && !hasStopReasonField);
+    const isComplete = hasStopReasonEndTurn || !forceIncomplete && !hasStopReasonField;
     const llmCalls = [];
     for (const msgId of assistantOrder) {
       const chunks = assistantChunks.get(msgId);
-      if (!chunks || chunks.length === 0) continue;
+      if (!chunks || chunks.length === 0)
+        continue;
       const merged = mergeAssistantChunks(chunks);
       const toolUses = merged.content.filter((b) => b.type === "tool_use");
       const toolCalls = toolUses.map((tu) => {
@@ -2878,7 +2691,7 @@ function groupIntoTurns(messages) {
         return {
           tool_use: tu,
           result: result ? { content: result.content, timestamp: result.timestamp } : void 0,
-          agentId: result?.agentId,
+          agentId: result?.agentId
         };
       });
       llmCalls.push({
@@ -2887,22 +2700,19 @@ function groupIntoTurns(messages) {
         usage: merged.usage,
         startTime: merged.startTime,
         endTime: merged.endTime,
-        toolCalls,
+        toolCalls
       });
     }
     turns.push({
       userContent: currentUser.message.content,
       userTimestamp: currentUser.timestamp,
       llmCalls,
-      isComplete,
+      isComplete
     });
   }
   for (const msg of messages) {
     if (isHumanMessage(msg)) {
-      const isNewTurn =
-        currentUser === null ||
-        (msg.promptId !== void 0 && msg.promptId !== currentPromptId) ||
-        msg.promptId === void 0;
+      const isNewTurn = currentUser === null || msg.promptId !== void 0 && msg.promptId !== currentPromptId || msg.promptId === void 0;
       if (isNewTurn) {
         finalizeTurn();
         currentPromptId = msg.promptId;
@@ -2934,8 +2744,7 @@ function groupIntoTurns(messages) {
 import { appendFileSync, mkdirSync, statSync as statSync2, renameSync } from "node:fs";
 import { dirname } from "node:path";
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
-var LOG_FILE =
-  process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
+var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
 var debugEnabled = false;
 function initLogger(debug2) {
   debugEnabled = debug2;
@@ -2946,16 +2755,18 @@ function rotateIfNeeded() {
     if (statSync2(LOG_FILE).size >= MAX_LOG_BYTES) {
       renameSync(LOG_FILE, `${LOG_FILE}.1`);
     }
-  } catch {}
+  } catch {
+  }
 }
 function write(level, message) {
-  const timestamp = /* @__PURE__ */ new Date().toISOString().replace("T", " ").replace("Z", "");
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").replace("Z", "");
   const line = `${timestamp} [${level}] ${message}
 `;
   try {
     rotateIfNeeded();
     appendFileSync(LOG_FILE, line);
-  } catch {}
+  } catch {
+  }
 }
 function log(message) {
   write("INFO", message);
@@ -2973,14 +2784,7 @@ function debug(message) {
 }
 
 // dist/state.js
-import {
-  readFileSync as readFileSync2,
-  writeFileSync,
-  mkdirSync as mkdirSync2,
-  openSync as openSync2,
-  closeSync as closeSync2,
-  unlinkSync,
-} from "node:fs";
+import { readFileSync as readFileSync2, writeFileSync, mkdirSync as mkdirSync2, openSync as openSync2, closeSync as closeSync2, unlinkSync } from "node:fs";
 import { dirname as dirname2 } from "node:path";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
@@ -3005,12 +2809,14 @@ async function acquireLock(stateFilePath) {
   }
   try {
     unlinkSync(lock);
-  } catch {}
+  } catch {
+  }
 }
 function releaseLock(stateFilePath) {
   try {
     unlinkSync(lockPath(stateFilePath));
-  } catch {}
+  } catch {
+  }
 }
 async function atomicUpdateState(stateFilePath, fn) {
   await acquireLock(stateFilePath);
@@ -3030,14 +2836,12 @@ function loadState(stateFilePath) {
   }
 }
 function getSessionState(state, sessionId) {
-  return (
-    state[sessionId] ?? {
-      last_line: -1,
-      turn_count: 0,
-      updated: "",
-      task_run_map: {},
-    }
-  );
+  return state[sessionId] ?? {
+    last_line: -1,
+    turn_count: 0,
+    updated: "",
+    task_run_map: {}
+  };
 }
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 function pruneOldSessions(state, now = Date.now()) {
@@ -3056,7 +2860,7 @@ function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, c
     last_line: -1,
     turn_count: 0,
     updated: "",
-    task_run_map: {},
+    task_run_map: {}
   };
   return {
     ...state,
@@ -3064,17 +2868,15 @@ function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, c
       ...existingSession,
       last_line: lastLine,
       turn_count: turnCount,
-      updated: /* @__PURE__ */ new Date().toISOString(),
+      updated: (/* @__PURE__ */ new Date()).toISOString(),
       task_run_map: taskRunMap ?? existingSession.task_run_map,
-      current_turn_run_id:
-        currentTurnRunId !== void 0 ? currentTurnRunId : existingSession.current_turn_run_id,
-    },
+      current_turn_run_id: currentTurnRunId !== void 0 ? currentTurnRunId : existingSession.current_turn_run_id
+    }
   };
 }
 
 // node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/regex.js
-var regex_default =
-  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
+var regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
 
 // node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/validate.js
 function validate(uuid) {
@@ -3090,8 +2892,8 @@ function parse(uuid) {
   let v;
   const arr2 = new Uint8Array(16);
   arr2[0] = (v = parseInt(uuid.slice(0, 8), 16)) >>> 24;
-  arr2[1] = (v >>> 16) & 255;
-  arr2[2] = (v >>> 8) & 255;
+  arr2[1] = v >>> 16 & 255;
+  arr2[2] = v >>> 8 & 255;
   arr2[3] = v & 255;
   arr2[4] = (v = parseInt(uuid.slice(9, 13), 16)) >>> 8;
   arr2[5] = v & 255;
@@ -3099,11 +2901,11 @@ function parse(uuid) {
   arr2[7] = v & 255;
   arr2[8] = (v = parseInt(uuid.slice(19, 23), 16)) >>> 8;
   arr2[9] = v & 255;
-  arr2[10] = ((v = parseInt(uuid.slice(24, 36), 16)) / 1099511627776) & 255;
-  arr2[11] = (v / 4294967296) & 255;
-  arr2[12] = (v >>> 24) & 255;
-  arr2[13] = (v >>> 16) & 255;
-  arr2[14] = (v >>> 8) & 255;
+  arr2[10] = (v = parseInt(uuid.slice(24, 36), 16)) / 1099511627776 & 255;
+  arr2[11] = v / 4294967296 & 255;
+  arr2[12] = v >>> 24 & 255;
+  arr2[13] = v >>> 16 & 255;
+  arr2[14] = v >>> 8 & 255;
   arr2[15] = v & 255;
   return arr2;
 }
@@ -3115,28 +2917,7 @@ for (let i = 0; i < 256; ++i) {
   byteToHex.push((i + 256).toString(16).slice(1));
 }
 function unsafeStringify(arr2, offset = 0) {
-  return (
-    byteToHex[arr2[offset + 0]] +
-    byteToHex[arr2[offset + 1]] +
-    byteToHex[arr2[offset + 2]] +
-    byteToHex[arr2[offset + 3]] +
-    "-" +
-    byteToHex[arr2[offset + 4]] +
-    byteToHex[arr2[offset + 5]] +
-    "-" +
-    byteToHex[arr2[offset + 6]] +
-    byteToHex[arr2[offset + 7]] +
-    "-" +
-    byteToHex[arr2[offset + 8]] +
-    byteToHex[arr2[offset + 9]] +
-    "-" +
-    byteToHex[arr2[offset + 10]] +
-    byteToHex[arr2[offset + 11]] +
-    byteToHex[arr2[offset + 12]] +
-    byteToHex[arr2[offset + 13]] +
-    byteToHex[arr2[offset + 14]] +
-    byteToHex[arr2[offset + 15]]
-  ).toLowerCase();
+  return (byteToHex[arr2[offset + 0]] + byteToHex[arr2[offset + 1]] + byteToHex[arr2[offset + 2]] + byteToHex[arr2[offset + 3]] + "-" + byteToHex[arr2[offset + 4]] + byteToHex[arr2[offset + 5]] + "-" + byteToHex[arr2[offset + 6]] + byteToHex[arr2[offset + 7]] + "-" + byteToHex[arr2[offset + 8]] + byteToHex[arr2[offset + 9]] + "-" + byteToHex[arr2[offset + 10]] + byteToHex[arr2[offset + 11]] + byteToHex[arr2[offset + 12]] + byteToHex[arr2[offset + 13]] + byteToHex[arr2[offset + 14]] + byteToHex[arr2[offset + 15]]).toLowerCase();
 }
 
 // node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/rng.js
@@ -3148,7 +2929,7 @@ function rng() {
     crypto.randomFillSync(rnds8Pool);
     poolPtr = 0;
   }
-  return rnds8Pool.slice(poolPtr, (poolPtr += 16));
+  return rnds8Pool.slice(poolPtr, poolPtr += 16);
 }
 
 // node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/v35.js
@@ -3171,18 +2952,15 @@ function v35(name, version, hashfunc) {
     if (typeof namespace === "string") {
       namespace = parse_default(namespace);
     }
-    if (
-      ((_namespace = namespace) === null || _namespace === void 0 ? void 0 : _namespace.length) !==
-      16
-    ) {
+    if (((_namespace = namespace) === null || _namespace === void 0 ? void 0 : _namespace.length) !== 16) {
       throw TypeError("Namespace must be array-like (16 iterable integer values, 0-255)");
     }
     let bytes = new Uint8Array(16 + value.length);
     bytes.set(namespace);
     bytes.set(value, namespace.length);
     bytes = hashfunc(bytes);
-    bytes[6] = (bytes[6] & 15) | version;
-    bytes[8] = (bytes[8] & 63) | 128;
+    bytes[6] = bytes[6] & 15 | version;
+    bytes[8] = bytes[8] & 63 | 128;
     if (buf) {
       offset = offset || 0;
       for (let i = 0; i < 16; ++i) {
@@ -3194,7 +2972,8 @@ function v35(name, version, hashfunc) {
   }
   try {
     generateUUID.name = name;
-  } catch (err) {}
+  } catch (err) {
+  }
   generateUUID.DNS = DNS;
   generateUUID.URL = URL2;
   return generateUUID;
@@ -3203,7 +2982,7 @@ function v35(name, version, hashfunc) {
 // node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/native.js
 import crypto2 from "node:crypto";
 var native_default = {
-  randomUUID: crypto2.randomUUID,
+  randomUUID: crypto2.randomUUID
 };
 
 // node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/v4.js
@@ -3213,8 +2992,8 @@ function v4(options, buf, offset) {
   }
   options = options || {};
   const rnds = options.random || (options.rng || rng)();
-  rnds[6] = (rnds[6] & 15) | 64;
-  rnds[8] = (rnds[8] & 63) | 128;
+  rnds[6] = rnds[6] & 15 | 64;
+  rnds[8] = rnds[8] & 63 | 128;
   if (buf) {
     offset = offset || 0;
     for (let i = 0; i < 16; ++i) {
@@ -3248,7 +3027,7 @@ var _seqHigh = null;
 var _msecs = 0;
 function v7(options, buf, offset) {
   options = options || {};
-  let i = (buf && offset) || 0;
+  let i = buf && offset || 0;
   const b = buf || new Uint8Array(16);
   const rnds = options.random || (options.rng || rng)();
   const msecs = options.msecs !== void 0 ? options.msecs : Date.now();
@@ -3266,15 +3045,15 @@ function v7(options, buf, offset) {
     if (seq > 2147483647) {
       seq = 2147483647;
     }
-    seqHigh = (seq >>> 19) & 4095;
+    seqHigh = seq >>> 19 & 4095;
     seqLow = seq & 524287;
   }
   if (seqHigh === null || seqLow === null) {
     seqHigh = rnds[6] & 127;
-    seqHigh = (seqHigh << 8) | rnds[7];
+    seqHigh = seqHigh << 8 | rnds[7];
     seqLow = rnds[8] & 63;
-    seqLow = (seqLow << 8) | rnds[9];
-    seqLow = (seqLow << 5) | (rnds[10] >>> 3);
+    seqLow = seqLow << 8 | rnds[9];
+    seqLow = seqLow << 5 | rnds[10] >>> 3;
   }
   if (msecs + 1e4 > _msecs && seq === null) {
     if (++seqLow > 524287) {
@@ -3289,17 +3068,17 @@ function v7(options, buf, offset) {
   }
   _seqHigh = seqHigh;
   _seqLow = seqLow;
-  b[i++] = (_msecs / 1099511627776) & 255;
-  b[i++] = (_msecs / 4294967296) & 255;
-  b[i++] = (_msecs / 16777216) & 255;
-  b[i++] = (_msecs / 65536) & 255;
-  b[i++] = (_msecs / 256) & 255;
+  b[i++] = _msecs / 1099511627776 & 255;
+  b[i++] = _msecs / 4294967296 & 255;
+  b[i++] = _msecs / 16777216 & 255;
+  b[i++] = _msecs / 65536 & 255;
+  b[i++] = _msecs / 256 & 255;
   b[i++] = _msecs & 255;
-  b[i++] = ((seqHigh >>> 4) & 15) | 112;
+  b[i++] = seqHigh >>> 4 & 15 | 112;
   b[i++] = seqHigh & 255;
-  b[i++] = ((seqLow >>> 13) & 63) | 128;
-  b[i++] = (seqLow >>> 5) & 255;
-  b[i++] = ((seqLow << 3) & 255) | (rnds[10] & 7);
+  b[i++] = seqLow >>> 13 & 63 | 128;
+  b[i++] = seqLow >>> 5 & 255;
+  b[i++] = seqLow << 3 & 255 | rnds[10] & 7;
   b[i++] = rnds[11];
   b[i++] = rnds[12];
   b[i++] = rnds[13];
@@ -3347,19 +3126,10 @@ var LANGSMITH_REQUEST_HEADERS = "langsmith.request.headers";
 // node_modules/.pnpm/langsmith@0.5.15/node_modules/langsmith/dist/utils/env.js
 var globalEnv;
 var isBrowser = () => typeof window !== "undefined" && typeof window.document !== "undefined";
-var isWebWorker = () =>
-  typeof globalThis === "object" &&
-  globalThis.constructor &&
-  globalThis.constructor.name === "DedicatedWorkerGlobalScope";
-var isJsDom = () =>
-  (typeof window !== "undefined" && window.name === "nodejs") ||
-  (typeof navigator !== "undefined" && navigator.userAgent.includes("jsdom"));
+var isWebWorker = () => typeof globalThis === "object" && globalThis.constructor && globalThis.constructor.name === "DedicatedWorkerGlobalScope";
+var isJsDom = () => typeof window !== "undefined" && window.name === "nodejs" || typeof navigator !== "undefined" && navigator.userAgent.includes("jsdom");
 var isDeno = () => typeof Deno !== "undefined";
-var isNode = () =>
-  typeof process !== "undefined" &&
-  typeof process.versions !== "undefined" &&
-  typeof process.versions.node !== "undefined" &&
-  !isDeno();
+var isNode = () => typeof process !== "undefined" && typeof process.versions !== "undefined" && typeof process.versions.node !== "undefined" && !isDeno();
 var getEnv = () => {
   if (globalEnv) {
     return globalEnv;
@@ -3391,7 +3161,7 @@ function getRuntimeEnvironment() {
       runtime: env,
       sdk: "langsmith-js",
       sdk_version: __version__,
-      ...releaseEnv,
+      ...releaseEnv
     };
   }
   return runtimeEnvironment;
@@ -3409,16 +3179,10 @@ function getLangSmithEnvVarsMetadata() {
     "LANGSMITH_ENDPOINT",
     "LANGSMITH_TRACING_V2",
     "LANGSMITH_PROJECT",
-    "LANGSMITH_SESSION",
+    "LANGSMITH_SESSION"
   ];
   for (const [key, value] of Object.entries(allEnvVars)) {
-    if (
-      typeof value === "string" &&
-      !excluded.includes(key) &&
-      !key.toLowerCase().includes("key") &&
-      !key.toLowerCase().includes("secret") &&
-      !key.toLowerCase().includes("token")
-    ) {
+    if (typeof value === "string" && !excluded.includes(key) && !key.toLowerCase().includes("key") && !key.toLowerCase().includes("secret") && !key.toLowerCase().includes("token")) {
       if (key === "LANGCHAIN_REVISION_ID") {
         envVars["revision_id"] = value;
       } else {
@@ -3434,12 +3198,7 @@ function getLangSmithEnvironmentVariables() {
     if (typeof process !== "undefined" && process.env) {
       for (const [key, value] of Object.entries(process.env)) {
         if ((key.startsWith("LANGCHAIN_") || key.startsWith("LANGSMITH_")) && value != null) {
-          if (
-            (key.toLowerCase().includes("key") ||
-              key.toLowerCase().includes("secret") ||
-              key.toLowerCase().includes("token")) &&
-            typeof value === "string"
-          ) {
+          if ((key.toLowerCase().includes("key") || key.toLowerCase().includes("secret") || key.toLowerCase().includes("token")) && typeof value === "string") {
             envVars[key] = value.slice(0, 2) + "*".repeat(value.length - 4) + value.slice(-2);
           } else {
             envVars[key] = value;
@@ -3447,15 +3206,16 @@ function getLangSmithEnvironmentVariables() {
         }
       }
     }
-  } catch (e) {}
+  } catch (e) {
+  }
   return envVars;
 }
 function getEnvironmentVariable(name) {
   try {
-    return typeof process !== "undefined"
-      ? // eslint-disable-next-line no-process-env
-        process.env?.[name]
-      : void 0;
+    return typeof process !== "undefined" ? (
+      // eslint-disable-next-line no-process-env
+      process.env?.[name]
+    ) : void 0;
   } catch (e) {
     return void 0;
   }
@@ -3487,7 +3247,7 @@ function getShas() {
     "BITBUCKET_COMMIT",
     "DRONE_COMMIT_SHA",
     "SEMAPHORE_GIT_SHA",
-    "BUILDKITE_COMMIT",
+    "BUILDKITE_COMMIT"
   ];
   const shas = {};
   for (const env of common_release_envs) {
@@ -3500,10 +3260,7 @@ function getShas() {
   return shas;
 }
 function getOtelEnabled() {
-  return (
-    getEnvironmentVariable("OTEL_ENABLED") === "true" ||
-    getLangSmithEnvironmentVariable("OTEL_ENABLED") === "true"
-  );
+  return getEnvironmentVariable("OTEL_ENABLED") === "true" || getLangSmithEnvironmentVariable("OTEL_ENABLED") === "true";
 }
 
 // node_modules/.pnpm/langsmith@0.5.15/node_modules/langsmith/dist/singletons/otel.js
@@ -3513,14 +3270,12 @@ var MockTracer = class {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: false,
+      value: false
     });
   }
   startActiveSpan(_name, ...args) {
     if (!this.hasWarned && getOtelEnabled()) {
-      console.warn(
-        'You have enabled OTEL export via the `OTEL_ENABLED` or `LANGSMITH_OTEL_ENABLED` environment variable, but have not initialized the required OTEL instances. Please add:\n```\nimport { initializeOTEL } from "langsmith/experimental/otel/setup";\ninitializeOTEL();\n```\nat the beginning of your code.',
-      );
+      console.warn('You have enabled OTEL export via the `OTEL_ENABLED` or `LANGSMITH_OTEL_ENABLED` environment variable, but have not initialized the required OTEL instances. Please add:\n```\nimport { initializeOTEL } from "langsmith/experimental/otel/setup";\ninitializeOTEL();\n```\nat the beginning of your code.');
       this.hasWarned = true;
     }
     let fn;
@@ -3543,7 +3298,7 @@ var MockOTELTrace = class {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: new MockTracer(),
+      value: new MockTracer()
     });
   }
   getTracer(_name, _version) {
@@ -3578,9 +3333,7 @@ var MockOTELContext = class {
 };
 var OTEL_TRACE_KEY = /* @__PURE__ */ Symbol.for("ls:otel_trace");
 var OTEL_CONTEXT_KEY = /* @__PURE__ */ Symbol.for("ls:otel_context");
-var OTEL_GET_DEFAULT_OTLP_TRACER_PROVIDER_KEY = /* @__PURE__ */ Symbol.for(
-  "ls:otel_get_default_otlp_tracer_provider",
-);
+var OTEL_GET_DEFAULT_OTLP_TRACER_PROVIDER_KEY = /* @__PURE__ */ Symbol.for("ls:otel_get_default_otlp_tracer_provider");
 var mockOTELTrace = new MockOTELTrace();
 var mockOTELContext = new MockOTELContext();
 var OTELProvider = class {
@@ -3622,7 +3375,7 @@ var WELL_KNOWN_OPERATION_NAMES = {
   tool: "execute_tool",
   retriever: "embeddings",
   embedding: "embeddings",
-  prompt: "chat",
+  prompt: "chat"
 };
 function getOperationName(runType) {
   return WELL_KNOWN_OPERATION_NAMES[runType] || runType;
@@ -3633,7 +3386,7 @@ var LangSmithToOTELTranslator = class {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: /* @__PURE__ */ new Map(),
+      value: /* @__PURE__ */ new Map()
     });
   }
   exportBatch(operations, otelContextMap) {
@@ -3877,10 +3630,7 @@ var LangSmithToOTELTranslator = class {
             span.setAttribute(GEN_AI_RESPONSE_ID, outputs.id);
           }
           if (outputs.choices && Array.isArray(outputs.choices)) {
-            const finishReasons = outputs.choices
-              .map((choice) => choice.finish_reason)
-              .filter((reason) => reason)
-              .map(String);
+            const finishReasons = outputs.choices.map((choice) => choice.finish_reason).filter((reason) => reason).map(String);
             if (finishReasons.length > 0) {
               span.setAttribute(GEN_AI_RESPONSE_FINISH_REASONS, finishReasons.join(", "));
             }
@@ -3894,16 +3644,10 @@ var LangSmithToOTELTranslator = class {
           if (outputs.usage_metadata && typeof outputs.usage_metadata === "object") {
             const usageMetadata = outputs.usage_metadata;
             if (usageMetadata.input_token_details) {
-              span.setAttribute(
-                GEN_AI_USAGE_INPUT_TOKEN_DETAILS,
-                JSON.stringify(usageMetadata.input_token_details),
-              );
+              span.setAttribute(GEN_AI_USAGE_INPUT_TOKEN_DETAILS, JSON.stringify(usageMetadata.input_token_details));
             }
             if (usageMetadata.output_token_details) {
-              span.setAttribute(
-                GEN_AI_USAGE_OUTPUT_TOKEN_DETAILS,
-                JSON.stringify(usageMetadata.output_token_details),
-              );
+              span.setAttribute(GEN_AI_USAGE_OUTPUT_TOKEN_DETAILS, JSON.stringify(usageMetadata.output_token_details));
             }
           }
         }
@@ -3945,13 +3689,7 @@ var LangSmithToOTELTranslator = class {
     }
     const flatGenerations = Array.isArray(generations[0]) ? generations.flat() : generations;
     for (const generation of flatGenerations) {
-      if (
-        typeof generation === "object" &&
-        generation.message &&
-        typeof generation.message === "object" &&
-        generation.message.kwargs &&
-        typeof generation.message.kwargs === "object"
-      ) {
+      if (typeof generation === "object" && generation.message && typeof generation.message === "object" && generation.message.kwargs && typeof generation.message.kwargs === "object") {
         tokenUsage = this.extractUnifiedRunTokens(generation.message.kwargs.usage_metadata);
         if (tokenUsage) {
           return tokenUsage;
@@ -3992,21 +3730,18 @@ var errorMessages = /* @__PURE__ */ new Set([
   // Undici (Node.js)
   " A network error occurred.",
   // Bun (WebKit)
-  "Network connection lost",
+  "Network connection lost"
   // Cloudflare Workers (fetch)
 ]);
 function isNetworkError(error2) {
-  const isValid =
-    error2 && isError(error2) && error2.name === "TypeError" && typeof error2.message === "string";
+  const isValid = error2 && isError(error2) && error2.name === "TypeError" && typeof error2.message === "string";
   if (!isValid) {
     return false;
   }
   const { message, stack } = error2;
   if (message === "Load failed") {
-    return (
-      stack === void 0 || // Sentry adds its own stack trace to the fetch error, so also check for that
-      "__sentry_captured__" in error2
-    );
+    return stack === void 0 || // Sentry adds its own stack trace to the fetch error, so also check for that
+    "__sentry_captured__" in error2;
   }
   if (message.startsWith("error sending request for url")) {
     return true;
@@ -4032,9 +3767,7 @@ function validateNumberOption(name, value, { min = 0, allowInfinity = false } = 
     return;
   }
   if (typeof value !== "number" || Number.isNaN(value)) {
-    throw new TypeError(
-      `Expected \`${name}\` to be a number${allowInfinity ? " or Infinity" : ""}.`,
-    );
+    throw new TypeError(`Expected \`${name}\` to be a number${allowInfinity ? " or Infinity" : ""}.`);
   }
   if (!allowInfinity && !Number.isFinite(value)) {
     throw new TypeError(`Expected \`${name}\` to be a finite number.`);
@@ -4070,29 +3803,18 @@ function calculateRemainingTime(start, max) {
   }
   return max - (performance.now() - start);
 }
-async function onAttemptFailure({
-  error: error2,
-  attemptNumber,
-  retriesConsumed,
-  startTime,
-  options,
-}) {
-  const normalizedError =
-    error2 instanceof Error
-      ? error2
-      : new TypeError(`Non-error was thrown: "${error2}". You should only throw errors.`);
+async function onAttemptFailure({ error: error2, attemptNumber, retriesConsumed, startTime, options }) {
+  const normalizedError = error2 instanceof Error ? error2 : new TypeError(`Non-error was thrown: "${error2}". You should only throw errors.`);
   if (normalizedError instanceof AbortError) {
     throw normalizedError.originalError;
   }
-  const retriesLeft = Number.isFinite(options.retries)
-    ? Math.max(0, options.retries - retriesConsumed)
-    : options.retries;
+  const retriesLeft = Number.isFinite(options.retries) ? Math.max(0, options.retries - retriesConsumed) : options.retries;
   const maxRetryTime = options.maxRetryTime ?? Number.POSITIVE_INFINITY;
   const context = Object.freeze({
     error: normalizedError,
     attemptNumber,
     retriesLeft,
-    retriesConsumed,
+    retriesConsumed
   });
   await options.onFailedAttempt(context);
   if (calculateRemainingTime(startTime, maxRetryTime) <= 0) {
@@ -4110,7 +3832,7 @@ async function onAttemptFailure({
     options.signal?.throwIfAborted();
     return false;
   }
-  if (!(await options.shouldRetry(context))) {
+  if (!await options.shouldRetry(context)) {
     throw normalizedError;
   }
   if (!consumeRetry) {
@@ -4143,9 +3865,7 @@ async function pRetry(input, options = {}) {
   options = { ...options };
   validateRetries(options.retries);
   if (Object.hasOwn(options, "forever")) {
-    throw new Error(
-      "The `forever` option is no longer supported. For many use-cases, you can set `retries: Infinity` instead.",
-    );
+    throw new Error("The `forever` option is no longer supported. For many use-cases, you can set `retries: Infinity` instead.");
   }
   options.retries ??= 10;
   options.factor ??= 2;
@@ -4153,24 +3873,25 @@ async function pRetry(input, options = {}) {
   options.maxTimeout ??= Number.POSITIVE_INFINITY;
   options.maxRetryTime ??= Number.POSITIVE_INFINITY;
   options.randomize ??= false;
-  options.onFailedAttempt ??= () => {};
+  options.onFailedAttempt ??= () => {
+  };
   options.shouldRetry ??= () => true;
   options.shouldConsumeRetry ??= () => true;
   validateNumberOption("factor", options.factor, {
     min: 0,
-    allowInfinity: false,
+    allowInfinity: false
   });
   validateNumberOption("minTimeout", options.minTimeout, {
     min: 0,
-    allowInfinity: false,
+    allowInfinity: false
   });
   validateNumberOption("maxTimeout", options.maxTimeout, {
     min: 0,
-    allowInfinity: true,
+    allowInfinity: true
   });
   validateNumberOption("maxRetryTime", options.maxRetryTime, {
     min: 0,
-    allowInfinity: true,
+    allowInfinity: true
   });
   if (!(options.factor > 0)) {
     options.factor = 1;
@@ -4187,15 +3908,13 @@ async function pRetry(input, options = {}) {
       options.signal?.throwIfAborted();
       return result;
     } catch (error2) {
-      if (
-        await onAttemptFailure({
-          error: error2,
-          attemptNumber,
-          retriesConsumed,
-          startTime,
-          options,
-        })
-      ) {
+      if (await onAttemptFailure({
+        error: error2,
+        attemptNumber,
+        retriesConsumed,
+        startTime,
+        options
+      })) {
         retriesConsumed++;
       }
     }
@@ -4205,8 +3924,7 @@ async function pRetry(input, options = {}) {
 
 // node_modules/.pnpm/langsmith@0.5.15/node_modules/langsmith/dist/utils/p-queue.js
 var import_p_queue = __toESM(require_dist(), 1);
-var PQueue =
-  "default" in import_p_queue.default ? import_p_queue.default.default : import_p_queue.default;
+var PQueue = "default" in import_p_queue.default ? import_p_queue.default.default : import_p_queue.default;
 
 // node_modules/.pnpm/langsmith@0.5.15/node_modules/langsmith/dist/utils/async_caller.js
 var STATUS_RETRYABLE = [
@@ -4222,7 +3940,7 @@ var STATUS_RETRYABLE = [
   // Bad Gateway
   503,
   // Service Unavailable
-  504,
+  504
   // Gateway Timeout
 ];
 var AsyncCaller = class {
@@ -4231,37 +3949,37 @@ var AsyncCaller = class {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "maxRetries", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "maxQueueSizeBytes", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "queue", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "onFailedResponseHook", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "queueSizeBytes", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: 0,
+      value: 0
     });
     this.maxConcurrency = params.maxConcurrency ?? Infinity;
     this.maxRetries = params.maxRetries ?? 6;
@@ -4276,70 +3994,47 @@ var AsyncCaller = class {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   callWithOptions(options, callable, ...args) {
     const sizeBytes = options.sizeBytes ?? 0;
-    if (
-      this.maxQueueSizeBytes !== void 0 &&
-      sizeBytes > 0 &&
-      this.queueSizeBytes + sizeBytes > this.maxQueueSizeBytes
-    ) {
-      return Promise.reject(
-        new Error(
-          `Queue size limit (${this.maxQueueSizeBytes} bytes) exceeded. Current queue size: ${this.queueSizeBytes} bytes, attempted addition: ${sizeBytes} bytes.`,
-        ),
-      );
+    if (this.maxQueueSizeBytes !== void 0 && sizeBytes > 0 && this.queueSizeBytes + sizeBytes > this.maxQueueSizeBytes) {
+      return Promise.reject(new Error(`Queue size limit (${this.maxQueueSizeBytes} bytes) exceeded. Current queue size: ${this.queueSizeBytes} bytes, attempted addition: ${sizeBytes} bytes.`));
     }
     if (sizeBytes > 0) {
       this.queueSizeBytes += sizeBytes;
     }
     const onFailedResponseHook = this.onFailedResponseHook;
-    let promise = this.queue.add(
-      () =>
-        pRetry(
-          () =>
-            callable(...args).catch((error2) => {
-              if (error2 instanceof Error) {
-                throw error2;
-              } else {
-                throw new Error(error2);
-              }
-            }),
-          {
-            async onFailedAttempt({ error: error2 }) {
-              if (typeof error2 !== "object" || error2 == null) throw error2;
-              const errorMessage =
-                "message" in error2 && typeof error2.message === "string" ? error2.message : void 0;
-              if (
-                errorMessage?.startsWith("Cancel") ||
-                errorMessage?.startsWith("TimeoutError") ||
-                errorMessage?.startsWith("AbortError")
-              ) {
-                throw error2;
-              }
-              if ("name" in error2 && error2.name === "TimeoutError") {
-                throw error2;
-              }
-              if ("code" in error2 && error2.code === "ECONNABORTED") {
-                throw error2;
-              }
-              const response = "response" in error2 ? error2.response : void 0;
-              if (onFailedResponseHook) {
-                const handled = await onFailedResponseHook(response);
-                if (handled) return;
-              }
-              const status = response?.status ?? ("status" in error2 ? error2.status : void 0);
-              if (
-                status != null &&
-                (typeof status === "number" || typeof status === "string") &&
-                !STATUS_RETRYABLE.includes(+status)
-              ) {
-                throw error2;
-              }
-            },
-            retries: this.maxRetries,
-            randomize: true,
-          },
-        ),
-      { throwOnTimeout: true },
-    );
+    let promise = this.queue.add(() => pRetry(() => callable(...args).catch((error2) => {
+      if (error2 instanceof Error) {
+        throw error2;
+      } else {
+        throw new Error(error2);
+      }
+    }), {
+      async onFailedAttempt({ error: error2 }) {
+        if (typeof error2 !== "object" || error2 == null)
+          throw error2;
+        const errorMessage = "message" in error2 && typeof error2.message === "string" ? error2.message : void 0;
+        if (errorMessage?.startsWith("Cancel") || errorMessage?.startsWith("TimeoutError") || errorMessage?.startsWith("AbortError")) {
+          throw error2;
+        }
+        if ("name" in error2 && error2.name === "TimeoutError") {
+          throw error2;
+        }
+        if ("code" in error2 && error2.code === "ECONNABORTED") {
+          throw error2;
+        }
+        const response = "response" in error2 ? error2.response : void 0;
+        if (onFailedResponseHook) {
+          const handled = await onFailedResponseHook(response);
+          if (handled)
+            return;
+        }
+        const status = response?.status ?? ("status" in error2 ? error2.status : void 0);
+        if (status != null && (typeof status === "number" || typeof status === "string") && !STATUS_RETRYABLE.includes(+status)) {
+          throw error2;
+        }
+      },
+      retries: this.maxRetries,
+      randomize: true
+    }), { throwOnTimeout: true });
     if (sizeBytes > 0) {
       promise = promise.finally(() => {
         this.queueSizeBytes -= sizeBytes;
@@ -4352,7 +4047,7 @@ var AsyncCaller = class {
           options.signal?.addEventListener("abort", () => {
             reject(new Error("AbortError"));
           });
-        }),
+        })
       ]);
     }
     return promise;
@@ -4366,7 +4061,7 @@ function isLangChainMessage(message) {
 function convertLangChainMessageToExample(message) {
   const converted = {
     type: message._getType(),
-    data: { content: message.content },
+    data: { content: message.content }
   };
   if (message?.additional_kwargs && Object.keys(message.additional_kwargs).length > 0) {
     converted.data.additional_kwargs = { ...message.additional_kwargs };
@@ -4402,9 +4097,7 @@ function hexToBytes(hex) {
   }
   return bytes;
 }
-var kkey = hexToBytes(
-  "b8fe6c3923a44bbe7c01812cf721ad1cded46de9839097db7240a4a4b7b3671fcb79e64eccc0e578825ad07dccff7221b8084674f743248ee03590e6813a264c3c2852bb91c300cb88d0658b1b532ea371644897a20df94e3819ef46a9deacd8a8fa763fe39c343ff9dcbbc7c70b4f1d8a51e04bcdb45931c89f7ec9d9787364eac5ac8334d3ebc3c581a0fffa1363eb170ddd51b7f0da49d316552629d4689e2b16be587d47a1fc8ff8b8d17ad031ce45cb3a8f95160428afd7fbcabb4b407e",
-);
+var kkey = hexToBytes("b8fe6c3923a44bbe7c01812cf721ad1cded46de9839097db7240a4a4b7b3671fcb79e64eccc0e578825ad07dccff7221b8084674f743248ee03590e6813a264c3c2852bb91c300cb88d0658b1b532ea371644897a20df94e3819ef46a9deacd8a8fa763fe39c343ff9dcbbc7c70b4f1d8a51e04bcdb45931c89f7ec9d9787364eac5ac8334d3ebc3c581a0fffa1363eb170ddd51b7f0da49d316552629d4689e2b16be587d47a1fc8ff8b8d17ad031ce45cb3a8f95160428afd7fbcabb4b407e");
 var mask128 = (n(1) << n(128)) - n(1);
 var mask64 = (n(1) << n(64)) - n(1);
 var mask32 = (n(1) << n(32)) - n(1);
@@ -4427,28 +4120,20 @@ function readUInt8(buf, offset = 0) {
   return buf[offset];
 }
 var bswap64 = (a) => {
-  return (
-    ((a & n(255)) << n(56)) |
-    ((a & n(65280)) << n(40)) |
-    ((a & n(16711680)) << n(24)) |
-    ((a & n(4278190080)) << n(8)) |
-    ((a & n(1095216660480)) >> n(8)) |
-    ((a & n(280375465082880)) >> n(24)) |
-    ((a & n(71776119061217280)) >> n(40)) |
-    ((a & n(18374686479671624e3)) >> n(56))
-  );
+  return (a & n(255)) << n(56) | (a & n(65280)) << n(40) | (a & n(16711680)) << n(24) | (a & n(4278190080)) << n(8) | (a & n(1095216660480)) >> n(8) | (a & n(280375465082880)) >> n(24) | (a & n(71776119061217280)) >> n(40) | (a & n(18374686479671624e3)) >> n(56);
 };
 var bswap32 = (a) => {
-  a = ((a & n(65535)) << n(16)) | ((a & n(4294901760)) >> n(16));
-  a = ((a & n(16711935)) << n(8)) | ((a & n(4278255360)) >> n(8));
+  a = (a & n(65535)) << n(16) | (a & n(4294901760)) >> n(16);
+  a = (a & n(16711935)) << n(8) | (a & n(4278255360)) >> n(8);
   return a;
 };
-var XXH_mult32to64 = (a, b) => ((a & mask32) * (b & mask32)) & mask64;
+var XXH_mult32to64 = (a, b) => (a & mask32) * (b & mask32) & mask64;
 var assert = (a) => {
-  if (!a) throw new Error("Assert failed");
+  if (!a)
+    throw new Error("Assert failed");
 };
 function rotl32(a, b) {
-  return ((a << b) | (a >> (n(32) - b))) & mask32;
+  return (a << b | a >> n(32) - b) & mask32;
 }
 function XXH3_accumulate_512(acc, data, key) {
   for (let i = 0; i < ACC_NB; i++) {
@@ -4498,11 +4183,7 @@ function XXH3_hashLong(acc, data, secret, f_acc, f_scramble) {
   {
     const nbStripes = Math.floor((data.byteLength - 1 - block_len * nb_blocks) / STRIPE_LEN);
     acc = XXH3_accumulate(acc, getView(data, nb_blocks * block_len), secret, nbStripes);
-    acc = f_acc(
-      acc,
-      getView(data, data.byteLength - STRIPE_LEN),
-      getView(secret, secret.byteLength - STRIPE_LEN - 7),
-    );
+    acc = f_acc(acc, getView(data, data.byteLength - STRIPE_LEN), getView(secret, secret.byteLength - STRIPE_LEN - 7));
   }
   return acc;
 }
@@ -4515,45 +4196,34 @@ function XXH3_hashLong_128b(data, secret, seed) {
     PRIME64_4,
     PRIME32_2,
     PRIME64_5,
-    PRIME32_1,
+    PRIME32_1
   ]);
   assert(data.length > 128);
   acc = XXH3_hashLong(acc, data, secret, XXH3_accumulate_512, XXH3_scrambleAcc);
   assert(acc.length * 8 == 64);
   {
-    const low64 = XXH3_mergeAccs(
-      acc,
-      getView(secret, 11),
-      (n(data.byteLength) * PRIME64_1) & mask64,
-    );
-    const high64 = XXH3_mergeAccs(
-      acc,
-      getView(secret, secret.byteLength - STRIPE_LEN - 11),
-      ~(n(data.byteLength) * PRIME64_2) & mask64,
-    );
-    return (high64 << n(64)) | low64;
+    const low64 = XXH3_mergeAccs(acc, getView(secret, 11), n(data.byteLength) * PRIME64_1 & mask64);
+    const high64 = XXH3_mergeAccs(acc, getView(secret, secret.byteLength - STRIPE_LEN - 11), ~(n(data.byteLength) * PRIME64_2) & mask64);
+    return high64 << n(64) | low64;
   }
 }
 function XXH3_mul128_fold64(a, b) {
-  const lll = (a * b) & mask128;
-  return (lll & mask64) ^ (lll >> n(64));
+  const lll = a * b & mask128;
+  return lll & mask64 ^ lll >> n(64);
 }
 function XXH3_mix16B(data, key, seed) {
-  return XXH3_mul128_fold64(
-    (readBigUInt64LE(data, 0) ^ (readBigUInt64LE(key, 0) + seed)) & mask64,
-    (readBigUInt64LE(data, 8) ^ (readBigUInt64LE(key, 8) - seed)) & mask64,
-  );
+  return XXH3_mul128_fold64((readBigUInt64LE(data, 0) ^ readBigUInt64LE(key, 0) + seed) & mask64, (readBigUInt64LE(data, 8) ^ readBigUInt64LE(key, 8) - seed) & mask64);
 }
 function XXH3_mix32B(acc, data1, data2, key, seed) {
   let accl = acc & mask64;
-  let acch = (acc >> n(64)) & mask64;
+  let acch = acc >> n(64) & mask64;
   accl += XXH3_mix16B(data1, key, seed);
   accl ^= readBigUInt64LE(data2, 0) + readBigUInt64LE(data2, 8);
   accl &= mask64;
   acch += XXH3_mix16B(data2, getView(key, 16), seed);
   acch ^= readBigUInt64LE(data1, 0) + readBigUInt64LE(data1, 8);
   acch &= mask64;
-  return (acch << n(64)) | accl;
+  return acch << n(64) | accl;
 }
 function XXH3_avalanche(h64) {
   h64 ^= h64 >> n(37);
@@ -4575,19 +4245,15 @@ function XXH3_avalanche64(h64) {
 function XXH3_len_1to3_128b(data, key32, seed) {
   const len = data.byteLength;
   assert(len > 0 && len <= 3);
-  const combined =
-    n(readUInt8(data, len - 1)) |
-    n(len << 8) |
-    n(readUInt8(data, 0) << 16) |
-    n(readUInt8(data, len >> 1) << 24);
+  const combined = n(readUInt8(data, len - 1)) | n(len << 8) | n(readUInt8(data, 0) << 16) | n(readUInt8(data, len >> 1) << 24);
   const blow = (n(readUInt32LE(key32, 0)) ^ n(readUInt32LE(key32, 4))) + seed;
   const low = (combined ^ blow) & mask64;
   const bhigh = (n(readUInt32LE(key32, 8)) ^ n(readUInt32LE(key32, 12))) - seed;
   const high = (rotl32(bswap32(combined), n(13)) ^ bhigh) & mask64;
-  return ((XXH3_avalanche64(high) & mask64) << n(64)) | XXH3_avalanche64(low);
+  return (XXH3_avalanche64(high) & mask64) << n(64) | XXH3_avalanche64(low);
 }
 function xorshift64(b, shift) {
-  return b ^ (b >> shift);
+  return b ^ b >> shift;
 }
 function XXH3_len_4to8_128b(data, key32, seed) {
   const len = data.byteLength;
@@ -4595,121 +4261,91 @@ function XXH3_len_4to8_128b(data, key32, seed) {
   {
     const l1 = readUInt32LE(data, 0);
     const l2 = readUInt32LE(data, len - 4);
-    const l64 = n(l1) | (n(l2) << n(32));
-    const bitflip = ((readBigUInt64LE(key32, 16) ^ readBigUInt64LE(key32, 24)) + seed) & mask64;
+    const l64 = n(l1) | n(l2) << n(32);
+    const bitflip = (readBigUInt64LE(key32, 16) ^ readBigUInt64LE(key32, 24)) + seed & mask64;
     const keyed = l64 ^ bitflip;
-    let m128 = (keyed * (PRIME64_1 + (n(len) << n(2)))) & mask128;
+    let m128 = keyed * (PRIME64_1 + (n(len) << n(2))) & mask128;
     m128 += (m128 & mask64) << n(65);
     m128 &= mask128;
     m128 ^= m128 >> n(67);
-    return (
-      xorshift64((xorshift64(m128 & mask64, n(35)) * PRIME_MX2) & mask64, n(28)) |
-      (XXH3_avalanche(m128 >> n(64)) << n(64))
-    );
+    return xorshift64(xorshift64(m128 & mask64, n(35)) * PRIME_MX2 & mask64, n(28)) | XXH3_avalanche(m128 >> n(64)) << n(64);
   }
 }
 function XXH3_len_9to16_128b(data, key64, seed) {
   const len = data.byteLength;
   assert(len >= 9 && len <= 16);
   {
-    const bitflipl = ((readBigUInt64LE(key64, 32) ^ readBigUInt64LE(key64, 40)) + seed) & mask64;
-    const bitfliph = ((readBigUInt64LE(key64, 48) ^ readBigUInt64LE(key64, 56)) - seed) & mask64;
+    const bitflipl = (readBigUInt64LE(key64, 32) ^ readBigUInt64LE(key64, 40)) + seed & mask64;
+    const bitfliph = (readBigUInt64LE(key64, 48) ^ readBigUInt64LE(key64, 56)) - seed & mask64;
     const ll1 = readBigUInt64LE(data);
     let ll2 = readBigUInt64LE(data, len - 8);
     let m128 = (ll1 ^ ll2 ^ bitflipl) * PRIME64_1;
     const m128_l = (m128 & mask64) + (n(len - 1) << n(54));
-    m128 = (m128 & (mask128 ^ mask64)) | m128_l;
+    m128 = m128 & (mask128 ^ mask64) | m128_l;
     ll2 ^= bitfliph;
-    m128 += (ll2 + (ll2 & mask32) * (PRIME32_2 - n(1))) << n(64);
+    m128 += ll2 + (ll2 & mask32) * (PRIME32_2 - n(1)) << n(64);
     m128 &= mask128;
     m128 ^= bswap64(m128 >> n(64));
     let h128 = (m128 & mask64) * PRIME64_2;
-    h128 += ((m128 >> n(64)) * PRIME64_2) << n(64);
+    h128 += (m128 >> n(64)) * PRIME64_2 << n(64);
     h128 &= mask128;
-    return XXH3_avalanche(h128 & mask64) | (XXH3_avalanche(h128 >> n(64)) << n(64));
+    return XXH3_avalanche(h128 & mask64) | XXH3_avalanche(h128 >> n(64)) << n(64);
   }
 }
 function XXH3_len_0to16_128b(data, seed) {
   const len = data.byteLength;
   assert(len <= 16);
-  if (len > 8) return XXH3_len_9to16_128b(data, kkey, seed);
-  if (len >= 4) return XXH3_len_4to8_128b(data, kkey, seed);
-  if (len > 0) return XXH3_len_1to3_128b(data, kkey, seed);
-  return (
-    XXH3_avalanche64(seed ^ readBigUInt64LE(kkey, 64) ^ readBigUInt64LE(kkey, 72)) |
-    (XXH3_avalanche64(seed ^ readBigUInt64LE(kkey, 80) ^ readBigUInt64LE(kkey, 88)) << n(64))
-  );
+  if (len > 8)
+    return XXH3_len_9to16_128b(data, kkey, seed);
+  if (len >= 4)
+    return XXH3_len_4to8_128b(data, kkey, seed);
+  if (len > 0)
+    return XXH3_len_1to3_128b(data, kkey, seed);
+  return XXH3_avalanche64(seed ^ readBigUInt64LE(kkey, 64) ^ readBigUInt64LE(kkey, 72)) | XXH3_avalanche64(seed ^ readBigUInt64LE(kkey, 80) ^ readBigUInt64LE(kkey, 88)) << n(64);
 }
 function inv64(x) {
-  return (~x + n(1)) & mask64;
+  return ~x + n(1) & mask64;
 }
 function XXH3_len_17to128_128b(data, secret, seed) {
-  let acc = (n(data.byteLength) * PRIME64_1) & mask64;
+  let acc = n(data.byteLength) * PRIME64_1 & mask64;
   let i = n(data.byteLength - 1) / n(32);
   while (i >= 0) {
     const ni = Number(i);
-    acc = XXH3_mix32B(
-      acc,
-      getView(data, 16 * ni),
-      getView(data, data.byteLength - 16 * (ni + 1)),
-      getView(secret, 32 * ni),
-      seed,
-    );
+    acc = XXH3_mix32B(acc, getView(data, 16 * ni), getView(data, data.byteLength - 16 * (ni + 1)), getView(secret, 32 * ni), seed);
     i--;
   }
-  let h128l = (acc + (acc >> n(64))) & mask64;
+  let h128l = acc + (acc >> n(64)) & mask64;
   h128l = XXH3_avalanche(h128l);
-  let h128h =
-    (acc & mask64) * PRIME64_1 +
-    (acc >> n(64)) * PRIME64_4 +
-    ((n(data.byteLength) - seed) & mask64) * PRIME64_2;
+  let h128h = (acc & mask64) * PRIME64_1 + (acc >> n(64)) * PRIME64_4 + (n(data.byteLength) - seed & mask64) * PRIME64_2;
   h128h &= mask64;
   h128h = inv64(XXH3_avalanche(h128h));
-  return h128l | (h128h << n(64));
+  return h128l | h128h << n(64);
 }
 function XXH3_len_129to240_128b(data, secret, seed) {
-  let acc = (n(data.byteLength) * PRIME64_1) & mask64;
+  let acc = n(data.byteLength) * PRIME64_1 & mask64;
   for (let i = 32; i < 160; i += 32) {
-    acc = XXH3_mix32B(
-      acc,
-      getView(data, i - 32),
-      getView(data, i - 16),
-      getView(secret, i - 32),
-      seed,
-    );
+    acc = XXH3_mix32B(acc, getView(data, i - 32), getView(data, i - 16), getView(secret, i - 32), seed);
   }
-  acc = XXH3_avalanche(acc & mask64) | (XXH3_avalanche(acc >> n(64)) << n(64));
+  acc = XXH3_avalanche(acc & mask64) | XXH3_avalanche(acc >> n(64)) << n(64);
   for (let i = 160; i <= data.byteLength; i += 32) {
-    acc = XXH3_mix32B(
-      acc,
-      getView(data, i - 32),
-      getView(data, i - 16),
-      getView(secret, 3 + i - 160),
-      seed,
-    );
+    acc = XXH3_mix32B(acc, getView(data, i - 32), getView(data, i - 16), getView(secret, 3 + i - 160), seed);
   }
-  acc = XXH3_mix32B(
-    acc,
-    getView(data, data.byteLength - 16),
-    getView(data, data.byteLength - 32),
-    getView(secret, 136 - 17 - 16),
-    inv64(seed),
-  );
-  let h128l = (acc + (acc >> n(64))) & mask64;
+  acc = XXH3_mix32B(acc, getView(data, data.byteLength - 16), getView(data, data.byteLength - 32), getView(secret, 136 - 17 - 16), inv64(seed));
+  let h128l = acc + (acc >> n(64)) & mask64;
   h128l = XXH3_avalanche(h128l);
-  let h128h =
-    (acc & mask64) * PRIME64_1 +
-    (acc >> n(64)) * PRIME64_4 +
-    ((n(data.byteLength) - seed) & mask64) * PRIME64_2;
+  let h128h = (acc & mask64) * PRIME64_1 + (acc >> n(64)) * PRIME64_4 + (n(data.byteLength) - seed & mask64) * PRIME64_2;
   h128h &= mask64;
   h128h = inv64(XXH3_avalanche(h128h));
-  return h128l | (h128h << n(64));
+  return h128l | h128h << n(64);
 }
 function XXH3_128(data, seed = n(0)) {
   const len = data.byteLength;
-  if (len <= 16) return XXH3_len_0to16_128b(data, seed);
-  if (len <= 128) return XXH3_len_17to128_128b(data, kkey, seed);
-  if (len <= 240) return XXH3_len_129to240_128b(data, kkey, seed);
+  if (len <= 16)
+    return XXH3_len_0to16_128b(data, seed);
+  if (len <= 128)
+    return XXH3_len_17to128_128b(data, kkey, seed);
+  if (len <= 240)
+    return XXH3_len_129to240_128b(data, kkey, seed);
   return XXH3_hashLong_128b(data, kkey, seed);
 }
 function xxh128ToBytes(hash128) {
@@ -4751,9 +4387,7 @@ function uuidToBytes(uuidStr) {
   return bytes;
 }
 function bytesToUuid(bytes) {
-  const hex = Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 var _textEncoder = new TextEncoder();
@@ -4772,16 +4406,16 @@ function nonCryptographicUuid7Deterministic(originalId, key) {
     b.set(originalBytes.slice(0, 6), 0);
   } else {
     const msecs = Date.now();
-    b[0] = (msecs / 1099511627776) & 255;
-    b[1] = (msecs / 4294967296) & 255;
-    b[2] = (msecs / 16777216) & 255;
-    b[3] = (msecs / 65536) & 255;
-    b[4] = (msecs / 256) & 255;
+    b[0] = msecs / 1099511627776 & 255;
+    b[1] = msecs / 4294967296 & 255;
+    b[2] = msecs / 16777216 & 255;
+    b[3] = msecs / 65536 & 255;
+    b[4] = msecs / 256 & 255;
     b[5] = msecs & 255;
   }
-  b[6] = 112 | (h[0] & 15);
+  b[6] = 112 | h[0] & 15;
   b[7] = h[1];
-  b[8] = 128 | (h[2] & 63);
+  b[8] = 128 | h[2] & 63;
   b.set(h.slice(3, 10), 9);
   return bytesToUuid(b);
 }
@@ -4804,7 +4438,7 @@ var LangSmithConflictError = class extends Error {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     this.name = "LangSmithConflictError";
     this.status = 409;
@@ -4817,19 +4451,14 @@ var LangSmithNotFoundError = class extends Error {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     this.name = "LangSmithNotFoundError";
     this.status = 404;
   }
 };
 function isLangSmithNotFoundError(error2) {
-  return (
-    error2 != null &&
-    typeof error2 === "object" &&
-    "name" in error2 &&
-    error2?.name === "LangSmithNotFoundError"
-  );
+  return error2 != null && typeof error2 === "object" && "name" in error2 && error2?.name === "LangSmithNotFoundError";
 }
 async function raiseForStatus(response, context, consumeOnSuccess) {
   let errorBody;
@@ -4844,8 +4473,7 @@ async function raiseForStatus(response, context, consumeOnSuccess) {
       const errorData = await response.json();
       const errorCode = errorData?.error;
       if (errorCode === "org_scoped_key_requires_workspace") {
-        errorBody =
-          "This API key is org-scoped and requires workspace specification. Please provide 'workspaceId' parameter, or set LANGSMITH_WORKSPACE_ID environment variable.";
+        errorBody = "This API key is org-scoped and requires workspace specification. Please provide 'workspaceId' parameter, or set LANGSMITH_WORKSPACE_ID environment variable.";
       }
     } catch (e) {
       const errorWithStatus = new Error(`${response.status} ${response.statusText}`);
@@ -4874,14 +4502,12 @@ async function raiseForStatus(response, context, consumeOnSuccess) {
 var ERR_CONFLICTING_ENDPOINTS = "ERR_CONFLICTING_ENDPOINTS";
 var ConflictingEndpointsError = class extends Error {
   constructor() {
-    super(
-      "You cannot provide both LANGSMITH_ENDPOINT / LANGCHAIN_ENDPOINT and LANGSMITH_RUNS_ENDPOINTS.",
-    );
+    super("You cannot provide both LANGSMITH_ENDPOINT / LANGCHAIN_ENDPOINT and LANGSMITH_RUNS_ENDPOINTS.");
     Object.defineProperty(this, "code", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: ERR_CONFLICTING_ENDPOINTS,
+      value: ERR_CONFLICTING_ENDPOINTS
     });
     this.name = "ConflictingEndpointsError";
   }
@@ -4892,13 +4518,7 @@ function isConflictingEndpointsError(err) {
 
 // node_modules/.pnpm/langsmith@0.5.15/node_modules/langsmith/dist/utils/prompts.js
 function parsePromptIdentifier(identifier) {
-  if (
-    !identifier ||
-    identifier.split("/").length > 2 ||
-    identifier.startsWith("/") ||
-    identifier.endsWith("/") ||
-    identifier.split(":").length > 2
-  ) {
+  if (!identifier || identifier.split("/").length > 2 || identifier.startsWith("/") || identifier.endsWith("/") || identifier.split(":").length > 2) {
     throw new Error(getInvalidPromptIdentifierMsg(identifier));
   }
   const [ownerNamePart, commitPart] = identifier.split(":");
@@ -4929,7 +4549,7 @@ async function writeFileAtomic(filePath, content) {
   const tempPath = `${filePath}.tmp`;
   await nodeFsPromises.writeFile(tempPath, content, {
     encoding: "utf8",
-    mode: 384,
+    mode: 384
   });
   await nodeFsPromises.rename(tempPath, filePath);
 }
@@ -4972,31 +4592,31 @@ var PromptCache = class {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: /* @__PURE__ */ new Map(),
+      value: /* @__PURE__ */ new Map()
     });
     Object.defineProperty(this, "maxSize", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "ttlSeconds", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "refreshIntervalSeconds", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "refreshTimer", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "_metrics", {
       enumerable: true,
@@ -5006,8 +4626,8 @@ var PromptCache = class {
         hits: 0,
         misses: 0,
         refreshes: 0,
-        refreshErrors: 0,
-      },
+        refreshErrors: 0
+      }
     });
     this.configure(config);
   }
@@ -5038,7 +4658,7 @@ var PromptCache = class {
       hits: 0,
       misses: 0,
       refreshes: 0,
-      refreshErrors: 0,
+      refreshErrors: 0
     };
   }
   /**
@@ -5080,7 +4700,7 @@ var PromptCache = class {
     const entry = {
       value,
       createdAt: Date.now(),
-      refreshFunc,
+      refreshFunc
     };
     this.cache.delete(key);
     this.cache.set(key, entry);
@@ -5166,7 +4786,7 @@ var PromptCache = class {
       }
       const entry = {
         value,
-        createdAt: now,
+        createdAt: now
         // Fresh TTL from load time
       };
       this.cache.set(key, entry);
@@ -5249,9 +4869,7 @@ var _getFetchImplementation = (debug2) => {
       const [url, options] = args;
       console.log(`\u2192 ${options?.method || "GET"} ${url}`);
     }
-    const res = await (
-      globalThis[LANGSMITH_FETCH_IMPLEMENTATION_KEY] ?? DEFAULT_FETCH_IMPLEMENTATION
-    )(...args);
+    const res = await (globalThis[LANGSMITH_FETCH_IMPLEMENTATION_KEY] ?? DEFAULT_FETCH_IMPLEMENTATION)(...args);
     if (debug2 || getLangSmithEnvironmentVariable("DEBUG") === "true") {
       console.log(`\u2190 ${res.status} ${res.statusText} ${res.url}`);
     }
@@ -5268,7 +4886,7 @@ var encoder = new TextEncoder();
 function defaultOptions() {
   return {
     depthLimit: Number.MAX_SAFE_INTEGER,
-    edgesLimit: Number.MAX_SAFE_INTEGER,
+    edgesLimit: Number.MAX_SAFE_INTEGER
   };
 }
 function encodeString(str) {
@@ -5287,7 +4905,7 @@ function serializeWellKnownTypes(val) {
     } else if (val instanceof Error) {
       return {
         name: val.name,
-        message: val.message,
+        message: val.message
       };
     }
   } else if (typeof val === "bigint") {
@@ -5296,7 +4914,7 @@ function serializeWellKnownTypes(val) {
   return val;
 }
 function createDefaultReplacer(userReplacer) {
-  return function (key, val) {
+  return function(key, val) {
     if (userReplacer) {
       const userResult = userReplacer.call(this, key, val);
       if (userResult !== void 0) {
@@ -5312,25 +4930,12 @@ function serialize(obj, errorContext, replacer, spacer, options) {
     return encodeString(str);
   } catch (e) {
     if (!e.message?.includes("Converting circular structure to JSON")) {
-      console.warn(
-        `[WARNING]: LangSmith received unserializable value.${
-          errorContext
-            ? `
-Context: ${errorContext}`
-            : ""
-        }`,
-      );
+      console.warn(`[WARNING]: LangSmith received unserializable value.${errorContext ? `
+Context: ${errorContext}` : ""}`);
       return encodeString("[Unserializable]");
     }
-    getLangSmithEnvironmentVariable("SUPPRESS_CIRCULAR_JSON_WARNINGS") !== "true" &&
-      console.warn(
-        `[WARNING]: LangSmith received circular JSON. This will decrease tracer performance. ${
-          errorContext
-            ? `
-Context: ${errorContext}`
-            : ""
-        }`,
-      );
+    getLangSmithEnvironmentVariable("SUPPRESS_CIRCULAR_JSON_WARNINGS") !== "true" && console.warn(`[WARNING]: LangSmith received circular JSON. This will decrease tracer performance. ${errorContext ? `
+Context: ${errorContext}` : ""}`);
     if (typeof options === "undefined") {
       options = defaultOptions();
     }
@@ -5406,13 +5011,10 @@ function decirc(val, k, edgeIndex, stack, parent, depth, options) {
   }
 }
 function replaceGetterValues(replacer) {
-  replacer =
-    typeof replacer !== "undefined"
-      ? replacer
-      : function (k, v) {
-          return v;
-        };
-  return function (key, val) {
+  replacer = typeof replacer !== "undefined" ? replacer : function(k, v) {
+    return v;
+  };
+  return function(key, val) {
     if (replacerStack.length > 0) {
       for (var i = 0; i < replacerStack.length; i++) {
         var part = replacerStack[i];
@@ -5429,13 +5031,7 @@ function replaceGetterValues(replacer) {
 
 // node_modules/.pnpm/langsmith@0.5.15/node_modules/langsmith/dist/client.js
 function _ensureUTCTimestamp(ts) {
-  if (
-    typeof ts === "string" &&
-    ts.length > 0 &&
-    !ts.includes("Z") &&
-    !ts.includes("+") &&
-    !ts.includes("-", 10)
-  ) {
+  if (typeof ts === "string" && ts.length > 0 && !ts.includes("Z") && !ts.includes("+") && !ts.includes("-", 10)) {
     return ts + "Z";
   }
   return ts;
@@ -5444,7 +5040,7 @@ function _normalizeRunTimestamps(run) {
   return {
     ...run,
     start_time: _ensureUTCTimestamp(run.start_time),
-    end_time: _ensureUTCTimestamp(run.end_time),
+    end_time: _ensureUTCTimestamp(run.end_time)
   };
 }
 function mergeRuntimeEnvIntoRun(run, cachedEnvVars, omitTracedRuntimeInfo) {
@@ -5459,31 +5055,26 @@ function mergeRuntimeEnvIntoRun(run, cachedEnvVars, omitTracedRuntimeInfo) {
     ...extra,
     runtime: {
       ...runtimeEnv,
-      ...extra?.runtime,
+      ...extra?.runtime
     },
     metadata: {
       ...envVars,
-      ...(envVars.revision_id || ("revision_id" in run && run.revision_id)
-        ? {
-            revision_id: ("revision_id" in run ? run.revision_id : void 0) ?? envVars.revision_id,
-          }
-        : {}),
-      ...metadata,
-    },
+      ...envVars.revision_id || "revision_id" in run && run.revision_id ? {
+        revision_id: ("revision_id" in run ? run.revision_id : void 0) ?? envVars.revision_id
+      } : {},
+      ...metadata
+    }
   };
   return run;
 }
 var getTracingSamplingRate = (configRate) => {
-  const samplingRateStr =
-    configRate?.toString() ?? getLangSmithEnvironmentVariable("TRACING_SAMPLING_RATE");
+  const samplingRateStr = configRate?.toString() ?? getLangSmithEnvironmentVariable("TRACING_SAMPLING_RATE");
   if (samplingRateStr === void 0) {
     return void 0;
   }
   const samplingRate = parseFloat(samplingRateStr);
   if (samplingRate < 0 || samplingRate > 1) {
-    throw new Error(
-      `LANGSMITH_TRACING_SAMPLING_RATE must be between 0 and 1 if set. Got: ${samplingRate}`,
-    );
+    throw new Error(`LANGSMITH_TRACING_SAMPLING_RATE must be between 0 and 1 if set. Got: ${samplingRate}`);
   }
   return samplingRate;
 };
@@ -5503,10 +5094,7 @@ function trimQuotes(str) {
   if (str === void 0) {
     return void 0;
   }
-  return str
-    .trim()
-    .replace(/^"(.*)"$/, "$1")
-    .replace(/^'(.*)'$/, "$1");
+  return str.trim().replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
 }
 var handle429 = async (response) => {
   if (response?.status === 429) {
@@ -5535,19 +5123,19 @@ var AutoBatchQueue = class {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: [],
+      value: []
     });
     Object.defineProperty(this, "sizeBytes", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: 0,
+      value: 0
     });
     Object.defineProperty(this, "maxSizeBytes", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     this.maxSizeBytes = maxSizeBytes ?? DEFAULT_MAX_SIZE_BYTES;
   }
@@ -5561,9 +5149,7 @@ var AutoBatchQueue = class {
     });
     const size = serialize(item.item, `Serializing run with id: ${item.item.id}`).length;
     if (this.sizeBytes + size > this.maxSizeBytes && this.items.length > 0) {
-      console.warn(
-        `AutoBatchQueue size limit (${this.maxSizeBytes} bytes) exceeded. Dropping run with id: ${item.item.id}. Current queue size: ${this.sizeBytes} bytes, attempted addition: ${size} bytes.`,
-      );
+      console.warn(`AutoBatchQueue size limit (${this.maxSizeBytes} bytes) exceeded. Dropping run with id: ${item.item.id}. Current queue size: ${this.sizeBytes} bytes, attempted addition: ${size} bytes.`);
       itemPromiseResolve();
       return itemPromise;
     }
@@ -5576,7 +5162,7 @@ var AutoBatchQueue = class {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       itemPromiseResolve,
       itemPromise,
-      size,
+      size
     });
     this.sizeBytes += size;
     return itemPromise;
@@ -5587,11 +5173,7 @@ var AutoBatchQueue = class {
     }
     const popped = [];
     let poppedSizeBytes = 0;
-    while (
-      poppedSizeBytes + (this.peek()?.size ?? 0) < upToSizeBytes &&
-      this.items.length > 0 &&
-      popped.length < upToSize
-    ) {
+    while (poppedSizeBytes + (this.peek()?.size ?? 0) < upToSizeBytes && this.items.length > 0 && popped.length < upToSize) {
       const item = this.items.shift();
       if (item) {
         popped.push(item);
@@ -5612,9 +5194,9 @@ var AutoBatchQueue = class {
         otelContext: it.otelContext,
         apiKey: it.apiKey,
         apiUrl: it.apiUrl,
-        size: it.size,
+        size: it.size
       })),
-      () => popped.forEach((it) => it.itemPromiseResolve()),
+      () => popped.forEach((it) => it.itemPromiseResolve())
     ];
   }
 };
@@ -5627,217 +5209,217 @@ var Client = class _Client {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "apiUrl", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "webUrl", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "workspaceId", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "caller", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "batchIngestCaller", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "timeout_ms", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "_tenantId", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: null,
+      value: null
     });
     Object.defineProperty(this, "hideInputs", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "hideOutputs", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "omitTracedRuntimeInfo", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "tracingSampleRate", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "filteredPostUuids", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: /* @__PURE__ */ new Set(),
+      value: /* @__PURE__ */ new Set()
     });
     Object.defineProperty(this, "autoBatchTracing", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: true,
+      value: true
     });
     Object.defineProperty(this, "autoBatchQueue", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "autoBatchTimeout", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "autoBatchAggregationDelayMs", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: 250,
+      value: 250
     });
     Object.defineProperty(this, "batchSizeBytesLimit", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "batchSizeLimit", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "fetchOptions", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "settings", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "blockOnRootRunFinalization", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: getEnvironmentVariable("LANGSMITH_TRACING_BACKGROUND") === "false",
+      value: getEnvironmentVariable("LANGSMITH_TRACING_BACKGROUND") === "false"
     });
     Object.defineProperty(this, "traceBatchConcurrency", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: 5,
+      value: 5
     });
     Object.defineProperty(this, "_serverInfo", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "_getServerInfoPromise", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "manualFlushMode", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: false,
+      value: false
     });
     Object.defineProperty(this, "langSmithToOTELTranslator", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "fetchImplementation", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "cachedLSEnvVarsForMetadata", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "_promptCache", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "multipartStreamingDisabled", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: false,
+      value: false
     });
     Object.defineProperty(this, "_multipartDisabled", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: false,
+      value: false
     });
     Object.defineProperty(this, "_runCompressionDisabled", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: getLangSmithEnvironmentVariable("DISABLE_RUN_COMPRESSION") === "true",
+      value: getLangSmithEnvironmentVariable("DISABLE_RUN_COMPRESSION") === "true"
     });
     Object.defineProperty(this, "failedTracesDir", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "failedTracesMaxBytes", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: 100 * 1024 * 1024,
+      value: 100 * 1024 * 1024
     });
     Object.defineProperty(this, "debug", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: getEnvironmentVariable("LANGSMITH_DEBUG") === "true",
+      value: getEnvironmentVariable("LANGSMITH_DEBUG") === "true"
     });
     const defaultConfig = _Client.getDefaultClientConfig();
     this.tracingSampleRate = getTracingSamplingRate(config.tracingSamplingRate);
@@ -5850,14 +5432,12 @@ var Client = class _Client {
     if (this.webUrl?.endsWith("/")) {
       this.webUrl = this.webUrl.slice(0, -1);
     }
-    this.workspaceId = trimQuotes(
-      config.workspaceId ?? getLangSmithEnvironmentVariable("WORKSPACE_ID"),
-    );
+    this.workspaceId = trimQuotes(config.workspaceId ?? getLangSmithEnvironmentVariable("WORKSPACE_ID"));
     this.timeout_ms = config.timeout_ms ?? 9e4;
     this.caller = new AsyncCaller({
-      ...(config.callerOptions ?? {}),
+      ...config.callerOptions ?? {},
       maxRetries: 4,
-      debug: config.debug ?? this.debug,
+      debug: config.debug ?? this.debug
     });
     this.traceBatchConcurrency = config.traceBatchConcurrency ?? this.traceBatchConcurrency;
     if (this.traceBatchConcurrency < 1) {
@@ -5878,17 +5458,16 @@ var Client = class _Client {
       maxRetries: 4,
       maxConcurrency: this.traceBatchConcurrency,
       maxQueueSizeBytes: maxMemory,
-      ...(config.callerOptions ?? {}),
+      ...config.callerOptions ?? {},
       onFailedResponseHook: handle429,
-      debug: config.debug ?? this.debug,
+      debug: config.debug ?? this.debug
     });
     this.hideInputs = config.hideInputs ?? config.anonymizer ?? defaultConfig.hideInputs;
     this.hideOutputs = config.hideOutputs ?? config.anonymizer ?? defaultConfig.hideOutputs;
     this.omitTracedRuntimeInfo = config.omitTracedRuntimeInfo ?? false;
     this.autoBatchTracing = config.autoBatchTracing ?? this.autoBatchTracing;
     this.autoBatchQueue = new AutoBatchQueue(maxMemory);
-    this.blockOnRootRunFinalization =
-      config.blockOnRootRunFinalization ?? this.blockOnRootRunFinalization;
+    this.blockOnRootRunFinalization = config.blockOnRootRunFinalization ?? this.blockOnRootRunFinalization;
     this.batchSizeBytesLimit = config.batchSizeBytesLimit;
     this.batchSizeLimit = config.batchSizeLimit;
     this.fetchOptions = config.fetchOptions || {};
@@ -5898,14 +5477,10 @@ var Client = class _Client {
     }
     this.cachedLSEnvVarsForMetadata = getLangSmithEnvVarsMetadata();
     if (config.cache !== void 0 && config.disablePromptCache) {
-      warnOnce(
-        "Both 'cache' and 'disablePromptCache' were provided. The 'cache' parameter is deprecated and will be removed in a future version. Using 'cache' parameter value.",
-      );
+      warnOnce("Both 'cache' and 'disablePromptCache' were provided. The 'cache' parameter is deprecated and will be removed in a future version. Using 'cache' parameter value.");
     }
     if (config.cache !== void 0) {
-      warnOnce(
-        "The 'cache' parameter is deprecated and will be removed in a future version. Use 'configureGlobalPromptCache()' to configure the global cache, or 'disablePromptCache: true' to disable caching for this client.",
-      );
+      warnOnce("The 'cache' parameter is deprecated and will be removed in a future version. Use 'configureGlobalPromptCache()' to configure the global cache, or 'disablePromptCache: true' to disable caching for this client.");
       if (config.cache === false) {
         this._promptCache = void 0;
       } else if (config.cache === true) {
@@ -5927,7 +5502,7 @@ var Client = class _Client {
       apiKey,
       webUrl: void 0,
       hideInputs,
-      hideOutputs,
+      hideOutputs
     };
   }
   getHostUrl() {
@@ -5958,7 +5533,7 @@ var Client = class _Client {
   }
   get headers() {
     const headers = {
-      "User-Agent": `langsmith-js/${__version__}`,
+      "User-Agent": `langsmith-js/${__version__}`
     };
     if (this.apiKey) {
       headers["x-api-key"] = `${this.apiKey}`;
@@ -6014,7 +5589,7 @@ var Client = class _Client {
         method: "GET",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, `fetch ${path2}`);
       return res;
@@ -6037,7 +5612,7 @@ var Client = class _Client {
           method: "GET",
           headers: this.headers,
           signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
+          ...this.fetchOptions
         });
         await raiseForStatus(res, `fetch ${path2}`);
         return res;
@@ -6063,7 +5638,7 @@ var Client = class _Client {
           headers: { ...this.headers, "Content-Type": "application/json" },
           signal: AbortSignal.timeout(this.timeout_ms),
           ...this.fetchOptions,
-          body: body2,
+          body: body2
         });
         await raiseForStatus(res, `fetch ${path2}`);
         return res;
@@ -6129,20 +5704,14 @@ var Client = class _Client {
   }
   async _getBatchSizeLimitBytes() {
     const serverInfo = await this._ensureServerInfo();
-    return (
-      this.batchSizeBytesLimit ??
-      serverInfo?.batch_ingest_config?.size_limit_bytes ??
-      DEFAULT_UNCOMPRESSED_BATCH_SIZE_LIMIT_BYTES
-    );
+    return this.batchSizeBytesLimit ?? serverInfo?.batch_ingest_config?.size_limit_bytes ?? DEFAULT_UNCOMPRESSED_BATCH_SIZE_LIMIT_BYTES;
   }
   /**
    * Get the maximum number of operations to batch in a single request.
    */
   async _getBatchSizeLimit() {
     const serverInfo = await this._ensureServerInfo();
-    return (
-      this.batchSizeLimit ?? serverInfo?.batch_ingest_config?.size_limit ?? DEFAULT_BATCH_SIZE_LIMIT
-    );
+    return this.batchSizeLimit ?? serverInfo?.batch_ingest_config?.size_limit ?? DEFAULT_BATCH_SIZE_LIMIT;
   }
   async _getDatasetExamplesMultiPartSupport() {
     const serverInfo = await this._ensureServerInfo();
@@ -6153,7 +5722,7 @@ var Client = class _Client {
     while (this.autoBatchQueue.items.length > 0) {
       const [batch, done] = this.autoBatchQueue.pop({
         upToSizeBytes: batchSizeLimitBytes,
-        upToSize: batchSizeLimit,
+        upToSize: batchSizeLimit
       });
       if (!batch.length) {
         done();
@@ -6174,7 +5743,7 @@ var Client = class _Client {
       for (const [batchKey, batch2] of Object.entries(batchesByDestination)) {
         const batchPromise = this._processBatch(batch2, {
           apiUrl: batchKey === "default" ? void 0 : batchKey.split("|")[0],
-          apiKey: batchKey === "default" ? void 0 : batchKey.split("|")[1],
+          apiKey: batchKey === "default" ? void 0 : batchKey.split("|")[1]
         });
         batchPromises.push(batchPromise);
       }
@@ -6202,7 +5771,7 @@ var Client = class _Client {
         version: 1,
         endpoint,
         headers: replayHeaders,
-        body_base64: bodyBuffer.toString("base64"),
+        body_base64: bodyBuffer.toString("base64")
       });
       const filename = `trace_${Date.now()}_${v4_default().slice(0, 8)}.json`;
       const filepath = path.join(directory, filename);
@@ -6220,20 +5789,16 @@ var Client = class _Client {
             total += size;
           }
           if (total >= maxBytes) {
-            console.warn(
-              `Could not write trace to fallback dir ${directory} as it's already over size limit (${total} bytes >= ${maxBytes} bytes). Increase LANGSMITH_FAILED_TRACES_MAX_MB if possible.`,
-            );
+            console.warn(`Could not write trace to fallback dir ${directory} as it's already over size limit (${total} bytes >= ${maxBytes} bytes). Increase LANGSMITH_FAILED_TRACES_MAX_MB if possible.`);
             return;
           }
-        } catch {}
+        } catch {
+        }
       }
       await writeFileAtomic(filepath, envelope);
       console.warn(`LangSmith trace upload failed; data saved to ${filepath} for later replay.`);
     } catch (writeErr) {
-      console.error(
-        `LangSmith tracing error: could not write trace to fallback dir ${directory}:`,
-        writeErr,
-      );
+      console.error(`LangSmith tracing error: could not write trace to fallback dir ${directory}:`, writeErr);
     }
   }
   async _processBatch(batch, options) {
@@ -6247,27 +5812,24 @@ var Client = class _Client {
       } else {
         const ingestParams = {
           runCreates: batch.filter((item) => item.action === "create").map((item) => item.item),
-          runUpdates: batch.filter((item) => item.action === "update").map((item) => item.item),
+          runUpdates: batch.filter((item) => item.action === "update").map((item) => item.item)
         };
         const serverInfo = await this._ensureServerInfo();
-        const useMultipart =
-          !this._multipartDisabled &&
-          (serverInfo?.batch_ingest_config?.use_multipart_endpoint ?? true);
+        const useMultipart = !this._multipartDisabled && (serverInfo?.batch_ingest_config?.use_multipart_endpoint ?? true);
         if (useMultipart) {
-          const useGzip =
-            !this._runCompressionDisabled && serverInfo?.instance_flags?.gzip_body_enabled;
+          const useGzip = !this._runCompressionDisabled && serverInfo?.instance_flags?.gzip_body_enabled;
           try {
             await this.multipartIngestRuns(ingestParams, {
               ...options,
               useGzip,
-              sizeBytes: batchSizeBytes,
+              sizeBytes: batchSizeBytes
             });
           } catch (e) {
             if (isLangSmithNotFoundError(e)) {
               this._multipartDisabled = true;
               await this.batchIngestRuns(ingestParams, {
                 ...options,
-                sizeBytes: batchSizeBytes,
+                sizeBytes: batchSizeBytes
               });
             } else {
               throw e;
@@ -6276,7 +5838,7 @@ var Client = class _Client {
         } else {
           await this.batchIngestRuns(ingestParams, {
             ...options,
-            sizeBytes: batchSizeBytes,
+            sizeBytes: batchSizeBytes
           });
         }
       }
@@ -6296,14 +5858,14 @@ var Client = class _Client {
               operation: "post",
               id: item.item.id,
               trace_id: item.item.trace_id ?? item.item.id,
-              run: item.item,
+              run: item.item
             });
           } else {
             operations.push({
               operation: "patch",
               id: item.item.id,
               trace_id: item.item.trace_id ?? item.item.id,
-              run: item.item,
+              run: item.item
             });
           }
         }
@@ -6314,24 +5876,17 @@ var Client = class _Client {
   async processRunOperation(item) {
     clearTimeout(this.autoBatchTimeout);
     this.autoBatchTimeout = void 0;
-    item.item = mergeRuntimeEnvIntoRun(
-      item.item,
-      this.cachedLSEnvVarsForMetadata,
-      this.omitTracedRuntimeInfo,
-    );
+    item.item = mergeRuntimeEnvIntoRun(item.item, this.cachedLSEnvVarsForMetadata, this.omitTracedRuntimeInfo);
     const itemPromise = this.autoBatchQueue.push(item);
     if (this.manualFlushMode) {
       return itemPromise;
     }
     const sizeLimitBytes = await this._getBatchSizeLimitBytes();
     const sizeLimit = await this._getBatchSizeLimit();
-    if (
-      this.autoBatchQueue.sizeBytes > sizeLimitBytes ||
-      this.autoBatchQueue.items.length > sizeLimit
-    ) {
+    if (this.autoBatchQueue.sizeBytes > sizeLimitBytes || this.autoBatchQueue.items.length > sizeLimit) {
       void this.drainAutoBatchQueue({
         batchSizeLimitBytes: sizeLimitBytes,
-        batchSizeLimit: sizeLimit,
+        batchSizeLimit: sizeLimit
       });
     }
     if (this.autoBatchQueue.items.length > 0) {
@@ -6339,7 +5894,7 @@ var Client = class _Client {
         this.autoBatchTimeout = void 0;
         void this.drainAutoBatchQueue({
           batchSizeLimitBytes: sizeLimitBytes,
-          batchSizeLimit: sizeLimit,
+          batchSizeLimit: sizeLimit
         });
       }, this.autoBatchAggregationDelayMs);
     }
@@ -6351,16 +5906,14 @@ var Client = class _Client {
         method: "GET",
         headers: { Accept: "application/json" },
         signal: AbortSignal.timeout(SERVER_INFO_REQUEST_TIMEOUT_MS),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, "get server info");
       return res;
     });
     const json = await response.json();
     if (this.debug) {
-      console.log(
-        "\n=== LangSmith Server Configuration ===\n" + JSON.stringify(json, null, 2) + "\n",
-      );
+      console.log("\n=== LangSmith Server Configuration ===\n" + JSON.stringify(json, null, 2) + "\n");
     }
     return json;
   }
@@ -6371,9 +5924,7 @@ var Client = class _Client {
           try {
             this._serverInfo = await this._getServerInfo();
           } catch (e) {
-            console.warn(
-              `[LANGSMITH]: Failed to fetch info on supported operations. Falling back to batch operations and default limits. Info: ${e.status ?? "Unspecified status code"} ${e.message}`,
-            );
+            console.warn(`[LANGSMITH]: Failed to fetch info on supported operations. Falling back to batch operations and default limits. Info: ${e.status ?? "Unspecified status code"} ${e.message}`);
           }
         }
         return this._serverInfo ?? {};
@@ -6400,7 +5951,7 @@ var Client = class _Client {
     const sizeLimit = await this._getBatchSizeLimit();
     await this.drainAutoBatchQueue({
       batchSizeLimitBytes: sizeLimitBytes,
-      batchSizeLimit: sizeLimit,
+      batchSizeLimit: sizeLimit
     });
   }
   _cloneCurrentOTELContext() {
@@ -6420,52 +5971,41 @@ var Client = class _Client {
     }
     const headers = {
       ...this.headers,
-      "Content-Type": "application/json",
+      "Content-Type": "application/json"
     };
     const session_name = run.project_name;
     delete run.project_name;
     const runCreate = await this.prepareRunCreateOrUpdateInputs({
       session_name,
       ...run,
-      start_time: run.start_time ?? Date.now(),
+      start_time: run.start_time ?? Date.now()
     });
-    if (
-      this.autoBatchTracing &&
-      runCreate.trace_id !== void 0 &&
-      runCreate.dotted_order !== void 0
-    ) {
+    if (this.autoBatchTracing && runCreate.trace_id !== void 0 && runCreate.dotted_order !== void 0) {
       const otelContext = this._cloneCurrentOTELContext();
       void this.processRunOperation({
         action: "create",
         item: runCreate,
         otelContext,
         apiKey: options?.apiKey,
-        apiUrl: options?.apiUrl,
+        apiUrl: options?.apiUrl
       }).catch(console.error);
       return;
     }
-    const mergedRunCreateParam = mergeRuntimeEnvIntoRun(
-      runCreate,
-      this.cachedLSEnvVarsForMetadata,
-      this.omitTracedRuntimeInfo,
-    );
+    const mergedRunCreateParam = mergeRuntimeEnvIntoRun(runCreate, this.cachedLSEnvVarsForMetadata, this.omitTracedRuntimeInfo);
     if (options?.apiKey !== void 0) {
       headers["x-api-key"] = options.apiKey;
     }
     if (options?.workspaceId !== void 0) {
       headers["x-tenant-id"] = options.workspaceId;
     }
-    const body = serialize(
-      mergedRunCreateParam,
-      `Creating run with id: ${mergedRunCreateParam.id}`,
-    );
+    const body = serialize(mergedRunCreateParam, `Creating run with id: ${mergedRunCreateParam.id}`);
     await this.caller.call(async () => {
       const res = await this._fetch(`${options?.apiUrl ?? this.apiUrl}/runs`, {
         method: "POST",
         headers,
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "create run", true);
       return res;
@@ -6479,12 +6019,8 @@ var Client = class _Client {
     if (runCreates === void 0 && runUpdates === void 0) {
       return;
     }
-    let preparedCreateParams = await Promise.all(
-      runCreates?.map((create) => this.prepareRunCreateOrUpdateInputs(create)) ?? [],
-    );
-    let preparedUpdateParams = await Promise.all(
-      runUpdates?.map((update) => this.prepareRunCreateOrUpdateInputs(update)) ?? [],
-    );
+    let preparedCreateParams = await Promise.all(runCreates?.map((create) => this.prepareRunCreateOrUpdateInputs(create)) ?? []);
+    let preparedUpdateParams = await Promise.all(runUpdates?.map((update) => this.prepareRunCreateOrUpdateInputs(update)) ?? []);
     if (preparedCreateParams.length > 0 && preparedUpdateParams.length > 0) {
       const createById = preparedCreateParams.reduce((params, run) => {
         if (!run.id) {
@@ -6498,7 +6034,7 @@ var Client = class _Client {
         if (updateParam.id !== void 0 && createById[updateParam.id]) {
           createById[updateParam.id] = {
             ...createById[updateParam.id],
-            ...updateParam,
+            ...updateParam
           };
         } else {
           standaloneUpdates.push(updateParam);
@@ -6509,14 +6045,14 @@ var Client = class _Client {
     }
     const rawBatch = {
       post: preparedCreateParams,
-      patch: preparedUpdateParams,
+      patch: preparedUpdateParams
     };
     if (!rawBatch.post.length && !rawBatch.patch.length) {
       return;
     }
     const batchChunks = {
       post: [],
-      patch: [],
+      patch: []
     };
     for (const k of ["post", "patch"]) {
       const key = k;
@@ -6528,21 +6064,15 @@ var Client = class _Client {
       }
     }
     if (batchChunks.post.length > 0 || batchChunks.patch.length > 0) {
-      const runIds = batchChunks.post
-        .map((item) => item.id)
-        .concat(batchChunks.patch.map((item) => item.id))
-        .join(",");
-      await this._postBatchIngestRuns(
-        serialize(batchChunks, `Ingesting runs with ids: ${runIds}`),
-        options,
-      );
+      const runIds = batchChunks.post.map((item) => item.id).concat(batchChunks.patch.map((item) => item.id)).join(",");
+      await this._postBatchIngestRuns(serialize(batchChunks, `Ingesting runs with ids: ${runIds}`), options);
     }
   }
   async _postBatchIngestRuns(body, options) {
     const headers = {
       ...this.headers,
       "Content-Type": "application/json",
-      Accept: "application/json",
+      Accept: "application/json"
     };
     if (options?.apiKey !== void 0) {
       headers["x-api-key"] = options.apiKey;
@@ -6553,7 +6083,7 @@ var Client = class _Client {
         headers,
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "batch create run", true);
       return res;
@@ -6585,17 +6115,13 @@ var Client = class _Client {
       return runCreate.trace_id === void 0 || runCreate.dotted_order === void 0;
     });
     if (invalidRunCreate !== void 0) {
-      throw new Error(
-        `Multipart ingest requires "trace_id" and "dotted_order" to be set when creating a run`,
-      );
+      throw new Error(`Multipart ingest requires "trace_id" and "dotted_order" to be set when creating a run`);
     }
     const invalidRunUpdate = preparedUpdateParams.find((runUpdate) => {
       return runUpdate.trace_id === void 0 || runUpdate.dotted_order === void 0;
     });
     if (invalidRunUpdate !== void 0) {
-      throw new Error(
-        `Multipart ingest requires "trace_id" and "dotted_order" to be set when updating a run`,
-      );
+      throw new Error(`Multipart ingest requires "trace_id" and "dotted_order" to be set when updating a run`);
     }
     if (preparedCreateParams.length > 0 && preparedUpdateParams.length > 0) {
       const createById = preparedCreateParams.reduce((params, run) => {
@@ -6610,7 +6136,7 @@ var Client = class _Client {
         if (updateParam.id !== void 0 && createById[updateParam.id]) {
           createById[updateParam.id] = {
             ...createById[updateParam.id],
-            ...updateParam,
+            ...updateParam
           };
         } else {
           standaloneUpdates.push(updateParam);
@@ -6626,44 +6152,29 @@ var Client = class _Client {
     const accumulatedParts = [];
     for (const [method, payloads] of [
       ["post", preparedCreateParams],
-      ["patch", preparedUpdateParams],
+      ["patch", preparedUpdateParams]
     ]) {
       for (const originalPayload of payloads) {
-        const {
-          inputs,
-          outputs,
-          events,
-          extra,
-          error: error2,
-          serialized,
-          attachments,
-          ...payload
-        } = originalPayload;
+        const { inputs, outputs, events, extra, error: error2, serialized, attachments, ...payload } = originalPayload;
         const fields = { inputs, outputs, events, extra, error: error2, serialized };
-        const stringifiedPayload = serialize(
-          payload,
-          `Serializing for multipart ingestion of run with id: ${payload.id}`,
-        );
+        const stringifiedPayload = serialize(payload, `Serializing for multipart ingestion of run with id: ${payload.id}`);
         accumulatedParts.push({
           name: `${method}.${payload.id}`,
           payload: new Blob([stringifiedPayload], {
-            type: `application/json; length=${stringifiedPayload.length}`,
+            type: `application/json; length=${stringifiedPayload.length}`
             // encoding=gzip
-          }),
+          })
         });
         for (const [key, value] of Object.entries(fields)) {
           if (value === void 0) {
             continue;
           }
-          const stringifiedValue = serialize(
-            value,
-            `Serializing ${key} for multipart ingestion of run with id: ${payload.id}`,
-          );
+          const stringifiedValue = serialize(value, `Serializing ${key} for multipart ingestion of run with id: ${payload.id}`);
           accumulatedParts.push({
             name: `${method}.${payload.id}.${key}`,
             payload: new Blob([stringifiedValue], {
-              type: `application/json; length=${stringifiedValue.length}`,
-            }),
+              type: `application/json; length=${stringifiedValue.length}`
+            })
           });
         }
         if (payload.id !== void 0) {
@@ -6680,16 +6191,14 @@ var Client = class _Client {
                 content = attachment.data;
               }
               if (name.includes(".")) {
-                console.warn(
-                  `Skipping attachment '${name}' for run ${payload.id}: Invalid attachment name. Attachment names must not contain periods ('.'). Please rename the attachment and try again.`,
-                );
+                console.warn(`Skipping attachment '${name}' for run ${payload.id}: Invalid attachment name. Attachment names must not contain periods ('.'). Please rename the attachment and try again.`);
                 continue;
               }
               accumulatedParts.push({
                 name: `attachment.${payload.id}.${name}`,
                 payload: new Blob([content], {
-                  type: `${contentType}; length=${content.byteLength}`,
-                }),
+                  type: `${contentType}; length=${content.byteLength}`
+                })
               });
             }
           }
@@ -6702,30 +6211,20 @@ var Client = class _Client {
   async _createNodeFetchBody(parts, boundary) {
     const chunks = [];
     for (const part of parts) {
-      chunks.push(
-        new Blob([
-          `--${boundary}\r
+      chunks.push(new Blob([`--${boundary}\r
+`]));
+      chunks.push(new Blob([
+        `Content-Disposition: form-data; name="${part.name}"\r
 `,
-        ]),
-      );
-      chunks.push(
-        new Blob([
-          `Content-Disposition: form-data; name="${part.name}"\r
-`,
-          `Content-Type: ${part.payload.type}\r
+        `Content-Type: ${part.payload.type}\r
 \r
-`,
-        ]),
-      );
+`
+      ]));
       chunks.push(part.payload);
       chunks.push(new Blob(["\r\n"]));
     }
-    chunks.push(
-      new Blob([
-        `--${boundary}--\r
-`,
-      ]),
-    );
+    chunks.push(new Blob([`--${boundary}--\r
+`]));
     const body = new Blob(chunks);
     const arrayBuffer = await body.arrayBuffer();
     return arrayBuffer;
@@ -6764,7 +6263,7 @@ var Client = class _Client {
         await writeChunk(`--${boundary}--\r
 `);
         controller.close();
-      },
+      }
     });
     return stream;
   }
@@ -6777,7 +6276,7 @@ var Client = class _Client {
         const body = await bodyFactory();
         const headers = {
           ...this.headers,
-          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Type": `multipart/form-data; boundary=${boundary}`
         };
         if (options?.apiKey !== void 0) {
           headers["x-api-key"] = options.apiKey;
@@ -6793,7 +6292,7 @@ var Client = class _Client {
           body: transformedBody,
           duplex: "half",
           signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
+          ...this.fetchOptions
         });
         await raiseForStatus(response, `Failed to send multipart request`, true);
         return response;
@@ -6809,14 +6308,8 @@ var Client = class _Client {
       } else {
         res = await sendWithRetry(buildBuffered);
       }
-      if (
-        (!this.multipartStreamingDisabled || streamedAttempt) &&
-        res.status === 422 &&
-        (options?.apiUrl ?? this.apiUrl) !== DEFAULT_API_URL
-      ) {
-        console.warn(
-          `Streaming multipart upload to ${options?.apiUrl ?? this.apiUrl}/runs/multipart failed. This usually means the host does not support chunked uploads. Retrying with a buffered upload for operation "${context}".`,
-        );
+      if ((!this.multipartStreamingDisabled || streamedAttempt) && res.status === 422 && (options?.apiUrl ?? this.apiUrl) !== DEFAULT_API_URL) {
+        console.warn(`Streaming multipart upload to ${options?.apiUrl ?? this.apiUrl}/runs/multipart failed. This usually means the host does not support chunked uploads. Retrying with a buffered upload for operation "${context}".`);
         this.multipartStreamingDisabled = true;
         res = await sendWithRetry(buildBuffered);
       }
@@ -6830,13 +6323,7 @@ Context: ${context}`);
       if (this.failedTracesDir) {
         const bodyBuffer = await this._createNodeFetchBody(parts, boundary).catch(() => null);
         if (bodyBuffer) {
-          await _Client._writeTraceToFallbackDir(
-            this.failedTracesDir,
-            bodyBuffer,
-            { "Content-Type": `multipart/form-data; boundary=${boundary}` },
-            "runs/multipart",
-            this.failedTracesMaxBytes,
-          );
+          await _Client._writeTraceToFallbackDir(this.failedTracesDir, bodyBuffer, { "Content-Type": `multipart/form-data; boundary=${boundary}` }, "runs/multipart", this.failedTracesMaxBytes);
         }
       }
     }
@@ -6855,18 +6342,13 @@ Context: ${context}`);
     }
     if (this.autoBatchTracing && data.trace_id !== void 0 && data.dotted_order !== void 0) {
       const otelContext = this._cloneCurrentOTELContext();
-      if (
-        run.end_time !== void 0 &&
-        data.parent_run_id === void 0 &&
-        this.blockOnRootRunFinalization &&
-        !this.manualFlushMode
-      ) {
+      if (run.end_time !== void 0 && data.parent_run_id === void 0 && this.blockOnRootRunFinalization && !this.manualFlushMode) {
         await this.processRunOperation({
           action: "update",
           item: data,
           otelContext,
           apiKey: options?.apiKey,
-          apiUrl: options?.apiUrl,
+          apiUrl: options?.apiUrl
         }).catch(console.error);
         return;
       } else {
@@ -6875,14 +6357,14 @@ Context: ${context}`);
           item: data,
           otelContext,
           apiKey: options?.apiKey,
-          apiUrl: options?.apiUrl,
+          apiUrl: options?.apiUrl
         }).catch(console.error);
       }
       return;
     }
     const headers = {
       ...this.headers,
-      "Content-Type": "application/json",
+      "Content-Type": "application/json"
     };
     if (options?.apiKey !== void 0) {
       headers["x-api-key"] = options.apiKey;
@@ -6897,7 +6379,7 @@ Context: ${context}`);
         headers,
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "update run", true);
       return res;
@@ -6922,7 +6404,7 @@ Context: ${context}`);
         sessionId = projectOpts?.projectId;
       } else {
         const project = await this.readProject({
-          projectName: getLangSmithEnvironmentVariable("PROJECT") || "default",
+          projectName: getLangSmithEnvironmentVariable("PROJECT") || "default"
         });
         sessionId = project.id;
       }
@@ -6940,13 +6422,11 @@ Context: ${context}`);
     }
   }
   async _loadChildRuns(run) {
-    const childRuns = await toArray(
-      this.listRuns({
-        isRoot: false,
-        projectId: run.session_id,
-        traceId: run.trace_id,
-      }),
-    );
+    const childRuns = await toArray(this.listRuns({
+      isRoot: false,
+      projectId: run.session_id,
+      traceId: run.trace_id
+    }));
     const treemap = {};
     const runs = {};
     childRuns.sort((a, b) => (a?.dotted_order ?? "").localeCompare(b?.dotted_order ?? ""));
@@ -7053,37 +6533,14 @@ Context: ${context}`);
    * });
    */
   async *listRuns(props) {
-    const {
-      projectId,
-      projectName,
-      parentRunId,
-      traceId,
-      referenceExampleId,
-      startTime,
-      executionOrder,
-      isRoot,
-      runType,
-      error: error2,
-      id,
-      query,
-      filter,
-      traceFilter,
-      treeFilter,
-      limit,
-      select,
-      order,
-    } = props;
+    const { projectId, projectName, parentRunId, traceId, referenceExampleId, startTime, executionOrder, isRoot, runType, error: error2, id, query, filter, traceFilter, treeFilter, limit, select, order } = props;
     let projectIds = [];
     if (projectId) {
       projectIds = Array.isArray(projectId) ? projectId : [projectId];
     }
     if (projectName) {
       const projectNames = Array.isArray(projectName) ? projectName : [projectName];
-      const projectIds_ = await Promise.all(
-        projectNames.map((name) =>
-          this.readProject({ projectName: name }).then((project) => project.id),
-        ),
-      );
+      const projectIds_ = await Promise.all(projectNames.map((name) => this.readProject({ projectName: name }).then((project) => project.id)));
       projectIds.push(...projectIds_);
     }
     const default_select = [
@@ -7113,7 +6570,7 @@ Context: ${context}`);
       "tags",
       "total_cost",
       "total_tokens",
-      "trace_id",
+      "trace_id"
     ];
     const body = {
       session: projectIds.length ? projectIds : null,
@@ -7132,12 +6589,10 @@ Context: ${context}`);
       trace: traceId,
       select: select ? select : default_select,
       is_root: isRoot,
-      order,
+      order
     };
     if (body.select.includes("child_run_ids")) {
-      warnOnce(
-        "Deprecated: 'child_run_ids' in the listRuns select parameter is deprecated and will be removed in a future version.",
-      );
+      warnOnce("Deprecated: 'child_run_ids' in the listRuns select parameter is deprecated and will be removed in a future version.");
     }
     let runsYielded = 0;
     for await (const runs of this._getCursorPaginatedList("/runs/query", body)) {
@@ -7167,7 +6622,7 @@ Context: ${context}`);
       filter,
       start_time: startTime ? startTime.toISOString() : null,
       end_time: endTime ? endTime.toISOString() : null,
-      limit: Number(limit) || 100,
+      limit: Number(limit) || 100
     };
     let currentOffset = Number(offset) || 0;
     const path2 = "/runs/group";
@@ -7175,11 +6630,9 @@ Context: ${context}`);
     while (true) {
       const currentBody = {
         ...baseBody,
-        offset: currentOffset,
+        offset: currentOffset
       };
-      const filteredPayload = Object.fromEntries(
-        Object.entries(currentBody).filter(([_, value]) => value !== void 0),
-      );
+      const filteredPayload = Object.fromEntries(Object.entries(currentBody).filter(([_, value]) => value !== void 0));
       const body = JSON.stringify(filteredPayload);
       const response = await this.caller.call(async () => {
         const res = await this._fetch(url, {
@@ -7187,7 +6640,7 @@ Context: ${context}`);
           headers: { ...this.headers, "Content-Type": "application/json" },
           signal: AbortSignal.timeout(this.timeout_ms),
           ...this.fetchOptions,
-          body,
+          body
         });
         await raiseForStatus(res, `Failed to fetch ${path2}`);
         return res;
@@ -7207,15 +6660,7 @@ Context: ${context}`);
     }
   }
   async *readThread(props) {
-    const {
-      threadId,
-      projectId,
-      projectName,
-      isRoot = true,
-      limit,
-      filter: userFilter,
-      order = "asc",
-    } = props;
+    const { threadId, projectId, projectName, isRoot = true, limit, filter: userFilter, order = "asc" } = props;
     if (!projectId && !projectName) {
       throw new Error("threadId requires projectId or projectName");
     }
@@ -7227,7 +6672,7 @@ Context: ${context}`);
       isRoot,
       limit,
       filter: combinedFilter,
-      order,
+      order
     });
   }
   async listThreads(props) {
@@ -7263,7 +6708,7 @@ Context: ${context}`);
       "completion_tokens",
       "prompt_cost",
       "prompt_tokens",
-      "first_token_time",
+      "first_token_time"
     ];
     const bodyQuery = {
       session: [sessionId],
@@ -7271,7 +6716,7 @@ Context: ${context}`);
       limit: 100,
       order: "desc",
       select: runSelect,
-      start_time: startTimeResolved.toISOString(),
+      start_time: startTimeResolved.toISOString()
     };
     if (filter != null) {
       bodyQuery.filter = filter;
@@ -7295,7 +6740,8 @@ Context: ${context}`);
         const bRun = b;
         const aStart = aRun.start_time ?? "";
         const bStart = bRun.start_time ?? "";
-        if (aStart !== bStart) return aStart.localeCompare(bStart);
+        if (aStart !== bStart)
+          return aStart.localeCompare(bStart);
         const aOrder = aRun.dotted_order ?? "";
         const bOrder = bRun.dotted_order ?? "";
         return aOrder.localeCompare(bOrder);
@@ -7318,7 +6764,7 @@ Context: ${context}`);
         feedback_stats: null,
         first_inputs: "",
         last_outputs: "",
-        last_error: null,
+        last_error: null
       });
     }
     result.sort((a, b) => {
@@ -7330,33 +6776,12 @@ Context: ${context}`);
     const withLimit = limit !== void 0 ? withOffset.slice(0, limit) : withOffset;
     return withLimit;
   }
-  async getRunStats({
-    id,
-    trace,
-    parentRun,
-    runType,
-    projectNames,
-    projectIds,
-    referenceExampleIds,
-    startTime,
-    endTime,
-    error: error2,
-    query,
-    filter,
-    traceFilter,
-    treeFilter,
-    isRoot,
-    dataSourceType,
-  }) {
+  async getRunStats({ id, trace, parentRun, runType, projectNames, projectIds, referenceExampleIds, startTime, endTime, error: error2, query, filter, traceFilter, treeFilter, isRoot, dataSourceType }) {
     let projectIds_ = projectIds || [];
     if (projectNames) {
       projectIds_ = [
-        ...(projectIds || []),
-        ...(await Promise.all(
-          projectNames.map((name) =>
-            this.readProject({ projectName: name }).then((project) => project.id),
-          ),
-        )),
+        ...projectIds || [],
+        ...await Promise.all(projectNames.map((name) => this.readProject({ projectName: name }).then((project) => project.id)))
       ];
     }
     const payload = {
@@ -7374,11 +6799,9 @@ Context: ${context}`);
       trace_filter: traceFilter,
       tree_filter: treeFilter,
       is_root: isRoot,
-      data_source_type: dataSourceType,
+      data_source_type: dataSourceType
     };
-    const filteredPayload = Object.fromEntries(
-      Object.entries(payload).filter(([_, value]) => value !== void 0),
-    );
+    const filteredPayload = Object.fromEntries(Object.entries(payload).filter(([_, value]) => value !== void 0));
     const body = JSON.stringify(filteredPayload);
     const response = await this.caller.call(async () => {
       const res = await this._fetch(`${this.apiUrl}/runs/stats`, {
@@ -7386,7 +6809,7 @@ Context: ${context}`);
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "get run stats");
       return res;
@@ -7397,7 +6820,7 @@ Context: ${context}`);
   async shareRun(runId, { shareId } = {}) {
     const data = {
       run_id: runId,
-      share_token: shareId || v4_default(),
+      share_token: shareId || v4_default()
     };
     assertUuid(runId);
     const body = JSON.stringify(data);
@@ -7407,7 +6830,7 @@ Context: ${context}`);
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "share run");
       return res;
@@ -7425,7 +6848,7 @@ Context: ${context}`);
         method: "DELETE",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, "unshare run", true);
       return res;
@@ -7438,7 +6861,7 @@ Context: ${context}`);
         method: "GET",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, "read run shared link");
       return res;
@@ -7451,7 +6874,7 @@ Context: ${context}`);
   }
   async listSharedRuns(shareToken, { runIds } = {}) {
     const queryParams = new URLSearchParams({
-      share_token: shareToken,
+      share_token: shareToken
     });
     if (runIds !== void 0) {
       for (const runId of runIds) {
@@ -7464,7 +6887,7 @@ Context: ${context}`);
         method: "GET",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, "list shared runs");
       return res;
@@ -7486,7 +6909,7 @@ Context: ${context}`);
         method: "GET",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, "read dataset shared schema");
       return res;
@@ -7504,7 +6927,7 @@ Context: ${context}`);
       datasetId = dataset.id;
     }
     const data = {
-      dataset_id: datasetId,
+      dataset_id: datasetId
     };
     assertUuid(datasetId);
     const body = JSON.stringify(data);
@@ -7514,7 +6937,7 @@ Context: ${context}`);
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "share dataset");
       return res;
@@ -7530,7 +6953,7 @@ Context: ${context}`);
         method: "DELETE",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, "unshare dataset", true);
       return res;
@@ -7543,7 +6966,7 @@ Context: ${context}`);
         method: "GET",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, "read shared dataset");
       return res;
@@ -7573,15 +6996,12 @@ Context: ${context}`);
       }
     });
     const response = await this.caller.call(async () => {
-      const res = await this._fetch(
-        `${this.apiUrl}/public/${shareToken}/examples?${urlParams.toString()}`,
-        {
-          method: "GET",
-          headers: this.headers,
-          signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
-        },
-      );
+      const res = await this._fetch(`${this.apiUrl}/public/${shareToken}/examples?${urlParams.toString()}`, {
+        method: "GET",
+        headers: this.headers,
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions
+      });
       await raiseForStatus(res, "list shared examples");
       return res;
     });
@@ -7596,17 +7016,10 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     return result.map((example) => ({
       ...example,
-      _hostUrl: this.getHostUrl(),
+      _hostUrl: this.getHostUrl()
     }));
   }
-  async createProject({
-    projectName,
-    description = null,
-    metadata = null,
-    upsert = false,
-    projectExtra = null,
-    referenceDatasetId = null,
-  }) {
+  async createProject({ projectName, description = null, metadata = null, upsert = false, projectExtra = null, referenceDatasetId = null }) {
     const upsert_ = upsert ? `?upsert=true` : "";
     const endpoint = `${this.apiUrl}/sessions${upsert_}`;
     const extra = projectExtra || {};
@@ -7616,7 +7029,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     const body = {
       name: projectName,
       extra,
-      description,
+      description
     };
     if (referenceDatasetId !== null) {
       body["reference_dataset_id"] = referenceDatasetId;
@@ -7628,7 +7041,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body: serializedBody,
+        body: serializedBody
       });
       await raiseForStatus(res, "create project");
       return res;
@@ -7636,20 +7049,17 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     const result = await response.json();
     return result;
   }
-  async updateProject(
-    projectId,
-    { name = null, description = null, metadata = null, projectExtra = null, endTime = null },
-  ) {
+  async updateProject(projectId, { name = null, description = null, metadata = null, projectExtra = null, endTime = null }) {
     const endpoint = `${this.apiUrl}/sessions/${projectId}`;
     let extra = projectExtra;
     if (metadata) {
-      extra = { ...(extra || {}), metadata };
+      extra = { ...extra || {}, metadata };
     }
     const body = JSON.stringify({
       name,
       extra,
       description,
-      end_time: endTime ? new Date(endTime).toISOString() : null,
+      end_time: endTime ? new Date(endTime).toISOString() : null
     });
     const response = await this.caller.call(async () => {
       const res = await this._fetch(endpoint, {
@@ -7657,7 +7067,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "update project");
       return res;
@@ -7683,7 +7093,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         method: "GET",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, "has project");
       return res;
@@ -7756,17 +7166,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     throw new Error("No projects found to resolve tenant.");
   }
-  async *listProjects({
-    projectIds,
-    name,
-    nameContains,
-    referenceDatasetId,
-    referenceDatasetName,
-    includeStats,
-    datasetVersion,
-    referenceFree,
-    metadata,
-  } = {}) {
+  async *listProjects({ projectIds, name, nameContains, referenceDatasetId, referenceDatasetName, includeStats, datasetVersion, referenceFree, metadata } = {}) {
     const params = new URLSearchParams();
     if (projectIds !== void 0) {
       for (const projectId of projectIds) {
@@ -7783,7 +7183,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       params.append("reference_dataset", referenceDatasetId);
     } else if (referenceDatasetName !== void 0) {
       const dataset = await this.readDataset({
-        datasetName: referenceDatasetName,
+        datasetName: referenceDatasetName
       });
       params.append("reference_dataset", dataset.id);
     }
@@ -7820,7 +7220,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         method: "DELETE",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, `delete session ${projectId_} (${projectName})`, true);
       return res;
@@ -7852,7 +7252,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body: formData,
+        body: formData
       });
       await raiseForStatus(res, "upload CSV");
       return res;
@@ -7864,7 +7264,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     const body = {
       name,
       description,
-      extra: { source: "sdk", ...(metadata ? { metadata } : {}) },
+      extra: { source: "sdk", ...metadata ? { metadata } : {} }
     };
     if (dataType) {
       body.data_type = dataType;
@@ -7882,7 +7282,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body: serializedBody,
+        body: serializedBody
       });
       await raiseForStatus(res, "create dataset");
       return res;
@@ -7922,8 +7322,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     } catch (e) {
       if (
         // eslint-disable-next-line no-instanceof/no-instanceof
-        e instanceof Error &&
-        e.message.toLocaleLowerCase().includes("not found")
+        e instanceof Error && e.message.toLocaleLowerCase().includes("not found")
       ) {
         return false;
       }
@@ -7942,7 +7341,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     const urlParams = new URLSearchParams({
       from_version: typeof fromVersion === "string" ? fromVersion : fromVersion.toISOString(),
-      to_version: typeof toVersion === "string" ? toVersion : toVersion.toISOString(),
+      to_version: typeof toVersion === "string" ? toVersion : toVersion.toISOString()
     });
     const response = await this._get(`/datasets/${datasetId_}/versions/diff`, urlParams);
     return response;
@@ -7957,24 +7356,14 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     const response = await this._getResponse(`${path2}/${datasetId}/openai_ft`);
     const datasetText = await response.text();
-    const dataset = datasetText
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line));
+    const dataset = datasetText.trim().split("\n").map((line) => JSON.parse(line));
     return dataset;
   }
-  async *listDatasets({
-    limit = 100,
-    offset = 0,
-    datasetIds,
-    datasetName,
-    datasetNameContains,
-    metadata,
-  } = {}) {
+  async *listDatasets({ limit = 100, offset = 0, datasetIds, datasetName, datasetNameContains, metadata } = {}) {
     const path2 = "/datasets";
     const params = new URLSearchParams({
       limit: limit.toString(),
-      offset: offset.toString(),
+      offset: offset.toString()
     });
     if (datasetIds !== void 0) {
       for (const id_ of datasetIds) {
@@ -8013,7 +7402,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "update dataset");
       return res;
@@ -8044,7 +7433,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     assertUuid(_datasetId);
     const body = JSON.stringify({
       as_of: typeof asOf === "string" ? asOf : asOf.toISOString(),
-      tag,
+      tag
     });
     await this.caller.call(async () => {
       const res = await this._fetch(`${this.apiUrl}/datasets/${_datasetId}/tags`, {
@@ -8052,7 +7441,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "update dataset tags", true);
       return res;
@@ -8078,7 +7467,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         method: "DELETE",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, `delete ${path2}`, true);
       return res;
@@ -8096,7 +7485,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     assertUuid(datasetId_);
     const data = {
-      tag,
+      tag
     };
     const body = JSON.stringify(data);
     const response = await this.caller.call(async () => {
@@ -8105,7 +7494,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "index dataset");
       return res;
@@ -8145,7 +7534,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
   async similarExamples(inputs, datasetId, limit, { filter } = {}) {
     const data = {
       limit,
-      inputs,
+      inputs
     };
     if (filter !== void 0) {
       data["filter"] = filter;
@@ -8158,7 +7547,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
         method: "POST",
-        body,
+        body
       });
       await raiseForStatus(res, "fetch similar examples");
       return res;
@@ -8182,8 +7571,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       const dataset = await this.readDataset({ datasetName: datasetName_ });
       datasetId_ = dataset.id;
     }
-    const createdAt_ =
-      (outputs ? options?.createdAt : inputsOrUpdate.created_at) || /* @__PURE__ */ new Date();
+    const createdAt_ = (outputs ? options?.createdAt : inputsOrUpdate.created_at) || /* @__PURE__ */ new Date();
     let data;
     if (!isExampleCreate(inputsOrUpdate)) {
       data = {
@@ -8196,7 +7584,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         source_run_id: options?.sourceRunId,
         use_source_run_io: options?.useSourceRunIO,
         use_source_run_attachments: options?.useSourceRunAttachments,
-        attachments: options?.attachments,
+        attachments: options?.attachments
       };
     } else {
       data = inputsOrUpdate;
@@ -8225,19 +7613,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       const examples2 = await Promise.all(response2.example_ids.map((id) => this.readExample(id)));
       return examples2;
     }
-    const {
-      inputs,
-      outputs,
-      metadata,
-      splits,
-      sourceRunIds,
-      useSourceRunIOs,
-      useSourceRunAttachments,
-      attachments,
-      exampleIds,
-      datasetId,
-      datasetName,
-    } = propsOrUploads;
+    const { inputs, outputs, metadata, splits, sourceRunIds, useSourceRunIOs, useSourceRunAttachments, attachments, exampleIds, datasetId, datasetName } = propsOrUploads;
     if (inputs === void 0) {
       throw new Error("Must provide inputs when using legacy parameters");
     }
@@ -8262,7 +7638,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         attachments: attachments?.[idx],
         source_run_id: sourceRunIds?.[idx],
         use_source_run_io: useSourceRunIOs?.[idx],
-        use_source_run_attachments: useSourceRunAttachments?.[idx],
+        use_source_run_attachments: useSourceRunAttachments?.[idx]
       };
     });
     const response = await this._uploadExamplesMultipart(datasetId_, formattedExamples);
@@ -8279,9 +7655,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       }
       return message;
     });
-    const finalOutput = isLangChainMessage(generations)
-      ? convertLangChainMessageToExample(generations)
-      : generations;
+    const finalOutput = isLangChainMessage(generations) ? convertLangChainMessageToExample(generations) : generations;
     return this.createExample({ input: finalInput }, { output: finalOutput }, options);
   }
   async readExample(exampleId) {
@@ -8294,26 +7668,14 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       example.attachments = Object.entries(attachment_urls).reduce((acc, [key, value]) => {
         acc[key.slice("attachment.".length)] = {
           presigned_url: value.presigned_url,
-          mime_type: value.mime_type,
+          mime_type: value.mime_type
         };
         return acc;
       }, {});
     }
     return example;
   }
-  async *listExamples({
-    datasetId,
-    datasetName,
-    exampleIds,
-    asOf,
-    splits,
-    inlineS3Urls,
-    metadata,
-    limit,
-    offset,
-    filter,
-    includeAttachments,
-  } = {}) {
+  async *listExamples({ datasetId, datasetName, exampleIds, asOf, splits, inlineS3Urls, metadata, limit, offset, filter, includeAttachments } = {}) {
     let datasetId_;
     if (datasetId !== void 0 && datasetName !== void 0) {
       throw new Error("Must provide either datasetName or datasetId, not both");
@@ -8326,7 +7688,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       throw new Error("Must provide a datasetName or datasetId");
     }
     const params = new URLSearchParams({ dataset: datasetId_ });
-    const dataset_version = asOf ? (typeof asOf === "string" ? asOf : asOf?.toISOString()) : void 0;
+    const dataset_version = asOf ? typeof asOf === "string" ? asOf : asOf?.toISOString() : void 0;
     if (dataset_version) {
       params.append("as_of", dataset_version);
     }
@@ -8367,7 +7729,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
           example.attachments = Object.entries(attachment_urls).reduce((acc, [key, value]) => {
             acc[key.slice("attachment.".length)] = {
               presigned_url: value.presigned_url,
-              mime_type: value.mime_type || void 0,
+              mime_type: value.mime_type || void 0
             };
             return acc;
           }, {});
@@ -8388,7 +7750,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         method: "DELETE",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, `delete ${path2}`, true);
       return res;
@@ -8410,10 +7772,10 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
           headers: { ...this.headers, "Content-Type": "application/json" },
           body: JSON.stringify({
             example_ids: exampleIds,
-            hard_delete: true,
+            hard_delete: true
           }),
           signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
+          ...this.fetchOptions
         });
         await raiseForStatus(res, "hard delete examples", true);
         return res;
@@ -8426,7 +7788,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
           method: "DELETE",
           headers: this.headers,
           signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
+          ...this.fetchOptions
         });
         await raiseForStatus(res, "delete examples", true);
         return res;
@@ -8487,7 +7849,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       resolvedDatasetId = datasetId;
     }
     assertUuid(resolvedDatasetId);
-    if ((asOf && tag) || (!asOf && !tag)) {
+    if (asOf && tag || !asOf && !tag) {
       throw new Error("Exactly one of asOf and tag must be specified.");
     }
     const params = new URLSearchParams();
@@ -8498,15 +7860,12 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       params.append("tag", tag);
     }
     const response = await this.caller.call(async () => {
-      const res = await this._fetch(
-        `${this.apiUrl}/datasets/${resolvedDatasetId}/version?${params.toString()}`,
-        {
-          method: "GET",
-          headers: { ...this.headers },
-          signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
-        },
-      );
+      const res = await this._fetch(`${this.apiUrl}/datasets/${resolvedDatasetId}/version?${params.toString()}`, {
+        method: "GET",
+        headers: { ...this.headers },
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions
+      });
       await raiseForStatus(res, "read dataset version");
       return res;
     });
@@ -8526,7 +7885,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     assertUuid(datasetId_);
     const params = new URLSearchParams();
-    const dataset_version = asOf ? (typeof asOf === "string" ? asOf : asOf?.toISOString()) : void 0;
+    const dataset_version = asOf ? typeof asOf === "string" ? asOf : asOf?.toISOString() : void 0;
     if (dataset_version) {
       params.append("as_of", dataset_version);
     }
@@ -8552,7 +7911,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         assertUuid(id);
         return id;
       }),
-      remove,
+      remove
     };
     const body = JSON.stringify(data);
     await this.caller.call(async () => {
@@ -8561,31 +7920,13 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "update dataset splits", true);
       return res;
     });
   }
-  async createFeedback(
-    runId,
-    key,
-    {
-      score,
-      value,
-      correction,
-      comment,
-      sourceInfo,
-      feedbackSourceType = "api",
-      sourceRunId,
-      feedbackId,
-      feedbackConfig,
-      projectId,
-      comparativeExperimentId,
-      sessionId,
-      startTime,
-    },
-  ) {
+  async createFeedback(runId, key, { score, value, correction, comment, sourceInfo, feedbackSourceType = "api", sourceRunId, feedbackId, feedbackConfig, projectId, comparativeExperimentId, sessionId, startTime }) {
     if (!runId && !projectId) {
       throw new Error("One of runId or projectId must be provided");
     }
@@ -8594,19 +7935,12 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     const feedback_source = {
       type: feedbackSourceType ?? "api",
-      metadata: sourceInfo ?? {},
+      metadata: sourceInfo ?? {}
     };
-    if (
-      sourceRunId !== void 0 &&
-      feedback_source?.metadata !== void 0 &&
-      !feedback_source.metadata["__run"]
-    ) {
+    if (sourceRunId !== void 0 && feedback_source?.metadata !== void 0 && !feedback_source.metadata["__run"]) {
       feedback_source.metadata["__run"] = { run_id: sourceRunId };
     }
-    if (
-      feedback_source?.metadata !== void 0 &&
-      feedback_source.metadata["__run"]?.run_id !== void 0
-    ) {
+    if (feedback_source?.metadata !== void 0 && feedback_source.metadata["__run"]?.run_id !== void 0) {
       assertUuid(feedback_source.metadata["__run"].run_id);
     }
     const feedback = {
@@ -8621,7 +7955,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       comparative_experiment_id: comparativeExperimentId,
       feedbackConfig,
       session_id: sessionId ?? projectId,
-      start_time: startTime,
+      start_time: startTime
     };
     const body = JSON.stringify(feedback);
     const url = `${this.apiUrl}/feedback`;
@@ -8631,7 +7965,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "create feedback", true);
       return res;
@@ -8660,7 +7994,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "update feedback", true);
       return res;
@@ -8680,7 +8014,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         method: "DELETE",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, `delete ${path2}`, true);
       return res;
@@ -8727,7 +8061,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     const body = {
       run_id: runId,
       feedback_key: feedbackKey,
-      feedback_config: feedbackConfig,
+      feedback_config: feedbackConfig
     };
     if (expiration) {
       if (typeof expiration === "string") {
@@ -8737,7 +8071,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       }
     } else {
       body["expires_in"] = {
-        hours: 3,
+        hours: 3
       };
     }
     const serializedBody = JSON.stringify(body);
@@ -8747,31 +8081,21 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body: serializedBody,
+        body: serializedBody
       });
       await raiseForStatus(res, "create presigned feedback token");
       return res;
     });
     return await response.json();
   }
-  async createComparativeExperiment({
-    name,
-    experimentIds,
-    referenceDatasetId,
-    createdAt,
-    description,
-    metadata,
-    id,
-  }) {
+  async createComparativeExperiment({ name, experimentIds, referenceDatasetId, createdAt, description, metadata, id }) {
     if (experimentIds.length === 0) {
       throw new Error("At least one experiment is required");
     }
     if (!referenceDatasetId) {
-      referenceDatasetId = (
-        await this.readProject({
-          projectId: experimentIds[0],
-        })
-      ).reference_dataset_id;
+      referenceDatasetId = (await this.readProject({
+        projectId: experimentIds[0]
+      })).reference_dataset_id;
     }
     if (!referenceDatasetId == null) {
       throw new Error("A reference dataset is required");
@@ -8783,9 +8107,10 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       reference_dataset_id: referenceDatasetId,
       description,
       created_at: (createdAt ?? /* @__PURE__ */ new Date())?.toISOString(),
-      extra: {},
+      extra: {}
     };
-    if (metadata) body.extra["metadata"] = metadata;
+    if (metadata)
+      body.extra["metadata"] = metadata;
     const serializedBody = JSON.stringify(body);
     const response = await this.caller.call(async () => {
       const res = await this._fetch(`${this.apiUrl}/datasets/comparative`, {
@@ -8793,7 +8118,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body: serializedBody,
+        body: serializedBody
       });
       await raiseForStatus(res, "create comparative experiment");
       return res;
@@ -8837,20 +8162,18 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       } else if (run) {
         runId_ = run.id;
       }
-      feedbacks.push(
-        await this.createFeedback(runId_, res.key, {
-          score: res.score,
-          value: res.value,
-          comment: res.comment,
-          correction: res.correction,
-          sourceInfo: sourceInfo_,
-          sourceRunId: res.sourceRunId,
-          feedbackConfig: res.feedbackConfig,
-          feedbackSourceType: "model",
-          sessionId: run?.session_id,
-          startTime: run?.start_time,
-        }),
-      );
+      feedbacks.push(await this.createFeedback(runId_, res.key, {
+        score: res.score,
+        value: res.value,
+        comment: res.comment,
+        correction: res.correction,
+        sourceInfo: sourceInfo_,
+        sourceRunId: res.sourceRunId,
+        feedbackConfig: res.feedbackConfig,
+        feedbackSourceType: "model",
+        sessionId: run?.session_id,
+        startTime: run?.start_time
+      }));
     }
     return [evalResults, feedbacks];
   }
@@ -8878,7 +8201,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     const body = {
       feedback_key: feedbackKey,
       feedback_config: feedbackConfig,
-      is_lower_score_better: isLowerScoreBetter,
+      is_lower_score_better: isLowerScoreBetter
     };
     const response = await this.caller.call(async () => {
       const res = await this._fetch(`${this.apiUrl}/feedback-configs`, {
@@ -8886,7 +8209,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body: JSON.stringify(body),
+        body: JSON.stringify(body)
       });
       await raiseForStatus(res, "create feedback config");
       return res;
@@ -8909,13 +8232,15 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         params.append("key", key);
       });
     }
-    if (nameContains) params.append("name_contains", nameContains);
+    if (nameContains)
+      params.append("name_contains", nameContains);
     params.append("limit", (limit !== void 0 ? Math.min(limit, 100) : 100).toString());
     let count = 0;
     for await (const configs of this._getPaginated("/feedback-configs", params)) {
       yield* configs;
       count += configs.length;
-      if (limit !== void 0 && count >= limit) break;
+      if (limit !== void 0 && count >= limit)
+        break;
     }
   }
   /**
@@ -8941,7 +8266,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body: JSON.stringify(body),
+        body: JSON.stringify(body)
       });
       await raiseForStatus(res, "update feedback config");
       return res;
@@ -8959,7 +8284,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         method: "DELETE",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, "delete feedback config", true);
       return res;
@@ -8986,14 +8311,17 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         params.append("ids", id);
       });
     }
-    if (name) params.append("name", name);
-    if (nameContains) params.append("name_contains", nameContains);
+    if (name)
+      params.append("name", name);
+    if (nameContains)
+      params.append("name_contains", nameContains);
     params.append("limit", (limit !== void 0 ? Math.min(limit, 100) : 100).toString());
     let count = 0;
     for await (const queues of this._getPaginated("/annotation-queues", params)) {
       yield* queues;
       count++;
-      if (limit !== void 0 && count >= limit) break;
+      if (limit !== void 0 && count >= limit)
+        break;
     }
   }
   /**
@@ -9011,18 +8339,16 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       description,
       id: queueId || v4_default(),
       rubric_instructions: rubricInstructions,
-      rubric_items: rubricItems,
+      rubric_items: rubricItems
     };
-    const serializedBody = JSON.stringify(
-      Object.fromEntries(Object.entries(body).filter(([_, v]) => v !== void 0)),
-    );
+    const serializedBody = JSON.stringify(Object.fromEntries(Object.entries(body).filter(([_, v]) => v !== void 0)));
     const response = await this.caller.call(async () => {
       const res = await this._fetch(`${this.apiUrl}/annotation-queues`, {
         method: "POST",
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body: serializedBody,
+        body: serializedBody
       });
       await raiseForStatus(res, "create annotation queue");
       return res;
@@ -9036,15 +8362,12 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    */
   async readAnnotationQueue(queueId) {
     const response = await this.caller.call(async () => {
-      const res = await this._fetch(
-        `${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}`,
-        {
-          method: "GET",
-          headers: this.headers,
-          signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
-        },
-      );
+      const res = await this._fetch(`${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}`, {
+        method: "GET",
+        headers: this.headers,
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions
+      });
       await raiseForStatus(res, "read annotation queue");
       return res;
     });
@@ -9060,22 +8383,23 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
   async updateAnnotationQueue(queueId, options) {
     const { name, description, rubricInstructions, rubricItems } = options;
     const bodyObj = {};
-    if (name !== void 0) bodyObj.name = name;
-    if (description !== void 0) bodyObj.description = description;
-    if (rubricInstructions !== void 0) bodyObj.rubric_instructions = rubricInstructions;
-    if (rubricItems !== void 0) bodyObj.rubric_items = rubricItems;
+    if (name !== void 0)
+      bodyObj.name = name;
+    if (description !== void 0)
+      bodyObj.description = description;
+    if (rubricInstructions !== void 0)
+      bodyObj.rubric_instructions = rubricInstructions;
+    if (rubricItems !== void 0)
+      bodyObj.rubric_items = rubricItems;
     const body = JSON.stringify(bodyObj);
     await this.caller.call(async () => {
-      const res = await this._fetch(
-        `${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}`,
-        {
-          method: "PATCH",
-          headers: { ...this.headers, "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
-          body,
-        },
-      );
+      const res = await this._fetch(`${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}`, {
+        method: "PATCH",
+        headers: { ...this.headers, "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions,
+        body
+      });
       await raiseForStatus(res, "update annotation queue", true);
       return res;
     });
@@ -9086,15 +8410,12 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    */
   async deleteAnnotationQueue(queueId) {
     await this.caller.call(async () => {
-      const res = await this._fetch(
-        `${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}`,
-        {
-          method: "DELETE",
-          headers: { ...this.headers, Accept: "application/json" },
-          signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
-        },
-      );
+      const res = await this._fetch(`${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}`, {
+        method: "DELETE",
+        headers: { ...this.headers, Accept: "application/json" },
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions
+      });
       await raiseForStatus(res, "delete annotation queue", true);
       return res;
     });
@@ -9107,16 +8428,13 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
   async addRunsToAnnotationQueue(queueId, runIds) {
     const body = JSON.stringify(runIds.map((id, i) => assertUuid(id, `runIds[${i}]`).toString()));
     await this.caller.call(async () => {
-      const res = await this._fetch(
-        `${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}/runs`,
-        {
-          method: "POST",
-          headers: { ...this.headers, "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
-          body,
-        },
-      );
+      const res = await this._fetch(`${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}/runs`, {
+        method: "POST",
+        headers: { ...this.headers, "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions,
+        body
+      });
       await raiseForStatus(res, "add runs to annotation queue", true);
       return res;
     });
@@ -9135,7 +8453,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         method: "GET",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, "get run from annotation queue");
       return res;
@@ -9150,15 +8468,12 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    */
   async deleteRunFromAnnotationQueue(queueId, queueRunId) {
     await this.caller.call(async () => {
-      const res = await this._fetch(
-        `${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}/runs/${assertUuid(queueRunId, "queueRunId")}`,
-        {
-          method: "DELETE",
-          headers: { ...this.headers, Accept: "application/json" },
-          signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
-        },
-      );
+      const res = await this._fetch(`${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}/runs/${assertUuid(queueRunId, "queueRunId")}`, {
+        method: "DELETE",
+        headers: { ...this.headers, Accept: "application/json" },
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions
+      });
       await raiseForStatus(res, "delete run from annotation queue", true);
       return res;
     });
@@ -9169,15 +8484,12 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    */
   async getSizeFromAnnotationQueue(queueId) {
     const response = await this.caller.call(async () => {
-      const res = await this._fetch(
-        `${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}/size`,
-        {
-          method: "GET",
-          headers: this.headers,
-          signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
-        },
-      );
+      const res = await this._fetch(`${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}/size`, {
+        method: "GET",
+        headers: this.headers,
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions
+      });
       await raiseForStatus(res, "get size from annotation queue");
       return res;
     });
@@ -9197,15 +8509,12 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
   }
   async _getLatestCommitHash(promptOwnerAndName) {
     const response = await this.caller.call(async () => {
-      const res = await this._fetch(
-        `${this.apiUrl}/commits/${promptOwnerAndName}/?limit=${1}&offset=${0}`,
-        {
-          method: "GET",
-          headers: this.headers,
-          signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
-        },
-      );
+      const res = await this._fetch(`${this.apiUrl}/commits/${promptOwnerAndName}/?limit=${1}&offset=${0}`, {
+        method: "GET",
+        headers: this.headers,
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions
+      });
       await raiseForStatus(res, "get latest commit hash");
       return res;
     });
@@ -9224,7 +8533,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, `${like ? "like" : "unlike"} prompt`);
       return res;
@@ -9233,7 +8542,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
   }
   async _getPromptUrl(promptIdentifier) {
     const [owner, promptName, commitHash] = parsePromptIdentifier(promptIdentifier);
-    if (!(await this._currentTenantIsOwner(owner))) {
+    if (!await this._currentTenantIsOwner(owner)) {
       if (commitHash !== "latest") {
         return `${this.getHostUrl()}/hub/${owner}/${promptName}/${commitHash.substring(0, 8)}`;
       } else {
@@ -9322,11 +8631,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    */
   async *listCommits(promptIdentifier) {
     const [owner, promptName, _] = parsePromptIdentifier(promptIdentifier);
-    for await (const commits of this._getPaginated(
-      `/commits/${owner}/${promptName}/`,
-      new URLSearchParams(),
-      (res) => res.commits,
-    )) {
+    for await (const commits of this._getPaginated(`/commits/${owner}/${promptName}/`, new URLSearchParams(), (res) => res.commits)) {
       yield* commits;
     }
   }
@@ -9394,7 +8699,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         method: "GET",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       if (res?.status === 404) {
         return null;
@@ -9447,15 +8752,15 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         https://smith.langchain.com/prompts`);
     }
     const [owner, promptName, _] = parsePromptIdentifier(promptIdentifier);
-    if (!(await this._currentTenantIsOwner(owner))) {
+    if (!await this._currentTenantIsOwner(owner)) {
       throw await this._ownerConflictError("create a prompt", owner);
     }
     const data = {
       repo_handle: promptName,
-      ...(options?.description && { description: options.description }),
-      ...(options?.readme && { readme: options.readme }),
-      ...(options?.tags && { tags: options.tags }),
-      is_public: !!options?.isPublic,
+      ...options?.description && { description: options.description },
+      ...options?.readme && { readme: options.readme },
+      ...options?.tags && { tags: options.tags },
+      is_public: !!options?.isPublic
     };
     const body = JSON.stringify(data);
     const response = await this.caller.call(async () => {
@@ -9464,7 +8769,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "create prompt");
       return res;
@@ -9502,17 +8807,14 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    * ```
    */
   async createCommit(promptIdentifier, object, options) {
-    if (!(await this.promptExists(promptIdentifier))) {
+    if (!await this.promptExists(promptIdentifier)) {
       throw new Error("Prompt does not exist, you must create it first.");
     }
     const [owner, promptName, _] = parsePromptIdentifier(promptIdentifier);
-    const resolvedParentCommitHash =
-      options?.parentCommitHash === "latest" || !options?.parentCommitHash
-        ? await this._getLatestCommitHash(`${owner}/${promptName}`)
-        : options?.parentCommitHash;
+    const resolvedParentCommitHash = options?.parentCommitHash === "latest" || !options?.parentCommitHash ? await this._getLatestCommitHash(`${owner}/${promptName}`) : options?.parentCommitHash;
     const payload = {
       manifest: JSON.parse(JSON.stringify(object)),
-      parent_commit: resolvedParentCommitHash,
+      parent_commit: resolvedParentCommitHash
     };
     const body = JSON.stringify(payload);
     const response = await this.caller.call(async () => {
@@ -9521,15 +8823,13 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         headers: { ...this.headers, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "create commit");
       return res;
     });
     const result = await response.json();
-    return this._getPromptUrl(
-      `${owner}/${promptName}${result.commit_hash ? `:${result.commit_hash}` : ""}`,
-    );
+    return this._getPromptUrl(`${owner}/${promptName}${result.commit_hash ? `:${result.commit_hash}` : ""}`);
   }
   /**
    * Update examples with attachments using multipart form data.
@@ -9540,43 +8840,32 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     return this._updateExamplesMultipart(datasetId, updates);
   }
   async _updateExamplesMultipart(datasetId, updates = []) {
-    if (!(await this._getDatasetExamplesMultiPartSupport())) {
-      throw new Error(
-        "Your LangSmith deployment does not allow using the multipart examples endpoint, please upgrade your deployment to the latest version.",
-      );
+    if (!await this._getDatasetExamplesMultiPartSupport()) {
+      throw new Error("Your LangSmith deployment does not allow using the multipart examples endpoint, please upgrade your deployment to the latest version.");
     }
     const formData = new FormData();
     for (const example of updates) {
       const exampleId = example.id;
       const exampleBody = {
-        ...(example.metadata && { metadata: example.metadata }),
-        ...(example.split && { split: example.split }),
+        ...example.metadata && { metadata: example.metadata },
+        ...example.split && { split: example.split }
       };
-      const stringifiedExample = serialize(
-        exampleBody,
-        `Serializing body for example with id: ${exampleId}`,
-      );
+      const stringifiedExample = serialize(exampleBody, `Serializing body for example with id: ${exampleId}`);
       const exampleBlob = new Blob([stringifiedExample], {
-        type: "application/json",
+        type: "application/json"
       });
       formData.append(exampleId, exampleBlob);
       if (example.inputs) {
-        const stringifiedInputs = serialize(
-          example.inputs,
-          `Serializing inputs for example with id: ${exampleId}`,
-        );
+        const stringifiedInputs = serialize(example.inputs, `Serializing inputs for example with id: ${exampleId}`);
         const inputsBlob = new Blob([stringifiedInputs], {
-          type: "application/json",
+          type: "application/json"
         });
         formData.append(`${exampleId}.inputs`, inputsBlob);
       }
       if (example.outputs) {
-        const stringifiedOutputs = serialize(
-          example.outputs,
-          `Serializing outputs whle updating example with id: ${exampleId}`,
-        );
+        const stringifiedOutputs = serialize(example.outputs, `Serializing outputs whle updating example with id: ${exampleId}`);
         const outputsBlob = new Blob([stringifiedOutputs], {
-          type: "application/json",
+          type: "application/json"
         });
         formData.append(`${exampleId}.outputs`, outputsBlob);
       }
@@ -9591,34 +8880,28 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
             data = attachment.data;
           }
           const attachmentBlob = new Blob([data], {
-            type: `${mimeType}; length=${data.byteLength}`,
+            type: `${mimeType}; length=${data.byteLength}`
           });
           formData.append(`${exampleId}.attachment.${name}`, attachmentBlob);
         }
       }
       if (example.attachments_operations) {
-        const stringifiedAttachmentsOperations = serialize(
-          example.attachments_operations,
-          `Serializing attachments while updating example with id: ${exampleId}`,
-        );
+        const stringifiedAttachmentsOperations = serialize(example.attachments_operations, `Serializing attachments while updating example with id: ${exampleId}`);
         const attachmentsOperationsBlob = new Blob([stringifiedAttachmentsOperations], {
-          type: "application/json",
+          type: "application/json"
         });
         formData.append(`${exampleId}.attachments_operations`, attachmentsOperationsBlob);
       }
     }
     const datasetIdToUse = datasetId ?? updates[0]?.dataset_id;
     const response = await this.caller.call(async () => {
-      const res = await this._fetch(
-        `${this.apiUrl}${this._getPlatformEndpointPath(`datasets/${datasetIdToUse}/examples`)}`,
-        {
-          method: "PATCH",
-          headers: this.headers,
-          signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
-          body: formData,
-        },
-      );
+      const res = await this._fetch(`${this.apiUrl}${this._getPlatformEndpointPath(`datasets/${datasetIdToUse}/examples`)}`, {
+        method: "PATCH",
+        headers: this.headers,
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions,
+        body: formData
+      });
       await raiseForStatus(res, "update examples");
       return res;
     });
@@ -9634,51 +8917,40 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     return this._uploadExamplesMultipart(datasetId, uploads);
   }
   async _uploadExamplesMultipart(datasetId, uploads = []) {
-    if (!(await this._getDatasetExamplesMultiPartSupport())) {
-      throw new Error(
-        "Your LangSmith deployment does not allow using the multipart examples endpoint, please upgrade your deployment to the latest version.",
-      );
+    if (!await this._getDatasetExamplesMultiPartSupport()) {
+      throw new Error("Your LangSmith deployment does not allow using the multipart examples endpoint, please upgrade your deployment to the latest version.");
     }
     const formData = new FormData();
     for (const example of uploads) {
       const exampleId = (example.id ?? v4_default()).toString();
       const exampleBody = {
         created_at: example.created_at,
-        ...(example.metadata && { metadata: example.metadata }),
-        ...(example.split && { split: example.split }),
-        ...(example.source_run_id && { source_run_id: example.source_run_id }),
-        ...(example.use_source_run_io && {
-          use_source_run_io: example.use_source_run_io,
-        }),
-        ...(example.use_source_run_attachments && {
-          use_source_run_attachments: example.use_source_run_attachments,
-        }),
+        ...example.metadata && { metadata: example.metadata },
+        ...example.split && { split: example.split },
+        ...example.source_run_id && { source_run_id: example.source_run_id },
+        ...example.use_source_run_io && {
+          use_source_run_io: example.use_source_run_io
+        },
+        ...example.use_source_run_attachments && {
+          use_source_run_attachments: example.use_source_run_attachments
+        }
       };
-      const stringifiedExample = serialize(
-        exampleBody,
-        `Serializing body for uploaded example with id: ${exampleId}`,
-      );
+      const stringifiedExample = serialize(exampleBody, `Serializing body for uploaded example with id: ${exampleId}`);
       const exampleBlob = new Blob([stringifiedExample], {
-        type: "application/json",
+        type: "application/json"
       });
       formData.append(exampleId, exampleBlob);
       if (example.inputs) {
-        const stringifiedInputs = serialize(
-          example.inputs,
-          `Serializing inputs for uploaded example with id: ${exampleId}`,
-        );
+        const stringifiedInputs = serialize(example.inputs, `Serializing inputs for uploaded example with id: ${exampleId}`);
         const inputsBlob = new Blob([stringifiedInputs], {
-          type: "application/json",
+          type: "application/json"
         });
         formData.append(`${exampleId}.inputs`, inputsBlob);
       }
       if (example.outputs) {
-        const stringifiedOutputs = serialize(
-          example.outputs,
-          `Serializing outputs for uploaded example with id: ${exampleId}`,
-        );
+        const stringifiedOutputs = serialize(example.outputs, `Serializing outputs for uploaded example with id: ${exampleId}`);
         const outputsBlob = new Blob([stringifiedOutputs], {
-          type: "application/json",
+          type: "application/json"
         });
         formData.append(`${exampleId}.outputs`, outputsBlob);
       }
@@ -9693,42 +8965,44 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
             data = attachment.data;
           }
           const attachmentBlob = new Blob([data], {
-            type: `${mimeType}; length=${data.byteLength}`,
+            type: `${mimeType}; length=${data.byteLength}`
           });
           formData.append(`${exampleId}.attachment.${name}`, attachmentBlob);
         }
       }
     }
     const response = await this.caller.call(async () => {
-      const res = await this._fetch(
-        `${this.apiUrl}${this._getPlatformEndpointPath(`datasets/${datasetId}/examples`)}`,
-        {
-          method: "POST",
-          headers: this.headers,
-          signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
-          body: formData,
-        },
-      );
+      const res = await this._fetch(`${this.apiUrl}${this._getPlatformEndpointPath(`datasets/${datasetId}/examples`)}`, {
+        method: "POST",
+        headers: this.headers,
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions,
+        body: formData
+      });
       await raiseForStatus(res, "upload examples");
       return res;
     });
     return response.json();
   }
   async updatePrompt(promptIdentifier, options) {
-    if (!(await this.promptExists(promptIdentifier))) {
+    if (!await this.promptExists(promptIdentifier)) {
       throw new Error("Prompt does not exist, you must create it first.");
     }
     const [owner, promptName] = parsePromptIdentifier(promptIdentifier);
-    if (!(await this._currentTenantIsOwner(owner))) {
+    if (!await this._currentTenantIsOwner(owner)) {
       throw await this._ownerConflictError("update a prompt", owner);
     }
     const payload = {};
-    if (options?.description !== void 0) payload.description = options.description;
-    if (options?.readme !== void 0) payload.readme = options.readme;
-    if (options?.tags !== void 0) payload.tags = options.tags;
-    if (options?.isPublic !== void 0) payload.is_public = options.isPublic;
-    if (options?.isArchived !== void 0) payload.is_archived = options.isArchived;
+    if (options?.description !== void 0)
+      payload.description = options.description;
+    if (options?.readme !== void 0)
+      payload.readme = options.readme;
+    if (options?.tags !== void 0)
+      payload.tags = options.tags;
+    if (options?.isPublic !== void 0)
+      payload.is_public = options.isPublic;
+    if (options?.isArchived !== void 0)
+      payload.is_archived = options.isArchived;
     if (Object.keys(payload).length === 0) {
       throw new Error("No valid update options provided");
     }
@@ -9738,11 +9012,11 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         method: "PATCH",
         headers: {
           ...this.headers,
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions,
-        body,
+        body
       });
       await raiseForStatus(res, "update prompt");
       return res;
@@ -9750,11 +9024,11 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     return response.json();
   }
   async deletePrompt(promptIdentifier) {
-    if (!(await this.promptExists(promptIdentifier))) {
+    if (!await this.promptExists(promptIdentifier)) {
       throw new Error("Prompt does not exist, you must create it first.");
     }
     const [owner, promptName, _] = parsePromptIdentifier(promptIdentifier);
-    if (!(await this._currentTenantIsOwner(owner))) {
+    if (!await this._currentTenantIsOwner(owner)) {
       throw await this._ownerConflictError("delete a prompt", owner);
     }
     const response = await this.caller.call(async () => {
@@ -9762,7 +9036,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         method: "DELETE",
         headers: this.headers,
         signal: AbortSignal.timeout(this.timeout_ms),
-        ...this.fetchOptions,
+        ...this.fetchOptions
       });
       await raiseForStatus(res, "delete prompt");
       return res;
@@ -9783,15 +9057,12 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
   async _fetchPromptFromApi(promptIdentifier, options) {
     const [owner, promptName, commitHash] = parsePromptIdentifier(promptIdentifier);
     const response = await this.caller.call(async () => {
-      const res = await this._fetch(
-        `${this.apiUrl}/commits/${owner}/${promptName}/${commitHash}${options?.includeModel ? "?include_model=true" : ""}`,
-        {
-          method: "GET",
-          headers: this.headers,
-          signal: AbortSignal.timeout(this.timeout_ms),
-          ...this.fetchOptions,
-        },
-      );
+      const res = await this._fetch(`${this.apiUrl}/commits/${owner}/${promptName}/${commitHash}${options?.includeModel ? "?include_model=true" : ""}`, {
+        method: "GET",
+        headers: this.headers,
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions
+      });
       await raiseForStatus(res, "pull prompt commit");
       return res;
     });
@@ -9801,7 +9072,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       repo: promptName,
       commit_hash: result.commit_hash,
       manifest: result.manifest,
-      examples: result.examples,
+      examples: result.examples
     };
   }
   async pullPromptCommit(promptIdentifier, options) {
@@ -9826,7 +9097,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
   async _pullPrompt(promptIdentifier, options) {
     const promptObject = await this.pullPromptCommit(promptIdentifier, {
       includeModel: options?.includeModel,
-      skipCache: options?.skipCache,
+      skipCache: options?.skipCache
     });
     const prompt = JSON.stringify(promptObject.manifest);
     return prompt;
@@ -9838,7 +9109,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
           description: options?.description,
           readme: options?.readme,
           tags: options?.tags,
-          isPublic: options?.isPublic,
+          isPublic: options?.isPublic
         });
       }
     } else {
@@ -9846,14 +9117,14 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         description: options?.description,
         readme: options?.readme,
         tags: options?.tags,
-        isPublic: options?.isPublic,
+        isPublic: options?.isPublic
       });
     }
     if (!options?.object) {
       return await this._getPromptUrl(promptIdentifier);
     }
     const url = await this.createCommit(promptIdentifier, options?.object, {
-      parentCommitHash: options?.parentCommitHash,
+      parentCommitHash: options?.parentCommitHash
     });
     return url;
   }
@@ -9876,7 +9147,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       // Placeholder API key not needed anymore in most cases, but
       // some private deployments may have API key-based rate limiting
       // that would cause this to fail if we provide no value.
-      apiKey: "placeholder",
+      apiKey: "placeholder"
     });
     const ds = await sourceClient.readSharedDataset(tokenUuid);
     const finalDatasetName = datasetName || ds.name;
@@ -9885,24 +9156,23 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         console.log(`Dataset ${finalDatasetName} already exists in your tenant. Skipping.`);
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+    }
     const examples = await sourceClient.listSharedExamples(tokenUuid);
     const dataset = await this.createDataset(finalDatasetName, {
       description: ds.description,
       dataType: ds.data_type || "kv",
       inputsSchema: ds.inputs_schema_definition ?? void 0,
-      outputsSchema: ds.outputs_schema_definition ?? void 0,
+      outputsSchema: ds.outputs_schema_definition ?? void 0
     });
     try {
       await this.createExamples({
         inputs: examples.map((e) => e.inputs),
-        outputs: examples.flatMap((e) => (e.outputs ? [e.outputs] : [])),
-        datasetId: dataset.id,
+        outputs: examples.flatMap((e) => e.outputs ? [e.outputs] : []),
+        datasetId: dataset.id
       });
     } catch (e) {
-      console.error(
-        `An error occurred while creating dataset ${finalDatasetName}. You should delete it manually.`,
-      );
+      console.error(`An error occurred while creating dataset ${finalDatasetName}. You should delete it manually.`);
       throw e;
     }
   }
@@ -9910,7 +9180,8 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     try {
       assertUuid(urlOrToken);
       return [apiUrl, urlOrToken];
-    } catch (_) {}
+    } catch (_) {
+    }
     try {
       const parsedUrl = new URL(urlOrToken);
       const pathParts = parsedUrl.pathname.split("/").filter((part) => part !== "");
@@ -9956,15 +9227,13 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    */
   async awaitPendingTraceBatches() {
     if (this.manualFlushMode) {
-      console.warn(
-        "[WARNING]: When tracing in manual flush mode, you must call `await client.flush()` manually to submit trace batches.",
-      );
+      console.warn("[WARNING]: When tracing in manual flush mode, you must call `await client.flush()` manually to submit trace batches.");
       return Promise.resolve();
     }
     await new Promise((resolve) => setTimeout(resolve, 1));
     await Promise.all([
       ...this.autoBatchQueue.items.map(({ itemPromise }) => itemPromise),
-      this.batchIngestCaller.queue.onIdle(),
+      this.batchIngestCaller.queue.onIdle()
     ]);
     if (this.langSmithToOTELTranslator !== void 0) {
       await getDefaultOTLPTracerComponents()?.DEFAULT_LANGSMITH_SPAN_PROCESSOR?.forceFlush();
@@ -9975,7 +9244,7 @@ Object.defineProperty(Client, "_fallbackDirsCreated", {
   enumerable: true,
   configurable: true,
   writable: true,
-  value: /* @__PURE__ */ new Set(),
+  value: /* @__PURE__ */ new Set()
 });
 function isExampleCreate(input) {
   return "dataset_id" in input || "dataset_name" in input;
@@ -10003,22 +9272,18 @@ function getContextVar(runTree, key) {
   return void 0;
 }
 function setContextVar(runTree, key, value) {
-  const contextVars =
-    _LC_CONTEXT_VARIABLES_KEY in runTree
-      ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        runTree[_LC_CONTEXT_VARIABLES_KEY]
-      : {};
+  const contextVars = _LC_CONTEXT_VARIABLES_KEY in runTree ? (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    runTree[_LC_CONTEXT_VARIABLES_KEY]
+  ) : {};
   contextVars[key] = value;
   runTree[_LC_CONTEXT_VARIABLES_KEY] = contextVars;
 }
 
 // node_modules/.pnpm/langsmith@0.5.15/node_modules/langsmith/dist/utils/project.js
 var getDefaultProjectName = () => {
-  return (
-    getLangSmithEnvironmentVariable("PROJECT") ??
-    getEnvironmentVariable("LANGCHAIN_SESSION") ?? // TODO: Deprecate
-    "default"
-  );
+  return getLangSmithEnvironmentVariable("PROJECT") ?? getEnvironmentVariable("LANGCHAIN_SESSION") ?? // TODO: Deprecate
+  "default";
 };
 
 // node_modules/.pnpm/langsmith@0.5.15/node_modules/langsmith/dist/run_trees.js
@@ -10040,10 +9305,14 @@ function convertToDottedOrderFormat(epoch, runId, executionOrder = 1) {
   const microsecondPrecisionDatestring = getMicrosecondPrecisionDatestring(epoch, executionOrder);
   return {
     dottedOrder: stripNonAlphanumeric(microsecondPrecisionDatestring) + runId,
-    microsecondPrecisionDatestring,
+    microsecondPrecisionDatestring
   };
 }
-var HEADER_SAFE_REPLICA_FIELDS = /* @__PURE__ */ new Set(["projectName", "updates", "reroot"]);
+var HEADER_SAFE_REPLICA_FIELDS = /* @__PURE__ */ new Set([
+  "projectName",
+  "updates",
+  "reroot"
+]);
 function filterReplicaForHeaders(replica) {
   const filtered = {};
   for (const key of Object.keys(replica)) {
@@ -10059,25 +9328,25 @@ var Baggage = class _Baggage {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "tags", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "project_name", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "replicas", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     this.metadata = metadata;
     this.tags = tags;
@@ -10131,169 +9400,169 @@ var RunTree = class _RunTree {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "name", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "run_type", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "project_name", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "parent_run", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "parent_run_id", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "child_runs", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "start_time", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "end_time", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "extra", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "tags", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "error", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "serialized", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "inputs", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "outputs", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "reference_example_id", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "client", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "events", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "trace_id", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "dotted_order", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "tracingEnabled", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "execution_order", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "child_execution_order", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "attachments", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "replicas", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "distributedParentId", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "_serialized_start_time", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     Object.defineProperty(this, "_awaitInputsOnPost", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: void 0,
+      value: void 0
     });
     if (isRunTree(originalConfig)) {
       Object.assign(this, { ...originalConfig });
@@ -10304,7 +9573,7 @@ var RunTree = class _RunTree {
     const client2 = config.client ?? _RunTree.getSharedClient();
     const dedupedMetadata = {
       ...metadata,
-      ...config?.extra?.metadata,
+      ...config?.extra?.metadata
     };
     config.extra = { ...config.extra, metadata: dedupedMetadata };
     if ("id" in config && config.id == null) {
@@ -10314,10 +9583,7 @@ var RunTree = class _RunTree {
     this.execution_order ??= 1;
     this.child_execution_order ??= 1;
     if (!this.dotted_order) {
-      this._serialized_start_time = getMicrosecondPrecisionDatestring(
-        this.start_time,
-        this.execution_order,
-      );
+      this._serialized_start_time = getMicrosecondPrecisionDatestring(this.start_time, this.execution_order);
     }
     if (!this.id) {
       this.id = uuid7FromTime(this._serialized_start_time ?? this.start_time);
@@ -10331,11 +9597,7 @@ var RunTree = class _RunTree {
     }
     this.replicas = _ensureWriteReplicas(this.replicas);
     if (!this.dotted_order) {
-      const { dottedOrder } = convertToDottedOrderFormat(
-        this.start_time,
-        this.id,
-        this.execution_order,
-      );
+      const { dottedOrder } = convertToDottedOrderFormat(this.start_time, this.id, this.execution_order);
       if (this.parent_run) {
         this.dotted_order = this.parent_run.dotted_order + "." + dottedOrder;
       } else {
@@ -10348,8 +9610,8 @@ var RunTree = class _RunTree {
       ...this.extra,
       metadata: {
         ...this.extra?.metadata,
-        ...metadata,
-      },
+        ...metadata
+      }
     };
   }
   get metadata() {
@@ -10367,7 +9629,7 @@ var RunTree = class _RunTree {
       start_time,
       serialized: {},
       inputs: {},
-      extra: {},
+      extra: {}
     };
   }
   static getSharedClient() {
@@ -10391,14 +9653,14 @@ var RunTree = class _RunTree {
       client: this.client,
       tracingEnabled: this.tracingEnabled,
       execution_order: child_execution_order,
-      child_execution_order,
+      child_execution_order
     });
     const parentMeta = this.extra?.metadata ?? {};
     const childMeta = child.extra?.metadata ?? {};
     if (Object.keys(parentMeta).length > 0) {
       child.extra = {
         ...child.extra,
-        metadata: { ...parentMeta, ...childMeta },
+        metadata: { ...parentMeta, ...childMeta }
       };
     }
     if (_LC_CONTEXT_VARIABLES_KEY in this) {
@@ -10408,9 +9670,7 @@ var RunTree = class _RunTree {
     const presentConfig = config.extra?.[LC_CHILD] ?? this.extra[LC_CHILD];
     if (isRunnableConfigLike(presentConfig)) {
       const newConfig = { ...presentConfig };
-      const callbacks = isCallbackManagerLike(newConfig.callbacks)
-        ? newConfig.callbacks.copy?.()
-        : void 0;
+      const callbacks = isCallbackManagerLike(newConfig.callbacks) ? newConfig.callbacks.copy?.() : void 0;
       if (callbacks) {
         Object.assign(callbacks, { _parentRunId: child.id });
         callbacks.handlers?.find(isLangChainTracerLike)?.updateFromRunTree?.(child);
@@ -10422,10 +9682,7 @@ var RunTree = class _RunTree {
     let current = this;
     while (current != null && !visited.has(current.id)) {
       visited.add(current.id);
-      current.child_execution_order = Math.max(
-        current.child_execution_order,
-        child_execution_order,
-      );
+      current.child_execution_order = Math.max(current.child_execution_order, child_execution_order);
       current = current.parent_run;
     }
     this.child_runs.push(child);
@@ -10436,9 +9693,7 @@ var RunTree = class _RunTree {
     this.error = this.error ?? error2;
     this.end_time = this.end_time ?? endTime;
     if (metadata && Object.keys(metadata).length > 0) {
-      this.extra = this.extra
-        ? { ...this.extra, metadata: { ...this.extra.metadata, ...metadata } }
-        : { metadata };
+      this.extra = this.extra ? { ...this.extra, metadata: { ...this.extra.metadata, ...metadata } } : { metadata };
     }
   }
   _convertToCreate(run, runtimeEnv, excludeChildRuns = true) {
@@ -10458,9 +9713,7 @@ var RunTree = class _RunTree {
     const parent_run_id = run.parent_run?.id ?? run.parent_run_id;
     let child_runs;
     if (!excludeChildRuns) {
-      child_runs = run.child_runs.map((child_run) =>
-        this._convertToCreate(child_run, runtimeEnv, excludeChildRuns),
-      );
+      child_runs = run.child_runs.map((child_run) => this._convertToCreate(child_run, runtimeEnv, excludeChildRuns));
     } else {
       child_runs = [];
     }
@@ -10483,7 +9736,7 @@ var RunTree = class _RunTree {
       dotted_order: run.dotted_order,
       tags: run.tags,
       attachments: run.attachments,
-      events: run.events,
+      events: run.events
     };
   }
   _sliceParentId(parentId, run) {
@@ -10520,21 +9773,12 @@ var RunTree = class _RunTree {
     }
   }
   _remapForProject(params) {
-    const {
-      projectName,
-      runtimeEnv,
-      excludeChildRuns = true,
-      reroot = false,
-      distributedParentId,
-      apiUrl,
-      apiKey,
-      workspaceId,
-    } = params;
+    const { projectName, runtimeEnv, excludeChildRuns = true, reroot = false, distributedParentId, apiUrl, apiKey, workspaceId } = params;
     const baseRun = this._convertToCreate(this, runtimeEnv, excludeChildRuns);
     if (projectName === this.project_name) {
       return {
         ...baseRun,
-        session_name: projectName,
+        session_name: projectName
       };
     }
     if (reroot) {
@@ -10554,7 +9798,7 @@ var RunTree = class _RunTree {
         projectName,
         apiUrl,
         apiKey,
-        workspaceId,
+        workspaceId
       });
       this._setReplicaTraceRoot(replicaKey, baseRun.id);
     }
@@ -10565,7 +9809,7 @@ var RunTree = class _RunTree {
         projectName,
         apiUrl,
         apiKey,
-        workspaceId,
+        workspaceId
       });
       ancestorRerootedTraceId = replicaTraceRoots[replicaKey];
       if (ancestorRerootedTraceId) {
@@ -10615,7 +9859,7 @@ var RunTree = class _RunTree {
       trace_id: newTraceId,
       parent_run_id: newParentId,
       dotted_order: newDottedOrder,
-      session_name: projectName,
+      session_name: projectName
     };
   }
   async postRun(excludeChildRuns = true) {
@@ -10634,12 +9878,12 @@ var RunTree = class _RunTree {
             distributedParentId: this.distributedParentId,
             apiUrl,
             apiKey,
-            workspaceId,
+            workspaceId
           });
           await this.client.createRun(runCreate, {
             apiKey,
             apiUrl,
-            workspaceId,
+            workspaceId
           });
         }
       } else {
@@ -10647,9 +9891,7 @@ var RunTree = class _RunTree {
         await this.client.createRun(runCreate);
       }
       if (!excludeChildRuns) {
-        warnOnce(
-          "Posting with excludeChildRuns=false is deprecated and will be removed in a future version.",
-        );
+        warnOnce("Posting with excludeChildRuns=false is deprecated and will be removed in a future version.");
         for (const childRun of this.child_runs) {
           await childRun.postRun(false);
         }
@@ -10670,7 +9912,7 @@ var RunTree = class _RunTree {
           distributedParentId: this.distributedParentId,
           apiUrl,
           apiKey,
-          workspaceId,
+          workspaceId
         });
         const updatePayload = {
           id: runData.id,
@@ -10689,7 +9931,7 @@ var RunTree = class _RunTree {
           tags: runData.tags,
           extra: runData.extra,
           attachments: this.attachments,
-          ...updates,
+          ...updates
         };
         if (!options?.excludeInputs) {
           updatePayload.inputs = runData.inputs;
@@ -10697,7 +9939,7 @@ var RunTree = class _RunTree {
         await this.client.updateRun(runData.id, updatePayload, {
           apiKey,
           apiUrl,
-          workspaceId,
+          workspaceId
         });
       }
     } else {
@@ -10717,7 +9959,7 @@ var RunTree = class _RunTree {
           trace_id: this.trace_id,
           tags: this.tags,
           attachments: this.attachments,
-          session_name: this.project_name,
+          session_name: this.project_name
         };
         if (!options?.excludeInputs) {
           runUpdate.inputs = this.inputs;
@@ -10743,13 +9985,13 @@ var RunTree = class _RunTree {
     if (typeof event === "string") {
       this.events.push({
         name: "event",
-        time: /* @__PURE__ */ new Date().toISOString(),
-        message: event,
+        time: (/* @__PURE__ */ new Date()).toISOString(),
+        message: event
       });
     } else {
       this.events.push({
         ...event,
-        time: event.time ?? /* @__PURE__ */ new Date().toISOString(),
+        time: event.time ?? (/* @__PURE__ */ new Date()).toISOString()
       });
     }
   }
@@ -10761,9 +10003,7 @@ var RunTree = class _RunTree {
     let tracingEnabled = isTracingEnabled();
     if (callbackManager) {
       const parentRunId = callbackManager?.getParentRunId?.() ?? "";
-      const langChainTracer = callbackManager?.handlers?.find(
-        (handler) => handler?.name == "langchain_tracer",
-      );
+      const langChainTracer = callbackManager?.handlers?.find((handler) => handler?.name == "langchain_tracer");
       parentRun = langChainTracer?.getRun?.(parentRunId);
       projectName = langChainTracer?.projectName;
       client2 = langChainTracer?.client;
@@ -10774,7 +10014,7 @@ var RunTree = class _RunTree {
         ...props,
         client: client2,
         tracingEnabled,
-        project_name: projectName,
+        project_name: projectName
       });
     }
     const parentRunTree = new _RunTree({
@@ -10785,13 +10025,15 @@ var RunTree = class _RunTree {
       client: client2,
       tracingEnabled,
       project_name: projectName,
-      tags: [...new Set((parentRun?.tags ?? []).concat(parentConfig?.tags ?? []))],
+      tags: [
+        ...new Set((parentRun?.tags ?? []).concat(parentConfig?.tags ?? []))
+      ],
       extra: {
         metadata: {
           ...parentRun?.extra?.metadata,
-          ...parentConfig?.metadata,
-        },
-      },
+          ...parentConfig?.metadata
+        }
+      }
     });
     return parentRunTree.createChild(props);
   }
@@ -10799,15 +10041,13 @@ var RunTree = class _RunTree {
     return this.fromHeaders({ "langsmith-trace": dottedOrder });
   }
   static fromHeaders(headers, inheritArgs) {
-    const rawHeaders =
-      "get" in headers && typeof headers.get === "function"
-        ? {
-            "langsmith-trace": headers.get("langsmith-trace"),
-            baggage: headers.get("baggage"),
-          }
-        : headers;
+    const rawHeaders = "get" in headers && typeof headers.get === "function" ? {
+      "langsmith-trace": headers.get("langsmith-trace"),
+      baggage: headers.get("baggage")
+    } : headers;
     const headerTrace = rawHeaders["langsmith-trace"];
-    if (!headerTrace || typeof headerTrace !== "string") return void 0;
+    if (!headerTrace || typeof headerTrace !== "string")
+      return void 0;
     const parentDottedOrder = headerTrace.trim();
     const parsedDottedOrder = parentDottedOrder.split(".").map((part) => {
       const [strTime, uuid] = part.split("Z");
@@ -10821,7 +10061,7 @@ var RunTree = class _RunTree {
       start_time: inheritArgs?.["start_time"] ?? Date.now(),
       id: parsedDottedOrder.at(-1)?.uuid,
       trace_id: traceId,
-      dotted_order: parentDottedOrder,
+      dotted_order: parentDottedOrder
     };
     if (rawHeaders["baggage"] && typeof rawHeaders["baggage"] === "string") {
       const baggage = Baggage.fromHeader(rawHeaders["baggage"]);
@@ -10837,12 +10077,7 @@ var RunTree = class _RunTree {
   toHeaders(headers) {
     const result = {
       "langsmith-trace": this.dotted_order,
-      baggage: new Baggage(
-        this.extra?.metadata,
-        this.tags,
-        this.project_name,
-        this.replicas,
-      ).toHeader(),
+      baggage: new Baggage(this.extra?.metadata, this.tags, this.project_name, this.replicas).toHeader()
     };
     if (headers) {
       for (const [key, value] of Object.entries(result)) {
@@ -10856,18 +10091,13 @@ Object.defineProperty(RunTree, "sharedClient", {
   enumerable: true,
   configurable: true,
   writable: true,
-  value: null,
+  value: null
 });
 function isRunTree(x) {
   return x != null && typeof x.createChild === "function" && typeof x.postRun === "function";
 }
 function isLangChainTracerLike(x) {
-  return (
-    typeof x === "object" &&
-    x != null &&
-    typeof x.name === "string" &&
-    x.name === "langchain_tracer"
-  );
+  return typeof x === "object" && x != null && typeof x.name === "string" && x.name === "langchain_tracer";
 }
 function containsLangChainTracerLike(x) {
   return Array.isArray(x) && x.some((callback) => isLangChainTracerLike(callback));
@@ -10877,43 +10107,35 @@ function isCallbackManagerLike(x) {
 }
 function isRunnableConfigLike(x) {
   const callbacks = x?.callbacks;
-  return (
-    x != null &&
-    typeof callbacks === "object" && // Callback manager with a langchain tracer
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (containsLangChainTracerLike(callbacks?.handlers) || // Or it's an array with a LangChainTracerLike object within it
-      containsLangChainTracerLike(callbacks))
-  );
+  return x != null && typeof callbacks === "object" && // Callback manager with a langchain tracer
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (containsLangChainTracerLike(callbacks?.handlers) || // Or it's an array with a LangChainTracerLike object within it
+  containsLangChainTracerLike(callbacks));
 }
 function _getWriteReplicasFromEnv() {
   const envVar = getEnvironmentVariable("LANGSMITH_RUNS_ENDPOINTS");
-  if (!envVar) return [];
+  if (!envVar)
+    return [];
   try {
     const parsed = JSON.parse(envVar);
     if (Array.isArray(parsed)) {
       const replicas = [];
       for (const item of parsed) {
         if (typeof item !== "object" || item === null) {
-          console.warn(
-            `Invalid item type in LANGSMITH_RUNS_ENDPOINTS: expected object, got ${typeof item}`,
-          );
+          console.warn(`Invalid item type in LANGSMITH_RUNS_ENDPOINTS: expected object, got ${typeof item}`);
           continue;
         }
         if (typeof item.api_url !== "string") {
-          console.warn(
-            `Invalid api_url type in LANGSMITH_RUNS_ENDPOINTS: expected string, got ${typeof item.api_url}`,
-          );
+          console.warn(`Invalid api_url type in LANGSMITH_RUNS_ENDPOINTS: expected string, got ${typeof item.api_url}`);
           continue;
         }
         if (typeof item.api_key !== "string") {
-          console.warn(
-            `Invalid api_key type in LANGSMITH_RUNS_ENDPOINTS: expected string, got ${typeof item.api_key}`,
-          );
+          console.warn(`Invalid api_key type in LANGSMITH_RUNS_ENDPOINTS: expected string, got ${typeof item.api_key}`);
           continue;
         }
         replicas.push({
           apiUrl: item.api_url.replace(/\/$/, ""),
-          apiKey: item.api_key,
+          apiKey: item.api_key
         });
       }
       return replicas;
@@ -10925,29 +10147,23 @@ function _getWriteReplicasFromEnv() {
         if (typeof key === "string") {
           replicas.push({
             apiUrl: cleanUrl,
-            apiKey: key,
+            apiKey: key
           });
         } else {
-          console.warn(
-            `Invalid value type in LANGSMITH_RUNS_ENDPOINTS for URL ${url}: expected string, got ${typeof key}`,
-          );
+          console.warn(`Invalid value type in LANGSMITH_RUNS_ENDPOINTS for URL ${url}: expected string, got ${typeof key}`);
           continue;
         }
       }
       return replicas;
     } else {
-      console.warn(
-        `Invalid LANGSMITH_RUNS_ENDPOINTS \u2013 must be valid JSON array of objects with api_url and api_key properties, or object mapping url->apiKey, got ${typeof parsed}`,
-      );
+      console.warn(`Invalid LANGSMITH_RUNS_ENDPOINTS \u2013 must be valid JSON array of objects with api_url and api_key properties, or object mapping url->apiKey, got ${typeof parsed}`);
       return [];
     }
   } catch (e) {
     if (isConflictingEndpointsError(e)) {
       throw e;
     }
-    console.warn(
-      "Invalid LANGSMITH_RUNS_ENDPOINTS \u2013 must be valid JSON array of objects with api_url and api_key properties, or object mapping url->apiKey",
-    );
+    console.warn("Invalid LANGSMITH_RUNS_ENDPOINTS \u2013 must be valid JSON array of objects with api_url and api_key properties, or object mapping url->apiKey");
     return [];
   }
 }
@@ -10957,7 +10173,7 @@ function _ensureWriteReplicas(replicas) {
       if (Array.isArray(replica)) {
         return {
           projectName: replica[0],
-          updates: replica[1],
+          updates: replica[1]
         };
       }
       return replica;
@@ -11021,10 +10237,7 @@ function formatContent(blocks) {
   });
 }
 function buildUsageMetadata(usage) {
-  const input_tokens =
-    (usage.input_tokens ?? 0) +
-    (usage.cache_creation_input_tokens ?? 0) +
-    (usage.cache_read_input_tokens ?? 0);
+  const input_tokens = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
   const output_tokens = usage.output_tokens ?? 0;
   const total_tokens = input_tokens + output_tokens;
   if (total_tokens === 0) {
@@ -11036,40 +10249,25 @@ function buildUsageMetadata(usage) {
     total_tokens,
     input_token_details: {
       cache_read: usage.cache_read_input_tokens ?? 0,
-      cache_creation: usage.cache_creation_input_tokens ?? 0,
-    },
+      cache_creation: usage.cache_creation_input_tokens ?? 0
+    }
   };
 }
 async function traceTurn(options) {
-  const {
-    turn,
-    sessionId,
-    turnNum,
-    project,
-    parentRunId,
-    existingTaskRunMap,
-    tracedToolUseIds,
-    traceId: providedTraceId,
-    parentDottedOrder: providedParentDottedOrder,
-  } = options;
+  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder } = options;
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
   if (!client) {
     throw new Error("LangSmith client not initialized \u2014 call initClient() first");
   }
-  const userContent =
-    typeof turn.userContent === "string"
-      ? [{ type: "text", text: turn.userContent }]
-      : turn.userContent;
+  const userContent = typeof turn.userContent === "string" ? [{ type: "text", text: turn.userContent }] : turn.userContent;
   let turnRunId;
   let shouldCreateTurn = false;
   if (parentRunId) {
     debug(`Using existing run ${parentRunId} as parent for LLM/tool runs`);
     turnRunId = parentRunId;
     if (!traceId || !parentDottedOrder) {
-      throw new Error(
-        `Missing trace context when using parentRunId. traceId=${traceId}, parentDottedOrder=${parentDottedOrder}`,
-      );
+      throw new Error(`Missing trace context when using parentRunId. traceId=${traceId}, parentDottedOrder=${parentDottedOrder}`);
     }
   } else {
     shouldCreateTurn = true;
@@ -11086,22 +10284,21 @@ async function traceTurn(options) {
       project_name: project,
       start_time: turnStartTime,
       trace_id: traceId,
-      dotted_order: parentDottedOrder,
+      dotted_order: parentDottedOrder
     });
   }
-  const accumulatedMessages = [{ role: "user", content: userContent }];
+  const accumulatedMessages = [
+    { role: "user", content: userContent }
+  ];
   const taskRunMap = {
-    ...existingTaskRunMap,
+    ...existingTaskRunMap
   };
   let lastEndTime = turn.userTimestamp;
   for (const llmCall of turn.llmCalls) {
     const assistantContent = formatContent(llmCall.content);
     const assistantRunId = uuid7();
     const assistantStartTime = isoToMillis(llmCall.startTime);
-    const assistantDottedOrderSegment = generateDottedOrderSegment(
-      assistantStartTime,
-      assistantRunId,
-    );
+    const assistantDottedOrderSegment = generateDottedOrderSegment(assistantStartTime, assistantRunId);
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
     await client.createRun({
       id: assistantRunId,
@@ -11112,7 +10309,7 @@ async function traceTurn(options) {
       start_time: assistantStartTime,
       parent_run_id: turnRunId,
       trace_id: traceId,
-      dotted_order: assistantDottedOrder,
+      dotted_order: assistantDottedOrder
     });
     for (const toolCall of llmCall.toolCalls) {
       if (toolCall.agentId && existingTaskRunMap?.[toolCall.agentId]) {
@@ -11125,8 +10322,7 @@ async function traceTurn(options) {
         continue;
       }
       const toolEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
-      const toolStartTime =
-        isoToMillis(llmCall.endTime) <= isoToMillis(toolEndTime) ? llmCall.endTime : toolEndTime;
+      const toolStartTime = isoToMillis(llmCall.endTime) <= isoToMillis(toolEndTime) ? llmCall.endTime : toolEndTime;
       const toolRunId = uuid7();
       const toolStartTimeMs = isoToMillis(toolStartTime);
       const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTimeMs, toolRunId);
@@ -11144,17 +10340,15 @@ async function traceTurn(options) {
         trace_id: traceId,
         dotted_order: toolDottedOrder,
         extra: {
-          metadata: { thread_id: sessionId, ls_integration: "claude-code" },
-        },
+          metadata: { thread_id: sessionId, ls_integration: "claude-code" }
+        }
       });
       if (toolCall.agentId) {
         taskRunMap[toolCall.agentId] = {
           run_id: toolRunId,
-          dotted_order: toolDottedOrder,
+          dotted_order: toolDottedOrder
         };
-        debug(
-          `Task tool ${toolCall.tool_use.id} \u2192 agentId=${toolCall.agentId}, runId=${toolRunId}`,
-        );
+        debug(`Task tool ${toolCall.tool_use.id} \u2192 agentId=${toolCall.agentId}, runId=${toolRunId}`);
       }
       lastEndTime = toolEndTime;
     }
@@ -11165,7 +10359,7 @@ async function traceTurn(options) {
       parent_run_id: turnRunId,
       end_time: isoToMillis(assistantEndTime),
       outputs: {
-        messages: [{ role: "assistant", content: assistantContent }],
+        messages: [{ role: "assistant", content: assistantContent }]
       },
       extra: {
         metadata: {
@@ -11174,19 +10368,19 @@ async function traceTurn(options) {
           ls_provider: "anthropic",
           ls_model_name: llmCall.model,
           ls_invocation_params: {
-            model: llmCall.model,
+            model: llmCall.model
           },
           usage_metadata: buildUsageMetadata(llmCall.usage),
-          ...(llmCall.synthetic ? { synthetic: true } : {}),
-        },
-      },
+          ...llmCall.synthetic ? { synthetic: true } : {}
+        }
+      }
     });
     accumulatedMessages.push({ role: "assistant", content: assistantContent });
     for (const tc of llmCall.toolCalls) {
       accumulatedMessages.push({
         role: "tool",
         tool_call_id: tc.tool_use.id,
-        content: [{ type: "text", text: tc.result?.content ?? "" }],
+        content: [{ type: "text", text: tc.result?.content ?? "" }]
       });
     }
     lastEndTime = assistantEndTime;
@@ -11204,9 +10398,9 @@ async function traceTurn(options) {
         metadata: {
           thread_id: sessionId,
           ls_integration: "claude-code",
-          turn_number: turnNum,
-        },
-      },
+          turn_number: turnNum
+        }
+      }
     });
   }
   const status = turn.isComplete ? "complete" : "interrupted";
@@ -11261,9 +10455,9 @@ async function tracePendingSubagents(options) {
               ls_integration: "claude-code",
               tool_name: "Agent",
               agent_type: toolName,
-              agent_id: subagent.agent_id,
-            },
-          },
+              agent_id: subagent.agent_id
+            }
+          }
         });
       }
       const subagentChainId = uuid7();
@@ -11286,9 +10480,9 @@ async function tracePendingSubagents(options) {
             ls_integration: "claude-code",
             ls_agent_type: "subagent",
             agent_type: toolName,
-            agent_id: subagent.agent_id,
-          },
-        },
+            agent_id: subagent.agent_id
+          }
+        }
       });
       for (let i = 0; i < subagentTurns.length; i++) {
         await traceTurn({
@@ -11299,7 +10493,7 @@ async function tracePendingSubagents(options) {
           parentRunId: subagentChainId,
           existingTaskRunMap: void 0,
           traceId: parentTraceId,
-          parentDottedOrder: subagentChainDottedOrder,
+          parentDottedOrder: subagentChainDottedOrder
         });
       }
       log(`Traced subagent ${toolName} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`);
@@ -11343,7 +10537,7 @@ function readStdin() {
   return new Promise((resolve, reject) => {
     let data = "";
     process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => (data += chunk));
+    process.stdin.on("data", (chunk) => data += chunk);
     process.stdin.on("end", () => {
       try {
         resolve(JSON.parse(data));
@@ -11360,7 +10554,8 @@ async function main() {
   const startTime = Date.now();
   const input = await readStdin();
   const config = initHook();
-  if (!config) return;
+  if (!config)
+    return;
   debug(`Stop hook started, session=${input.session_id}`);
   if (input.stop_hook_active) {
     debug("stop_hook_active=true, skipping");
@@ -11394,9 +10589,7 @@ async function main() {
     const lastLlm = lastTurn.llmCalls[lastTurn.llmCalls.length - 1];
     if (lastLlm && lastLlm.toolCalls.length > 0) {
       debug("Final LLM response missing from transcript, synthesizing from last_assistant_message");
-      const syntheticStart = sessionState.last_tool_end_time
-        ? new Date(sessionState.last_tool_end_time).toISOString()
-        : (lastLlm.toolCalls[lastLlm.toolCalls.length - 1].result?.timestamp ?? lastLlm.endTime);
+      const syntheticStart = sessionState.last_tool_end_time ? new Date(sessionState.last_tool_end_time).toISOString() : lastLlm.toolCalls[lastLlm.toolCalls.length - 1].result?.timestamp ?? lastLlm.endTime;
       const syntheticEnd = new Date(startTime).toISOString();
       lastTurn.llmCalls.push({
         content: [{ type: "text", text: input.last_assistant_message }],
@@ -11405,7 +10598,7 @@ async function main() {
         startTime: syntheticStart,
         endTime: syntheticEnd,
         toolCalls: [],
-        synthetic: true,
+        synthetic: true
       });
     }
   }
@@ -11434,7 +10627,7 @@ async function main() {
         existingTaskRunMap,
         tracedToolUseIds,
         traceId,
-        parentDottedOrder: dottedOrder,
+        parentDottedOrder: dottedOrder
       });
       allTaskRunMaps = { ...allTaskRunMaps, ...taskRunMap };
       tracedTurns++;
@@ -11451,16 +10644,16 @@ async function main() {
         parent_run_id: currentParentRunId,
         end_time: Date.now(),
         outputs: {
-          messages: [{ role: "assistant", content: input.last_assistant_message }],
+          messages: [{ role: "assistant", content: input.last_assistant_message }]
         },
         extra: {
           metadata: {
             thread_id: input.session_id,
             ls_integration: "claude-code",
             ls_agent_type: "root",
-            turn_number: sessionState.current_turn_number,
-          },
-        },
+            turn_number: sessionState.current_turn_number
+          }
+        }
       });
       debug(`Turn run ${currentRunId} completed`);
     } catch (err) {
@@ -11478,7 +10671,7 @@ async function main() {
       pendingSubagents,
       taskRunMap: mergedTaskRunMap,
       parentTraceId: freshSession.current_trace_id,
-      project: config.project,
+      project: config.project
     });
   }
   const savedLastLine = tracedTurns > 0 ? lastLine : sessionState.last_line;
@@ -11491,7 +10684,7 @@ async function main() {
       latestSession.turn_count + tracedTurns,
       // Merge any late PostToolUse writes with our traced entries. allTaskRunMaps
       // wins on conflicts since it has the fully resolved data from traceTurn.
-      { ...latestSession.task_run_map, ...allTaskRunMaps },
+      { ...latestSession.task_run_map, ...allTaskRunMaps }
     );
     updatedState[input.session_id].current_turn_run_id = void 0;
     updatedState[input.session_id].pending_subagent_traces = [];
@@ -11509,6 +10702,7 @@ async function main() {
 main().catch((err) => {
   try {
     error(`Stop hook fatal error: ${err}`);
-  } catch {}
+  } catch {
+  }
   process.exit(0);
 });
