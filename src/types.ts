@@ -199,9 +199,6 @@ export interface SessionState {
     agent_transcript_path: string;
     session_id: string;
   }>;
-  /** Transcript paths for spawned subagents (set by SubagentStart).
-   *  Provides transcript paths even when SubagentStop doesn't fire (interrupted subagents). */
-  subagent_transcript_paths?: Record<string, { transcript_path: string; agent_type: string }>;
 }
 
 export interface TracingState {

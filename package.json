@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "postbuild": "chmod +x dist/hooks/user-prompt-submit.js dist/hooks/post-tool-use.js dist/hooks/stop.js dist/hooks/stop-failure.js dist/hooks/subagent-start.js dist/hooks/subagent-stop.js dist/hooks/pre-compact.js dist/hooks/post-compact.js dist/hooks/session-end.js",
+    "postbuild": "chmod +x dist/hooks/user-prompt-submit.js dist/hooks/post-tool-use.js dist/hooks/stop.js dist/hooks/stop-failure.js dist/hooks/subagent-stop.js dist/hooks/pre-compact.js dist/hooks/post-compact.js dist/hooks/session-end.js",
     "dev": "tsc --watch",
     "format": "oxfmt --write",
     "test": "vitest run",

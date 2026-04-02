@@ -16,13 +16,7 @@ import {
   updateSessionState,
   pruneOldSessions,
 } from "../state.js";
-import {
-  initClient,
-  traceTurn,
-  tracePendingSubagents,
-  buildPendingSubagentList,
-  flushPendingTraces,
-} from "../langsmith.js";
+import { initClient, traceTurn, tracePendingSubagents, flushPendingTraces } from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import type { StopHookInput } from "../types.js";
@@ -195,14 +189,8 @@ async function main(): Promise<void> {
   // Merge task_run_map entries written by PostToolUse with those from traceTurn
   const mergedTaskRunMap = { ...freshSession.task_run_map, ...allTaskRunMaps };
 
-  // Build pending subagents: SubagentStop entries + SubagentStart fallbacks for
-  // any interrupted subagents where SubagentStop never fired.
-  const pendingSubagents = buildPendingSubagentList(
-    input.session_id,
-    freshSession.pending_subagent_traces ?? [],
-    freshSession.subagent_transcript_paths ?? {},
-    mergedTaskRunMap,
-  );
+  // Process any pending subagent traces queued by SubagentStop
+  const pendingSubagents = freshSession.pending_subagent_traces || [];
   if (pendingSubagents.length > 0) {
     debug(`Processing ${pendingSubagents.length} pending subagent trace(s)`);
     await tracePendingSubagents({
@@ -234,7 +222,6 @@ async function main(): Promise<void> {
     // Clear fields that are no longer needed
     updatedState[input.session_id].current_turn_run_id = undefined;
     updatedState[input.session_id].pending_subagent_traces = [];
-    updatedState[input.session_id].subagent_transcript_paths = {};
     updatedState[input.session_id].traced_tool_use_ids = [];
     return pruneOldSessions(updatedState);
   });
