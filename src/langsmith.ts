@@ -9,6 +9,7 @@
 import { Client, uuid7 } from "langsmith";
 import type { Turn, ContentBlock, Usage } from "./types.js";
 import { readTranscript, groupIntoTurns } from "./transcript.js";
+import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
 import { debug } from "./logger.js";
 
@@ -378,6 +379,105 @@ export async function traceTurn(
   );
 
   return taskRunMap;
+}
+
+// ─── Interrupted turn recovery ──────────────────────────────────────────────
+
+/**
+ * Close an interrupted turn run (Stop never fired for it).
+ * Traces any LLM calls from the transcript, processes pending subagents,
+ * closes the parent run with "User interrupt", and flushes pending traces.
+ *
+ * Used by UserPromptSubmit (on next prompt in same session) and SessionEnd
+ * (on session exit after interrupt).
+ *
+ * @returns The advanced `lastLine` and number of turns traced, so the caller
+ *          can advance `last_line` / `turn_count` in state.
+ */
+export async function closeInterruptedTurn(options: {
+  sessionId: string;
+  sessionState: import("./types.js").SessionState;
+  transcriptPath: string | undefined;
+  project: string;
+  stateFilePath: string;
+}): Promise<{ lastLine: number; turnsTraced: number }> {
+  const { sessionId, sessionState, transcriptPath, project, stateFilePath } = options;
+  if (!client) throw new Error("LangSmith client not initialized — call initClient() first");
+
+  let lastLine = sessionState.last_line;
+  let turnsTraced = 0;
+  let taskRunMap = sessionState.task_run_map ?? {};
+
+  // Trace LLM calls from the transcript if we have a path.
+  if (transcriptPath) {
+    try {
+      const { messages, lastLine: newLastLine } = readTranscript(
+        transcriptPath,
+        sessionState.last_line,
+      );
+      if (messages.length > 0) {
+        const turns = groupIntoTurns(messages);
+        if (turns.length > 0) {
+          await traceTurn({
+            turn: turns[turns.length - 1],
+            sessionId,
+            turnNum: sessionState.turn_count + 1,
+            project,
+            parentRunId: sessionState.current_turn_run_id,
+            existingTaskRunMap: taskRunMap,
+            tracedToolUseIds: new Set(sessionState.traced_tool_use_ids ?? []),
+            traceId: sessionState.current_trace_id,
+            parentDottedOrder: sessionState.current_dotted_order,
+          });
+          lastLine = newLastLine;
+          turnsTraced = 1;
+        }
+      }
+    } catch (err) {
+      logger.error(`Failed to trace interrupted turn transcript: ${err}`);
+    }
+  }
+
+  // Re-read state to pick up any task_run_map / pending_subagent_traces written by
+  // async PostToolUse / SubagentStop hooks after the snapshot was taken.
+  const freshSession = getSessionState(loadState(stateFilePath), sessionId);
+  taskRunMap = { ...taskRunMap, ...freshSession.task_run_map };
+  const pendingSubagents = freshSession.pending_subagent_traces ?? [];
+
+  // Trace any pending subagents queued by SubagentStop.
+  if (pendingSubagents.length > 0) {
+    try {
+      await tracePendingSubagents({
+        sessionId,
+        pendingSubagents,
+        taskRunMap,
+        parentTraceId: sessionState.current_trace_id,
+        project,
+      });
+    } catch (err) {
+      logger.error(`Failed to trace pending subagents on interrupt: ${err}`);
+    }
+  }
+
+  // Close the parent turn run with "User interrupt".
+  await client.updateRun(sessionState.current_turn_run_id!, {
+    trace_id: sessionState.current_trace_id,
+    dotted_order: sessionState.current_dotted_order,
+    parent_run_id: sessionState.current_parent_run_id,
+    end_time: Date.now(),
+    error: "User interrupt",
+    extra: {
+      metadata: {
+        thread_id: sessionId,
+        ls_integration: "claude-code",
+        turn_number: sessionState.current_turn_number,
+      },
+    },
+  });
+
+  await flushPendingTraces();
+
+  return { lastLine, turnsTraced };
 }
 
 // ─── Subagent tracing ────────────────────────────────────────────────────────

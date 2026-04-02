@@ -15,12 +15,10 @@ import { uuid7 } from "langsmith";
 import { debug, error } from "../logger.js";
 import {
   initClient,
-  traceTurn,
-  tracePendingSubagents,
+  closeInterruptedTurn,
   generateDottedOrderSegment,
   parseDottedOrder,
 } from "../langsmith.js";
-import { readTranscript, groupIntoTurns } from "../transcript.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -64,70 +62,18 @@ async function main(): Promise<void> {
 
   if (sessionState.current_turn_run_id) {
     debug(`Tracing interrupted turn ${sessionState.current_turn_run_id}`);
-    const taskRunMap = sessionState.task_run_map ?? {};
-
-    // Trace LLM calls from the transcript.
-    const transcriptPath = expandHome(input.transcript_path);
-    if (transcriptPath) {
-      try {
-        const { messages, lastLine } = readTranscript(transcriptPath, sessionState.last_line);
-        if (messages.length > 0) {
-          const turns = groupIntoTurns(messages);
-          if (turns.length > 0) {
-            await traceTurn({
-              turn: turns[turns.length - 1],
-              sessionId: input.session_id,
-              turnNum: sessionState.turn_count + 1,
-              project: config.project,
-              parentRunId: sessionState.current_turn_run_id,
-              existingTaskRunMap: taskRunMap,
-              tracedToolUseIds: new Set(sessionState.traced_tool_use_ids ?? []),
-              traceId: sessionState.current_trace_id,
-              parentDottedOrder: sessionState.current_dotted_order,
-            });
-            interruptedLastLine = lastLine;
-            interruptedTurnsTraced = 1;
-          }
-        }
-      } catch (err) {
-        error(`Failed to trace interrupted turn transcript: ${err}`);
-      }
-    }
-
-    // Trace any pending subagents (SubagentStop already queued them).
-    const pendingSubagents = sessionState.pending_subagent_traces ?? [];
-    if (pendingSubagents.length > 0) {
-      try {
-        await tracePendingSubagents({
-          sessionId: input.session_id,
-          pendingSubagents,
-          taskRunMap,
-          parentTraceId: sessionState.current_trace_id,
-          project: config.project,
-        });
-      } catch (err) {
-        error(`Failed to trace pending subagents: ${err}`);
-      }
-    }
-
-    // Close the parent turn run.
     try {
-      await client.updateRun(sessionState.current_turn_run_id, {
-        trace_id: sessionState.current_trace_id,
-        dotted_order: sessionState.current_dotted_order,
-        parent_run_id: sessionState.current_parent_run_id,
-        end_time: Date.now(),
-        error: "User interrupt",
-        extra: {
-          metadata: {
-            thread_id: input.session_id,
-            ls_integration: "claude-code",
-            turn_number: sessionState.current_turn_number,
-          },
-        },
+      const { lastLine, turnsTraced } = await closeInterruptedTurn({
+        sessionId: input.session_id,
+        sessionState,
+        transcriptPath: expandHome(input.transcript_path),
+        project: config.project,
+        stateFilePath: config.stateFilePath,
       });
+      interruptedLastLine = lastLine;
+      interruptedTurnsTraced = turnsTraced;
     } catch (err) {
-      error(`Failed to close interrupted turn run: ${err}`);
+      error(`Failed to close interrupted turn: ${err}`);
     }
   }
 
