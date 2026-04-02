@@ -136,12 +136,12 @@ describe("atomicUpdateState", () => {
 
 describe("pruneOldSessions", () => {
   const now = Date.now();
-  const eightDaysAgo = new Date(now - 8 * 24 * 60 * 60 * 1000).toISOString();
+  const twoDaysAgo = new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString();
   const oneHourAgo = new Date(now - 60 * 60 * 1000).toISOString();
 
-  it("removes sessions older than 7 days", () => {
+  it("removes sessions older than 24 hours", () => {
     const state = {
-      old: { last_line: 5, turn_count: 1, updated: eightDaysAgo },
+      old: { last_line: 5, turn_count: 1, updated: twoDaysAgo },
       recent: { last_line: 10, turn_count: 2, updated: oneHourAgo },
     };
     const result = pruneOldSessions(state, now);
@@ -161,8 +161,8 @@ describe("pruneOldSessions", () => {
 
   it("returns empty object when all sessions are stale", () => {
     const state = {
-      old1: { last_line: 0, turn_count: 0, updated: eightDaysAgo },
-      old2: { last_line: 0, turn_count: 0, updated: eightDaysAgo },
+      old1: { last_line: 0, turn_count: 0, updated: twoDaysAgo },
+      old2: { last_line: 0, turn_count: 0, updated: twoDaysAgo },
     };
     expect(pruneOldSessions(state, now)).toEqual({});
   });
@@ -176,19 +176,30 @@ describe("pruneOldSessions", () => {
     expect(Object.keys(result)).toHaveLength(2);
   });
 
-  it("preserves old sessions with an active turn (current_turn_run_id set)", () => {
+  it("prunes sessions with current_turn_run_id older than 24 hours", () => {
+    const state = {
+      abandoned: {
+        last_line: 500,
+        turn_count: 50,
+        updated: twoDaysAgo,
+        current_turn_run_id: "run-abc-123",
+      },
+    };
+    const result = pruneOldSessions(state, now);
+    expect(result).not.toHaveProperty("abandoned");
+  });
+
+  it("preserves sessions with current_turn_run_id within 24 hours", () => {
     const state = {
       active: {
         last_line: 500,
         turn_count: 50,
-        updated: eightDaysAgo,
+        updated: oneHourAgo,
         current_turn_run_id: "run-abc-123",
       },
-      inactive: { last_line: 5, turn_count: 1, updated: eightDaysAgo },
     };
     const result = pruneOldSessions(state, now);
     expect(result).toHaveProperty("active");
-    expect(result).not.toHaveProperty("inactive");
   });
 });
 

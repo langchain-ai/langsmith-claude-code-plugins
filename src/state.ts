@@ -96,22 +96,18 @@ export function getSessionState(state: TracingState, sessionId: string): Session
 
 // ─── Session pruning ───────────────────────────────────────────────────────
 
-const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
- * Remove sessions whose `updated` timestamp is older than SESSION_MAX_AGE_MS.
- * Sessions with an active turn (current_turn_run_id set) are never pruned,
- * since pruning would reset last_line and cause a full transcript replay.
+ * Remove sessions whose `updated` timestamp is older than 24 hours.
+ * Pruned sessions that are later resumed will skip to the end of their
+ * transcript (handled by UserPromptSubmit's fresh-state logic), so there's
+ * no risk of replaying old messages.
  */
 export function pruneOldSessions(state: TracingState, now: number = Date.now()): TracingState {
   const cutoff = now - SESSION_MAX_AGE_MS;
   const pruned: TracingState = {};
   for (const [sessionId, session] of Object.entries(state)) {
-    // Never prune a session with an active turn — its state is in use.
-    if (session.current_turn_run_id) {
-      pruned[sessionId] = session;
-      continue;
-    }
     const updatedMs = session.updated ? new Date(session.updated).getTime() : 0;
     if (updatedMs >= cutoff) {
       pruned[sessionId] = session;
