@@ -1,17 +1,17 @@
 {
-  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "langsmith-claude-code-plugins",
-  "description": "Trace Claude Code conversations, tool calls, subagent executions, and context compaction to LangSmith",
   "owner": {
     "name": "LangChain",
     "email": "support@langchain.dev"
+  },
+  "metadata": {
+    "description": "Trace Claude Code conversations, tool calls, subagent executions, and context compaction to LangSmith",
   },
   "plugins": [
     {
       "name": "langsmith-tracing",
       "description": "Traces Claude Code sessions to LangSmith with full observability: LLM calls, tool executions, subagent runs, and context compaction events",
-      "source": ".",
-      "category": "development",
+      "source": "./",
       "homepage": "https://github.com/langchain-ai/langsmith-claude-code-plugins"
     }
   ]
