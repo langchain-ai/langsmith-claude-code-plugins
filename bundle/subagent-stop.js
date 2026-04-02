@@ -4,8 +4,7 @@
 import { appendFileSync, mkdirSync, statSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
-var LOG_FILE =
-  process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
+var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
 var debugEnabled = false;
 function initLogger(debug2) {
   debugEnabled = debug2;
@@ -16,16 +15,18 @@ function rotateIfNeeded() {
     if (statSync(LOG_FILE).size >= MAX_LOG_BYTES) {
       renameSync(LOG_FILE, `${LOG_FILE}.1`);
     }
-  } catch {}
+  } catch {
+  }
 }
 function write(level, message) {
-  const timestamp = /* @__PURE__ */ new Date().toISOString().replace("T", " ").replace("Z", "");
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").replace("Z", "");
   const line = `${timestamp} [${level}] ${message}
 `;
   try {
     rotateIfNeeded();
     appendFileSync(LOG_FILE, line);
-  } catch {}
+  } catch {
+  }
 }
 function error(message) {
   write("ERROR", message);
@@ -37,14 +38,7 @@ function debug(message) {
 }
 
 // dist/state.js
-import {
-  readFileSync,
-  writeFileSync,
-  mkdirSync as mkdirSync2,
-  openSync,
-  closeSync,
-  unlinkSync,
-} from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync as mkdirSync2, openSync, closeSync, unlinkSync } from "node:fs";
 import { dirname as dirname2 } from "node:path";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
@@ -69,12 +63,14 @@ async function acquireLock(stateFilePath) {
   }
   try {
     unlinkSync(lock);
-  } catch {}
+  } catch {
+  }
 }
 function releaseLock(stateFilePath) {
   try {
     unlinkSync(lockPath(stateFilePath));
-  } catch {}
+  } catch {
+  }
 }
 async function atomicUpdateState(stateFilePath, fn) {
   await acquireLock(stateFilePath);
@@ -94,14 +90,12 @@ function loadState(stateFilePath) {
   }
 }
 function getSessionState(state, sessionId) {
-  return (
-    state[sessionId] ?? {
-      last_line: -1,
-      turn_count: 0,
-      updated: "",
-      task_run_map: {},
-    }
-  );
+  return state[sessionId] ?? {
+    last_line: -1,
+    turn_count: 0,
+    updated: "",
+    task_run_map: {}
+  };
 }
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
@@ -139,7 +133,7 @@ function readStdin() {
   return new Promise((resolve, reject) => {
     let data = "";
     process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => (data += chunk));
+    process.stdin.on("data", (chunk) => data += chunk);
     process.stdin.on("end", () => {
       try {
         resolve(JSON.parse(data));
@@ -155,7 +149,8 @@ function readStdin() {
 async function main() {
   const input = await readStdin();
   const config = initHook();
-  if (!config) return;
+  if (!config)
+    return;
   debug(`SubagentStop hook: agent_id=${input.agent_id}, type=${input.agent_type}`);
   const agentTranscriptPath = expandHome(input.agent_transcript_path);
   if (!agentTranscriptPath) {
@@ -169,24 +164,23 @@ async function main() {
       [input.session_id]: {
         ...parentSessionState,
         pending_subagent_traces: [
-          ...(parentSessionState.pending_subagent_traces || []),
+          ...parentSessionState.pending_subagent_traces || [],
           {
             agent_id: input.agent_id,
             agent_type: input.agent_type,
             agent_transcript_path: agentTranscriptPath,
-            session_id: input.session_id,
-          },
-        ],
-      },
+            session_id: input.session_id
+          }
+        ]
+      }
     };
   });
-  debug(
-    `Queued subagent trace for ${input.agent_type} (${input.agent_id}) - will be processed by Stop hook`,
-  );
+  debug(`Queued subagent trace for ${input.agent_type} (${input.agent_id}) - will be processed by Stop hook`);
 }
 main().catch((err) => {
   try {
     error(`SubagentStop hook fatal error: ${err}`);
-  } catch {}
+  } catch {
+  }
   process.exit(0);
 });
