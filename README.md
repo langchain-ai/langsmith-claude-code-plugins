@@ -142,6 +142,11 @@ Your outer run (chain)
     └── Claude (llm)
 ```
 
+## Known limitations
+
+Currently, subagents are only traced upon completion. This means if you interrupt a conversation turn during a subagent run,
+the subagent runs will not be traced.
+
 ## Development
 
 ```bash

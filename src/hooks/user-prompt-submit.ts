@@ -130,6 +130,7 @@ async function main(): Promise<void> {
         // Clear interrupted turn's stale data
         task_run_map: {},
         traced_tool_use_ids: [],
+        tool_start_times: {},
         pending_subagent_traces: [],
       },
     };

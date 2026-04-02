@@ -67,6 +67,7 @@ async function main(): Promise<void> {
           current_parent_run_id: undefined,
           task_run_map: {},
           traced_tool_use_ids: [],
+          tool_start_times: {},
           pending_subagent_traces: [],
         },
       };

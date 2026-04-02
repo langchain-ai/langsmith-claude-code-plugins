@@ -170,7 +170,7 @@ async function main(): Promise<void> {
           metadata: {
             thread_id: input.session_id,
             ls_integration: "claude-code",
-            ls_agent_type: "agent",
+            ls_agent_type: "root",
             turn_number: sessionState.current_turn_number,
           },
         },
@@ -223,6 +223,7 @@ async function main(): Promise<void> {
     updatedState[input.session_id].current_turn_run_id = undefined;
     updatedState[input.session_id].pending_subagent_traces = [];
     updatedState[input.session_id].traced_tool_use_ids = [];
+    updatedState[input.session_id].tool_start_times = {};
     return pruneOldSessions(updatedState);
   });
 

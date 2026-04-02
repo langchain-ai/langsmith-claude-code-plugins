@@ -528,8 +528,22 @@ export async function tracePendingSubagents(options: {
 
       debug(`Processing subagent ${toolName} (${subagent.agent_id}) under run ${parentToolRunId}`);
 
+      // Read subagent transcript and trace its turns.
+      const { messages: subagentMessages } = readTranscript(subagent.agent_transcript_path, -1);
+      if (subagentMessages.length === 0) {
+        debug(`Empty subagent transcript: ${subagent.agent_transcript_path}`);
+        continue;
+      }
+
+      const subagentTurns = groupIntoTurns(subagentMessages);
+
+      // PreToolUse records start time before the tool runs; PostToolUse records
+      // end time after — so deferred times already bracket the subagent's transcript.
+      const subagentStartTime = (deferred?.start_time as number | undefined) ?? Date.now();
+      const subagentEndTime = (deferred?.end_time as number | undefined) ?? Date.now();
+
       // PostToolUse deferred the Agent tool run creation so we can use the
-      // real subagent name. Create it now with the correct name.
+      // real subagent name. Create it now with the correct name and clamped times.
       if (deferred) {
         await client.createRun({
           id: parentToolRunId,
@@ -538,8 +552,8 @@ export async function tracePendingSubagents(options: {
           inputs: { input: deferred.inputs },
           outputs: { output: deferred.outputs },
           project_name: deferred.project_name as string | undefined,
-          start_time: deferred.start_time as number,
-          end_time: deferred.end_time as number,
+          start_time: subagentStartTime,
+          end_time: subagentEndTime,
           parent_run_id: deferred.parent_run_id as string,
           trace_id: deferred.trace_id as string,
           dotted_order: agentToolDottedOrder,
@@ -555,20 +569,10 @@ export async function tracePendingSubagents(options: {
         });
       }
 
-      // Read subagent transcript and trace its turns.
-      const { messages: subagentMessages } = readTranscript(subagent.agent_transcript_path, -1);
-      if (subagentMessages.length === 0) {
-        debug(`Empty subagent transcript: ${subagent.agent_transcript_path}`);
-        continue;
-      }
-
-      const subagentTurns = groupIntoTurns(subagentMessages);
-
       // Create an intermediate chain run as a child of the Agent tool run,
       // then nest all subagent turns under it.
       const subagentChainId = uuid7();
-      const subagentChainStartTime = (deferred?.start_time as number | undefined) ?? Date.now();
-      const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentChainStartTime, subagentChainId)}`;
+      const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentStartTime, subagentChainId)}`;
 
       await client.createRun({
         id: subagentChainId,
@@ -577,8 +581,8 @@ export async function tracePendingSubagents(options: {
         inputs: deferred?.inputs ?? {},
         outputs: { output: deferred?.outputs },
         project_name: project,
-        start_time: subagentChainStartTime,
-        end_time: (deferred?.end_time as number | undefined) ?? Date.now(),
+        start_time: subagentStartTime,
+        end_time: subagentEndTime,
         parent_run_id: parentToolRunId,
         trace_id: parentTraceId,
         dotted_order: subagentChainDottedOrder,
@@ -586,6 +590,7 @@ export async function tracePendingSubagents(options: {
           metadata: {
             thread_id: sessionId,
             ls_integration: "claude-code",
+            ls_agent_type: "subagent",
             agent_type: toolName,
             agent_id: subagent.agent_id,
           },

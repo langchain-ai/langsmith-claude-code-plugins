@@ -56,16 +56,18 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Generate run ID and dotted order for this tool
+  // Generate run ID and dotted order for this tool.
+  // Use PreToolUse's recorded start time if available (accurate wall-clock time
+  // from before the tool ran), otherwise fall back to Date.now().
   const toolRunId = uuid7();
-  const startTime = Date.now();
+  const startTime = sessionState.tool_start_times?.[input.tool_use_id] ?? Date.now();
+  const toolEndTime = Date.now();
 
   // Generate proper dotted order segment
   const toolDottedOrderSegment = generateDottedOrderSegment(startTime, toolRunId);
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
 
   const agentId = (input.tool_response as { agentId?: string }).agentId;
-  const toolEndTime = Date.now();
 
   if (agentId) {
     // Agent tool: defer LangSmith run creation to the Stop hook, which will
