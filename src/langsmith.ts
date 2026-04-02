@@ -513,6 +513,11 @@ export async function tracePendingSubagents(options: {
     throw new Error("LangSmith client not initialized — call initClient() first");
   }
 
+  if (!parentTraceId) {
+    logger.warn("Cannot trace subagents: no parent trace ID");
+    return;
+  }
+
   for (const subagent of pendingSubagents) {
     try {
       const taskRunInfo = taskRunMap[subagent.agent_id];
@@ -549,8 +554,8 @@ export async function tracePendingSubagents(options: {
           id: parentToolRunId,
           name: "Agent",
           run_type: "tool",
-          inputs: { input: deferred.inputs },
-          outputs: { output: deferred.outputs },
+          inputs: { input: deferred.inputs ?? {} },
+          outputs: { output: deferred.outputs ?? {} },
           project_name: deferred.project_name as string | undefined,
           start_time: subagentStartTime,
           end_time: subagentEndTime,
