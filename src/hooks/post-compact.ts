@@ -8,7 +8,7 @@
 
 import { uuid7 } from "langsmith";
 import { debug, error } from "../logger.js";
-import { initClient, flushPendingTraces, generateDottedOrderSegment } from "../langsmith.js";
+import { initClient, generateDottedOrderSegment } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -63,7 +63,6 @@ async function main(): Promise<void> {
     });
 
     debug(`Created compaction run ${runId} (${input.trigger})`);
-    await flushPendingTraces();
   } catch (err) {
     error(`Failed to create compaction run: ${err}`);
   }
