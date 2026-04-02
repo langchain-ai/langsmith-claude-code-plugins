@@ -35,6 +35,17 @@
         ]
       }
     ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/stop-failure.js\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "SubagentStop": [
       {
         "hooks": [

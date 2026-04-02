@@ -45,6 +45,31 @@ async function main(): Promise<void> {
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
+
+  // If there's a stale turn run, the previous turn was interrupted (Stop never fired).
+  // Close it out so its child tool runs become visible in LangSmith.
+  if (sessionState.current_turn_run_id) {
+    debug(`Closing interrupted turn run ${sessionState.current_turn_run_id}`);
+    try {
+      await client.updateRun(sessionState.current_turn_run_id, {
+        trace_id: sessionState.current_trace_id,
+        dotted_order: sessionState.current_dotted_order,
+        parent_run_id: sessionState.current_parent_run_id,
+        end_time: Date.now(),
+        error: "User interrupt",
+        extra: {
+          metadata: {
+            thread_id: input.session_id,
+            ls_integration: "claude-code",
+            turn_number: sessionState.current_turn_number,
+          },
+        },
+      });
+    } catch (err) {
+      error(`Failed to close interrupted turn run: ${err}`);
+    }
+  }
+
   const turnNum = sessionState.turn_count + 1;
 
   const runId = uuid7();
