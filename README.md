@@ -20,6 +20,13 @@ From within Claude Code, run:
 /reload-plugins
 ```
 
+To update, run:
+
+```
+/plugin marketplace update langsmith-claude-code-plugins
+/reload-plugins
+```
+
 ### From source (development)
 
 ```bash
