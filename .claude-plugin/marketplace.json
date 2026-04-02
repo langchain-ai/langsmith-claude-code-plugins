@@ -5,7 +5,7 @@
     "email": "support@langchain.dev"
   },
   "metadata": {
-    "description": "Trace Claude Code conversations, tool calls, subagent executions, and context compaction to LangSmith",
+    "description": "Trace Claude Code conversations, tool calls, subagent executions, and context compaction to LangSmith"
   },
   "plugins": [
     {
