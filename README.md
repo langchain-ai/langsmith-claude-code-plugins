@@ -31,7 +31,7 @@ claude --plugin-dir /path/to/tracing-claude-code
 
 **Option 1: Claude Code settings file (recommended)**
 
-Add to `~/.claude/settings.local.json`:
+Add to `~/.claude/settings.json`:
 
 ```json
 {

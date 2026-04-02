@@ -169,7 +169,10 @@ export async function traceTurn(
     throw new Error("LangSmith client not initialized — call initClient() first");
   }
 
-  const userContent = [{ type: "text", text: turn.userContent }];
+  const userContent =
+    typeof turn.userContent === "string"
+      ? [{ type: "text", text: turn.userContent }]
+      : turn.userContent;
 
   // Determine the turn run ID and whether we need to create it
   let turnRunId: string;

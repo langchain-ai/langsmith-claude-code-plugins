@@ -43,14 +43,22 @@ export function readTranscript(
   return { messages, lastLine };
 }
 
-/** Check if a message is a human user prompt (string content) vs tool result (array content). */
+/** Check if a message is a human user prompt (string content, or array content without tool_result blocks — e.g. images). */
 export function isHumanMessage(msg: TranscriptMessage): msg is UserMessage {
-  return msg.type === "user" && typeof msg.message.content === "string";
+  if (msg.type !== "user") return false;
+  if (typeof msg.message.content === "string") return true;
+  // Array content is a human message if it contains no tool_result blocks
+  // (e.g. text + image content blocks).
+  if (Array.isArray(msg.message.content)) {
+    return !msg.message.content.some((b: { type: string }) => b.type === "tool_result");
+  }
+  return false;
 }
 
-/** Check if a message is a tool result. */
+/** Check if a message is a tool result (array content with tool_result blocks). */
 export function isToolResult(msg: TranscriptMessage): msg is ToolResultMessage {
-  return msg.type === "user" && Array.isArray(msg.message.content);
+  if (msg.type !== "user" || !Array.isArray(msg.message.content)) return false;
+  return msg.message.content.some((b: { type: string }) => b.type === "tool_result");
 }
 
 /** Check if a message is an assistant message. */
@@ -215,7 +223,7 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
     }
 
     turns.push({
-      userContent: currentUser.message.content,
+      userContent: currentUser.message.content as string | Array<Record<string, unknown>>,
       userTimestamp: currentUser.timestamp,
       llmCalls,
       isComplete,

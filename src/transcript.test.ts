@@ -155,6 +155,22 @@ describe("isHumanMessage", () => {
     expect(isHumanMessage(makeUser("Hello"))).toBe(true);
   });
 
+  it("returns true for user message with array content (e.g. images)", () => {
+    const msg = {
+      type: "user" as const,
+      message: {
+        role: "user" as const,
+        content: [
+          { type: "text", text: "Check this image" },
+          { type: "image", source: { type: "base64", data: "abc" } },
+        ],
+      },
+      timestamp: "2025-01-01T00:00:00Z",
+    } as const;
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(isHumanMessage(msg as any)).toBe(true);
+  });
+
   it("returns false for tool result message", () => {
     expect(isHumanMessage(makeToolResult("tool_1", "result"))).toBe(false);
   });
@@ -171,6 +187,22 @@ describe("isToolResult", () => {
 
   it("returns false for human user message", () => {
     expect(isToolResult(makeUser("Hello"))).toBe(false);
+  });
+
+  it("returns false for user message with array content that has no tool_result blocks", () => {
+    const msg = {
+      type: "user" as const,
+      message: {
+        role: "user" as const,
+        content: [
+          { type: "text", text: "Check this image" },
+          { type: "image", source: { type: "base64", data: "abc" } },
+        ],
+      },
+      timestamp: "2025-01-01T00:00:00Z",
+    };
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(isToolResult(msg as any)).toBe(false);
   });
 
   it("returns false for assistant message", () => {
@@ -410,6 +442,25 @@ describe("groupIntoTurns", () => {
     const turns = groupIntoTurns(messages);
     // Should still work; the tool call just won't have a result
     expect(turns[0].llmCalls[0].toolCalls[0].result).toBeUndefined();
+  });
+
+  it("handles user message with image content (array content blocks)", () => {
+    const imageContent = [
+      { type: "text", text: "Seems to look okay to me?" },
+      { type: "image", source: { type: "base64", data: "abc" } },
+    ];
+    const messages: TranscriptMessage[] = [
+      {
+        type: "user",
+        message: { role: "user", content: imageContent },
+        timestamp: "2025-01-01T00:00:00Z",
+      } as unknown as TranscriptMessage,
+      makeAssistant("msg_1", "Yes, that looks correct."),
+    ];
+    const turns = groupIntoTurns(messages);
+    expect(turns).toHaveLength(1);
+    expect(turns[0].userContent).toEqual(imageContent);
+    expect(turns[0].llmCalls).toHaveLength(1);
   });
 
   it("preserves user timestamp", () => {

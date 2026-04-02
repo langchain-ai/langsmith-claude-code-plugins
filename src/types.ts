@@ -149,7 +149,7 @@ export interface LLMCall {
 
 /** A complete turn: one user prompt → one or more LLM calls. */
 export interface Turn {
-  userContent: string;
+  userContent: string | Array<Record<string, unknown>>;
   userTimestamp: string;
   llmCalls: LLMCall[];
   /** Whether the turn is complete (has stop_reason: "end_turn"). If false, the assistant is still responding. */
