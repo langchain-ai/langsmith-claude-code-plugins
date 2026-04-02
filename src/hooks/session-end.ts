@@ -68,6 +68,7 @@ async function main(): Promise<void> {
           task_run_map: {},
           traced_tool_use_ids: [],
           pending_subagent_traces: [],
+          subagent_transcript_paths: {},
         },
       };
     });

@@ -409,6 +409,9 @@ export async function closeInterruptedTurn(options: {
   let taskRunMap = sessionState.task_run_map ?? {};
 
   // Trace LLM calls from the transcript if we have a path.
+  // Capture the returned task run map — if traceTurn created an Agent tool run
+  // directly (because PostToolUse's deferred entry wasn't in state yet), that
+  // entry serves as the fallback parent for tracePendingSubagents.
   if (transcriptPath) {
     try {
       const { messages, lastLine: newLastLine } = readTranscript(
@@ -418,7 +421,7 @@ export async function closeInterruptedTurn(options: {
       if (messages.length > 0) {
         const turns = groupIntoTurns(messages);
         if (turns.length > 0) {
-          await traceTurn({
+          const transcriptTaskRunMap = await traceTurn({
             turn: turns[turns.length - 1],
             sessionId,
             turnNum: sessionState.turn_count + 1,
@@ -429,6 +432,9 @@ export async function closeInterruptedTurn(options: {
             traceId: sessionState.current_trace_id,
             parentDottedOrder: sessionState.current_dotted_order,
           });
+          // Merge transcript-discovered runs; deferred entries from state take
+          // precedence so we don't create duplicate Agent tool runs.
+          taskRunMap = { ...transcriptTaskRunMap, ...taskRunMap };
           lastLine = newLastLine;
           turnsTraced = 1;
         }
@@ -438,11 +444,47 @@ export async function closeInterruptedTurn(options: {
     }
   }
 
-  // Re-read state to pick up any task_run_map / pending_subagent_traces written by
-  // async PostToolUse / SubagentStop hooks after the snapshot was taken.
   const freshSession = getSessionState(loadState(stateFilePath), sessionId);
   taskRunMap = { ...taskRunMap, ...freshSession.task_run_map };
-  const pendingSubagents = freshSession.pending_subagent_traces ?? [];
+
+  // For subagents only known via SubagentStart (PostToolUse never fired because the
+  // Agent tool was interrupted before returning a result), synthesize task_run_map
+  // entries so tracePendingSubagents can nest the subagent chain under the right parent.
+  for (const [agentId, pathInfo] of Object.entries(freshSession.subagent_transcript_paths ?? {})) {
+    if (
+      !taskRunMap[agentId] &&
+      sessionState.current_turn_run_id &&
+      sessionState.current_dotted_order
+    ) {
+      const syntheticRunId = uuid7();
+      const startTime = Date.now();
+      taskRunMap[agentId] = {
+        run_id: syntheticRunId,
+        dotted_order: `${sessionState.current_dotted_order}.${generateDottedOrderSegment(startTime, syntheticRunId)}`,
+        deferred: {
+          trace_id: sessionState.current_trace_id!,
+          parent_run_id: sessionState.current_turn_run_id,
+          start_time: startTime,
+          end_time: startTime,
+          inputs: {},
+          outputs: { interrupted: true },
+          project_name: project,
+        },
+      };
+      debug(
+        `Synthesized task run entry for interrupted subagent ${pathInfo.agent_type} (${agentId})`,
+      );
+    }
+  }
+
+  // Build pending subagent list: SubagentStop entries take precedence; fall back to
+  // SubagentStart entries for interrupted subagents where SubagentStop never fired.
+  const pendingSubagents = buildPendingSubagentList(
+    sessionId,
+    freshSession.pending_subagent_traces ?? [],
+    freshSession.subagent_transcript_paths ?? {},
+    taskRunMap,
+  );
 
   // Trace any pending subagents queued by SubagentStop.
   if (pendingSubagents.length > 0) {
@@ -496,7 +538,39 @@ export interface TaskRunEntry {
 }
 
 /**
- * Trace pending subagents queued by SubagentStop.
+ * Build the full list of pending subagents to trace.
+ *
+ * SubagentStop entries are authoritative (subagent completed normally).
+ * For interrupted subagents where SubagentStop never fired, fall back to
+ * entries written by SubagentStart (which always fires at spawn time).
+ * Only include fallback entries that have a matching task_run_map entry
+ * (so we know the Agent tool run parent exists).
+ */
+export function buildPendingSubagentList(
+  sessionId: string,
+  pendingSubagentTraces: PendingSubagent[],
+  subagentTranscriptPaths: Record<string, { transcript_path: string; agent_type: string }>,
+  taskRunMap: Record<string, TaskRunEntry>,
+): PendingSubagent[] {
+  const result = [...pendingSubagentTraces];
+  const covered = new Set(pendingSubagentTraces.map((s) => s.agent_id));
+
+  for (const [agentId, pathInfo] of Object.entries(subagentTranscriptPaths)) {
+    if (!covered.has(agentId) && taskRunMap[agentId]) {
+      result.push({
+        agent_id: agentId,
+        agent_type: pathInfo.agent_type,
+        agent_transcript_path: pathInfo.transcript_path,
+        session_id: sessionId,
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Trace pending subagents queued by SubagentStop (or recovered from SubagentStart).
  * Used by both the Stop hook (normal completion) and UserPromptSubmit
  * (interrupted turn recovery).
  */
