@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Turn } from "./types.js";
+import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 
 const mockCreateRun = vi.fn().mockResolvedValue(undefined);
 const mockUpdateRun = vi.fn().mockResolvedValue(undefined);
 const mockAwaitPendingTraceBatches = vi.fn().mockResolvedValue(undefined);
+
+// Track the last RunTree params for assertions
+let lastRunTreeParams: Record<string, unknown> | null = null;
+// Track all RunTree instances with their operations
+let allRunTreeInstances: Array<{ params: Record<string, unknown>; ops: string[] }> = [];
 
 vi.mock("langsmith", () => {
   class MockClient {
@@ -11,8 +17,35 @@ vi.mock("langsmith", () => {
     updateRun = mockUpdateRun;
     awaitPendingTraceBatches = mockAwaitPendingTraceBatches;
   }
+  class MockRunTree {
+    client: MockClient | undefined;
+    params: Record<string, unknown>;
+    _tracker: { params: Record<string, unknown>; ops: string[] };
+    constructor(params: { client?: MockClient; id: string } & Record<string, unknown>) {
+      this.client = params.client;
+      this.params = params;
+      lastRunTreeParams = params;
+      this._tracker = { params, ops: [] };
+      allRunTreeInstances.push(this._tracker);
+    }
+    postRun() {
+      this._tracker.ops.push("postRun");
+      // Only call createRun if client exists (for non-replica-only mode)
+      if (this.client) {
+        this.client.createRun(this.params);
+      }
+    }
+    patchRun() {
+      this._tracker.ops.push("patchRun");
+      // Only call updateRun if client exists (for non-replica-only mode)
+      if (this.client) {
+        this.client.updateRun(this.params.id, this.params);
+      }
+    }
+  }
 
   return {
+    RunTree: MockRunTree,
     Client: MockClient,
     uuid7: () => `test-uuid-${Math.random().toString(36).slice(2, 15)}`,
   };
@@ -26,7 +59,7 @@ vi.mock("./logger.js", () => ({
   initLogger: vi.fn(),
 }));
 
-import { initClient, traceTurn, generateDottedOrderSegment } from "./langsmith.js";
+import { initTracing, traceTurn, generateDottedOrderSegment } from "./langsmith.js";
 
 // ─── generateDottedOrderSegment ─────────────────────────────────────────────
 
@@ -58,7 +91,8 @@ describe("traceTurn", () => {
     mockCreateRun.mockClear();
     mockUpdateRun.mockClear();
     mockAwaitPendingTraceBatches.mockClear();
-    initClient("test-api-key", "https://test.api.com");
+    allRunTreeInstances = [];
+    initTracing("test-api-key", "https://test.api.com");
   });
 
   it("creates a standalone turn when no parentRunId given", async () => {
@@ -90,14 +124,14 @@ describe("traceTurn", () => {
 
     // First call creates the standalone turn
     const turnCall = mockCreateRun.mock.calls[0][0];
-    expect(turnCall.name).toBe("Claude Code Turn");
+    expect(turnCall.name).toBe(USER_PROMPT_TURN_NAME);
     expect(turnCall.run_type).toBe("chain");
     expect(turnCall.trace_id).toBe(turnCall.id); // root trace
     expect(turnCall.dotted_order).toBeTruthy();
 
     // Second call creates the assistant LLM run (bare — no metadata on createRun)
     const llmCall = mockCreateRun.mock.calls[1][0];
-    expect(llmCall.name).toBe("Claude");
+    expect(llmCall.name).toBe(ASSISTANT_RUN_NAME);
     expect(llmCall.run_type).toBe("llm");
     expect(llmCall.parent_run_id).toBe(turnCall.id);
     expect(llmCall.trace_id).toBe(turnCall.id);
@@ -147,7 +181,7 @@ describe("traceTurn", () => {
     expect(mockCreateRun).toHaveBeenCalledTimes(1);
 
     const llmCall = mockCreateRun.mock.calls[0][0];
-    expect(llmCall.name).toBe("Claude");
+    expect(llmCall.name).toBe(ASSISTANT_RUN_NAME);
     expect(llmCall.run_type).toBe("llm");
     expect(llmCall.parent_run_id).toBe(parentRunId);
     expect(llmCall.trace_id).toBe(traceId);
@@ -522,5 +556,502 @@ describe("traceTurn", () => {
     // Last updateRun call is the turn completion
     const turnUpdateArgs = mockUpdateRun.mock.calls[mockUpdateRun.mock.calls.length - 1][1];
     expect(turnUpdateArgs.error).toBe("Interrupted");
+  });
+
+  it("passes replicas to RunTree when provided", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_a",
+        projectName: "project-prod",
+      },
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_b",
+        projectName: "project-staging",
+        updates: { metadata: { environment: "staging" } },
+      },
+    ];
+
+    // Re-initialize with replicas
+    initTracing("test-api-key", "https://test.api.com", replicas);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Check that replicas were passed to RunTree
+    expect(lastRunTreeParams).toBeDefined();
+    expect(lastRunTreeParams?.replicas).toEqual(replicas);
+  });
+
+  it("works with replicas only (no client API key)", async () => {
+    // Initialize with no API key but with replicas
+    initTracing(undefined, undefined, [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_replica",
+        projectName: "project-replica",
+      },
+    ]);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    // Should not throw even without client
+    await expect(
+      traceTurn({
+        turn,
+        sessionId: "session-123",
+        turnNum: 1,
+        project: "test-project",
+      }),
+    ).resolves.not.toThrow();
+
+    // RunTree should still be created with replicas
+    expect(lastRunTreeParams).toBeDefined();
+    expect(lastRunTreeParams?.replicas).toBeDefined();
+    expect(lastRunTreeParams?.replicas).toHaveLength(1);
+    // Client should be undefined when no API key provided
+    expect(lastRunTreeParams?.client).toBeUndefined();
+  });
+
+  it("throws when neither client nor replicas are initialized", async () => {
+    // Initialize with no client and no replicas
+    initTracing(undefined, undefined, undefined);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [],
+      isComplete: true,
+    };
+
+    await expect(
+      traceTurn({
+        turn,
+        sessionId: "session-123",
+        turnNum: 1,
+        project: "test-project",
+      }),
+    ).rejects.toThrow("LangSmith client not initialized");
+  });
+
+  it("passes replicas with updates field to RunTree", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_a",
+        projectName: "project-prod",
+      },
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_b",
+        projectName: "project-staging",
+        updates: { metadata: { environment: "staging" } },
+      },
+    ];
+
+    initTracing("test-api-key", "https://test.api.com", replicas);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Check that replicas with updates field was passed correctly
+    expect(lastRunTreeParams?.replicas).toHaveLength(2);
+    expect((lastRunTreeParams?.replicas as any)?.[1]).toHaveProperty("updates");
+    expect((lastRunTreeParams?.replicas as any)?.[1].updates).toEqual({
+      metadata: { environment: "staging" },
+    });
+  });
+
+  it("traces to multiple different projects via replicas", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_prod_workspace",
+        projectName: "production-project",
+      },
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_staging_workspace",
+        projectName: "staging-project",
+      },
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_dev_workspace",
+        projectName: "dev-project",
+      },
+    ];
+
+    initTracing("test-api-key", "https://test.api.com", replicas);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Verify all three project destinations are in replicas
+    expect(lastRunTreeParams?.replicas).toHaveLength(3);
+    const projectNames = (lastRunTreeParams?.replicas as any[])?.map((r) => r.projectName);
+    expect(projectNames).toContain("production-project");
+    expect(projectNames).toContain("staging-project");
+    expect(projectNames).toContain("dev-project");
+  });
+
+  it("works with replicas-only mode tracing to different projects", async () => {
+    // No primary client - only replicas
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_a",
+        projectName: "project-prod",
+      },
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_b",
+        projectName: "project-staging",
+        updates: { metadata: { environment: "staging" } },
+      },
+    ];
+
+    // Initialize with no API key, no API URL, only replicas
+    initTracing(undefined, undefined, replicas);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    // Should successfully trace without a primary client
+    await expect(
+      traceTurn({
+        turn,
+        sessionId: "session-123",
+        turnNum: 1,
+        project: "test-project",
+      }),
+    ).resolves.not.toThrow();
+
+    // Verify replicas are passed correctly
+    expect(lastRunTreeParams?.replicas).toHaveLength(2);
+    expect(lastRunTreeParams?.client).toBeUndefined();
+
+    // Verify both project destinations
+    const projectNames = (lastRunTreeParams?.replicas as any[])?.map((r) => r.projectName);
+    expect(projectNames).toContain("project-prod");
+    expect(projectNames).toContain("project-staging");
+  });
+
+  it("supports replicas with different API URLs (multi-tenant)", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_langsmith",
+        projectName: "langsmith-project",
+      },
+      {
+        apiUrl: "https://custom.langsmith.enterprise.com",
+        apiKey: "ls__key_enterprise",
+        projectName: "enterprise-project",
+      },
+    ];
+
+    initTracing(undefined, undefined, replicas);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Verify different API URLs are preserved
+    const apiUrls = (lastRunTreeParams?.replicas as any[])?.map((r) => r.apiUrl);
+    expect(apiUrls).toContain("https://api.smith.langchain.com");
+    expect(apiUrls).toContain("https://custom.langsmith.enterprise.com");
+  });
+
+  it("applies updates metadata to replica runs", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_with_updates",
+        projectName: "project-with-metadata",
+        updates: {
+          metadata: {
+            environment: "production",
+            version: "1.0.0",
+            team: "platform",
+          },
+        },
+      },
+    ];
+
+    initTracing(undefined, undefined, replicas);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Verify updates are passed through
+    expect(lastRunTreeParams?.replicas).toHaveLength(1);
+    expect((lastRunTreeParams?.replicas as any[])?.[0].updates).toEqual({
+      metadata: {
+        environment: "production",
+        version: "1.0.0",
+        team: "platform",
+      },
+    });
+  });
+
+  it("sets project_name consistently on patchRun RunTree instances (standalone turn)", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_a",
+        projectName: "project-a",
+      },
+    ];
+
+    initTracing("test-api-key", "https://test.api.com", replicas);
+    allRunTreeInstances = [];
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    // Standalone turn (no parentRunId) creates the turn run itself
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Every RunTree used for patchRun must have project_name and run_type set
+    const patchInstances = allRunTreeInstances.filter((i) => i.ops.includes("patchRun"));
+    expect(patchInstances.length).toBeGreaterThan(0);
+    for (const inst of patchInstances) {
+      expect(inst.params.project_name).toBe("test-project");
+      expect(inst.params.run_type).toBeDefined();
+    }
+
+    // Standalone turn has: turn patchRun (chain) + assistant patchRun (llm)
+    const llmPatches = patchInstances.filter((i) => i.params.run_type === "llm");
+    const chainPatches = patchInstances.filter((i) => i.params.run_type === "chain");
+    expect(llmPatches.length).toBe(1);
+    expect(chainPatches.length).toBe(1);
+
+    // start_time must be set on patchRun to prevent the SDK from defaulting to Date.now()
+    // which would overwrite the correct start_time and cause negative durations
+    expect(llmPatches[0].params.start_time).toBe("2025-01-01T00:00:01Z");
+    expect(chainPatches[0].params.start_time).toBe("2025-01-01T00:00:00Z");
+  });
+
+  it("sets project_name and run_type consistently on patchRun RunTree instances (with parentRunId)", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_a",
+        projectName: "project-a",
+      },
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_b",
+        projectName: "test-project",
+      },
+    ];
+
+    initTracing("test-api-key", "https://test.api.com", replicas);
+    allRunTreeInstances = [];
+
+    const parentRunId = "parent-run-id";
+    const traceId = "trace-id";
+    const parentDottedOrder = "20250101T000000000000Ztrace-id";
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [
+            {
+              tool_use: { id: "tool-1", name: "Read", input: { file: "test.ts" } },
+              result: { content: "file contents", timestamp: "2025-01-01T00:00:03Z" },
+            },
+          ],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+      parentRunId,
+      traceId,
+      parentDottedOrder,
+    });
+
+    // Every RunTree used for patchRun must have project_name and run_type
+    const patchInstances = allRunTreeInstances.filter((i) => i.ops.includes("patchRun"));
+    expect(patchInstances.length).toBeGreaterThan(0);
+    for (const inst of patchInstances) {
+      expect(inst.params.project_name).toBe("test-project");
+      expect(inst.params.run_type).toBeDefined();
+    }
+
+    // With parentRunId (no standalone turn creation), only the assistant patchRun fires
+    const llmPatches = patchInstances.filter((i) => i.params.run_type === "llm");
+    expect(llmPatches.length).toBe(1);
+
+    // LLM patchRun must carry the original start_time to avoid negative durations
+    expect(llmPatches[0].params.start_time).toBe("2025-01-01T00:00:01Z");
+
+    // end_time should be the last tool result timestamp (tool calls present)
+    expect(llmPatches[0].params.end_time).toBe("2025-01-01T00:00:03Z");
+
+    // postRun instances should also have project_name set
+    const postInstances = allRunTreeInstances.filter((i) => i.ops.includes("postRun"));
+    expect(postInstances.length).toBeGreaterThan(0);
+    for (const inst of postInstances) {
+      expect(inst.params.project_name).toBe("test-project");
+    }
   });
 });

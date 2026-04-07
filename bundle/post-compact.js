@@ -8968,7 +8968,7 @@ function filterReplicaForHeaders(replica) {
   return filtered;
 }
 var Baggage = class _Baggage {
-  constructor(metadata, tags, project_name, replicas) {
+  constructor(metadata, tags, project_name, replicas2) {
     Object.defineProperty(this, "metadata", {
       enumerable: true,
       configurable: true,
@@ -8996,14 +8996,14 @@ var Baggage = class _Baggage {
     this.metadata = metadata;
     this.tags = tags;
     this.project_name = project_name;
-    this.replicas = replicas;
+    this.replicas = replicas2;
   }
   static fromHeader(value) {
     const items = value.split(",");
     let metadata = {};
     let tags = [];
     let project_name;
-    let replicas;
+    let replicas2;
     for (const item of items) {
       const [key, uriValue] = item.split("=");
       const value2 = decodeURIComponent(uriValue);
@@ -9015,7 +9015,7 @@ var Baggage = class _Baggage {
         project_name = value2;
       } else if (key === "langsmith-replicas") {
         const parsed = JSON.parse(value2);
-        replicas = parsed.map((replica) => {
+        replicas2 = parsed.map((replica) => {
           if (Array.isArray(replica)) {
             return replica;
           }
@@ -9023,7 +9023,7 @@ var Baggage = class _Baggage {
         });
       }
     }
-    return new _Baggage(metadata, tags, project_name, replicas);
+    return new _Baggage(metadata, tags, project_name, replicas2);
   }
   toHeader() {
     const items = [];
@@ -9764,7 +9764,7 @@ function _getWriteReplicasFromEnv() {
   try {
     const parsed = JSON.parse(envVar);
     if (Array.isArray(parsed)) {
-      const replicas = [];
+      const replicas2 = [];
       for (const item of parsed) {
         if (typeof item !== "object" || item === null) {
           console.warn(`Invalid item type in LANGSMITH_RUNS_ENDPOINTS: expected object, got ${typeof item}`);
@@ -9778,19 +9778,19 @@ function _getWriteReplicasFromEnv() {
           console.warn(`Invalid api_key type in LANGSMITH_RUNS_ENDPOINTS: expected string, got ${typeof item.api_key}`);
           continue;
         }
-        replicas.push({
+        replicas2.push({
           apiUrl: item.api_url.replace(/\/$/, ""),
           apiKey: item.api_key
         });
       }
-      return replicas;
+      return replicas2;
     } else if (typeof parsed === "object" && parsed !== null) {
       _checkEndpointEnvUnset(parsed);
-      const replicas = [];
+      const replicas2 = [];
       for (const [url, key] of Object.entries(parsed)) {
         const cleanUrl = url.replace(/\/$/, "");
         if (typeof key === "string") {
-          replicas.push({
+          replicas2.push({
             apiUrl: cleanUrl,
             apiKey: key
           });
@@ -9799,7 +9799,7 @@ function _getWriteReplicasFromEnv() {
           continue;
         }
       }
-      return replicas;
+      return replicas2;
     } else {
       console.warn(`Invalid LANGSMITH_RUNS_ENDPOINTS \u2013 must be valid JSON array of objects with api_url and api_key properties, or object mapping url->apiKey, got ${typeof parsed}`);
       return [];
@@ -9812,9 +9812,9 @@ function _getWriteReplicasFromEnv() {
     return [];
   }
 }
-function _ensureWriteReplicas(replicas) {
-  if (replicas) {
-    return replicas.map((replica) => {
+function _ensureWriteReplicas(replicas2) {
+  if (replicas2) {
+    return replicas2.map((replica) => {
       if (Array.isArray(replica)) {
         return {
           projectName: replica[0],
@@ -9944,13 +9944,20 @@ function getSessionState(state, sessionId) {
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
 // dist/langsmith.js
-var client = null;
-function initClient(apiKey, apiUrl) {
-  client = new Client({ apiKey, apiUrl });
+var client = void 0;
+var replicas = void 0;
+function initTracing(apiKey, apiUrl, providedReplicas) {
+  if (apiKey) {
+    client = new Client({ apiKey, apiUrl });
+  } else {
+    client = void 0;
+  }
+  replicas = providedReplicas;
   return client;
 }
-function generateDottedOrderSegment(epoch, runId) {
-  const isoWithMicroseconds = `${new Date(epoch).toISOString().slice(0, -1)}000Z`;
+function generateDottedOrderSegment(time, runId) {
+  const iso = typeof time === "string" ? time : new Date(time).toISOString();
+  const isoWithMicroseconds = `${iso.slice(0, -1)}000Z`;
   const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
   return stripped + runId;
 }
@@ -9963,8 +9970,17 @@ function loadConfig() {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
+  let replicas2;
+  const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
+  if (providedReplicas !== void 0) {
+    try {
+      replicas2 = JSON.parse(providedReplicas);
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_RUNS_ENDPOINTS. Please make sure they are valid JSON.");
+    }
+  }
   const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
-  return { apiKey, project, apiBaseUrl, stateFilePath, debug: debug2, parentDottedOrder };
+  return { apiKey, project, apiBaseUrl, stateFilePath, debug: debug2, parentDottedOrder, replicas: replicas2 };
 }
 
 // dist/utils/hook-init.js
@@ -9974,8 +9990,8 @@ function initHook() {
   if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
     return null;
   }
-  if (!config.apiKey) {
-    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY)");
+  if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
+    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");
     return null;
   }
   return config;
@@ -10005,18 +10021,20 @@ async function main() {
   if (!config)
     return;
   debug(`PostCompact hook started, session=${input.session_id}, trigger=${input.trigger}`);
-  const client2 = initClient(config.apiKey, config.apiBaseUrl);
+  const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
-  const endTime = Date.now();
-  const startTime = sessionState.compaction_start_time ?? endTime;
+  const endTime = (/* @__PURE__ */ new Date()).toISOString();
+  const startTime = sessionState.compaction_start_time ? new Date(sessionState.compaction_start_time).toISOString() : endTime;
   const runId = uuid7();
   const segment = generateDottedOrderSegment(startTime, runId);
   const parentRunId = sessionState.current_turn_run_id;
   const traceId = sessionState.current_trace_id ?? runId;
   const dottedOrder = sessionState.current_dotted_order ? `${sessionState.current_dotted_order}.${segment}` : segment;
   try {
-    await client2.createRun({
+    const runTree = new RunTree({
+      client: client2,
+      replicas: config.replicas,
       id: runId,
       name: `Context Compaction (${input.trigger})`,
       run_type: "chain",
@@ -10036,6 +10054,7 @@ async function main() {
         }
       }
     });
+    await runTree.postRun();
     debug(`Created compaction run ${runId} (${input.trigger})`);
   } catch (err) {
     error(`Failed to create compaction run: ${err}`);

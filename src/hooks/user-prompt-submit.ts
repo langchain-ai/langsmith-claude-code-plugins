@@ -11,10 +11,10 @@
  * transcript before closing it with "User interrupt".
  */
 
-import { uuid7 } from "langsmith";
+import { RunTree, uuid7 } from "langsmith";
 import { debug, error } from "../logger.js";
 import {
-  initClient,
+  initTracing,
   closeInterruptedTurn,
   generateDottedOrderSegment,
   parseDottedOrder,
@@ -23,6 +23,7 @@ import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { getTranscriptEndLine } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { USER_PROMPT_TURN_NAME } from "../constants.js";
 
 interface UserPromptSubmitHookInput {
   session_id: string;
@@ -51,7 +52,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const client = initClient(config.apiKey, config.apiBaseUrl);
+  const client = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
@@ -94,7 +95,7 @@ async function main(): Promise<void> {
   const turnNum = sessionState.turn_count + interruptedTurnsTraced + 1;
 
   const runId = uuid7();
-  const startTime = Date.now();
+  const startTime = new Date().toISOString();
   const segment = generateDottedOrderSegment(startTime, runId);
 
   // If a parent dotted_order is provided, nest this turn under the existing run.
@@ -113,9 +114,11 @@ async function main(): Promise<void> {
     dottedOrder = segment;
   }
 
-  await client.createRun({
+  const runTree = new RunTree({
+    client,
+    replicas: config.replicas,
     id: runId,
-    name: "Claude Code Turn",
+    name: USER_PROMPT_TURN_NAME,
     run_type: "chain",
     inputs: { messages: [{ role: "user", content: input.prompt }] },
     project_name: config.project,
@@ -124,6 +127,8 @@ async function main(): Promise<void> {
     dotted_order: dottedOrder,
     ...(parentRunId ? { parent_run_id: parentRunId } : {}),
   });
+
+  await runTree.postRun();
 
   debug(`Created initial run ${runId} for turn ${turnNum}`);
 
@@ -138,6 +143,7 @@ async function main(): Promise<void> {
         current_dotted_order: dottedOrder,
         current_parent_run_id: parentRunId,
         current_turn_number: turnNum,
+        current_turn_start: startTime,
         // Advance past the interrupted turn's messages so Stop doesn't re-trace them
         last_line: interruptedLastLine,
         turn_count: ss.turn_count + interruptedTurnsTraced,

@@ -1,0 +1,4 @@
+const USER_PROMPT_TURN_NAME = "Claude Code Turn";
+const ASSISTANT_RUN_NAME = "Claude";
+
+export { USER_PROMPT_TURN_NAME, ASSISTANT_RUN_NAME };

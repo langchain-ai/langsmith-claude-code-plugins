@@ -6,9 +6,9 @@
  * Creates a LangSmith run capturing the compaction event and summary.
  */
 
-import { uuid7 } from "langsmith";
+import { RunTree, uuid7 } from "langsmith";
 import { debug, error } from "../logger.js";
-import { initClient, generateDottedOrderSegment } from "../langsmith.js";
+import { initTracing, generateDottedOrderSegment } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -30,13 +30,15 @@ async function main(): Promise<void> {
 
   debug(`PostCompact hook started, session=${input.session_id}, trigger=${input.trigger}`);
 
-  const client = initClient(config.apiKey, config.apiBaseUrl);
+  const client = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
 
-  const endTime = Date.now();
-  const startTime = sessionState.compaction_start_time ?? endTime;
+  const endTime = new Date().toISOString();
+  const startTime = sessionState.compaction_start_time
+    ? new Date(sessionState.compaction_start_time).toISOString()
+    : endTime;
 
   const runId = uuid7();
   const segment = generateDottedOrderSegment(startTime, runId);
@@ -49,7 +51,9 @@ async function main(): Promise<void> {
     : segment;
 
   try {
-    await client.createRun({
+    const runTree = new RunTree({
+      client,
+      replicas: config.replicas,
       id: runId,
       name: `Context Compaction (${input.trigger})`,
       run_type: "chain",
@@ -69,6 +73,7 @@ async function main(): Promise<void> {
         },
       },
     });
+    await runTree.postRun();
 
     debug(`Created compaction run ${runId} (${input.trigger})`);
   } catch (err) {

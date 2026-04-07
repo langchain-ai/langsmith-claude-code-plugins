@@ -16,10 +16,12 @@ import {
   updateSessionState,
   pruneOldSessions,
 } from "../state.js";
-import { initClient, traceTurn, tracePendingSubagents, flushPendingTraces } from "../langsmith.js";
+import { initTracing, traceTurn, tracePendingSubagents, flushPendingTraces } from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import type { StopHookInput } from "../types.js";
+import { RunTree } from "langsmith";
+import { USER_PROMPT_TURN_NAME } from "../constants.js";
 
 async function main(): Promise<void> {
   const startTime = Date.now();
@@ -45,7 +47,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const client = initClient(config.apiKey, config.apiBaseUrl);
+  const client = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
 
   // Load state and read new messages.
   const state = loadState(config.stateFilePath);
@@ -158,11 +160,18 @@ async function main(): Promise<void> {
 
     // We need to patch the existing run with end time
     try {
-      await client.updateRun(currentRunId, {
+      const runTree = new RunTree({
+        client,
+        replicas: config.replicas,
+        name: USER_PROMPT_TURN_NAME,
+        run_type: "chain",
+        project_name: config.project,
+        id: currentRunId,
         trace_id: currentTraceId,
         dotted_order: currentDottedOrder,
         parent_run_id: currentParentRunId,
-        end_time: Date.now(),
+        start_time: sessionState.current_turn_start,
+        end_time: new Date().toISOString(),
         outputs: {
           messages: [{ role: "assistant", content: input.last_assistant_message }],
         },
@@ -175,6 +184,7 @@ async function main(): Promise<void> {
           },
         },
       });
+      await runTree.patchRun({ excludeInputs: true });
       debug(`Turn run ${currentRunId} completed`);
     } catch (err) {
       error(`Failed to complete turn run: ${err}`);

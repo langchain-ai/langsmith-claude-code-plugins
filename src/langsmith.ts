@@ -6,52 +6,57 @@
  * serialization, retries, and auth automatically.
  */
 
-import { Client, uuid7 } from "langsmith";
+import { Client, RunTree, RunTreeConfig, uuid7 } from "langsmith";
 import type { Turn, ContentBlock, Usage } from "./types.js";
 import { readTranscript, groupIntoTurns } from "./transcript.js";
 import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
-import { debug } from "./logger.js";
+import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 
 // ─── Client setup ───────────────────────────────────────────────────────────
 
-let client: Client | null = null;
+let client: Client | undefined = undefined;
+let replicas: RunTreeConfig["replicas"] | undefined = undefined;
 
-export function initClient(apiKey: string, apiUrl: string): Client {
-  client = new Client({ apiKey, apiUrl });
+export function initTracing(
+  apiKey?: string,
+  apiUrl?: string,
+  providedReplicas?: RunTreeConfig["replicas"],
+) {
+  if (apiKey) {
+    client = new Client({ apiKey, apiUrl });
+  } else {
+    client = undefined;
+  }
+  replicas = providedReplicas;
   return client;
 }
 
 /** Flush all pending batches to ensure traces are sent before hook exits. */
 export async function flushPendingTraces(): Promise<void> {
-  if (!client) {
-    logger.warn("Cannot flush: client not initialized");
-    return;
-  }
-  if (typeof client.awaitPendingTraceBatches !== "function") {
-    logger.warn("Cannot flush: awaitPendingTraceBatches not available on client");
-    return;
-  }
   logger.debug("Awaiting pending trace batches...");
-  await client.awaitPendingTraceBatches();
+  // Flush our explicit client (if any) and the shared client used internally
+  // by RunTree for replica API calls when no explicit client is provided.
+  await Promise.all([
+    client?.awaitPendingTraceBatches(),
+    RunTree.getSharedClient().awaitPendingTraceBatches(),
+  ]);
   logger.debug("Trace batches flushed successfully");
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** Convert ISO timestamp to milliseconds since epoch. */
-function isoToMillis(iso: string): number {
-  return new Date(iso).getTime();
-}
-
 /**
  * Generate dotted order segment for a run.
  * Format: stripNonAlphanumeric(ISO_timestamp_with_execution_order) + runId
  * Based on LangSmith's convertToDottedOrderFormat function.
+ *
+ * Accepts an ISO string or milliseconds-since-epoch.
  */
-export function generateDottedOrderSegment(epoch: number, runId: string): string {
+export function generateDottedOrderSegment(time: string | number, runId: string): string {
+  const iso = typeof time === "string" ? time : new Date(time).toISOString();
   // Add microsecond precision using execution order
-  const isoWithMicroseconds = `${new Date(epoch).toISOString().slice(0, -1)}000Z`;
+  const isoWithMicroseconds = `${iso.slice(0, -1)}000Z`;
   // Strip non-alphanumeric characters
   const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
   return stripped + runId;
@@ -167,8 +172,8 @@ export async function traceTurn(
 
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
-  if (!client) {
-    throw new Error("LangSmith client not initialized — call initClient() first");
+  if (!client && !replicas) {
+    throw new Error("LangSmith client not initialized — call initTracing() first");
   }
 
   const userContent =
@@ -183,7 +188,7 @@ export async function traceTurn(
   if (parentRunId) {
     // UserPromptSubmit already created the Turn run (or this is a subagent under a tool run)
     // Use it as parent for LLM/tool runs
-    debug(`Using existing run ${parentRunId} as parent for LLM/tool runs`);
+    logger.debug(`Using existing run ${parentRunId} as parent for LLM/tool runs`);
     turnRunId = parentRunId;
 
     // Validate that we have required trace context
@@ -199,20 +204,22 @@ export async function traceTurn(
     turnRunId = uuid7();
     traceId = turnRunId; // This turn is its own trace root
 
-    const turnStartTime = isoToMillis(turn.userTimestamp);
-    parentDottedOrder = generateDottedOrderSegment(turnStartTime, turnRunId);
+    parentDottedOrder = generateDottedOrderSegment(turn.userTimestamp, turnRunId);
 
-    debug(`Creating new standalone turn run ${turnRunId}`);
-    await client.createRun({
+    logger.debug(`Creating new standalone turn run ${turnRunId}`);
+    const runTree = new RunTree({
+      client,
+      replicas,
       id: turnRunId,
-      name: "Claude Code Turn",
+      name: USER_PROMPT_TURN_NAME,
       run_type: "chain",
       inputs: { messages: [{ role: "user", content: userContent }] },
       project_name: project,
-      start_time: turnStartTime,
+      start_time: turn.userTimestamp,
       trace_id: traceId,
       dotted_order: parentDottedOrder,
     });
+    await runTree.postRun();
   }
 
   // Track accumulated messages for LLM input context.
@@ -233,32 +240,36 @@ export async function traceTurn(
 
     // Generate run ID for this LLM call
     const assistantRunId = uuid7();
-    const assistantStartTime = isoToMillis(llmCall.startTime);
     const assistantDottedOrderSegment = generateDottedOrderSegment(
-      assistantStartTime,
+      llmCall.startTime,
       assistantRunId,
     );
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
 
     // Create assistant (LLM) run as child of turn using Client API
-    await client.createRun({
+    const assistantRunTree = new RunTree({
+      client,
+      replicas,
       id: assistantRunId,
-      name: "Claude",
+      name: ASSISTANT_RUN_NAME,
       run_type: "llm",
       inputs: { messages: [...accumulatedMessages] },
       project_name: project,
-      start_time: assistantStartTime,
+      start_time: llmCall.startTime,
       parent_run_id: turnRunId,
       trace_id: traceId,
       dotted_order: assistantDottedOrder,
     });
+    await assistantRunTree.postRun();
 
     // 3. Create tool runs (siblings of assistant, children of turn).
     for (const toolCall of llmCall.toolCalls) {
       // Skip tools already traced by PostToolUse (agent tools via existingTaskRunMap,
       // regular tools via tracedToolUseIds).
       if (toolCall.agentId && existingTaskRunMap?.[toolCall.agentId]) {
-        debug(`Skipping Task tool for agent ${toolCall.agentId} - already traced by PostToolUse`);
+        logger.debug(
+          `Skipping Task tool for agent ${toolCall.agentId} - already traced by PostToolUse`,
+        );
         lastEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
         continue;
       }
@@ -270,25 +281,25 @@ export async function traceTurn(
       // Tools start when the LLM finishes, but for parallel tool calls the result
       // timestamp can precede the last LLM streaming chunk. Clamp to avoid negative latency.
       const toolEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
-      const toolStartTime =
-        isoToMillis(llmCall.endTime) <= isoToMillis(toolEndTime) ? llmCall.endTime : toolEndTime;
+      const toolStartTime = llmCall.endTime <= toolEndTime ? llmCall.endTime : toolEndTime;
 
       // Generate run ID for this tool
       const toolRunId = uuid7();
-      const toolStartTimeMs = isoToMillis(toolStartTime);
-      const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTimeMs, toolRunId);
+      const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTime, toolRunId);
       const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
 
       // Create and complete tool run in a single call.
-      await client.createRun({
+      const runTree = new RunTree({
+        client,
+        replicas,
         id: toolRunId,
         name: toolCall.tool_use.name,
         run_type: "tool",
         inputs: { input: toolCall.tool_use.input },
         outputs: { output: toolCall.result?.content ?? "No result" },
         project_name: project,
-        start_time: toolStartTimeMs,
-        end_time: isoToMillis(toolEndTime),
+        start_time: toolStartTime,
+        end_time: toolEndTime,
         parent_run_id: turnRunId,
         trace_id: traceId,
         dotted_order: toolDottedOrder,
@@ -296,6 +307,7 @@ export async function traceTurn(
           metadata: { thread_id: sessionId, ls_integration: "claude-code" },
         },
       });
+      await runTree.postRun();
 
       // If this is a Task tool, store the run ID and dotted_order for subagent linking
       if (toolCall.agentId) {
@@ -303,7 +315,7 @@ export async function traceTurn(
           run_id: toolRunId,
           dotted_order: toolDottedOrder,
         };
-        debug(
+        logger.debug(
           `Task tool ${toolCall.tool_use.id} → agentId=${toolCall.agentId}, runId=${toolRunId}`,
         );
       }
@@ -313,12 +325,18 @@ export async function traceTurn(
 
     // Complete the assistant run.
     const assistantEndTime = llmCall.toolCalls.length > 0 ? lastEndTime : llmCall.endTime;
-
-    await client.updateRun(assistantRunId, {
+    const runTree = new RunTree({
+      client,
+      replicas,
+      id: assistantRunId,
+      run_type: "llm",
       trace_id: traceId,
       dotted_order: assistantDottedOrder,
       parent_run_id: turnRunId,
-      end_time: isoToMillis(assistantEndTime),
+      name: ASSISTANT_RUN_NAME,
+      project_name: project,
+      start_time: llmCall.startTime,
+      end_time: assistantEndTime,
       outputs: {
         messages: [{ role: "assistant", content: assistantContent }],
       },
@@ -336,6 +354,8 @@ export async function traceTurn(
         },
       },
     });
+
+    await runTree.patchRun({ excludeInputs: true });
 
     // Accumulate context for next LLM call.
     accumulatedMessages.push({ role: "assistant", content: assistantContent });
@@ -356,11 +376,17 @@ export async function traceTurn(
 
     // Mark incomplete turns with an error so they're visible in LangSmith
     const error = turn.isComplete ? undefined : "Interrupted";
-
-    await client.updateRun(turnRunId, {
+    const runTree = new RunTree({
+      client,
+      replicas,
+      id: turnRunId,
+      run_type: "chain",
       trace_id: traceId,
       dotted_order: parentDottedOrder,
-      end_time: isoToMillis(lastEndTime),
+      name: USER_PROMPT_TURN_NAME,
+      project_name: project,
+      start_time: turn.userTimestamp,
+      end_time: lastEndTime,
       outputs: { messages: turnOutputs },
       error: error,
       extra: {
@@ -371,6 +397,8 @@ export async function traceTurn(
         },
       },
     });
+
+    await runTree.patchRun({ excludeInputs: true });
   }
 
   const status = turn.isComplete ? "complete" : "interrupted";
@@ -402,7 +430,8 @@ export async function closeInterruptedTurn(options: {
   stateFilePath: string;
 }): Promise<{ lastLine: number; turnsTraced: number }> {
   const { sessionId, sessionState, transcriptPath, project, stateFilePath } = options;
-  if (!client) throw new Error("LangSmith client not initialized — call initClient() first");
+  if (!client && !replicas)
+    throw new Error("LangSmith client not initialized — call initTracing() first");
 
   let lastLine = sessionState.last_line;
   let turnsTraced = 0;
@@ -459,12 +488,18 @@ export async function closeInterruptedTurn(options: {
     }
   }
 
-  // Close the parent turn run with "User interrupt".
-  await client.updateRun(sessionState.current_turn_run_id!, {
+  const runTree = new RunTree({
+    client,
+    replicas,
+    id: sessionState.current_turn_run_id!,
+    run_type: "chain",
     trace_id: sessionState.current_trace_id,
+    name: USER_PROMPT_TURN_NAME,
+    project_name: project,
     dotted_order: sessionState.current_dotted_order,
     parent_run_id: sessionState.current_parent_run_id,
-    end_time: Date.now(),
+    start_time: sessionState.current_turn_start,
+    end_time: new Date().toISOString(),
     error: "User interrupt",
     extra: {
       metadata: {
@@ -474,6 +509,9 @@ export async function closeInterruptedTurn(options: {
       },
     },
   });
+
+  // Close the parent turn run with "User interrupt".
+  await runTree.patchRun({ excludeInputs: true });
 
   await flushPendingTraces();
 
@@ -509,8 +547,8 @@ export async function tracePendingSubagents(options: {
 }): Promise<void> {
   const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project } = options;
 
-  if (!client) {
-    throw new Error("LangSmith client not initialized — call initClient() first");
+  if (!client && !replicas) {
+    throw new Error("LangSmith client not initialized — call initTracing() first");
   }
 
   if (!parentTraceId) {
@@ -531,12 +569,14 @@ export async function tracePendingSubagents(options: {
       const toolName = subagent.agent_type || "Agent";
       const deferred = taskRunInfo.deferred;
 
-      debug(`Processing subagent ${toolName} (${subagent.agent_id}) under run ${parentToolRunId}`);
+      logger.debug(
+        `Processing subagent ${toolName} (${subagent.agent_id}) under run ${parentToolRunId}`,
+      );
 
       // Read subagent transcript and trace its turns.
       const { messages: subagentMessages } = readTranscript(subagent.agent_transcript_path, -1);
       if (subagentMessages.length === 0) {
-        debug(`Empty subagent transcript: ${subagent.agent_transcript_path}`);
+        logger.debug(`Empty subagent transcript: ${subagent.agent_transcript_path}`);
         continue;
       }
 
@@ -544,13 +584,17 @@ export async function tracePendingSubagents(options: {
 
       // PreToolUse records start time before the tool runs; PostToolUse records
       // end time after — so deferred times already bracket the subagent's transcript.
-      const subagentStartTime = (deferred?.start_time as number | undefined) ?? Date.now();
-      const subagentEndTime = (deferred?.end_time as number | undefined) ?? Date.now();
+      const subagentStartTime =
+        (deferred?.start_time as string | undefined) ?? new Date().toISOString();
+      const subagentEndTime =
+        (deferred?.end_time as string | undefined) ?? new Date().toISOString();
 
       // PostToolUse deferred the Agent tool run creation so we can use the
       // real subagent name. Create it now with the correct name and clamped times.
       if (deferred) {
-        await client.createRun({
+        const runTree = new RunTree({
+          client,
+          replicas,
           id: parentToolRunId,
           name: "Agent",
           run_type: "tool",
@@ -572,6 +616,7 @@ export async function tracePendingSubagents(options: {
             },
           },
         });
+        await runTree.postRun();
       }
 
       // Create an intermediate chain run as a child of the Agent tool run,
@@ -579,7 +624,9 @@ export async function tracePendingSubagents(options: {
       const subagentChainId = uuid7();
       const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentStartTime, subagentChainId)}`;
 
-      await client.createRun({
+      const runTree = new RunTree({
+        client,
+        replicas,
         id: subagentChainId,
         name: `${toolName} Subagent`,
         run_type: "chain",
@@ -601,6 +648,7 @@ export async function tracePendingSubagents(options: {
           },
         },
       });
+      await runTree.postRun();
 
       for (let i = 0; i < subagentTurns.length; i++) {
         await traceTurn({
