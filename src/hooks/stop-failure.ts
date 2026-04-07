@@ -10,10 +10,12 @@
  */
 
 import { error, debug } from "../logger.js";
-import { initClient, flushPendingTraces } from "../langsmith.js";
+import { initTracing, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { RunTree } from "langsmith";
+import { USER_PROMPT_TURN_NAME } from "../constants.js";
 
 interface StopFailureHookInput {
   session_id: string;
@@ -33,7 +35,7 @@ async function main(): Promise<void> {
 
   debug(`StopFailure hook: session=${input.session_id}, error=${input.error}`);
 
-  const client = initClient(config.apiKey, config.apiBaseUrl);
+  const client = initTracing(config.apiKey, config.apiBaseUrl);
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
@@ -46,7 +48,11 @@ async function main(): Promise<void> {
   const errorMessage = input.error_details ? `${input.error}: ${input.error_details}` : input.error;
 
   try {
-    await client.updateRun(sessionState.current_turn_run_id, {
+    const runTree = new RunTree({
+      client,
+      replicas: config.replicas,
+      name: USER_PROMPT_TURN_NAME,
+      id: sessionState.current_turn_run_id,
       trace_id: sessionState.current_trace_id,
       dotted_order: sessionState.current_dotted_order,
       parent_run_id: sessionState.current_parent_run_id,
@@ -60,6 +66,7 @@ async function main(): Promise<void> {
         },
       },
     });
+    await runTree.patchRun({ excludeInputs: true });
     debug(`Closed turn run ${sessionState.current_turn_run_id} with error: ${errorMessage}`);
   } catch (err) {
     error(`Failed to close turn run on StopFailure: ${err}`);

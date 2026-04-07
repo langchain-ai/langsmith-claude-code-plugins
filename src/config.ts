@@ -1,3 +1,6 @@
+import type { RunTreeConfig } from "langsmith";
+import { error } from "./logger.js";
+
 /**
  * Configuration — reads from environment variables.
  */
@@ -10,6 +13,7 @@ export interface Config {
   debug: boolean;
   /** Dotted-order string of an existing LangSmith run to nest all traces under. */
   parentDottedOrder?: string;
+  replicas?: RunTreeConfig["replicas"];
 }
 
 export function loadConfig(): Config {
@@ -24,7 +28,19 @@ export function loadConfig(): Config {
 
   const debug = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
 
+  let replicas;
+  const providedReplicas = process.env.CC_LANGSMITH_REPLICAS;
+  if (providedReplicas !== undefined) {
+    try {
+      replicas = JSON.parse(providedReplicas);
+    } catch {
+      error(
+        "Failed to parse provided CC_LANGSMITH_REPLICAS. Please make sure they are valid JSON.",
+      );
+    }
+  }
+
   const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || undefined;
 
-  return { apiKey, project, apiBaseUrl, stateFilePath, debug, parentDottedOrder };
+  return { apiKey, project, apiBaseUrl, stateFilePath, debug, parentDottedOrder, replicas };
 }

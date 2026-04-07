@@ -2548,9 +2548,6 @@ function write(level, message) {
   } catch {
   }
 }
-function warn(message) {
-  write("WARN", message);
-}
 function error(message) {
   write("ERROR", message);
 }
@@ -9008,7 +9005,7 @@ function filterReplicaForHeaders(replica) {
   return filtered;
 }
 var Baggage = class _Baggage {
-  constructor(metadata, tags, project_name, replicas) {
+  constructor(metadata, tags, project_name, replicas2) {
     Object.defineProperty(this, "metadata", {
       enumerable: true,
       configurable: true,
@@ -9036,14 +9033,14 @@ var Baggage = class _Baggage {
     this.metadata = metadata;
     this.tags = tags;
     this.project_name = project_name;
-    this.replicas = replicas;
+    this.replicas = replicas2;
   }
   static fromHeader(value) {
     const items = value.split(",");
     let metadata = {};
     let tags = [];
     let project_name;
-    let replicas;
+    let replicas2;
     for (const item of items) {
       const [key, uriValue] = item.split("=");
       const value2 = decodeURIComponent(uriValue);
@@ -9055,7 +9052,7 @@ var Baggage = class _Baggage {
         project_name = value2;
       } else if (key === "langsmith-replicas") {
         const parsed = JSON.parse(value2);
-        replicas = parsed.map((replica) => {
+        replicas2 = parsed.map((replica) => {
           if (Array.isArray(replica)) {
             return replica;
           }
@@ -9063,7 +9060,7 @@ var Baggage = class _Baggage {
         });
       }
     }
-    return new _Baggage(metadata, tags, project_name, replicas);
+    return new _Baggage(metadata, tags, project_name, replicas2);
   }
   toHeader() {
     const items = [];
@@ -9804,7 +9801,7 @@ function _getWriteReplicasFromEnv() {
   try {
     const parsed = JSON.parse(envVar);
     if (Array.isArray(parsed)) {
-      const replicas = [];
+      const replicas2 = [];
       for (const item of parsed) {
         if (typeof item !== "object" || item === null) {
           console.warn(`Invalid item type in LANGSMITH_RUNS_ENDPOINTS: expected object, got ${typeof item}`);
@@ -9818,19 +9815,19 @@ function _getWriteReplicasFromEnv() {
           console.warn(`Invalid api_key type in LANGSMITH_RUNS_ENDPOINTS: expected string, got ${typeof item.api_key}`);
           continue;
         }
-        replicas.push({
+        replicas2.push({
           apiUrl: item.api_url.replace(/\/$/, ""),
           apiKey: item.api_key
         });
       }
-      return replicas;
+      return replicas2;
     } else if (typeof parsed === "object" && parsed !== null) {
       _checkEndpointEnvUnset(parsed);
-      const replicas = [];
+      const replicas2 = [];
       for (const [url, key] of Object.entries(parsed)) {
         const cleanUrl = url.replace(/\/$/, "");
         if (typeof key === "string") {
-          replicas.push({
+          replicas2.push({
             apiUrl: cleanUrl,
             apiKey: key
           });
@@ -9839,7 +9836,7 @@ function _getWriteReplicasFromEnv() {
           continue;
         }
       }
-      return replicas;
+      return replicas2;
     } else {
       console.warn(`Invalid LANGSMITH_RUNS_ENDPOINTS \u2013 must be valid JSON array of objects with api_url and api_key properties, or object mapping url->apiKey, got ${typeof parsed}`);
       return [];
@@ -9852,9 +9849,9 @@ function _getWriteReplicasFromEnv() {
     return [];
   }
 }
-function _ensureWriteReplicas(replicas) {
-  if (replicas) {
-    return replicas.map((replica) => {
+function _ensureWriteReplicas(replicas2) {
+  if (replicas2) {
+    return replicas2.map((replica) => {
       if (Array.isArray(replica)) {
         return {
           projectName: replica[0],
@@ -9941,23 +9938,22 @@ function getSessionState(state, sessionId) {
 }
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
+// dist/constants.js
+var USER_PROMPT_TURN_NAME = "Claude Code Turn";
+
 // dist/langsmith.js
-var client = null;
-function initClient(apiKey, apiUrl) {
-  client = new Client({ apiKey, apiUrl });
+var client = void 0;
+var replicas = void 0;
+function initTracing(apiKey, apiUrl, providedReplicas) {
+  if (apiKey) {
+    client = new Client({ apiKey, apiUrl });
+  }
+  replicas = providedReplicas;
   return client;
 }
 async function flushPendingTraces() {
-  if (!client) {
-    warn("Cannot flush: client not initialized");
-    return;
-  }
-  if (typeof client.awaitPendingTraceBatches !== "function") {
-    warn("Cannot flush: awaitPendingTraceBatches not available on client");
-    return;
-  }
   debug("Awaiting pending trace batches...");
-  await client.awaitPendingTraceBatches();
+  await client?.awaitPendingTraceBatches();
   debug("Trace batches flushed successfully");
 }
 
@@ -9969,8 +9965,17 @@ function loadConfig() {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
+  let replicas2;
+  const providedReplicas = process.env.CC_LANGSMITH_REPLICAS;
+  if (providedReplicas !== void 0) {
+    try {
+      replicas2 = JSON.parse(providedReplicas);
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_REPLICAS. Please make sure they are valid JSON.");
+    }
+  }
   const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
-  return { apiKey, project, apiBaseUrl, stateFilePath, debug: debug2, parentDottedOrder };
+  return { apiKey, project, apiBaseUrl, stateFilePath, debug: debug2, parentDottedOrder, replicas: replicas2 };
 }
 
 // dist/utils/hook-init.js
@@ -10011,7 +10016,7 @@ async function main() {
   if (!config)
     return;
   debug(`StopFailure hook: session=${input.session_id}, error=${input.error}`);
-  const client2 = initClient(config.apiKey, config.apiBaseUrl);
+  const client2 = initTracing(config.apiKey, config.apiBaseUrl);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   if (!sessionState.current_turn_run_id) {
@@ -10020,7 +10025,11 @@ async function main() {
   }
   const errorMessage = input.error_details ? `${input.error}: ${input.error_details}` : input.error;
   try {
-    await client2.updateRun(sessionState.current_turn_run_id, {
+    const runTree = new RunTree({
+      client: client2,
+      replicas: config.replicas,
+      name: USER_PROMPT_TURN_NAME,
+      id: sessionState.current_turn_run_id,
       trace_id: sessionState.current_trace_id,
       dotted_order: sessionState.current_dotted_order,
       parent_run_id: sessionState.current_parent_run_id,
@@ -10034,6 +10043,7 @@ async function main() {
         }
       }
     });
+    await runTree.patchRun({ excludeInputs: true });
     debug(`Closed turn run ${sessionState.current_turn_run_id} with error: ${errorMessage}`);
   } catch (err) {
     error(`Failed to close turn run on StopFailure: ${err}`);

@@ -11,7 +11,7 @@
  */
 
 import { debug, error } from "../logger.js";
-import { initClient, closeInterruptedTurn } from "../langsmith.js";
+import { initTracing, closeInterruptedTurn } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  initClient(config.apiKey, config.apiBaseUrl);
+  initTracing(config.apiKey, config.apiBaseUrl);
 
   debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
 

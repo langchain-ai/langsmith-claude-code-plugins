@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Turn } from "./types.js";
+import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 
 const mockCreateRun = vi.fn().mockResolvedValue(undefined);
 const mockUpdateRun = vi.fn().mockResolvedValue(undefined);
@@ -11,8 +12,23 @@ vi.mock("langsmith", () => {
     updateRun = mockUpdateRun;
     awaitPendingTraceBatches = mockAwaitPendingTraceBatches;
   }
+  class MockRunTree {
+    client: MockClient;
+    params: Record<string, unknown>;
+    constructor(params: { client: MockClient; id: string } & Record<string, unknown>) {
+      this.client = params.client;
+      this.params = params;
+    }
+    postRun() {
+      this.client.createRun(this.params);
+    }
+    patchRun() {
+      this.client.updateRun(this.params.id, this.params);
+    }
+  }
 
   return {
+    RunTree: MockRunTree,
     Client: MockClient,
     uuid7: () => `test-uuid-${Math.random().toString(36).slice(2, 15)}`,
   };
@@ -26,7 +42,7 @@ vi.mock("./logger.js", () => ({
   initLogger: vi.fn(),
 }));
 
-import { initClient, traceTurn, generateDottedOrderSegment } from "./langsmith.js";
+import { initTracing, traceTurn, generateDottedOrderSegment } from "./langsmith.js";
 
 // ─── generateDottedOrderSegment ─────────────────────────────────────────────
 
@@ -58,7 +74,7 @@ describe("traceTurn", () => {
     mockCreateRun.mockClear();
     mockUpdateRun.mockClear();
     mockAwaitPendingTraceBatches.mockClear();
-    initClient("test-api-key", "https://test.api.com");
+    initTracing("test-api-key", "https://test.api.com");
   });
 
   it("creates a standalone turn when no parentRunId given", async () => {
@@ -90,14 +106,14 @@ describe("traceTurn", () => {
 
     // First call creates the standalone turn
     const turnCall = mockCreateRun.mock.calls[0][0];
-    expect(turnCall.name).toBe("Claude Code Turn");
+    expect(turnCall.name).toBe(USER_PROMPT_TURN_NAME);
     expect(turnCall.run_type).toBe("chain");
     expect(turnCall.trace_id).toBe(turnCall.id); // root trace
     expect(turnCall.dotted_order).toBeTruthy();
 
     // Second call creates the assistant LLM run (bare — no metadata on createRun)
     const llmCall = mockCreateRun.mock.calls[1][0];
-    expect(llmCall.name).toBe("Claude");
+    expect(llmCall.name).toBe(ASSISTANT_RUN_NAME);
     expect(llmCall.run_type).toBe("llm");
     expect(llmCall.parent_run_id).toBe(turnCall.id);
     expect(llmCall.trace_id).toBe(turnCall.id);
@@ -147,7 +163,7 @@ describe("traceTurn", () => {
     expect(mockCreateRun).toHaveBeenCalledTimes(1);
 
     const llmCall = mockCreateRun.mock.calls[0][0];
-    expect(llmCall.name).toBe("Claude");
+    expect(llmCall.name).toBe(ASSISTANT_RUN_NAME);
     expect(llmCall.run_type).toBe("llm");
     expect(llmCall.parent_run_id).toBe(parentRunId);
     expect(llmCall.trace_id).toBe(traceId);

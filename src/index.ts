@@ -14,7 +14,7 @@ export {
   stripModelDateSuffix,
 } from "./transcript.js";
 
-export { initClient, traceTurn, flushPendingTraces } from "./langsmith.js";
+export { initTracing, traceTurn, flushPendingTraces } from "./langsmith.js";
 
 export {
   loadState,

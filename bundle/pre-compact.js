@@ -107,8 +107,17 @@ function loadConfig() {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
+  let replicas;
+  const providedReplicas = process.env.CC_LANGSMITH_REPLICAS;
+  if (providedReplicas !== void 0) {
+    try {
+      replicas = JSON.parse(providedReplicas);
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_REPLICAS. Please make sure they are valid JSON.");
+    }
+  }
   const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
-  return { apiKey, project, apiBaseUrl, stateFilePath, debug: debug2, parentDottedOrder };
+  return { apiKey, project, apiBaseUrl, stateFilePath, debug: debug2, parentDottedOrder, replicas };
 }
 
 // dist/utils/hook-init.js

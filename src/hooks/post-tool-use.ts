@@ -7,9 +7,9 @@
  * so SubagentStop can nest the subagent trace under it.
  */
 
-import { uuid7 } from "langsmith";
+import { RunTree, uuid7 } from "langsmith";
 import { debug, error } from "../logger.js";
-import { initClient, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
+import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -41,7 +41,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const client = initClient(config.apiKey, config.apiBaseUrl);
+  const client = initTracing(config.apiKey, config.apiBaseUrl);
 
   // Load state to get current turn's run ID (created by UserPromptSubmit)
   const state = loadState(config.stateFilePath);
@@ -75,7 +75,9 @@ async function main(): Promise<void> {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
   } else {
     // Regular tool: create and complete the run immediately.
-    await client.createRun({
+    const runTree = new RunTree({
+      client,
+      replicas: config.replicas,
       id: toolRunId,
       name: input.tool_name,
       run_type: "tool",
@@ -95,6 +97,7 @@ async function main(): Promise<void> {
         },
       },
     });
+    await runTree.postRun();
   }
 
   // Save state atomically so concurrent PostToolUse hooks don't clobber each other.

@@ -9323,7 +9323,7 @@ function filterReplicaForHeaders(replica) {
   return filtered;
 }
 var Baggage = class _Baggage {
-  constructor(metadata, tags, project_name, replicas) {
+  constructor(metadata, tags, project_name, replicas2) {
     Object.defineProperty(this, "metadata", {
       enumerable: true,
       configurable: true,
@@ -9351,14 +9351,14 @@ var Baggage = class _Baggage {
     this.metadata = metadata;
     this.tags = tags;
     this.project_name = project_name;
-    this.replicas = replicas;
+    this.replicas = replicas2;
   }
   static fromHeader(value) {
     const items = value.split(",");
     let metadata = {};
     let tags = [];
     let project_name;
-    let replicas;
+    let replicas2;
     for (const item of items) {
       const [key, uriValue] = item.split("=");
       const value2 = decodeURIComponent(uriValue);
@@ -9370,7 +9370,7 @@ var Baggage = class _Baggage {
         project_name = value2;
       } else if (key === "langsmith-replicas") {
         const parsed = JSON.parse(value2);
-        replicas = parsed.map((replica) => {
+        replicas2 = parsed.map((replica) => {
           if (Array.isArray(replica)) {
             return replica;
           }
@@ -9378,7 +9378,7 @@ var Baggage = class _Baggage {
         });
       }
     }
-    return new _Baggage(metadata, tags, project_name, replicas);
+    return new _Baggage(metadata, tags, project_name, replicas2);
   }
   toHeader() {
     const items = [];
@@ -10119,7 +10119,7 @@ function _getWriteReplicasFromEnv() {
   try {
     const parsed = JSON.parse(envVar);
     if (Array.isArray(parsed)) {
-      const replicas = [];
+      const replicas2 = [];
       for (const item of parsed) {
         if (typeof item !== "object" || item === null) {
           console.warn(`Invalid item type in LANGSMITH_RUNS_ENDPOINTS: expected object, got ${typeof item}`);
@@ -10133,19 +10133,19 @@ function _getWriteReplicasFromEnv() {
           console.warn(`Invalid api_key type in LANGSMITH_RUNS_ENDPOINTS: expected string, got ${typeof item.api_key}`);
           continue;
         }
-        replicas.push({
+        replicas2.push({
           apiUrl: item.api_url.replace(/\/$/, ""),
           apiKey: item.api_key
         });
       }
-      return replicas;
+      return replicas2;
     } else if (typeof parsed === "object" && parsed !== null) {
       _checkEndpointEnvUnset(parsed);
-      const replicas = [];
+      const replicas2 = [];
       for (const [url, key] of Object.entries(parsed)) {
         const cleanUrl = url.replace(/\/$/, "");
         if (typeof key === "string") {
-          replicas.push({
+          replicas2.push({
             apiUrl: cleanUrl,
             apiKey: key
           });
@@ -10154,7 +10154,7 @@ function _getWriteReplicasFromEnv() {
           continue;
         }
       }
-      return replicas;
+      return replicas2;
     } else {
       console.warn(`Invalid LANGSMITH_RUNS_ENDPOINTS \u2013 must be valid JSON array of objects with api_url and api_key properties, or object mapping url->apiKey, got ${typeof parsed}`);
       return [];
@@ -10167,9 +10167,9 @@ function _getWriteReplicasFromEnv() {
     return [];
   }
 }
-function _ensureWriteReplicas(replicas) {
-  if (replicas) {
-    return replicas.map((replica) => {
+function _ensureWriteReplicas(replicas2) {
+  if (replicas2) {
+    return replicas2.map((replica) => {
       if (Array.isArray(replica)) {
         return {
           projectName: replica[0],
@@ -10195,23 +10195,23 @@ function uuid7() {
 // node_modules/.pnpm/langsmith@0.5.15/node_modules/langsmith/dist/index.js
 var __version__ = "0.5.15";
 
+// dist/constants.js
+var USER_PROMPT_TURN_NAME = "Claude Code Turn";
+var ASSISTANT_RUN_NAME = "Claude";
+
 // dist/langsmith.js
-var client = null;
-function initClient(apiKey, apiUrl) {
-  client = new Client({ apiKey, apiUrl });
+var client = void 0;
+var replicas = void 0;
+function initTracing(apiKey, apiUrl, providedReplicas) {
+  if (apiKey) {
+    client = new Client({ apiKey, apiUrl });
+  }
+  replicas = providedReplicas;
   return client;
 }
 async function flushPendingTraces() {
-  if (!client) {
-    warn("Cannot flush: client not initialized");
-    return;
-  }
-  if (typeof client.awaitPendingTraceBatches !== "function") {
-    warn("Cannot flush: awaitPendingTraceBatches not available on client");
-    return;
-  }
   debug("Awaiting pending trace batches...");
-  await client.awaitPendingTraceBatches();
+  await client?.awaitPendingTraceBatches();
   debug("Trace batches flushed successfully");
 }
 function isoToMillis(iso) {
@@ -10257,8 +10257,8 @@ async function traceTurn(options) {
   const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder } = options;
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
-  if (!client) {
-    throw new Error("LangSmith client not initialized \u2014 call initClient() first");
+  if (!client && !replicas) {
+    throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
   }
   const userContent = typeof turn.userContent === "string" ? [{ type: "text", text: turn.userContent }] : turn.userContent;
   let turnRunId;
@@ -10276,9 +10276,11 @@ async function traceTurn(options) {
     const turnStartTime = isoToMillis(turn.userTimestamp);
     parentDottedOrder = generateDottedOrderSegment(turnStartTime, turnRunId);
     debug(`Creating new standalone turn run ${turnRunId}`);
-    await client.createRun({
+    const runTree = new RunTree({
+      client,
+      replicas,
       id: turnRunId,
-      name: "Claude Code Turn",
+      name: USER_PROMPT_TURN_NAME,
       run_type: "chain",
       inputs: { messages: [{ role: "user", content: userContent }] },
       project_name: project,
@@ -10286,6 +10288,7 @@ async function traceTurn(options) {
       trace_id: traceId,
       dotted_order: parentDottedOrder
     });
+    await runTree.postRun();
   }
   const accumulatedMessages = [
     { role: "user", content: userContent }
@@ -10300,9 +10303,11 @@ async function traceTurn(options) {
     const assistantStartTime = isoToMillis(llmCall.startTime);
     const assistantDottedOrderSegment = generateDottedOrderSegment(assistantStartTime, assistantRunId);
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
-    await client.createRun({
+    const assistantRunTree = new RunTree({
+      client,
+      replicas,
       id: assistantRunId,
-      name: "Claude",
+      name: ASSISTANT_RUN_NAME,
       run_type: "llm",
       inputs: { messages: [...accumulatedMessages] },
       project_name: project,
@@ -10311,6 +10316,7 @@ async function traceTurn(options) {
       trace_id: traceId,
       dotted_order: assistantDottedOrder
     });
+    await assistantRunTree.postRun();
     for (const toolCall of llmCall.toolCalls) {
       if (toolCall.agentId && existingTaskRunMap?.[toolCall.agentId]) {
         debug(`Skipping Task tool for agent ${toolCall.agentId} - already traced by PostToolUse`);
@@ -10327,7 +10333,9 @@ async function traceTurn(options) {
       const toolStartTimeMs = isoToMillis(toolStartTime);
       const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTimeMs, toolRunId);
       const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
-      await client.createRun({
+      const runTree2 = new RunTree({
+        client,
+        replicas,
         id: toolRunId,
         name: toolCall.tool_use.name,
         run_type: "tool",
@@ -10343,6 +10351,7 @@ async function traceTurn(options) {
           metadata: { thread_id: sessionId, ls_integration: "claude-code" }
         }
       });
+      await runTree2.postRun();
       if (toolCall.agentId) {
         taskRunMap[toolCall.agentId] = {
           run_id: toolRunId,
@@ -10353,10 +10362,14 @@ async function traceTurn(options) {
       lastEndTime = toolEndTime;
     }
     const assistantEndTime = llmCall.toolCalls.length > 0 ? lastEndTime : llmCall.endTime;
-    await client.updateRun(assistantRunId, {
+    const runTree = new RunTree({
+      client,
+      replicas,
+      id: assistantRunId,
       trace_id: traceId,
       dotted_order: assistantDottedOrder,
       parent_run_id: turnRunId,
+      name: ASSISTANT_RUN_NAME,
       end_time: isoToMillis(assistantEndTime),
       outputs: {
         messages: [{ role: "assistant", content: assistantContent }]
@@ -10375,6 +10388,7 @@ async function traceTurn(options) {
         }
       }
     });
+    await runTree.patchRun({ excludeInputs: true });
     accumulatedMessages.push({ role: "assistant", content: assistantContent });
     for (const tc of llmCall.toolCalls) {
       accumulatedMessages.push({
@@ -10388,9 +10402,13 @@ async function traceTurn(options) {
   if (shouldCreateTurn) {
     const turnOutputs = accumulatedMessages.filter((m) => m.role !== "user");
     const error2 = turn.isComplete ? void 0 : "Interrupted";
-    await client.updateRun(turnRunId, {
+    const runTree = new RunTree({
+      client,
+      replicas,
+      id: turnRunId,
       trace_id: traceId,
       dotted_order: parentDottedOrder,
+      name: USER_PROMPT_TURN_NAME,
       end_time: isoToMillis(lastEndTime),
       outputs: { messages: turnOutputs },
       error: error2,
@@ -10402,6 +10420,7 @@ async function traceTurn(options) {
         }
       }
     });
+    await runTree.patchRun({ excludeInputs: true });
   }
   const status = turn.isComplete ? "complete" : "interrupted";
   log(`Traced turn ${turnNum}: ${turnRunId} with ${turn.llmCalls.length} LLM call(s) [${status}]`);
@@ -10409,8 +10428,8 @@ async function traceTurn(options) {
 }
 async function tracePendingSubagents(options) {
   const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project } = options;
-  if (!client) {
-    throw new Error("LangSmith client not initialized \u2014 call initClient() first");
+  if (!client && !replicas) {
+    throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
   }
   if (!parentTraceId) {
     warn("Cannot trace subagents: no parent trace ID");
@@ -10437,7 +10456,9 @@ async function tracePendingSubagents(options) {
       const subagentStartTime = deferred?.start_time ?? Date.now();
       const subagentEndTime = deferred?.end_time ?? Date.now();
       if (deferred) {
-        await client.createRun({
+        const runTree2 = new RunTree({
+          client,
+          replicas,
           id: parentToolRunId,
           name: "Agent",
           run_type: "tool",
@@ -10459,10 +10480,13 @@ async function tracePendingSubagents(options) {
             }
           }
         });
+        await runTree2.postRun();
       }
       const subagentChainId = uuid7();
       const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentStartTime, subagentChainId)}`;
-      await client.createRun({
+      const runTree = new RunTree({
+        client,
+        replicas,
         id: subagentChainId,
         name: `${toolName} Subagent`,
         run_type: "chain",
@@ -10484,6 +10508,7 @@ async function tracePendingSubagents(options) {
           }
         }
       });
+      await runTree.postRun();
       for (let i = 0; i < subagentTurns.length; i++) {
         await traceTurn({
           turn: subagentTurns[i],
@@ -10511,8 +10536,17 @@ function loadConfig() {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
+  let replicas2;
+  const providedReplicas = process.env.CC_LANGSMITH_REPLICAS;
+  if (providedReplicas !== void 0) {
+    try {
+      replicas2 = JSON.parse(providedReplicas);
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_REPLICAS. Please make sure they are valid JSON.");
+    }
+  }
   const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
-  return { apiKey, project, apiBaseUrl, stateFilePath, debug: debug2, parentDottedOrder };
+  return { apiKey, project, apiBaseUrl, stateFilePath, debug: debug2, parentDottedOrder, replicas: replicas2 };
 }
 
 // dist/utils/hook-init.js
@@ -10566,7 +10600,7 @@ async function main() {
     warn(`Invalid input: session=${input.session_id}, transcript=${transcriptPath}`);
     return;
   }
-  const client2 = initClient(config.apiKey, config.apiBaseUrl);
+  const client2 = initTracing(config.apiKey, config.apiBaseUrl);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   debug(`Last line: ${sessionState.last_line}, turn count: ${sessionState.turn_count}`);
@@ -10638,7 +10672,11 @@ async function main() {
   if (currentRunId) {
     debug(`Completing Turn run ${currentRunId}`);
     try {
-      await client2.updateRun(currentRunId, {
+      const runTree = new RunTree({
+        client: client2,
+        replicas: config.replicas,
+        name: USER_PROMPT_TURN_NAME,
+        id: currentRunId,
         trace_id: currentTraceId,
         dotted_order: currentDottedOrder,
         parent_run_id: currentParentRunId,
@@ -10655,6 +10693,7 @@ async function main() {
           }
         }
       });
+      await runTree.patchRun({ excludeInputs: true });
       debug(`Turn run ${currentRunId} completed`);
     } catch (err) {
       error(`Failed to complete turn run: ${err}`);
