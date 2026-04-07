@@ -29,13 +29,13 @@ export function loadConfig(): Config {
   const debug = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
 
   let replicas;
-  const providedReplicas = process.env.CC_LANGSMITH_REPLICAS;
+  const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
   if (providedReplicas !== undefined) {
     try {
       replicas = JSON.parse(providedReplicas);
     } catch {
       error(
-        "Failed to parse provided CC_LANGSMITH_REPLICAS. Please make sure they are valid JSON.",
+        "Failed to parse provided CC_LANGSMITH_RUNS_ENDPOINTS. Please make sure they are valid JSON.",
       );
     }
   }

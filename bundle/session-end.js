@@ -10577,12 +10577,12 @@ function loadConfig() {
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
   let replicas2;
-  const providedReplicas = process.env.CC_LANGSMITH_REPLICAS;
+  const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
   if (providedReplicas !== void 0) {
     try {
       replicas2 = JSON.parse(providedReplicas);
     } catch {
-      error("Failed to parse provided CC_LANGSMITH_REPLICAS. Please make sure they are valid JSON.");
+      error("Failed to parse provided CC_LANGSMITH_RUNS_ENDPOINTS. Please make sure they are valid JSON.");
     }
   }
   const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
