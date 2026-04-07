@@ -39,7 +39,7 @@ claude --plugin-dir /path/to/langsmith-claude-code-plugins
 
 **Option 1: Claude Code settings file (recommended)**
 
-Add to `~/.claude/settings.json`:
+Add the following to a `.claude/settings.local.json` file in your project folder or `~/.claude/settings.json` globally:
 
 ```json
 {
@@ -88,15 +88,64 @@ The plugin respects the following environment variables:
 | Variable                           | Required | Default                           | Description                                                          |
 | ---------------------------------- | -------- | --------------------------------- | -------------------------------------------------------------------- |
 | `TRACE_TO_LANGSMITH`               | Yes      | —                                 | Set to `"true"` to enable tracing                                    |
-| `CC_LANGSMITH_API_KEY`             | Yes      | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`)                |
+| `CC_LANGSMITH_API_KEY`             | No*      | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`). *Required unless `CC_LANGSMITH_RUNS_ENDPOINTS` is set. |
 | `CC_LANGSMITH_PROJECT`             | No       | `"claude-code"`                   | LangSmith project name                                               |
 | `LANGSMITH_ENDPOINT`               | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                               |
 | `CC_LANGSMITH_DEBUG`               | No       | `"false"`                         | Enable debug logging                                                 |
 | `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | —                                 | Dotted-order of an existing run to nest all Claude Code traces under |
+| `CC_LANGSMITH_RUNS_ENDPOINTS`      | No       | —                                 | JSON array of replica destinations for multi-project tracing          |
 
 ## Nesting traces under an existing run
 
 Set `CC_LANGSMITH_PARENT_DOTTED_ORDER` to nest all Claude Code traces as children of an existing LangSmith run. This is useful when Claude Code is invoked programmatically as part of a larger traced workflow.
+
+## Tracing to multiple destinations (Replicas)
+
+You can trace to multiple LangSmith projects or workspaces simultaneously using the `CC_LANGSMITH_RUNS_ENDPOINTS` environment variable. This is useful for:
+
+- Sending traces to both a production and staging project
+- Tracing to multiple workspaces with different API keys
+- Adding extra metadata to specific replica destinations
+
+For more information on replicas, see the [LangSmith documentation](https://docs.langchain.com/langsmith/log-traces-to-project).
+
+### Configuration
+
+Set `CC_LANGSMITH_RUNS_ENDPOINTS` to a JSON array of replica configurations. This will override other client settings.
+
+**Option 1: Claude Code settings file (recommended)**
+
+In your local `.claude/settings.local.json` or global `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "TRACE_TO_LANGSMITH": "true",
+    "CC_LANGSMITH_RUNS_ENDPOINTS": "[{\"apiUrl\":\"https://api.smith.langchain.com\",\"apiKey\":\"ls__key_workspace_a\",\"projectName\":\"project-prod\"},{\"apiUrl\":\"https://api.smith.langchain.com\",\"apiKey\":\"ls__key_workspace_b\",\"projectName\":\"project-staging\",\"updates\":{\"metadata\":{\"environment\":\"staging\"}}}]"
+  }
+}
+```
+
+> **Tip:** To generate the escaped JSON string, use: `echo '[{"apiUrl":"...","apiKey":"...","projectName":"..."}]' | jq -cR .`
+
+**Option 2: Shell environment variable**
+
+Add to your `~/.zshrc`, `~/.bashrc`, or `~/.bash_profile`:
+
+```bash
+export CC_LANGSMITH_RUNS_ENDPOINTS='[{"apiUrl":"https://api.smith.langchain.com","apiKey":"ls__key_workspace_a","projectName":"project-prod"},{"apiUrl":"https://api.smith.langchain.com","apiKey":"ls__key_workspace_b","projectName":"project-staging","updates":{"metadata":{"environment":"staging"}}}]'
+```
+
+### Replica format
+
+Each replica object supports the following fields:
+
+| Field        | Required | Description                                                    |
+| ------------ | -------- | -------------------------------------------------------------- |
+| `apiUrl`     | Yes      | LangSmith API URL (typically `https://api.smith.langchain.com`) |
+| `apiKey`     | Yes      | API key for the destination workspace                          |
+| `projectName`| Yes      | Project name in the destination workspace                     |
+| `updates`    | No       | Optional metadata/fields to override on the replicated runs    |
 
 **Python**
 

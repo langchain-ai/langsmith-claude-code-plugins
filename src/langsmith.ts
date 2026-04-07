@@ -25,6 +25,8 @@ export function initTracing(
 ) {
   if (apiKey) {
     client = new Client({ apiKey, apiUrl });
+  } else {
+    client = undefined;
   }
   replicas = providedReplicas;
   return client;

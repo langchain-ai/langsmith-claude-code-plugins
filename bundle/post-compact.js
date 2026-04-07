@@ -9949,6 +9949,8 @@ var replicas = void 0;
 function initTracing(apiKey, apiUrl, providedReplicas) {
   if (apiKey) {
     client = new Client({ apiKey, apiUrl });
+  } else {
+    client = void 0;
   }
   replicas = providedReplicas;
   return client;
@@ -10018,7 +10020,7 @@ async function main() {
   if (!config)
     return;
   debug(`PostCompact hook started, session=${input.session_id}, trigger=${input.trigger}`);
-  const client2 = initTracing(config.apiKey, config.apiBaseUrl);
+  const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   const endTime = Date.now();

@@ -47,7 +47,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const client = initTracing(config.apiKey, config.apiBaseUrl);
+  const client = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
 
   // Load state and read new messages.
   const state = loadState(config.stateFilePath);

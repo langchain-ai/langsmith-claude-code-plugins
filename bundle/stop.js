@@ -10205,6 +10205,8 @@ var replicas = void 0;
 function initTracing(apiKey, apiUrl, providedReplicas) {
   if (apiKey) {
     client = new Client({ apiKey, apiUrl });
+  } else {
+    client = void 0;
   }
   replicas = providedReplicas;
   return client;
@@ -10600,7 +10602,7 @@ async function main() {
     warn(`Invalid input: session=${input.session_id}, transcript=${transcriptPath}`);
     return;
   }
-  const client2 = initTracing(config.apiKey, config.apiBaseUrl);
+  const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   debug(`Last line: ${sessionState.last_line}, turn count: ${sessionState.turn_count}`);

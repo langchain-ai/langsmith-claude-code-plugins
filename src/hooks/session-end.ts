@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  initTracing(config.apiKey, config.apiBaseUrl);
+  initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
 
   debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
 

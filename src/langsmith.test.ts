@@ -6,6 +6,9 @@ const mockCreateRun = vi.fn().mockResolvedValue(undefined);
 const mockUpdateRun = vi.fn().mockResolvedValue(undefined);
 const mockAwaitPendingTraceBatches = vi.fn().mockResolvedValue(undefined);
 
+// Track the last RunTree params for assertions
+let lastRunTreeParams: Record<string, unknown> | null = null;
+
 vi.mock("langsmith", () => {
   class MockClient {
     createRun = mockCreateRun;
@@ -13,17 +16,24 @@ vi.mock("langsmith", () => {
     awaitPendingTraceBatches = mockAwaitPendingTraceBatches;
   }
   class MockRunTree {
-    client: MockClient;
+    client: MockClient | undefined;
     params: Record<string, unknown>;
-    constructor(params: { client: MockClient; id: string } & Record<string, unknown>) {
+    constructor(params: { client?: MockClient; id: string } & Record<string, unknown>) {
       this.client = params.client;
       this.params = params;
+      lastRunTreeParams = params;
     }
     postRun() {
-      this.client.createRun(this.params);
+      // Only call createRun if client exists (for non-replica-only mode)
+      if (this.client) {
+        this.client.createRun(this.params);
+      }
     }
     patchRun() {
-      this.client.updateRun(this.params.id, this.params);
+      // Only call updateRun if client exists (for non-replica-only mode)
+      if (this.client) {
+        this.client.updateRun(this.params.id, this.params);
+      }
     }
   }
 
@@ -538,5 +548,164 @@ describe("traceTurn", () => {
     // Last updateRun call is the turn completion
     const turnUpdateArgs = mockUpdateRun.mock.calls[mockUpdateRun.mock.calls.length - 1][1];
     expect(turnUpdateArgs.error).toBe("Interrupted");
+  });
+
+  it("passes replicas to RunTree when provided", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_a",
+        projectName: "project-prod",
+      },
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_b",
+        projectName: "project-staging",
+        updates: { metadata: { environment: "staging" } },
+      },
+    ];
+
+    // Re-initialize with replicas
+    initTracing("test-api-key", "https://test.api.com", replicas);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Check that replicas were passed to RunTree
+    expect(lastRunTreeParams).toBeDefined();
+    expect(lastRunTreeParams?.replicas).toEqual(replicas);
+  });
+
+  it("works with replicas only (no client API key)", async () => {
+    // Initialize with no API key but with replicas
+    initTracing(undefined, undefined, [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_replica",
+        projectName: "project-replica",
+      },
+    ]);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    // Should not throw even without client
+    await expect(
+      traceTurn({
+        turn,
+        sessionId: "session-123",
+        turnNum: 1,
+        project: "test-project",
+      }),
+    ).resolves.not.toThrow();
+
+    // RunTree should still be created with replicas
+    expect(lastRunTreeParams).toBeDefined();
+    expect(lastRunTreeParams?.replicas).toBeDefined();
+    expect(lastRunTreeParams?.replicas).toHaveLength(1);
+    // Client should be undefined when no API key provided
+    expect(lastRunTreeParams?.client).toBeUndefined();
+  });
+
+  it("throws when neither client nor replicas are initialized", async () => {
+    // Initialize with no client and no replicas
+    initTracing(undefined, undefined, undefined);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [],
+      isComplete: true,
+    };
+
+    await expect(
+      traceTurn({
+        turn,
+        sessionId: "session-123",
+        turnNum: 1,
+        project: "test-project",
+      }),
+    ).rejects.toThrow("LangSmith client not initialized");
+  });
+
+  it("passes replicas with updates field to RunTree", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_a",
+        projectName: "project-prod",
+      },
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_b",
+        projectName: "project-staging",
+        updates: { metadata: { environment: "staging" } },
+      },
+    ];
+
+    initTracing("test-api-key", "https://test.api.com", replicas);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Check that replicas with updates field was passed correctly
+    expect(lastRunTreeParams?.replicas).toHaveLength(2);
+    expect((lastRunTreeParams?.replicas as any)?.[1]).toHaveProperty("updates");
+    expect((lastRunTreeParams?.replicas as any)?.[1].updates).toEqual({
+      metadata: { environment: "staging" },
+    });
   });
 });

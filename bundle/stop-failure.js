@@ -9947,6 +9947,8 @@ var replicas = void 0;
 function initTracing(apiKey, apiUrl, providedReplicas) {
   if (apiKey) {
     client = new Client({ apiKey, apiUrl });
+  } else {
+    client = void 0;
   }
   replicas = providedReplicas;
   return client;
@@ -10016,7 +10018,7 @@ async function main() {
   if (!config)
     return;
   debug(`StopFailure hook: session=${input.session_id}, error=${input.error}`);
-  const client2 = initTracing(config.apiKey, config.apiBaseUrl);
+  const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   if (!sessionState.current_turn_run_id) {

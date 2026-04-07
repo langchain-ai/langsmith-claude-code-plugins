@@ -52,7 +52,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const client = initTracing(config.apiKey, config.apiBaseUrl);
+  const client = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);

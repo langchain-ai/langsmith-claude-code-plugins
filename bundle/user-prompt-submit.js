@@ -10214,6 +10214,8 @@ var replicas = void 0;
 function initTracing(apiKey, apiUrl, providedReplicas) {
   if (apiKey) {
     client = new Client({ apiKey, apiUrl });
+  } else {
+    client = void 0;
   }
   replicas = providedReplicas;
   return client;
@@ -10684,7 +10686,7 @@ async function main() {
     debug("Skipping UserPromptSubmit for subagent \u2014 Stop hook handles tracing");
     return;
   }
-  const client2 = initTracing(config.apiKey, config.apiBaseUrl);
+  const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   let interruptedLastLine = sessionState.last_line;

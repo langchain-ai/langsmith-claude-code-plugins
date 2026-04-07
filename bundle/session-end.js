@@ -10175,6 +10175,8 @@ var replicas = void 0;
 function initTracing(apiKey, apiUrl, providedReplicas) {
   if (apiKey) {
     client = new Client({ apiKey, apiUrl });
+  } else {
+    client = void 0;
   }
   replicas = providedReplicas;
   return client;
@@ -10636,7 +10638,7 @@ async function main() {
     debug("No open turn run \u2014 nothing to close");
     return;
   }
-  initTracing(config.apiKey, config.apiBaseUrl);
+  initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
   debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
   try {
     const { lastLine, turnsTraced } = await closeInterruptedTurn({

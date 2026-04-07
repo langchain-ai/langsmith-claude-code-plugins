@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { loadConfig } from "./config.js";
 
 describe("loadConfig", () => {
@@ -12,6 +12,7 @@ describe("loadConfig", () => {
     delete process.env.LANGSMITH_ENDPOINT;
     delete process.env.STATE_FILE;
     delete process.env.CC_LANGSMITH_DEBUG;
+    delete process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
   });
 
   afterEach(() => {
@@ -74,5 +75,56 @@ describe("loadConfig", () => {
   it("does not enable debug with other values", () => {
     process.env.CC_LANGSMITH_DEBUG = "1";
     expect(loadConfig().debug).toBe(false);
+  });
+
+  it("parses CC_LANGSMITH_RUNS_ENDPOINTS as JSON array", () => {
+    process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_a",
+        projectName: "project-prod",
+      },
+    ]);
+    const config = loadConfig();
+    expect(config.replicas).toBeDefined();
+    expect(config.replicas).toHaveLength(1);
+    expect(config.replicas?.[0]).toEqual({
+      apiUrl: "https://api.smith.langchain.com",
+      apiKey: "ls__key_workspace_a",
+      projectName: "project-prod",
+    });
+  });
+
+  it("parses multiple replicas from CC_LANGSMITH_RUNS_ENDPOINTS", () => {
+    process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_a",
+        projectName: "project-prod",
+      },
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_b",
+        projectName: "project-staging",
+        updates: { metadata: { environment: "staging" } },
+      },
+    ]);
+    const config = loadConfig();
+    expect(config.replicas).toHaveLength(2);
+    expect(config.replicas?.[1].updates).toEqual({ metadata: { environment: "staging" } });
+  });
+
+  it("returns undefined replicas when CC_LANGSMITH_RUNS_ENDPOINTS not set", () => {
+    expect(loadConfig().replicas).toBeUndefined();
+  });
+
+  it("handles invalid JSON in CC_LANGSMITH_RUNS_ENDPOINTS gracefully", () => {
+    const originalError = console.error;
+    console.error = vi.fn();
+    process.env.CC_LANGSMITH_RUNS_ENDPOINTS = "not valid json";
+    const config = loadConfig();
+    // Should not throw and replicas should be undefined
+    expect(config.replicas).toBeUndefined();
+    console.error = originalError;
   });
 });
