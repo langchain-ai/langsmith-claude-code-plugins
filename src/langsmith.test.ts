@@ -708,4 +708,208 @@ describe("traceTurn", () => {
       metadata: { environment: "staging" },
     });
   });
+
+  it("traces to multiple different projects via replicas", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_prod_workspace",
+        projectName: "production-project",
+      },
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_staging_workspace",
+        projectName: "staging-project",
+      },
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_dev_workspace",
+        projectName: "dev-project",
+      },
+    ];
+
+    initTracing("test-api-key", "https://test.api.com", replicas);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Verify all three project destinations are in replicas
+    expect(lastRunTreeParams?.replicas).toHaveLength(3);
+    const projectNames = (lastRunTreeParams?.replicas as any[])?.map((r) => r.projectName);
+    expect(projectNames).toContain("production-project");
+    expect(projectNames).toContain("staging-project");
+    expect(projectNames).toContain("dev-project");
+  });
+
+  it("works with replicas-only mode tracing to different projects", async () => {
+    // No primary client - only replicas
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_a",
+        projectName: "project-prod",
+      },
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace_b",
+        projectName: "project-staging",
+        updates: { metadata: { environment: "staging" } },
+      },
+    ];
+
+    // Initialize with no API key, no API URL, only replicas
+    initTracing(undefined, undefined, replicas);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    // Should successfully trace without a primary client
+    await expect(
+      traceTurn({
+        turn,
+        sessionId: "session-123",
+        turnNum: 1,
+        project: "test-project",
+      }),
+    ).resolves.not.toThrow();
+
+    // Verify replicas are passed correctly
+    expect(lastRunTreeParams?.replicas).toHaveLength(2);
+    expect(lastRunTreeParams?.client).toBeUndefined();
+
+    // Verify both project destinations
+    const projectNames = (lastRunTreeParams?.replicas as any[])?.map((r) => r.projectName);
+    expect(projectNames).toContain("project-prod");
+    expect(projectNames).toContain("project-staging");
+  });
+
+  it("supports replicas with different API URLs (multi-tenant)", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_langsmith",
+        projectName: "langsmith-project",
+      },
+      {
+        apiUrl: "https://custom.langsmith.enterprise.com",
+        apiKey: "ls__key_enterprise",
+        projectName: "enterprise-project",
+      },
+    ];
+
+    initTracing(undefined, undefined, replicas);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Verify different API URLs are preserved
+    const apiUrls = (lastRunTreeParams?.replicas as any[])?.map((r) => r.apiUrl);
+    expect(apiUrls).toContain("https://api.smith.langchain.com");
+    expect(apiUrls).toContain("https://custom.langsmith.enterprise.com");
+  });
+
+  it("applies updates metadata to replica runs", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_with_updates",
+        projectName: "project-with-metadata",
+        updates: {
+          metadata: {
+            environment: "production",
+            version: "1.0.0",
+            team: "platform",
+          },
+        },
+      },
+    ];
+
+    initTracing(undefined, undefined, replicas);
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+    });
+
+    // Verify updates are passed through
+    expect(lastRunTreeParams?.replicas).toHaveLength(1);
+    expect((lastRunTreeParams?.replicas as any[])?.[0].updates).toEqual({
+      metadata: {
+        environment: "production",
+        version: "1.0.0",
+        team: "platform",
+      },
+    });
+  });
 });

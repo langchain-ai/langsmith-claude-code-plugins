@@ -85,15 +85,15 @@ Interrupted turns (where the user cancels mid-response) are marked with status `
 
 The plugin respects the following environment variables:
 
-| Variable                           | Required | Default                           | Description                                                          |
-| ---------------------------------- | -------- | --------------------------------- | -------------------------------------------------------------------- |
-| `TRACE_TO_LANGSMITH`               | Yes      | —                                 | Set to `"true"` to enable tracing                                    |
-| `CC_LANGSMITH_API_KEY`             | No*      | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`). *Required unless `CC_LANGSMITH_RUNS_ENDPOINTS` is set. |
-| `CC_LANGSMITH_PROJECT`             | No       | `"claude-code"`                   | LangSmith project name                                               |
-| `LANGSMITH_ENDPOINT`               | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                               |
-| `CC_LANGSMITH_DEBUG`               | No       | `"false"`                         | Enable debug logging                                                 |
-| `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | —                                 | Dotted-order of an existing run to nest all Claude Code traces under |
-| `CC_LANGSMITH_RUNS_ENDPOINTS`      | No       | —                                 | JSON array of replica destinations for multi-project tracing          |
+| Variable                           | Required | Default                           | Description                                                                                                    |
+| ---------------------------------- | -------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `TRACE_TO_LANGSMITH`               | Yes      | —                                 | Set to `"true"` to enable tracing                                                                              |
+| `CC_LANGSMITH_API_KEY`             | No\*     | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`). \*Required unless `CC_LANGSMITH_RUNS_ENDPOINTS` is set. |
+| `CC_LANGSMITH_PROJECT`             | No       | `"claude-code"`                   | LangSmith project name                                                                                         |
+| `LANGSMITH_ENDPOINT`               | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                                                                         |
+| `CC_LANGSMITH_DEBUG`               | No       | `"false"`                         | Enable debug logging                                                                                           |
+| `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | —                                 | Dotted-order of an existing run to nest all Claude Code traces under                                           |
+| `CC_LANGSMITH_RUNS_ENDPOINTS`      | No       | —                                 | JSON array of replica destinations for multi-project tracing                                                   |
 
 ## Nesting traces under an existing run
 
@@ -140,12 +140,12 @@ export CC_LANGSMITH_RUNS_ENDPOINTS='[{"apiUrl":"https://api.smith.langchain.com"
 
 Each replica object supports the following fields:
 
-| Field        | Required | Description                                                    |
-| ------------ | -------- | -------------------------------------------------------------- |
-| `apiUrl`     | Yes      | LangSmith API URL (typically `https://api.smith.langchain.com`) |
-| `apiKey`     | Yes      | API key for the destination workspace                          |
-| `projectName`| Yes      | Project name in the destination workspace                     |
-| `updates`    | No       | Optional metadata/fields to override on the replicated runs    |
+| Field         | Required | Description                                                     |
+| ------------- | -------- | --------------------------------------------------------------- |
+| `apiUrl`      | Yes      | LangSmith API URL (typically `https://api.smith.langchain.com`) |
+| `apiKey`      | Yes      | API key for the destination workspace                           |
+| `projectName` | Yes      | Project name in the destination workspace                       |
+| `updates`     | No       | Optional metadata/fields to override on the replicated runs     |
 
 **Python**
 
