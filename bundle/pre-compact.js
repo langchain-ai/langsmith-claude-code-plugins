@@ -127,8 +127,8 @@ function initHook() {
   if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
     return null;
   }
-  if (!config.apiKey) {
-    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY)");
+  if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
+    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");
     return null;
   }
   return config;

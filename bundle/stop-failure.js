@@ -9987,8 +9987,8 @@ function initHook() {
   if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
     return null;
   }
-  if (!config.apiKey) {
-    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY)");
+  if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
+    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");
     return null;
   }
   return config;
@@ -10031,11 +10031,14 @@ async function main() {
       client: client2,
       replicas: config.replicas,
       name: USER_PROMPT_TURN_NAME,
+      run_type: "chain",
+      project_name: config.project,
       id: sessionState.current_turn_run_id,
       trace_id: sessionState.current_trace_id,
       dotted_order: sessionState.current_dotted_order,
       parent_run_id: sessionState.current_parent_run_id,
-      end_time: Date.now(),
+      start_time: sessionState.current_turn_start,
+      end_time: (/* @__PURE__ */ new Date()).toISOString(),
       error: errorMessage,
       extra: {
         metadata: {

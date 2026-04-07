@@ -95,7 +95,7 @@ async function main(): Promise<void> {
   const turnNum = sessionState.turn_count + interruptedTurnsTraced + 1;
 
   const runId = uuid7();
-  const startTime = Date.now();
+  const startTime = new Date().toISOString();
   const segment = generateDottedOrderSegment(startTime, runId);
 
   // If a parent dotted_order is provided, nest this turn under the existing run.
@@ -143,6 +143,7 @@ async function main(): Promise<void> {
         current_dotted_order: dottedOrder,
         current_parent_run_id: parentRunId,
         current_turn_number: turnNum,
+        current_turn_start: startTime,
         // Advance past the interrupted turn's messages so Stop doesn't re-trace them
         last_line: interruptedLastLine,
         turn_count: ss.turn_count + interruptedTurnsTraced,

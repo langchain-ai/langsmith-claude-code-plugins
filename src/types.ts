@@ -172,8 +172,8 @@ export interface SessionState {
   current_parent_run_id?: string;
   /** Current turn number (1-based), set by UserPromptSubmit for Stop to use */
   current_turn_number?: number;
-  /** Current turn start time for duration calculation */
-  current_turn_start?: number;
+  /** Current turn start time (ISO string) for duration calculation */
+  current_turn_start?: string;
   /** Wall-clock time (ms) when the last tool finished, set by PostToolUse */
   last_tool_end_time?: number;
   /** Maps tool_use_id -> wall-clock start time (ms), set by PreToolUse */

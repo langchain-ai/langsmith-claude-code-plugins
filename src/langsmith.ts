@@ -41,19 +41,17 @@ export async function flushPendingTraces(): Promise<void> {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** Convert ISO timestamp to milliseconds since epoch. */
-function isoToMillis(iso: string): number {
-  return new Date(iso).getTime();
-}
-
 /**
  * Generate dotted order segment for a run.
  * Format: stripNonAlphanumeric(ISO_timestamp_with_execution_order) + runId
  * Based on LangSmith's convertToDottedOrderFormat function.
+ *
+ * Accepts an ISO string or milliseconds-since-epoch.
  */
-export function generateDottedOrderSegment(epoch: number, runId: string): string {
+export function generateDottedOrderSegment(time: string | number, runId: string): string {
+  const iso = typeof time === "string" ? time : new Date(time).toISOString();
   // Add microsecond precision using execution order
-  const isoWithMicroseconds = `${new Date(epoch).toISOString().slice(0, -1)}000Z`;
+  const isoWithMicroseconds = `${iso.slice(0, -1)}000Z`;
   // Strip non-alphanumeric characters
   const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
   return stripped + runId;
@@ -201,8 +199,7 @@ export async function traceTurn(
     turnRunId = uuid7();
     traceId = turnRunId; // This turn is its own trace root
 
-    const turnStartTime = isoToMillis(turn.userTimestamp);
-    parentDottedOrder = generateDottedOrderSegment(turnStartTime, turnRunId);
+    parentDottedOrder = generateDottedOrderSegment(turn.userTimestamp, turnRunId);
 
     logger.debug(`Creating new standalone turn run ${turnRunId}`);
     const runTree = new RunTree({
@@ -213,7 +210,7 @@ export async function traceTurn(
       run_type: "chain",
       inputs: { messages: [{ role: "user", content: userContent }] },
       project_name: project,
-      start_time: turnStartTime,
+      start_time: turn.userTimestamp,
       trace_id: traceId,
       dotted_order: parentDottedOrder,
     });
@@ -238,9 +235,8 @@ export async function traceTurn(
 
     // Generate run ID for this LLM call
     const assistantRunId = uuid7();
-    const assistantStartTime = isoToMillis(llmCall.startTime);
     const assistantDottedOrderSegment = generateDottedOrderSegment(
-      assistantStartTime,
+      llmCall.startTime,
       assistantRunId,
     );
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
@@ -254,7 +250,7 @@ export async function traceTurn(
       run_type: "llm",
       inputs: { messages: [...accumulatedMessages] },
       project_name: project,
-      start_time: assistantStartTime,
+      start_time: llmCall.startTime,
       parent_run_id: turnRunId,
       trace_id: traceId,
       dotted_order: assistantDottedOrder,
@@ -280,13 +276,11 @@ export async function traceTurn(
       // Tools start when the LLM finishes, but for parallel tool calls the result
       // timestamp can precede the last LLM streaming chunk. Clamp to avoid negative latency.
       const toolEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
-      const toolStartTime =
-        isoToMillis(llmCall.endTime) <= isoToMillis(toolEndTime) ? llmCall.endTime : toolEndTime;
+      const toolStartTime = llmCall.endTime <= toolEndTime ? llmCall.endTime : toolEndTime;
 
       // Generate run ID for this tool
       const toolRunId = uuid7();
-      const toolStartTimeMs = isoToMillis(toolStartTime);
-      const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTimeMs, toolRunId);
+      const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTime, toolRunId);
       const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
 
       // Create and complete tool run in a single call.
@@ -299,8 +293,8 @@ export async function traceTurn(
         inputs: { input: toolCall.tool_use.input },
         outputs: { output: toolCall.result?.content ?? "No result" },
         project_name: project,
-        start_time: toolStartTimeMs,
-        end_time: isoToMillis(toolEndTime),
+        start_time: toolStartTime,
+        end_time: toolEndTime,
         parent_run_id: turnRunId,
         trace_id: traceId,
         dotted_order: toolDottedOrder,
@@ -330,11 +324,14 @@ export async function traceTurn(
       client,
       replicas,
       id: assistantRunId,
+      run_type: "llm",
       trace_id: traceId,
       dotted_order: assistantDottedOrder,
       parent_run_id: turnRunId,
       name: ASSISTANT_RUN_NAME,
-      end_time: isoToMillis(assistantEndTime),
+      project_name: project,
+      start_time: llmCall.startTime,
+      end_time: assistantEndTime,
       outputs: {
         messages: [{ role: "assistant", content: assistantContent }],
       },
@@ -378,10 +375,13 @@ export async function traceTurn(
       client,
       replicas,
       id: turnRunId,
+      run_type: "chain",
       trace_id: traceId,
       dotted_order: parentDottedOrder,
       name: USER_PROMPT_TURN_NAME,
-      end_time: isoToMillis(lastEndTime),
+      project_name: project,
+      start_time: turn.userTimestamp,
+      end_time: lastEndTime,
       outputs: { messages: turnOutputs },
       error: error,
       extra: {
@@ -487,11 +487,14 @@ export async function closeInterruptedTurn(options: {
     client,
     replicas,
     id: sessionState.current_turn_run_id!,
+    run_type: "chain",
     trace_id: sessionState.current_trace_id,
     name: USER_PROMPT_TURN_NAME,
+    project_name: project,
     dotted_order: sessionState.current_dotted_order,
     parent_run_id: sessionState.current_parent_run_id,
-    end_time: Date.now(),
+    start_time: sessionState.current_turn_start,
+    end_time: new Date().toISOString(),
     error: "User interrupt",
     extra: {
       metadata: {
@@ -576,8 +579,10 @@ export async function tracePendingSubagents(options: {
 
       // PreToolUse records start time before the tool runs; PostToolUse records
       // end time after — so deferred times already bracket the subagent's transcript.
-      const subagentStartTime = (deferred?.start_time as number | undefined) ?? Date.now();
-      const subagentEndTime = (deferred?.end_time as number | undefined) ?? Date.now();
+      const subagentStartTime =
+        (deferred?.start_time as string | undefined) ?? new Date().toISOString();
+      const subagentEndTime =
+        (deferred?.end_time as string | undefined) ?? new Date().toISOString();
 
       // PostToolUse deferred the Agent tool run creation so we can use the
       // real subagent name. Create it now with the correct name and clamped times.

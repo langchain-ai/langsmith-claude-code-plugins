@@ -62,6 +62,9 @@ async function main(): Promise<void> {
   const toolRunId = uuid7();
   const startTime = sessionState.tool_start_times?.[input.tool_use_id] ?? Date.now();
   const toolEndTime = Date.now();
+  // Convert to ISO for RunTree (avoids internal timestamp mangling)
+  const startTimeIso = new Date(startTime).toISOString();
+  const toolEndTimeIso = new Date(toolEndTime).toISOString();
 
   // Generate proper dotted order segment
   const toolDottedOrderSegment = generateDottedOrderSegment(startTime, toolRunId);
@@ -84,8 +87,8 @@ async function main(): Promise<void> {
       inputs: { input: input.tool_input },
       outputs: { output: input.tool_response },
       project_name: config.project,
-      start_time: startTime,
-      end_time: toolEndTime,
+      start_time: startTimeIso,
+      end_time: toolEndTimeIso,
       parent_run_id: parentRunId,
       trace_id: traceId,
       dotted_order: toolDottedOrder,
@@ -118,12 +121,12 @@ async function main(): Promise<void> {
                   deferred: {
                     trace_id: traceId!,
                     parent_run_id: parentRunId!,
-                    start_time: startTime,
-                    end_time: toolEndTime,
+                    start_time: startTimeIso,
+                    end_time: toolEndTimeIso,
                     inputs: input.tool_input,
                     outputs: input.tool_response,
                     project_name: config.project,
-                  },
+                  } as Record<string, unknown>,
                 },
               },
             }

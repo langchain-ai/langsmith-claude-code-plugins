@@ -9960,8 +9960,9 @@ async function flushPendingTraces() {
   await client?.awaitPendingTraceBatches();
   debug("Trace batches flushed successfully");
 }
-function generateDottedOrderSegment(epoch, runId) {
-  const isoWithMicroseconds = `${new Date(epoch).toISOString().slice(0, -1)}000Z`;
+function generateDottedOrderSegment(time, runId) {
+  const iso = typeof time === "string" ? time : new Date(time).toISOString();
+  const isoWithMicroseconds = `${iso.slice(0, -1)}000Z`;
   const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
   return stripped + runId;
 }
@@ -9994,8 +9995,8 @@ function initHook() {
   if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
     return null;
   }
-  if (!config.apiKey) {
-    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY)");
+  if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
+    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");
     return null;
   }
   return config;
@@ -10041,6 +10042,8 @@ async function main() {
   const toolRunId = uuid7();
   const startTime = sessionState.tool_start_times?.[input.tool_use_id] ?? Date.now();
   const toolEndTime = Date.now();
+  const startTimeIso = new Date(startTime).toISOString();
+  const toolEndTimeIso = new Date(toolEndTime).toISOString();
   const toolDottedOrderSegment = generateDottedOrderSegment(startTime, toolRunId);
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
   const agentId = input.tool_response.agentId;
@@ -10056,8 +10059,8 @@ async function main() {
       inputs: { input: input.tool_input },
       outputs: { output: input.tool_response },
       project_name: config.project,
-      start_time: startTime,
-      end_time: toolEndTime,
+      start_time: startTimeIso,
+      end_time: toolEndTimeIso,
       parent_run_id: parentRunId,
       trace_id: traceId,
       dotted_order: toolDottedOrder,
@@ -10087,8 +10090,8 @@ async function main() {
               deferred: {
                 trace_id: traceId,
                 parent_run_id: parentRunId,
-                start_time: startTime,
-                end_time: toolEndTime,
+                start_time: startTimeIso,
+                end_time: toolEndTimeIso,
                 inputs: input.tool_input,
                 outputs: input.tool_response,
                 project_name: config.project

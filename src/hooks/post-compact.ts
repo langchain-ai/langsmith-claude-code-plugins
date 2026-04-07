@@ -35,8 +35,10 @@ async function main(): Promise<void> {
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
 
-  const endTime = Date.now();
-  const startTime = sessionState.compaction_start_time ?? endTime;
+  const endTime = new Date().toISOString();
+  const startTime = sessionState.compaction_start_time
+    ? new Date(sessionState.compaction_start_time).toISOString()
+    : endTime;
 
   const runId = uuid7();
   const segment = generateDottedOrderSegment(startTime, runId);

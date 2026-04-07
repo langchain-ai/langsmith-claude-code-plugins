@@ -52,11 +52,14 @@ async function main(): Promise<void> {
       client,
       replicas: config.replicas,
       name: USER_PROMPT_TURN_NAME,
+      run_type: "chain",
+      project_name: config.project,
       id: sessionState.current_turn_run_id,
       trace_id: sessionState.current_trace_id,
       dotted_order: sessionState.current_dotted_order,
       parent_run_id: sessionState.current_parent_run_id,
-      end_time: Date.now(),
+      start_time: sessionState.current_turn_start,
+      end_time: new Date().toISOString(),
       error: errorMessage,
       extra: {
         metadata: {

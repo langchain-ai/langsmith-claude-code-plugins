@@ -10186,11 +10186,9 @@ async function flushPendingTraces() {
   await client?.awaitPendingTraceBatches();
   debug("Trace batches flushed successfully");
 }
-function isoToMillis(iso) {
-  return new Date(iso).getTime();
-}
-function generateDottedOrderSegment(epoch, runId) {
-  const isoWithMicroseconds = `${new Date(epoch).toISOString().slice(0, -1)}000Z`;
+function generateDottedOrderSegment(time, runId) {
+  const iso = typeof time === "string" ? time : new Date(time).toISOString();
+  const isoWithMicroseconds = `${iso.slice(0, -1)}000Z`;
   const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
   return stripped + runId;
 }
@@ -10245,8 +10243,7 @@ async function traceTurn(options) {
     shouldCreateTurn = true;
     turnRunId = uuid7();
     traceId = turnRunId;
-    const turnStartTime = isoToMillis(turn.userTimestamp);
-    parentDottedOrder = generateDottedOrderSegment(turnStartTime, turnRunId);
+    parentDottedOrder = generateDottedOrderSegment(turn.userTimestamp, turnRunId);
     debug(`Creating new standalone turn run ${turnRunId}`);
     const runTree = new RunTree({
       client,
@@ -10256,7 +10253,7 @@ async function traceTurn(options) {
       run_type: "chain",
       inputs: { messages: [{ role: "user", content: userContent }] },
       project_name: project,
-      start_time: turnStartTime,
+      start_time: turn.userTimestamp,
       trace_id: traceId,
       dotted_order: parentDottedOrder
     });
@@ -10272,8 +10269,7 @@ async function traceTurn(options) {
   for (const llmCall of turn.llmCalls) {
     const assistantContent = formatContent(llmCall.content);
     const assistantRunId = uuid7();
-    const assistantStartTime = isoToMillis(llmCall.startTime);
-    const assistantDottedOrderSegment = generateDottedOrderSegment(assistantStartTime, assistantRunId);
+    const assistantDottedOrderSegment = generateDottedOrderSegment(llmCall.startTime, assistantRunId);
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
     const assistantRunTree = new RunTree({
       client,
@@ -10283,7 +10279,7 @@ async function traceTurn(options) {
       run_type: "llm",
       inputs: { messages: [...accumulatedMessages] },
       project_name: project,
-      start_time: assistantStartTime,
+      start_time: llmCall.startTime,
       parent_run_id: turnRunId,
       trace_id: traceId,
       dotted_order: assistantDottedOrder
@@ -10300,10 +10296,9 @@ async function traceTurn(options) {
         continue;
       }
       const toolEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
-      const toolStartTime = isoToMillis(llmCall.endTime) <= isoToMillis(toolEndTime) ? llmCall.endTime : toolEndTime;
+      const toolStartTime = llmCall.endTime <= toolEndTime ? llmCall.endTime : toolEndTime;
       const toolRunId = uuid7();
-      const toolStartTimeMs = isoToMillis(toolStartTime);
-      const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTimeMs, toolRunId);
+      const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTime, toolRunId);
       const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
       const runTree2 = new RunTree({
         client,
@@ -10314,8 +10309,8 @@ async function traceTurn(options) {
         inputs: { input: toolCall.tool_use.input },
         outputs: { output: toolCall.result?.content ?? "No result" },
         project_name: project,
-        start_time: toolStartTimeMs,
-        end_time: isoToMillis(toolEndTime),
+        start_time: toolStartTime,
+        end_time: toolEndTime,
         parent_run_id: turnRunId,
         trace_id: traceId,
         dotted_order: toolDottedOrder,
@@ -10338,11 +10333,14 @@ async function traceTurn(options) {
       client,
       replicas,
       id: assistantRunId,
+      run_type: "llm",
       trace_id: traceId,
       dotted_order: assistantDottedOrder,
       parent_run_id: turnRunId,
       name: ASSISTANT_RUN_NAME,
-      end_time: isoToMillis(assistantEndTime),
+      project_name: project,
+      start_time: llmCall.startTime,
+      end_time: assistantEndTime,
       outputs: {
         messages: [{ role: "assistant", content: assistantContent }]
       },
@@ -10378,10 +10376,13 @@ async function traceTurn(options) {
       client,
       replicas,
       id: turnRunId,
+      run_type: "chain",
       trace_id: traceId,
       dotted_order: parentDottedOrder,
       name: USER_PROMPT_TURN_NAME,
-      end_time: isoToMillis(lastEndTime),
+      project_name: project,
+      start_time: turn.userTimestamp,
+      end_time: lastEndTime,
       outputs: { messages: turnOutputs },
       error: error2,
       extra: {
@@ -10450,11 +10451,14 @@ async function closeInterruptedTurn(options) {
     client,
     replicas,
     id: sessionState.current_turn_run_id,
+    run_type: "chain",
     trace_id: sessionState.current_trace_id,
     name: USER_PROMPT_TURN_NAME,
+    project_name: project,
     dotted_order: sessionState.current_dotted_order,
     parent_run_id: sessionState.current_parent_run_id,
-    end_time: Date.now(),
+    start_time: sessionState.current_turn_start,
+    end_time: (/* @__PURE__ */ new Date()).toISOString(),
     error: "User interrupt",
     extra: {
       metadata: {
@@ -10495,8 +10499,8 @@ async function tracePendingSubagents(options) {
         continue;
       }
       const subagentTurns = groupIntoTurns(subagentMessages);
-      const subagentStartTime = deferred?.start_time ?? Date.now();
-      const subagentEndTime = deferred?.end_time ?? Date.now();
+      const subagentStartTime = deferred?.start_time ?? (/* @__PURE__ */ new Date()).toISOString();
+      const subagentEndTime = deferred?.end_time ?? (/* @__PURE__ */ new Date()).toISOString();
       if (deferred) {
         const runTree2 = new RunTree({
           client,
@@ -10598,8 +10602,8 @@ function initHook() {
   if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
     return null;
   }
-  if (!config.apiKey) {
-    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY)");
+  if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
+    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");
     return null;
   }
   return config;

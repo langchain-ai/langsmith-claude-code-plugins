@@ -9955,8 +9955,9 @@ function initTracing(apiKey, apiUrl, providedReplicas) {
   replicas = providedReplicas;
   return client;
 }
-function generateDottedOrderSegment(epoch, runId) {
-  const isoWithMicroseconds = `${new Date(epoch).toISOString().slice(0, -1)}000Z`;
+function generateDottedOrderSegment(time, runId) {
+  const iso = typeof time === "string" ? time : new Date(time).toISOString();
+  const isoWithMicroseconds = `${iso.slice(0, -1)}000Z`;
   const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
   return stripped + runId;
 }
@@ -9989,8 +9990,8 @@ function initHook() {
   if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
     return null;
   }
-  if (!config.apiKey) {
-    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY)");
+  if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
+    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");
     return null;
   }
   return config;
@@ -10023,8 +10024,8 @@ async function main() {
   const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
-  const endTime = Date.now();
-  const startTime = sessionState.compaction_start_time ?? endTime;
+  const endTime = (/* @__PURE__ */ new Date()).toISOString();
+  const startTime = sessionState.compaction_start_time ? new Date(sessionState.compaction_start_time).toISOString() : endTime;
   const runId = uuid7();
   const segment = generateDottedOrderSegment(startTime, runId);
   const parentRunId = sessionState.current_turn_run_id;
