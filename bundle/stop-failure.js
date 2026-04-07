@@ -9955,7 +9955,10 @@ function initTracing(apiKey, apiUrl, providedReplicas) {
 }
 async function flushPendingTraces() {
   debug("Awaiting pending trace batches...");
-  await client?.awaitPendingTraceBatches();
+  await Promise.all([
+    client?.awaitPendingTraceBatches(),
+    RunTree.getSharedClient().awaitPendingTraceBatches()
+  ]);
   debug("Trace batches flushed successfully");
 }
 

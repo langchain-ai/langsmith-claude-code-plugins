@@ -35,7 +35,12 @@ export function initTracing(
 /** Flush all pending batches to ensure traces are sent before hook exits. */
 export async function flushPendingTraces(): Promise<void> {
   logger.debug("Awaiting pending trace batches...");
-  await client?.awaitPendingTraceBatches();
+  // Flush our explicit client (if any) and the shared client used internally
+  // by RunTree for replica API calls when no explicit client is provided.
+  await Promise.all([
+    client?.awaitPendingTraceBatches(),
+    RunTree.getSharedClient().awaitPendingTraceBatches(),
+  ]);
   logger.debug("Trace batches flushed successfully");
 }
 

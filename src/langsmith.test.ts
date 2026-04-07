@@ -970,6 +970,11 @@ describe("traceTurn", () => {
     const chainPatches = patchInstances.filter((i) => i.params.run_type === "chain");
     expect(llmPatches.length).toBe(1);
     expect(chainPatches.length).toBe(1);
+
+    // start_time must be set on patchRun to prevent the SDK from defaulting to Date.now()
+    // which would overwrite the correct start_time and cause negative durations
+    expect(llmPatches[0].params.start_time).toBe("2025-01-01T00:00:01Z");
+    expect(chainPatches[0].params.start_time).toBe("2025-01-01T00:00:00Z");
   });
 
   it("sets project_name and run_type consistently on patchRun RunTree instances (with parentRunId)", async () => {
@@ -1035,6 +1040,12 @@ describe("traceTurn", () => {
     // With parentRunId (no standalone turn creation), only the assistant patchRun fires
     const llmPatches = patchInstances.filter((i) => i.params.run_type === "llm");
     expect(llmPatches.length).toBe(1);
+
+    // LLM patchRun must carry the original start_time to avoid negative durations
+    expect(llmPatches[0].params.start_time).toBe("2025-01-01T00:00:01Z");
+
+    // end_time should be the last tool result timestamp (tool calls present)
+    expect(llmPatches[0].params.end_time).toBe("2025-01-01T00:00:03Z");
 
     // postRun instances should also have project_name set
     const postInstances = allRunTreeInstances.filter((i) => i.ops.includes("postRun"));
