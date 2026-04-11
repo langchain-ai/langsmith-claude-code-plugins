@@ -22,9 +22,31 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: anthropics/claude-code-action@273fe825408ddced56cb02b228a74c72bed8241e # v1.0.62
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Configure LangSmith env via settings
+        run: |
+          mkdir -p ~/.claude
+          cat > ~/.claude/settings.json << 'EOF'
+          {
+            "env": {
+              "TRACE_TO_LANGSMITH": "true",
+              "CC_LANGSMITH_API_KEY": "${{ secrets.LANGSMITH_API_KEY }}",
+              "CC_LANGSMITH_PROJECT": "claude-code-review",
+              "CC_LANGSMITH_DEBUG": "true"
+            }
+          }
+          EOF
+          echo "Settings file created:"
+          cat ~/.claude/settings.json | sed 's/lsv2_[^"]*/***/g'
+          echo ""
+          echo "LANGSMITH_API_KEY secret is set: ${{ secrets.LANGSMITH_API_KEY != '' }}"
+
+      - uses: anthropics/claude-code-action@v1
         env:
-          # LangSmith tracing configuration
+          # LangSmith tracing configuration (also set via settings file above)
           TRACE_TO_LANGSMITH: "true"
           CC_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           CC_LANGSMITH_PROJECT: "claude-code-review"
