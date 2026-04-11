@@ -1,0 +1,49 @@
+name: Claude Code Review
+
+on:
+  # Run when someone comments "@claude" on a PR
+  issue_comment:
+    types: [created]
+  # Manual trigger for testing from any branch
+  workflow_dispatch:
+
+jobs:
+  claude-review:
+    # Only run on PR comments that mention @claude (skip filter for workflow_dispatch)
+    if: |
+      github.event_name == 'workflow_dispatch' || (github.event.issue.pull_request && contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@273fe825408ddced56cb02b228a74c72bed8241e # v1.0.62
+        env:
+          # LangSmith tracing configuration
+          TRACE_TO_LANGSMITH: "true"
+          CC_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          CC_LANGSMITH_PROJECT: "claude-code-review"
+          CC_LANGSMITH_DEBUG: "false"
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Install the LangSmith tracing plugin from this marketplace
+          plugin_marketplaces: |
+            https://github.com/langchain-ai/langsmith-claude-code-plugins
+          plugins: |
+            langsmith-tracing@langsmith-claude-code-plugins
+          # Optional: Use a settings file for additional configuration
+          # settings: .claude/settings.json
+          prompt: |
+            Please perform a code review on this pull request. Focus on:
+            - Code quality and best practices
+            - Potential bugs or issues
+            - Security concerns
+            - Performance considerations
+
+            Provide constructive feedback as comments on the PR.
