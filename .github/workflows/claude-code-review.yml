@@ -34,7 +34,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # Install the LangSmith tracing plugin from this marketplace
           plugin_marketplaces: |
-            https://github.com/langchain-ai/langsmith-claude-code-plugins
+            langchain-ai/langsmith-claude-code-plugins
           plugins: |
             langsmith-tracing@langsmith-claude-code-plugins
           # Optional: Use a settings file for additional configuration
