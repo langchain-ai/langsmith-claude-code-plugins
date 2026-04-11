@@ -28,10 +28,11 @@ jobs:
           TRACE_TO_LANGSMITH: "true"
           CC_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           CC_LANGSMITH_PROJECT: "claude-code-review"
-          CC_LANGSMITH_DEBUG: "false"
+          CC_LANGSMITH_DEBUG: "true"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          show_full_output: true
           # Install the LangSmith tracing plugin from this marketplace
           plugin_marketplaces: |
             https://github.com/langchain-ai/langsmith-claude-code-plugins.git
