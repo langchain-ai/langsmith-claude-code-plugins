@@ -70,3 +70,12 @@ jobs:
             - Performance considerations
 
             Provide constructive feedback as comments on the PR.
+
+      - name: Dump LangSmith plugin logs
+        if: always()
+        run: |
+          echo "=== Hook log ==="
+          cat ~/.claude/state/hook.log 2>/dev/null || echo "No hook.log found"
+          echo ""
+          echo "=== LangSmith state ==="
+          cat ~/.claude/state/langsmith_state.json 2>/dev/null || echo "No state file found"
