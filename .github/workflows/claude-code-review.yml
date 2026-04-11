@@ -4,7 +4,7 @@ on:
   # Run when someone comments "@claude" on a PR
   issue_comment:
     types: [created]
-  # Manual trigger for testing from any branch
+  # Manual trigger for testing
   workflow_dispatch:
 
 jobs:
