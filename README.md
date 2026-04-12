@@ -95,6 +95,31 @@ The plugin respects the following environment variables:
 | `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | —                                 | Dotted-order of an existing run to nest all Claude Code traces under                                           |
 | `CC_LANGSMITH_RUNS_ENDPOINTS`      | No       | —                                 | JSON array of replica destinations for multi-project tracing                                                   |
 
+## Usage with GitHub Actions
+
+You can use this plugin with [`anthropics/claude-code-action`](https://github.com/anthropics/claude-code-action) to trace Claude Code runs in CI. Add the following to your workflow:
+
+```yaml
+- uses: anthropics/claude-code-action@v1
+  env:
+    TRACE_TO_LANGSMITH: "true"
+    CC_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+    CC_LANGSMITH_PROJECT: "my-project"
+  with:
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    plugin_marketplaces: |
+      https://github.com/langchain-ai/langsmith-claude-code-plugins.git
+    plugins: |
+      langsmith-tracing@langsmith-claude-code-plugins
+    prompt: |
+      Your prompt here
+```
+
+Make sure to add `LANGSMITH_API_KEY` and `ANTHROPIC_API_KEY` as [repository secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions).
+
+See [`.github/workflows/claude-code-review.yml`](.github/workflows/claude-code-review.yml) for a full working example.
+
 ## Nesting traces under an existing run
 
 Set `CC_LANGSMITH_PARENT_DOTTED_ORDER` to nest all Claude Code traces as children of an existing LangSmith run. This is useful when Claude Code is invoked programmatically as part of a larger traced workflow.

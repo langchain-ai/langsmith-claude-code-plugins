@@ -4,12 +4,11 @@ on:
   # Run when someone comments "@claude" on a PR
   issue_comment:
     types: [created]
-  # Manual trigger for testing
+  # Manual trigger for testing from any branch
   workflow_dispatch:
 
 jobs:
   claude-review:
-    # Only run on PR comments that mention @claude (skip filter for workflow_dispatch)
     if: |
       github.event_name == 'workflow_dispatch' || (github.event.issue.pull_request && contains(github.event.comment.body, '@claude'))
     runs-on: ubuntu-latest
@@ -26,42 +25,18 @@ jobs:
         with:
           node-version: 24
 
-      - name: Configure LangSmith env via settings
-        run: |
-          mkdir -p ~/.claude
-          cat > ~/.claude/settings.json << 'EOF'
-          {
-            "env": {
-              "TRACE_TO_LANGSMITH": "true",
-              "CC_LANGSMITH_API_KEY": "${{ secrets.LANGSMITH_API_KEY }}",
-              "CC_LANGSMITH_PROJECT": "claude-code-review",
-              "CC_LANGSMITH_DEBUG": "true"
-            }
-          }
-          EOF
-          echo "Settings file created:"
-          cat ~/.claude/settings.json | sed 's/lsv2_[^"]*/***/g'
-          echo ""
-          echo "LANGSMITH_API_KEY secret is set: ${{ secrets.LANGSMITH_API_KEY != '' }}"
-
       - uses: anthropics/claude-code-action@v1
         env:
-          # LangSmith tracing configuration (also set via settings file above)
           TRACE_TO_LANGSMITH: "true"
           CC_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           CC_LANGSMITH_PROJECT: "claude-code-review"
-          CC_LANGSMITH_DEBUG: "true"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          show_full_output: true
-          # Install the LangSmith tracing plugin from this marketplace
           plugin_marketplaces: |
             https://github.com/langchain-ai/langsmith-claude-code-plugins.git
           plugins: |
             langsmith-tracing@langsmith-claude-code-plugins
-          # Optional: Use a settings file for additional configuration
-          # settings: .claude/settings.json
           prompt: |
             Please perform a code review on this pull request. Focus on:
             - Code quality and best practices
@@ -70,12 +45,3 @@ jobs:
             - Performance considerations
 
             Provide constructive feedback as comments on the PR.
-
-      - name: Dump LangSmith plugin logs
-        if: always()
-        run: |
-          echo "=== Hook log ==="
-          cat ~/.claude/state/hook.log 2>/dev/null || echo "No hook.log found"
-          echo ""
-          echo "=== LangSmith state ==="
-          cat ~/.claude/state/langsmith_state.json 2>/dev/null || echo "No state file found"
