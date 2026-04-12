@@ -24,8 +24,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@b47fd721da662d48c5680e154ad16a73ed74d2e0 # v1.0.93
         env:
           TRACE_TO_LANGSMITH: "true"
           CC_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
