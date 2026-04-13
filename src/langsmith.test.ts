@@ -1054,4 +1054,90 @@ describe("traceTurn", () => {
       expect(inst.params.project_name).toBe("test-project");
     }
   });
+
+  it("attaches customMetadata to standalone turn creation and completion", async () => {
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+      customMetadata: { pr_url: "https://github.com/org/repo/pull/42", pr_author: "octocat" },
+    });
+
+    // Standalone turn: postRun (creation) + patchRun (completion)
+    const turnPostInstances = allRunTreeInstances.filter(
+      (i) => i.ops.includes("postRun") && i.params.name === USER_PROMPT_TURN_NAME,
+    );
+    expect(turnPostInstances).toHaveLength(1);
+    const turnCreateMetadata = (turnPostInstances[0].params.extra as Record<string, unknown>)
+      ?.metadata as Record<string, unknown>;
+    expect(turnCreateMetadata.pr_url).toBe("https://github.com/org/repo/pull/42");
+    expect(turnCreateMetadata.pr_author).toBe("octocat");
+
+    const turnPatchInstances = allRunTreeInstances.filter(
+      (i) => i.ops.includes("patchRun") && i.params.name === USER_PROMPT_TURN_NAME,
+    );
+    expect(turnPatchInstances).toHaveLength(1);
+    const turnPatchMetadata = (turnPatchInstances[0].params.extra as Record<string, unknown>)
+      ?.metadata as Record<string, unknown>;
+    expect(turnPatchMetadata.pr_url).toBe("https://github.com/org/repo/pull/42");
+    expect(turnPatchMetadata.pr_author).toBe("octocat");
+    // Standard metadata should still be present
+    expect(turnPatchMetadata.thread_id).toBe("session-123");
+    expect(turnPatchMetadata.ls_integration).toBe("claude-code");
+  });
+
+  it("attaches customMetadata to child LLM runs", async () => {
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+      customMetadata: { pr_url: "https://github.com/org/repo/pull/42" },
+    });
+
+    // LLM patchRun should also have custom metadata
+    const llmPatchInstances = allRunTreeInstances.filter(
+      (i) => i.ops.includes("patchRun") && i.params.run_type === "llm",
+    );
+    expect(llmPatchInstances).toHaveLength(1);
+    const llmMetadata = (llmPatchInstances[0].params.extra as Record<string, unknown>)
+      ?.metadata as Record<string, unknown>;
+    expect(llmMetadata.pr_url).toBe("https://github.com/org/repo/pull/42");
+    // Standard LLM metadata should still be present
+    expect(llmMetadata.ls_provider).toBe("anthropic");
+    expect(llmMetadata.ls_model_name).toBe("claude-sonnet-4-5");
+  });
 });

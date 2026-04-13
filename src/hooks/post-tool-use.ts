@@ -97,6 +97,7 @@ async function main(): Promise<void> {
           thread_id: input.session_id,
           ls_integration: "claude-code",
           tool_name: input.tool_name,
+          ...config.customMetadata,
         },
       },
     });

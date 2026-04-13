@@ -84,6 +84,7 @@ async function main(): Promise<void> {
         transcriptPath: expandHome(input.transcript_path),
         project: config.project,
         stateFilePath: config.stateFilePath,
+        customMetadata: config.customMetadata,
       });
       interruptedLastLine = lastLine;
       interruptedTurnsTraced = turnsTraced;
@@ -126,6 +127,7 @@ async function main(): Promise<void> {
     trace_id: traceId,
     dotted_order: dottedOrder,
     ...(parentRunId ? { parent_run_id: parentRunId } : {}),
+    ...(config.customMetadata ? { extra: { metadata: { ...config.customMetadata } } } : {}),
   });
 
   await runTree.postRun();

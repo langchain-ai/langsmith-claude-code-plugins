@@ -66,6 +66,7 @@ async function main(): Promise<void> {
           thread_id: input.session_id,
           ls_integration: "claude-code",
           turn_number: sessionState.current_turn_number,
+          ...config.customMetadata,
         },
       },
     });

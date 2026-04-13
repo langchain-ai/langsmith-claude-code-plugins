@@ -10257,7 +10257,7 @@ function buildUsageMetadata(usage) {
   };
 }
 async function traceTurn(options) {
-  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder } = options;
+  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata } = options;
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
   if (!client && !replicas) {
@@ -10288,7 +10288,8 @@ async function traceTurn(options) {
       project_name: project,
       start_time: turn.userTimestamp,
       trace_id: traceId,
-      dotted_order: parentDottedOrder
+      dotted_order: parentDottedOrder,
+      ...customMetadata ? { extra: { metadata: { ...customMetadata } } } : {}
     });
     await runTree.postRun();
   }
@@ -10348,7 +10349,7 @@ async function traceTurn(options) {
         trace_id: traceId,
         dotted_order: toolDottedOrder,
         extra: {
-          metadata: { thread_id: sessionId, ls_integration: "claude-code" }
+          metadata: { thread_id: sessionId, ls_integration: "claude-code", ...customMetadata }
         }
       });
       await runTree2.postRun();
@@ -10387,7 +10388,8 @@ async function traceTurn(options) {
             model: llmCall.model
           },
           usage_metadata: buildUsageMetadata(llmCall.usage),
-          ...llmCall.synthetic ? { synthetic: true } : {}
+          ...llmCall.synthetic ? { synthetic: true } : {},
+          ...customMetadata
         }
       }
     });
@@ -10422,7 +10424,8 @@ async function traceTurn(options) {
         metadata: {
           thread_id: sessionId,
           ls_integration: "claude-code",
-          turn_number: turnNum
+          turn_number: turnNum,
+          ...customMetadata
         }
       }
     });
@@ -10433,7 +10436,7 @@ async function traceTurn(options) {
   return taskRunMap;
 }
 async function tracePendingSubagents(options) {
-  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project } = options;
+  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata } = options;
   if (!client && !replicas) {
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
   }
@@ -10482,7 +10485,8 @@ async function tracePendingSubagents(options) {
               ls_integration: "claude-code",
               tool_name: "Agent",
               agent_type: toolName,
-              agent_id: subagent.agent_id
+              agent_id: subagent.agent_id,
+              ...customMetadata
             }
           }
         });
@@ -10510,7 +10514,8 @@ async function tracePendingSubagents(options) {
             ls_integration: "claude-code",
             ls_agent_type: "subagent",
             agent_type: toolName,
-            agent_id: subagent.agent_id
+            agent_id: subagent.agent_id,
+            ...customMetadata
           }
         }
       });
@@ -10524,7 +10529,8 @@ async function tracePendingSubagents(options) {
           parentRunId: subagentChainId,
           existingTaskRunMap: void 0,
           traceId: parentTraceId,
-          parentDottedOrder: subagentChainDottedOrder
+          parentDottedOrder: subagentChainDottedOrder,
+          customMetadata
         });
       }
       log(`Traced subagent ${toolName} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`);
@@ -10552,7 +10558,30 @@ function loadConfig() {
     }
   }
   const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
-  return { apiKey, project, apiBaseUrl, stateFilePath, debug: debug2, parentDottedOrder, replicas: replicas2 };
+  let customMetadata;
+  const providedMetadata = process.env.CC_LANGSMITH_METADATA;
+  if (providedMetadata !== void 0) {
+    try {
+      const parsed = JSON.parse(providedMetadata);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        customMetadata = parsed;
+      } else {
+        error("CC_LANGSMITH_METADATA must be a JSON object (not an array or primitive).");
+      }
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
+    }
+  }
+  return {
+    apiKey,
+    project,
+    apiBaseUrl,
+    stateFilePath,
+    debug: debug2,
+    parentDottedOrder,
+    replicas: replicas2,
+    customMetadata
+  };
 }
 
 // dist/utils/hook-init.js
@@ -10663,6 +10692,7 @@ async function main() {
         sessionId: input.session_id,
         turnNum,
         project: config.project,
+        customMetadata: config.customMetadata,
         parentRunId,
         existingTaskRunMap,
         tracedToolUseIds,
@@ -10698,7 +10728,8 @@ async function main() {
             thread_id: input.session_id,
             ls_integration: "claude-code",
             ls_agent_type: "root",
-            turn_number: sessionState.current_turn_number
+            turn_number: sessionState.current_turn_number,
+            ...config.customMetadata
           }
         }
       });
@@ -10719,7 +10750,8 @@ async function main() {
       pendingSubagents,
       taskRunMap: mergedTaskRunMap,
       parentTraceId: freshSession.current_trace_id,
-      project: config.project
+      project: config.project,
+      customMetadata: config.customMetadata
     });
   }
   const savedLastLine = tracedTurns > 0 ? lastLine : sessionState.last_line;

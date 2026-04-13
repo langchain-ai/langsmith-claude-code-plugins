@@ -149,6 +149,8 @@ export interface TraceTurnOptions {
   tracedToolUseIds?: Set<string>;
   traceId?: string;
   parentDottedOrder?: string;
+  /** Custom metadata to attach to root turn runs. */
+  customMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -168,6 +170,7 @@ export async function traceTurn(
     tracedToolUseIds,
     traceId: providedTraceId,
     parentDottedOrder: providedParentDottedOrder,
+    customMetadata,
   } = options;
 
   let traceId = providedTraceId;
@@ -218,6 +221,7 @@ export async function traceTurn(
       start_time: turn.userTimestamp,
       trace_id: traceId,
       dotted_order: parentDottedOrder,
+      ...(customMetadata ? { extra: { metadata: { ...customMetadata } } } : {}),
     });
     await runTree.postRun();
   }
@@ -304,7 +308,7 @@ export async function traceTurn(
         trace_id: traceId,
         dotted_order: toolDottedOrder,
         extra: {
-          metadata: { thread_id: sessionId, ls_integration: "claude-code" },
+          metadata: { thread_id: sessionId, ls_integration: "claude-code", ...customMetadata },
         },
       });
       await runTree.postRun();
@@ -351,6 +355,7 @@ export async function traceTurn(
           },
           usage_metadata: buildUsageMetadata(llmCall.usage),
           ...(llmCall.synthetic ? { synthetic: true } : {}),
+          ...customMetadata,
         },
       },
     });
@@ -394,6 +399,7 @@ export async function traceTurn(
           thread_id: sessionId,
           ls_integration: "claude-code",
           turn_number: turnNum,
+          ...customMetadata,
         },
       },
     });
@@ -428,8 +434,10 @@ export async function closeInterruptedTurn(options: {
   transcriptPath: string | undefined;
   project: string;
   stateFilePath: string;
+  customMetadata?: Record<string, unknown>;
 }): Promise<{ lastLine: number; turnsTraced: number }> {
-  const { sessionId, sessionState, transcriptPath, project, stateFilePath } = options;
+  const { sessionId, sessionState, transcriptPath, project, stateFilePath, customMetadata } =
+    options;
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized — call initTracing() first");
 
@@ -482,6 +490,7 @@ export async function closeInterruptedTurn(options: {
         taskRunMap,
         parentTraceId: sessionState.current_trace_id,
         project,
+        customMetadata,
       });
     } catch (err) {
       logger.error(`Failed to trace pending subagents on interrupt: ${err}`);
@@ -506,6 +515,7 @@ export async function closeInterruptedTurn(options: {
         thread_id: sessionId,
         ls_integration: "claude-code",
         turn_number: sessionState.current_turn_number,
+        ...customMetadata,
       },
     },
   });
@@ -544,8 +554,10 @@ export async function tracePendingSubagents(options: {
   taskRunMap: Record<string, TaskRunEntry>;
   parentTraceId: string | undefined;
   project: string;
+  customMetadata?: Record<string, unknown>;
 }): Promise<void> {
-  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project } = options;
+  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata } =
+    options;
 
   if (!client && !replicas) {
     throw new Error("LangSmith client not initialized — call initTracing() first");
@@ -613,6 +625,7 @@ export async function tracePendingSubagents(options: {
               tool_name: "Agent",
               agent_type: toolName,
               agent_id: subagent.agent_id,
+              ...customMetadata,
             },
           },
         });
@@ -645,6 +658,7 @@ export async function tracePendingSubagents(options: {
             ls_agent_type: "subagent",
             agent_type: toolName,
             agent_id: subagent.agent_id,
+            ...customMetadata,
           },
         },
       });
@@ -660,6 +674,7 @@ export async function tracePendingSubagents(options: {
           existingTaskRunMap: undefined,
           traceId: parentTraceId,
           parentDottedOrder: subagentChainDottedOrder,
+          customMetadata,
         });
       }
 
