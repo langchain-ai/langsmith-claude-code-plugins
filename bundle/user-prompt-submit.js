@@ -10368,7 +10368,7 @@ async function traceTurn(options) {
         trace_id: traceId,
         dotted_order: toolDottedOrder,
         extra: {
-          metadata: { thread_id: sessionId, ls_integration: "claude-code" }
+          metadata: { thread_id: sessionId, ls_integration: "claude-code", ...customMetadata }
         }
       });
       await runTree2.postRun();
@@ -10407,7 +10407,8 @@ async function traceTurn(options) {
             model: llmCall.model
           },
           usage_metadata: buildUsageMetadata(llmCall.usage),
-          ...llmCall.synthetic ? { synthetic: true } : {}
+          ...llmCall.synthetic ? { synthetic: true } : {},
+          ...customMetadata
         }
       }
     });
@@ -10495,7 +10496,8 @@ async function closeInterruptedTurn(options) {
         pendingSubagents,
         taskRunMap,
         parentTraceId: sessionState.current_trace_id,
-        project
+        project,
+        customMetadata
       });
     } catch (err) {
       error(`Failed to trace pending subagents on interrupt: ${err}`);
@@ -10528,7 +10530,7 @@ async function closeInterruptedTurn(options) {
   return { lastLine, turnsTraced };
 }
 async function tracePendingSubagents(options) {
-  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project } = options;
+  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata } = options;
   if (!client && !replicas) {
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
   }
@@ -10577,7 +10579,8 @@ async function tracePendingSubagents(options) {
               ls_integration: "claude-code",
               tool_name: "Agent",
               agent_type: toolName,
-              agent_id: subagent.agent_id
+              agent_id: subagent.agent_id,
+              ...customMetadata
             }
           }
         });
@@ -10605,7 +10608,8 @@ async function tracePendingSubagents(options) {
             ls_integration: "claude-code",
             ls_agent_type: "subagent",
             agent_type: toolName,
-            agent_id: subagent.agent_id
+            agent_id: subagent.agent_id,
+            ...customMetadata
           }
         }
       });
@@ -10619,7 +10623,8 @@ async function tracePendingSubagents(options) {
           parentRunId: subagentChainId,
           existingTaskRunMap: void 0,
           traceId: parentTraceId,
-          parentDottedOrder: subagentChainDottedOrder
+          parentDottedOrder: subagentChainDottedOrder,
+          customMetadata
         });
       }
       log(`Traced subagent ${toolName} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`);
@@ -10651,7 +10656,12 @@ function loadConfig() {
   const providedMetadata = process.env.CC_LANGSMITH_METADATA;
   if (providedMetadata !== void 0) {
     try {
-      customMetadata = JSON.parse(providedMetadata);
+      const parsed = JSON.parse(providedMetadata);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        customMetadata = parsed;
+      } else {
+        error("CC_LANGSMITH_METADATA must be a JSON object (not an array or primitive).");
+      }
     } catch {
       error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
     }

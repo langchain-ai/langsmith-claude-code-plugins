@@ -211,6 +211,7 @@ async function main(): Promise<void> {
       taskRunMap: mergedTaskRunMap,
       parentTraceId: freshSession.current_trace_id,
       project: config.project,
+      customMetadata: config.customMetadata,
     });
   }
 

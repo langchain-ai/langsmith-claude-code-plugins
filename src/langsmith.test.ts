@@ -1103,7 +1103,7 @@ describe("traceTurn", () => {
     expect(turnPatchMetadata.ls_integration).toBe("claude-code");
   });
 
-  it("does not attach customMetadata to child LLM runs", async () => {
+  it("attaches customMetadata to child LLM runs", async () => {
     const turn: Turn = {
       userContent: "Hello",
       userTimestamp: "2025-01-01T00:00:00Z",
@@ -1128,13 +1128,16 @@ describe("traceTurn", () => {
       customMetadata: { pr_url: "https://github.com/org/repo/pull/42" },
     });
 
-    // LLM patchRun should NOT have custom metadata
+    // LLM patchRun should also have custom metadata
     const llmPatchInstances = allRunTreeInstances.filter(
       (i) => i.ops.includes("patchRun") && i.params.run_type === "llm",
     );
     expect(llmPatchInstances).toHaveLength(1);
     const llmMetadata = (llmPatchInstances[0].params.extra as Record<string, unknown>)
       ?.metadata as Record<string, unknown>;
-    expect(llmMetadata.pr_url).toBeUndefined();
+    expect(llmMetadata.pr_url).toBe("https://github.com/org/repo/pull/42");
+    // Standard LLM metadata should still be present
+    expect(llmMetadata.ls_provider).toBe("anthropic");
+    expect(llmMetadata.ls_model_name).toBe("claude-sonnet-4-5");
   });
 });

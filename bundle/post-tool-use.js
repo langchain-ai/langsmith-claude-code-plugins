@@ -9992,7 +9992,12 @@ function loadConfig() {
   const providedMetadata = process.env.CC_LANGSMITH_METADATA;
   if (providedMetadata !== void 0) {
     try {
-      customMetadata = JSON.parse(providedMetadata);
+      const parsed = JSON.parse(providedMetadata);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        customMetadata = parsed;
+      } else {
+        error("CC_LANGSMITH_METADATA must be a JSON object (not an array or primitive).");
+      }
     } catch {
       error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
     }
@@ -10089,7 +10094,8 @@ async function main() {
         metadata: {
           thread_id: input.session_id,
           ls_integration: "claude-code",
-          tool_name: input.tool_name
+          tool_name: input.tool_name,
+          ...config.customMetadata
         }
       }
     });

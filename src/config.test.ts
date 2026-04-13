@@ -153,4 +153,22 @@ describe("loadConfig", () => {
     expect(config.customMetadata).toBeUndefined();
     console.error = originalError;
   });
+
+  it("rejects array CC_LANGSMITH_METADATA", () => {
+    const originalError = console.error;
+    console.error = vi.fn();
+    process.env.CC_LANGSMITH_METADATA = '["not", "an", "object"]';
+    const config = loadConfig();
+    expect(config.customMetadata).toBeUndefined();
+    console.error = originalError;
+  });
+
+  it("rejects primitive CC_LANGSMITH_METADATA", () => {
+    const originalError = console.error;
+    console.error = vi.fn();
+    process.env.CC_LANGSMITH_METADATA = '"just a string"';
+    const config = loadConfig();
+    expect(config.customMetadata).toBeUndefined();
+    console.error = originalError;
+  });
 });

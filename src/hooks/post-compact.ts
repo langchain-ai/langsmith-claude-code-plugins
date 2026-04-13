@@ -70,6 +70,7 @@ async function main(): Promise<void> {
           thread_id: input.session_id,
           ls_integration: "claude-code",
           trigger: input.trigger,
+          ...config.customMetadata,
         },
       },
     });
