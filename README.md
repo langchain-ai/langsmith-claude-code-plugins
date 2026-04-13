@@ -106,6 +106,15 @@ You can use this plugin with [`anthropics/claude-code-action`](https://github.co
     TRACE_TO_LANGSMITH: "true"
     CC_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
     CC_LANGSMITH_PROJECT: "my-project"
+    CC_LANGSMITH_METADATA: |
+      {
+        "pr_url": "${{ github.event.pull_request.html_url || '' }}",
+        "pr_number": "${{ github.event.pull_request.number || '' }}",
+        "pr_author": "${{ github.event.pull_request.user.login || '' }}",
+        "repository": "${{ github.repository }}",
+        "commit_sha": "${{ github.sha }}",
+        "trigger": "${{ github.event_name }}"
+      }
   with:
     anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
     github_token: ${{ secrets.GITHUB_TOKEN }}
