@@ -10227,7 +10227,7 @@ function buildUsageMetadata(usage) {
   };
 }
 async function traceTurn(options) {
-  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder } = options;
+  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata } = options;
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
   if (!client && !replicas) {
@@ -10258,7 +10258,8 @@ async function traceTurn(options) {
       project_name: project,
       start_time: turn.userTimestamp,
       trace_id: traceId,
-      dotted_order: parentDottedOrder
+      dotted_order: parentDottedOrder,
+      ...customMetadata ? { extra: { metadata: { ...customMetadata } } } : {}
     });
     await runTree.postRun();
   }
@@ -10392,7 +10393,8 @@ async function traceTurn(options) {
         metadata: {
           thread_id: sessionId,
           ls_integration: "claude-code",
-          turn_number: turnNum
+          turn_number: turnNum,
+          ...customMetadata
         }
       }
     });
@@ -10403,7 +10405,7 @@ async function traceTurn(options) {
   return taskRunMap;
 }
 async function closeInterruptedTurn(options) {
-  const { sessionId, sessionState, transcriptPath, project, stateFilePath } = options;
+  const { sessionId, sessionState, transcriptPath, project, stateFilePath, customMetadata } = options;
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
   let lastLine = sessionState.last_line;
@@ -10467,7 +10469,8 @@ async function closeInterruptedTurn(options) {
       metadata: {
         thread_id: sessionId,
         ls_integration: "claude-code",
-        turn_number: sessionState.current_turn_number
+        turn_number: sessionState.current_turn_number,
+        ...customMetadata
       }
     }
   });
@@ -10595,7 +10598,25 @@ function loadConfig() {
     }
   }
   const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
-  return { apiKey, project, apiBaseUrl, stateFilePath, debug: debug2, parentDottedOrder, replicas: replicas2 };
+  let customMetadata;
+  const providedMetadata = process.env.CC_LANGSMITH_METADATA;
+  if (providedMetadata !== void 0) {
+    try {
+      customMetadata = JSON.parse(providedMetadata);
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
+    }
+  }
+  return {
+    apiKey,
+    project,
+    apiBaseUrl,
+    stateFilePath,
+    debug: debug2,
+    parentDottedOrder,
+    replicas: replicas2,
+    customMetadata
+  };
 }
 
 // dist/utils/hook-init.js
@@ -10653,7 +10674,8 @@ async function main() {
       sessionState,
       transcriptPath: expandHome(input.transcript_path),
       project: config.project,
-      stateFilePath: config.stateFilePath
+      stateFilePath: config.stateFilePath,
+      customMetadata: config.customMetadata
     });
     await atomicUpdateState(config.stateFilePath, (s) => {
       const ss = getSessionState(s, input.session_id);

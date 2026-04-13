@@ -140,6 +140,7 @@ async function main(): Promise<void> {
         sessionId: input.session_id,
         turnNum,
         project: config.project,
+        customMetadata: config.customMetadata,
 
         parentRunId,
         existingTaskRunMap,
@@ -181,6 +182,7 @@ async function main(): Promise<void> {
             ls_integration: "claude-code",
             ls_agent_type: "root",
             turn_number: sessionState.current_turn_number,
+            ...config.customMetadata,
           },
         },
       });

@@ -13,6 +13,7 @@ describe("loadConfig", () => {
     delete process.env.STATE_FILE;
     delete process.env.CC_LANGSMITH_DEBUG;
     delete process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
+    delete process.env.CC_LANGSMITH_METADATA;
   });
 
   afterEach(() => {
@@ -125,6 +126,31 @@ describe("loadConfig", () => {
     const config = loadConfig();
     // Should not throw and replicas should be undefined
     expect(config.replicas).toBeUndefined();
+    console.error = originalError;
+  });
+
+  it("parses CC_LANGSMITH_METADATA as JSON object", () => {
+    process.env.CC_LANGSMITH_METADATA = JSON.stringify({
+      pr_url: "https://github.com/org/repo/pull/42",
+      pr_author: "octocat",
+    });
+    const config = loadConfig();
+    expect(config.customMetadata).toEqual({
+      pr_url: "https://github.com/org/repo/pull/42",
+      pr_author: "octocat",
+    });
+  });
+
+  it("returns undefined customMetadata when CC_LANGSMITH_METADATA not set", () => {
+    expect(loadConfig().customMetadata).toBeUndefined();
+  });
+
+  it("handles invalid JSON in CC_LANGSMITH_METADATA gracefully", () => {
+    const originalError = console.error;
+    console.error = vi.fn();
+    process.env.CC_LANGSMITH_METADATA = "not valid json";
+    const config = loadConfig();
+    expect(config.customMetadata).toBeUndefined();
     console.error = originalError;
   });
 });

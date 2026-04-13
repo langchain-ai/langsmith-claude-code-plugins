@@ -51,6 +51,7 @@ async function main(): Promise<void> {
       transcriptPath: expandHome(input.transcript_path),
       project: config.project,
       stateFilePath: config.stateFilePath,
+      customMetadata: config.customMetadata,
     });
 
     await atomicUpdateState(config.stateFilePath, (s) => {

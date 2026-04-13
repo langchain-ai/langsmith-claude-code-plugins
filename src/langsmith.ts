@@ -149,6 +149,8 @@ export interface TraceTurnOptions {
   tracedToolUseIds?: Set<string>;
   traceId?: string;
   parentDottedOrder?: string;
+  /** Custom metadata to attach to root turn runs. */
+  customMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -168,6 +170,7 @@ export async function traceTurn(
     tracedToolUseIds,
     traceId: providedTraceId,
     parentDottedOrder: providedParentDottedOrder,
+    customMetadata,
   } = options;
 
   let traceId = providedTraceId;
@@ -218,6 +221,7 @@ export async function traceTurn(
       start_time: turn.userTimestamp,
       trace_id: traceId,
       dotted_order: parentDottedOrder,
+      ...(customMetadata ? { extra: { metadata: { ...customMetadata } } } : {}),
     });
     await runTree.postRun();
   }
@@ -394,6 +398,7 @@ export async function traceTurn(
           thread_id: sessionId,
           ls_integration: "claude-code",
           turn_number: turnNum,
+          ...customMetadata,
         },
       },
     });
@@ -428,8 +433,10 @@ export async function closeInterruptedTurn(options: {
   transcriptPath: string | undefined;
   project: string;
   stateFilePath: string;
+  customMetadata?: Record<string, unknown>;
 }): Promise<{ lastLine: number; turnsTraced: number }> {
-  const { sessionId, sessionState, transcriptPath, project, stateFilePath } = options;
+  const { sessionId, sessionState, transcriptPath, project, stateFilePath, customMetadata } =
+    options;
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized — call initTracing() first");
 
@@ -506,6 +513,7 @@ export async function closeInterruptedTurn(options: {
         thread_id: sessionId,
         ls_integration: "claude-code",
         turn_number: sessionState.current_turn_number,
+        ...customMetadata,
       },
     },
   });

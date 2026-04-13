@@ -9980,7 +9980,25 @@ function loadConfig() {
     }
   }
   const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
-  return { apiKey, project, apiBaseUrl, stateFilePath, debug: debug2, parentDottedOrder, replicas: replicas2 };
+  let customMetadata;
+  const providedMetadata = process.env.CC_LANGSMITH_METADATA;
+  if (providedMetadata !== void 0) {
+    try {
+      customMetadata = JSON.parse(providedMetadata);
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
+    }
+  }
+  return {
+    apiKey,
+    project,
+    apiBaseUrl,
+    stateFilePath,
+    debug: debug2,
+    parentDottedOrder,
+    replicas: replicas2,
+    customMetadata
+  };
 }
 
 // dist/utils/hook-init.js
@@ -10047,7 +10065,8 @@ async function main() {
         metadata: {
           thread_id: input.session_id,
           ls_integration: "claude-code",
-          turn_number: sessionState.current_turn_number
+          turn_number: sessionState.current_turn_number,
+          ...config.customMetadata
         }
       }
     });

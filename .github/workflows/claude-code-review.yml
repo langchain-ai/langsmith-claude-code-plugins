@@ -29,6 +29,14 @@ jobs:
           TRACE_TO_LANGSMITH: "true"
           CC_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           CC_LANGSMITH_PROJECT: "claude-code-review"
+          CC_LANGSMITH_METADATA: |
+            {
+              "pr_url": "${{ github.event.pull_request.html_url || github.event.issue.pull_request.html_url }}",
+              "pr_number": "${{ github.event.pull_request.number || github.event.issue.number }}",
+              "pr_author": "${{ github.event.pull_request.user.login || github.event.issue.user.login }}",
+              "repository": "${{ github.repository }}",
+              "commit_sha": "${{ github.sha }}"
+            }
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}

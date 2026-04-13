@@ -93,6 +93,7 @@ The plugin respects the following environment variables:
 | `LANGSMITH_ENDPOINT`               | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                                                                         |
 | `CC_LANGSMITH_DEBUG`               | No       | `"false"`                         | Enable debug logging                                                                                           |
 | `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | —                                 | Dotted-order of an existing run to nest all Claude Code traces under                                           |
+| `CC_LANGSMITH_METADATA`            | No       | —                                 | JSON object of custom metadata to attach to root turn runs (e.g. PR URL, author)                               |
 | `CC_LANGSMITH_RUNS_ENDPOINTS`      | No       | —                                 | JSON array of replica destinations for multi-project tracing                                                   |
 
 ## Usage with GitHub Actions
