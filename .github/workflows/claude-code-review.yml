@@ -31,11 +31,12 @@ jobs:
           CC_LANGSMITH_PROJECT: "claude-code-review"
           CC_LANGSMITH_METADATA: |
             {
-              "pr_url": "${{ github.event.pull_request.html_url || github.event.issue.pull_request.html_url }}",
-              "pr_number": "${{ github.event.pull_request.number || github.event.issue.number }}",
-              "pr_author": "${{ github.event.pull_request.user.login || github.event.issue.user.login }}",
+              "pr_url": "${{ github.event.pull_request.html_url || '' }}",
+              "pr_number": "${{ github.event.pull_request.number || '' }}",
+              "pr_author": "${{ github.event.pull_request.user.login || github.event.issue.user.login || '' }}",
               "repository": "${{ github.repository }}",
-              "commit_sha": "${{ github.sha }}"
+              "commit_sha": "${{ github.sha }}",
+              "trigger": "${{ github.event_name }}"
             }
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
