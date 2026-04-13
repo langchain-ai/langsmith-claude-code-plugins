@@ -17,7 +17,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "langsmith": "^0.5.15"
+    "langsmith": "^0.5.18"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
