@@ -8027,7 +8027,6 @@ function parseRepoName(remoteUrl) {
 function getRepoName(cwd) {
   try {
     const output = execSync("git remote -v", { cwd, encoding: "utf-8", timeout: 5e3 });
-    console.log("...", output);
     const lines = output.trim().split("\n").filter(Boolean);
     const remotes = [];
     for (const line of lines) {

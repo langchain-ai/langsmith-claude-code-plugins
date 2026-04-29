@@ -48,7 +48,6 @@ export function parseRepoName(remoteUrl: string): { provider: string; name: stri
 export function getRepoName(cwd: string): { provider: string; name: string } | undefined {
   try {
     const output = execSync("git remote -v", { cwd, encoding: "utf-8", timeout: 5000 });
-    console.log("...", output);
     const lines = output.trim().split("\n").filter(Boolean);
 
     // Parse all remotes: [name, url, type]
