@@ -8673,6 +8673,29 @@ async function tracePendingSubagents(options) {
 }
 
 // dist/config.js
+import { readFileSync as readFileSync5 } from "node:fs";
+import { userInfo } from "node:os";
+import { join } from "node:path";
+function readAnthropicUserId() {
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
+  if (!homeDir)
+    return void 0;
+  const configPath = join(homeDir, ".claude.json");
+  try {
+    const raw = readFileSync5(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    const userId = parsed?.userID;
+    if (typeof userId === "string" && userId.length > 0) {
+      return userId;
+    }
+  } catch (err) {
+    debug(`Could not read Anthropic user ID from ${configPath}: ${err}`);
+  }
+  return void 0;
+}
+function readLocalUsername() {
+  return userInfo().username;
+}
 function loadConfig() {
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
   const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
@@ -8704,6 +8727,13 @@ function loadConfig() {
       error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
     }
   }
+  const anthropicUserId = readAnthropicUserId();
+  const localUsername = readLocalUsername();
+  const identityMetadata = { local_username: localUsername };
+  if (anthropicUserId) {
+    identityMetadata.anthropic_user_id = anthropicUserId;
+  }
+  customMetadata = { ...identityMetadata, ...customMetadata };
   return {
     apiKey,
     project,

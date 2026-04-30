@@ -1,9 +1,43 @@
+import { readFileSync } from "node:fs";
+import { userInfo } from "node:os";
+import { join } from "node:path";
 import type { RunTreeConfig } from "langsmith";
-import { error } from "./logger.js";
+import { debug, error } from "./logger.js";
 
 /**
  * Configuration — reads from environment variables.
  */
+
+/**
+ * Read the Anthropic user ID from `~/.claude.json` if available.
+ *
+ * Claude Code stores a stable per-installation hashed user identifier as
+ * `userID` in the user's `~/.claude.json` config file. Returns `undefined`
+ * if the file doesn't exist, can't be parsed, or doesn't contain a userID.
+ */
+export function readAnthropicUserId(): string | undefined {
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
+  if (!homeDir) return undefined;
+
+  const configPath = join(homeDir, ".claude.json");
+  try {
+    const raw = readFileSync(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    const userId = parsed?.userID;
+    if (typeof userId === "string" && userId.length > 0) {
+      return userId;
+    }
+  } catch (err) {
+    // File missing or unreadable — non-fatal, just skip.
+    debug(`Could not read Anthropic user ID from ${configPath}: ${err}`);
+  }
+  return undefined;
+}
+
+/** Read the local OS username via `os.userInfo()`. */
+export function readLocalUsername(): string {
+  return userInfo().username;
+}
 
 export interface Config {
   apiKey: string;
@@ -58,6 +92,17 @@ export function loadConfig(): Config {
       error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
     }
   }
+
+  // Attach identity metadata so every traced run can be attributed to a
+  // specific Claude Code installation and local OS user. User-supplied
+  // metadata wins on key collision.
+  const anthropicUserId = readAnthropicUserId();
+  const localUsername = readLocalUsername();
+  const identityMetadata: Record<string, unknown> = { local_username: localUsername };
+  if (anthropicUserId) {
+    identityMetadata.anthropic_user_id = anthropicUserId;
+  }
+  customMetadata = { ...identityMetadata, ...customMetadata };
 
   return {
     apiKey,

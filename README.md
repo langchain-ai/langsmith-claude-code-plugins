@@ -77,6 +77,13 @@ Each LLM run includes:
 - **Outputs**: assistant response content
 - **Metadata**: `ls_provider: "anthropic"`, `ls_model_name`, `ls_invocation_params` (model, stop reason), token usage
 
+All runs (LLM, tool, turn, subagent) automatically include identity metadata so you can attribute traces in LangSmith:
+
+- `anthropic_user_id` — read from the `userID` field in `~/.claude.json` (the Claude Code installation's stable hashed user ID). Omitted if the file is missing or unreadable.
+- `local_username` — the local OS username from `os.userInfo()`.
+
+To override either field, supply your own value via `CC_LANGSMITH_METADATA` — user-supplied keys always win.
+
 Tool runs include the tool name, inputs, and output content.
 
 Interrupted turns (where the user cancels mid-response) are marked with status `"interrupted"` in LangSmith.
