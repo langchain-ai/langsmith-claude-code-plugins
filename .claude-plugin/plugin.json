@@ -1,7 +1,7 @@
 {
   "name": "langsmith-tracing",
   "description": "Traces Claude Code conversations to LangSmith, including subagent and tool executions",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "author": {
     "name": "LangChain"
   },
