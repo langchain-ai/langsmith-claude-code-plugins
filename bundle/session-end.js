@@ -846,7 +846,7 @@ function v7(options, buf, offset) {
 }
 var v7_default = v7;
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/experimental/otel/constants.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/experimental/otel/constants.js
 var GEN_AI_OPERATION_NAME = "gen_ai.operation.name";
 var GEN_AI_SYSTEM = "gen_ai.system";
 var GEN_AI_REQUEST_MODEL = "gen_ai.request.model";
@@ -881,7 +881,7 @@ var LANGSMITH_TAGS = "langsmith.span.tags";
 var LANGSMITH_REQUEST_STREAMING = "langsmith.request.streaming";
 var LANGSMITH_REQUEST_HEADERS = "langsmith.request.headers";
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/env.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/env.js
 var globalEnv;
 var isBrowser = () => typeof window !== "undefined" && typeof window.document !== "undefined";
 var isWebWorker = () => typeof globalThis === "object" && globalThis.constructor && globalThis.constructor.name === "DedicatedWorkerGlobalScope";
@@ -1021,7 +1021,7 @@ function getOtelEnabled() {
   return getEnvironmentVariable("OTEL_ENABLED") === "true" || getLangSmithEnvironmentVariable("OTEL_ENABLED") === "true";
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/singletons/otel.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/singletons/otel.js
 var MockTracer = class {
   constructor() {
     Object.defineProperty(this, "hasWarned", {
@@ -1127,7 +1127,7 @@ function getDefaultOTLPTracerComponents() {
   return OTELProviderSingleton.getDefaultOTLPTracerComponents();
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/experimental/otel/translator.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/experimental/otel/translator.js
 var WELL_KNOWN_OPERATION_NAMES = {
   llm: "chat",
   tool: "execute_tool",
@@ -1468,7 +1468,7 @@ var LangSmithToOTELTranslator = class {
   }
 };
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/is-network-error/index.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/is-network-error/index.js
 var objectToString = Object.prototype.toString;
 var isError = (value) => objectToString.call(value) === "[object Error]";
 var errorMessages = /* @__PURE__ */ new Set([
@@ -1507,7 +1507,7 @@ function isNetworkError(error2) {
   return errorMessages.has(message);
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/p-retry/index.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/p-retry/index.js
 function validateRetries(retries) {
   if (typeof retries === "number") {
     if (retries < 0) {
@@ -1680,11 +1680,11 @@ async function pRetry(input, options = {}) {
   throw new Error("Retry attempts exhausted without throwing an error.");
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/p-queue.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/p-queue.js
 var import_p_queue = __toESM(require_dist(), 1);
 var PQueue = "default" in import_p_queue.default ? import_p_queue.default.default : import_p_queue.default;
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/async_caller.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/async_caller.js
 var STATUS_RETRYABLE = [
   408,
   // Request Timeout
@@ -1812,7 +1812,7 @@ var AsyncCaller = class {
   }
 };
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/messages.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/messages.js
 function isLangChainMessage(message) {
   return typeof message?._getType === "function";
 }
@@ -1827,7 +1827,7 @@ function convertLangChainMessageToExample(message) {
   return converted;
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/warn.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/warn.js
 var warnedMessages = {};
 function warnOnce(message) {
   if (!warnedMessages[message]) {
@@ -1836,7 +1836,7 @@ function warnOnce(message) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/xxhash/xxhash.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/xxhash/xxhash.js
 var n = (n2) => BigInt(n2);
 var PRIME32_1 = n("0x9E3779B1");
 var PRIME32_2 = n("0x85EBCA77");
@@ -2116,7 +2116,7 @@ function xxh128ToBytes(hash128) {
   return result;
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/_uuid.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/_uuid.js
 var UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function assertUuid(str, which) {
   if (!UUID_REGEX.test(str)) {
@@ -2178,7 +2178,7 @@ function nonCryptographicUuid7Deterministic(originalId, key) {
   return bytesToUuid(b);
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/error.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/error.js
 function getInvalidPromptIdentifierMsg(identifier) {
   return `Invalid prompt identifier format: "${identifier}". Expected one of:
   - "prompt-name" (for private prompts)
@@ -2271,7 +2271,7 @@ function isConflictingEndpointsError(err) {
   return typeof err === "object" && err !== null && err.code === ERR_CONFLICTING_ENDPOINTS;
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/prompts.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/prompts.js
 function parsePromptIdentifier(identifier) {
   if (!identifier || identifier.split("/").length > 2 || identifier.startsWith("/") || identifier.endsWith("/") || identifier.split(":").length > 2) {
     throw new Error(getInvalidPromptIdentifierMsg(identifier));
@@ -2292,7 +2292,7 @@ function parsePromptIdentifier(identifier) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/fs.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/fs.js
 import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -2333,7 +2333,7 @@ function readFileSync2(filePath) {
   return nodeFs.readFileSync(filePath, "utf-8");
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/prompt_cache/index.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/prompt_cache/index.js
 function isStale(entry, ttlSeconds) {
   if (ttlSeconds === null) {
     return false;
@@ -2607,7 +2607,7 @@ var PromptCache = class {
 };
 var promptCacheSingleton = new PromptCache();
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/singletons/fetch.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/singletons/fetch.js
 var DEFAULT_FETCH_IMPLEMENTATION = (...args) => fetch(...args);
 var globalFetchSupportsWebStreaming = void 0;
 var LANGSMITH_FETCH_IMPLEMENTATION_KEY = /* @__PURE__ */ Symbol.for("ls:fetch_implementation");
@@ -2632,7 +2632,7 @@ var _getFetchImplementation = (debug2) => {
   };
 };
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/fast-safe-stringify/index.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/fast-safe-stringify/index.js
 var LIMIT_REPLACE_NODE = "[...]";
 var CIRCULAR_REPLACE_NODE = { result: "[Circular]" };
 var arr = [];
@@ -2784,7 +2784,7 @@ function replaceGetterValues(replacer) {
   };
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/client.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/client.js
 function _ensureUTCTimestamp(ts) {
   if (typeof ts === "string" && ts.length > 0 && !ts.includes("Z") && !ts.includes("+") && !ts.includes("-", 10)) {
     return ts + "Z";
@@ -3348,6 +3348,22 @@ var Client = class _Client {
     }
     return outputs;
   }
+  /**
+   * Filter content from new_token events to prevent streaming LLM output
+   * from being uploaded via events.
+   */
+  _filterNewTokenEvents(events) {
+    if (!events || events.length === 0) {
+      return events;
+    }
+    return events.map((event) => {
+      if (event.name === "new_token") {
+        const { kwargs: _, ...rest } = event;
+        return rest;
+      }
+      return event;
+    });
+  }
   async prepareRunCreateOrUpdateInputs(run) {
     const runParams = { ...run };
     if (runParams.inputs !== void 0) {
@@ -3355,6 +3371,9 @@ var Client = class _Client {
     }
     if (runParams.outputs !== void 0) {
       runParams.outputs = await this.processOutputs(runParams.outputs);
+    }
+    if (runParams.events !== void 0) {
+      runParams.events = this._filterNewTokenEvents(runParams.events);
     }
     return runParams;
   }
@@ -4115,6 +4134,9 @@ Context: ${context}`);
     }
     if (run.outputs) {
       run.outputs = await this.processOutputs(run.outputs);
+    }
+    if (run.events) {
+      run.events = this._filterNewTokenEvents(run.events);
     }
     const data = { ...run, id: runId };
     if (!this._filterForSampling([data], true).length) {
@@ -6976,7 +6998,7 @@ function isExampleCreate(input) {
   return "dataset_id" in input || "dataset_name" in input;
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/env.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/env.js
 var isTracingEnabled = (tracingEnabled) => {
   if (tracingEnabled !== void 0) {
     return tracingEnabled;
@@ -6985,11 +7007,11 @@ var isTracingEnabled = (tracingEnabled) => {
   return !!envVars.find((envVar) => getLangSmithEnvironmentVariable(envVar) === "true");
 };
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/singletons/constants.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/singletons/constants.js
 var _LC_CONTEXT_VARIABLES_KEY = /* @__PURE__ */ Symbol.for("lc:context_variables");
 var _REPLICA_TRACE_ROOTS_KEY = /* @__PURE__ */ Symbol.for("langsmith:replica_trace_roots");
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/context_vars.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/context_vars.js
 function getContextVar(runTree, key) {
   if (_LC_CONTEXT_VARIABLES_KEY in runTree) {
     const contextVars = runTree[_LC_CONTEXT_VARIABLES_KEY];
@@ -7006,13 +7028,13 @@ function setContextVar(runTree, key, value) {
   runTree[_LC_CONTEXT_VARIABLES_KEY] = contextVars;
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/utils/project.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/project.js
 var getDefaultProjectName = () => {
   return getLangSmithEnvironmentVariable("PROJECT") ?? getEnvironmentVariable("LANGCHAIN_SESSION") ?? // TODO: Deprecate
   "default";
 };
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/run_trees.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/run_trees.js
 var TIMESTAMP_LENGTH = 36;
 var UUID_NAMESPACE_DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 function getReplicaKey(replica) {
@@ -7913,13 +7935,13 @@ function _checkEndpointEnvUnset(parsed) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/uuid.js
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/uuid.js
 function uuid7() {
   return v7_default();
 }
 
-// node_modules/.pnpm/langsmith@0.5.18/node_modules/langsmith/dist/index.js
-var __version__ = "0.5.18";
+// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/index.js
+var __version__ = "0.5.19";
 
 // dist/transcript.js
 import { readFileSync as readFileSync3, statSync as statSync2, openSync, readSync, closeSync } from "node:fs";
