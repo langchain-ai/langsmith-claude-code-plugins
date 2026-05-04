@@ -27,6 +27,19 @@ To update, run:
 /reload-plugins
 ```
 
+### As a Claude Cowork plugin
+
+Claude Cowork runs Claude Code in a sandboxed VM, thus the plugin needs to be added separately.
+
+1. Allow network egress for `LANGSMITH_CC_ENDPOINT` (eg. `https://api.smith.langchain.com`) or for all domains
+2. Add `langchain-ai/langsmith-claude-code-plugins` marketplace in Customize > Personal Plugins (+) > Create Plugin > Add Marketplace
+3. Edit each of the Claude Code hooks by prepending LangSmith Claude Code environment variables to `command` of every hook. [Watch video to see step-by-step](https://github.com/user-attachments/assets/1d44b30f-e0a8-4173-b60b-97a2d1fb95c5).
+
+https://github.com/user-attachments/assets/1d44b30f-e0a8-4173-b60b-97a2d1fb95c5
+
+> [!IMPORTANT]
+> Make sure that 'Allow network egress' is either enabled for all domains or enabled for `LANGSMITH_CC_ENDPOINT`, otherwise Cowork might freeze.
+
 ### From source (development)
 
 ```bash
