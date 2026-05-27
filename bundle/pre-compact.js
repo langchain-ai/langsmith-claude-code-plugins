@@ -103,6 +103,7 @@ var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 import { readFileSync as readFileSync2 } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
+import { execSync } from "node:child_process";
 function readAnthropicUserId() {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE;
   if (!homeDir)
@@ -123,7 +124,48 @@ function readAnthropicUserId() {
 function readLocalUsername() {
   return userInfo().username;
 }
-function loadConfig() {
+var GIT_PROVIDERS_REGEX = {
+  github: /[@/](?:github\.com)[:/](.+?)(?:\.git)?\s/,
+  gitlab: /[@/](?:gitlab\.com)[:/](.+?)(?:\.git)?\s/,
+  bitbucket: /[@/](?:bitbucket\.org)[:/](.+?)(?:\.git)?\s/,
+  devAzure: /[@/](?:dev\.azure\.com)[:/](.+?)(?:\.git)?\s/
+};
+function parseRepoName(remoteUrl) {
+  for (const [provider, regex] of Object.entries(GIT_PROVIDERS_REGEX)) {
+    const match = remoteUrl.match(regex);
+    if (match)
+      return { provider, name: match[1] };
+  }
+  return void 0;
+}
+function getRepoName(cwd) {
+  try {
+    const output = execSync("git remote -v", { cwd, encoding: "utf-8", timeout: 5e3 });
+    const lines = output.trim().split("\n").filter(Boolean);
+    const remotes = [];
+    for (const line of lines) {
+      const parts = line.split(/\s+/);
+      if (parts.length >= 2 && line.includes("(fetch)")) {
+        remotes.push({ name: parts[0], url: parts[1] });
+      }
+    }
+    const origin = remotes.find((r) => r.name === "origin");
+    if (origin) {
+      const name = parseRepoName(origin.url + " ");
+      if (name)
+        return name;
+    }
+    for (const remote of remotes) {
+      const name = parseRepoName(remote.url + " ");
+      if (name)
+        return name;
+    }
+  } catch {
+  }
+  return void 0;
+}
+function loadConfig(options) {
+  const cwd = options?.cwd ?? process.cwd();
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
   const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
   const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
@@ -160,7 +202,13 @@ function loadConfig() {
   if (anthropicUserId) {
     identityMetadata.anthropic_user_id = anthropicUserId;
   }
-  customMetadata = { ...identityMetadata, ...customMetadata };
+  const repoMetadata = {};
+  const repoName = getRepoName(cwd);
+  if (repoName != null) {
+    repoMetadata.repository_name = repoName.name;
+    repoMetadata.repository_provider = repoName.provider;
+  }
+  customMetadata = { ...identityMetadata, ...repoMetadata, ...customMetadata };
   return {
     apiKey,
     project,
