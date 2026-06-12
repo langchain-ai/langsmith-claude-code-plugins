@@ -13,6 +13,7 @@ import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { classifyToolCall } from "../tool-metadata.js";
 
 interface PostToolUseHookInput {
   session_id: string;
@@ -97,6 +98,7 @@ async function main(): Promise<void> {
           thread_id: input.session_id,
           ls_integration: "claude-code",
           tool_name: input.tool_name,
+          ...classifyToolCall(input.tool_name, input.tool_input),
           ...config.customMetadata,
         },
       },
