@@ -8003,6 +8003,80 @@ function getSessionState(state, sessionId) {
 }
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
+// dist/tool-metadata.js
+var FILE_OPERATION = {
+  Read: "read",
+  Write: "write",
+  Edit: "edit",
+  NotebookEdit: "edit"
+};
+function getFilePath(input) {
+  for (const key of ["file_path", "notebook_path"]) {
+    const value = input[key];
+    if (typeof value === "string" && value.length > 0)
+      return value;
+  }
+  return void 0;
+}
+function matchSkillPath(path2) {
+  const segments = path2.split("/").filter((segment) => segment.length > 0);
+  const idx = segments.indexOf("skills");
+  if (idx === -1)
+    return void 0;
+  const skillName = segments[idx + 1];
+  const relativeSegments = segments.slice(idx + 2);
+  if (!skillName || relativeSegments.length === 0)
+    return void 0;
+  return { skillName, relativeSegments };
+}
+function classifyToolCall(toolName, input) {
+  const safeInput = input ?? {};
+  if (toolName === "Skill") {
+    const skill = safeInput.skill;
+    return {
+      ls_event_kind: "skill_load",
+      ls_resource_kind: "skill",
+      ls_skill_detection: "explicit",
+      ...typeof skill === "string" && skill.length > 0 ? { ls_skill_name: skill } : {}
+    };
+  }
+  const fileOperation = FILE_OPERATION[toolName];
+  if (!fileOperation)
+    return {};
+  const path2 = getFilePath(safeInput);
+  if (!path2)
+    return {};
+  const skillPath = matchSkillPath(path2);
+  if (!skillPath) {
+    return { ls_resource_kind: "file", ls_file_operation: fileOperation };
+  }
+  const { skillName, relativeSegments } = skillPath;
+  if (fileOperation === "read") {
+    const isManifest = relativeSegments.length === 1 && relativeSegments[0] === "SKILL.md";
+    if (isManifest) {
+      return {
+        ls_event_kind: "skill_load",
+        ls_resource_kind: "skill",
+        ls_file_operation: "read",
+        ls_skill_name: skillName,
+        ls_skill_detection: "inferred"
+      };
+    }
+    return {
+      ls_event_kind: "skill_file_access",
+      ls_resource_kind: "skill_file",
+      ls_file_operation: "read",
+      ls_skill_name: skillName
+    };
+  }
+  return {
+    ls_event_kind: "skill_file_mutation",
+    ls_resource_kind: "skill_file",
+    ls_file_operation: fileOperation,
+    ls_skill_name: skillName
+  };
+}
+
 // dist/langsmith.js
 var client = void 0;
 var replicas = void 0;
@@ -8233,6 +8307,7 @@ async function main() {
           thread_id: input.session_id,
           ls_integration: "claude-code",
           tool_name: input.tool_name,
+          ...classifyToolCall(input.tool_name, input.tool_input),
           ...config.customMetadata
         }
       }
