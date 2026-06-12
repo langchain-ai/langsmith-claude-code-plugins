@@ -12,6 +12,7 @@ import { readTranscript, groupIntoTurns } from "./transcript.js";
 import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
+import { classifyToolCall } from "./tool-metadata.js";
 
 // ─── Client setup ───────────────────────────────────────────────────────────
 
@@ -308,7 +309,12 @@ export async function traceTurn(
         trace_id: traceId,
         dotted_order: toolDottedOrder,
         extra: {
-          metadata: { thread_id: sessionId, ls_integration: "claude-code", ...customMetadata },
+          metadata: {
+            thread_id: sessionId,
+            ls_integration: "claude-code",
+            ...classifyToolCall(toolCall.tool_use.name, toolCall.tool_use.input),
+            ...customMetadata,
+          },
         },
       });
       await runTree.postRun();
