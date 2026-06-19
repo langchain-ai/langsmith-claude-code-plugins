@@ -3,7 +3,7 @@
  * messages into Turns (user prompt → LLM calls → tool results).
  */
 
-import { readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
 import type {
   TranscriptMessage,
   AssistantMessage,
@@ -169,14 +169,15 @@ export function getTranscriptEndLine(filePath: string): number {
 export function readRuntimeVersion(filePath: string): string | undefined {
   let fd: number | undefined;
   try {
-    const size = statSync(filePath).size;
+    // Open first, then fstat the descriptor (avoids a stat/open TOCTOU race).
+    fd = openSync(filePath, "r");
+    const size = fstatSync(fd).size;
     if (size === 0) return undefined;
 
     const window = 64 * 1024; // tail bytes — enough to contain at least one full line
     const start = Math.max(0, size - window);
     const len = size - start;
     const buf = Buffer.alloc(len);
-    fd = openSync(filePath, "r");
     readSync(fd, buf, 0, len, start);
 
     const text = buf.toString("utf-8");

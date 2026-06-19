@@ -7944,7 +7944,7 @@ function debug(message) {
 }
 
 // dist/transcript.js
-import { readFileSync as readFileSync3, statSync as statSync2, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync as readFileSync3, statSync as statSync2, fstatSync, openSync, readSync, closeSync } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
   let size;
@@ -8056,14 +8056,14 @@ function getTranscriptEndLine(filePath) {
 function readRuntimeVersion(filePath) {
   let fd;
   try {
-    const size = statSync2(filePath).size;
+    fd = openSync(filePath, "r");
+    const size = fstatSync(fd).size;
     if (size === 0)
       return void 0;
     const window2 = 64 * 1024;
     const start = Math.max(0, size - window2);
     const len = size - start;
     const buf = Buffer.alloc(len);
-    fd = openSync(filePath, "r");
     readSync(fd, buf, 0, len, start);
     const text = buf.toString("utf-8");
     const lines = text.split("\n").filter((l) => l.trim() !== "");

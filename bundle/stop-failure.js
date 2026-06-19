@@ -7933,7 +7933,7 @@ function _checkEndpointEnvUnset(parsed) {
 var __version__ = "0.5.19";
 
 // dist/transcript.js
-import { readFileSync as readFileSync3, statSync as statSync2, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync as readFileSync3, statSync as statSync2, fstatSync, openSync, readSync, closeSync } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 
 // dist/state.js

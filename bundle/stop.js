@@ -591,7 +591,7 @@ var require_dist = __commonJS({
 });
 
 // dist/transcript.js
-import { readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
   let size;
@@ -664,14 +664,14 @@ function readTranscript(filePath, afterLine = -1) {
 function readRuntimeVersion(filePath) {
   let fd;
   try {
-    const size = statSync(filePath).size;
+    fd = openSync(filePath, "r");
+    const size = fstatSync(fd).size;
     if (size === 0)
       return void 0;
     const window2 = 64 * 1024;
     const start = Math.max(0, size - window2);
     const len = size - start;
     const buf = Buffer.alloc(len);
-    fd = openSync(filePath, "r");
     readSync(fd, buf, 0, len, start);
     const text = buf.toString("utf-8");
     const lines = text.split("\n").filter((l) => l.trim() !== "");
