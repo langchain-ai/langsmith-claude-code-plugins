@@ -1140,4 +1140,93 @@ describe("traceTurn", () => {
     expect(llmMetadata.ls_provider).toBe("anthropic");
     expect(llmMetadata.ls_model_name).toBe("claude-sonnet-4-5");
   });
+
+  it("stamps coding-agent-v1 keys (turn_id/turn_number/runtime/approval) on every run", async () => {
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      promptId: "prompt_xyz",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [
+            {
+              tool_use: { type: "tool_use", id: "tu_1", name: "Bash", input: { command: "ls" } },
+              result: { content: "ok", timestamp: "2025-01-01T00:00:03Z" },
+            },
+          ],
+        },
+      ],
+      isComplete: false, // force standalone (root) turn creation + completion
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 7,
+      project: "test-project",
+      customMetadata: { ls_integration_version: "0.1.3" },
+      runtimeVersion: "2.1.181",
+      approvalPolicy: "acceptEdits",
+    });
+
+    // Tool run (postRun) — has turn_id, turn_number, runtime version, tool_name compat.
+    const toolPost = allRunTreeInstances.find(
+      (i) => i.params.run_type === "tool" && i.ops.includes("postRun"),
+    )!;
+    const toolMeta = (toolPost.params.extra as Record<string, unknown>).metadata as Record<
+      string,
+      unknown
+    >;
+    expect(toolMeta).toMatchObject({
+      ls_agent_kind: "coding_agent",
+      ls_integration: "claude-code",
+      ls_agent_runtime: "Claude Code",
+      ls_trace_schema_version: "coding-agent-v1",
+      thread_id: "session-123",
+      turn_id: "prompt_xyz",
+      turn_number: 7,
+      ls_agent_runtime_version: "2.1.181",
+      ls_integration_version: "0.1.3",
+      tool_name: "Bash", // DEPRECATED compat alias
+    });
+    expect(toolMeta.ls_tool_name).toBeUndefined(); // equals run name → omitted
+    expect(toolMeta.approval_policy).toBeUndefined(); // tool runs never get approval_policy
+
+    // LLM run (patchRun) — contract keys + preserved model conventions.
+    const llmPatch = allRunTreeInstances.find(
+      (i) => i.params.run_type === "llm" && i.ops.includes("patchRun"),
+    )!;
+    const llmMeta = (llmPatch.params.extra as Record<string, unknown>).metadata as Record<
+      string,
+      unknown
+    >;
+    expect(llmMeta).toMatchObject({
+      turn_id: "prompt_xyz",
+      turn_number: 7,
+      ls_agent_runtime_version: "2.1.181",
+      ls_provider: "anthropic",
+    });
+    expect(llmMeta.ls_agent_type).toBeUndefined(); // not a root/subagent run
+
+    // Standalone (root) turn completion (patchRun) — approval_policy + ls_agent_type compat.
+    const turnPatch = allRunTreeInstances.find(
+      (i) => i.params.name === USER_PROMPT_TURN_NAME && i.ops.includes("patchRun"),
+    )!;
+    const turnMeta = (turnPatch.params.extra as Record<string, unknown>).metadata as Record<
+      string,
+      unknown
+    >;
+    expect(turnMeta).toMatchObject({
+      turn_id: "prompt_xyz",
+      turn_number: 7,
+      approval_policy: "acceptEdits",
+      ls_agent_type: "root", // DEPRECATED compat alias
+    });
+    expect(turnMeta.ls_subagent_type).toBeUndefined(); // never on root
+  });
 });

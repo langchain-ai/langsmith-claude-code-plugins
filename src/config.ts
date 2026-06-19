@@ -10,6 +10,24 @@ import { execSync } from "node:child_process";
  */
 
 /**
+ * Plugin version, injected at build time by esbuild `define` (no runtime
+ * package.json). `typeof` guards the non-bundled case; env is the fallback.
+ */
+declare const __LS_INTEGRATION_VERSION__: string;
+export const LS_INTEGRATION_VERSION: string | undefined =
+  typeof __LS_INTEGRATION_VERSION__ !== "undefined"
+    ? __LS_INTEGRATION_VERSION__
+    : process.env.CC_LANGSMITH_INTEGRATION_VERSION || undefined;
+
+/** Host used to build a canonical https repository_url from a parsed provider. */
+const PROVIDER_HOSTS: Record<string, string> = {
+  github: "github.com",
+  gitlab: "gitlab.com",
+  bitbucket: "bitbucket.org",
+  devAzure: "dev.azure.com",
+};
+
+/**
  * Read the Anthropic user ID from `~/.claude.json` if available.
  *
  * Claude Code stores a stable per-installation hashed user identifier as
@@ -49,7 +67,7 @@ export interface Config {
   /** Dotted-order string of an existing LangSmith run to nest all traces under. */
   parentDottedOrder?: string;
   replicas?: RunTreeConfig["replicas"];
-  /** Custom metadata to attach to root turn runs (parsed from CC_LANGSMITH_METADATA). */
+  /** Base metadata (static contract keys + user CC_LANGSMITH_METADATA) for every run. */
   customMetadata?: Record<string, unknown>;
 }
 
@@ -111,6 +129,29 @@ export function getRepoName(cwd: string): { provider: string; name: string } | u
   return undefined;
 }
 
+/** Read the current git branch and commit SHA via the git CLI (omitted if absent). */
+export function getGitInfo(cwd: string): { branch?: string; commit?: string } {
+  const result: { branch?: string; commit?: string } = {};
+  try {
+    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+      cwd,
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim();
+    // "HEAD" means detached — no branch name available.
+    if (branch && branch !== "HEAD") result.branch = branch;
+  } catch {
+    // Not a git repo / git unavailable — skip.
+  }
+  try {
+    const commit = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8", timeout: 5000 }).trim();
+    if (commit) result.commit = commit;
+  } catch {
+    // Not a git repo / git unavailable — skip.
+  }
+  return result;
+}
+
 export function loadConfig(options?: { cwd?: string }): Config {
   const cwd = options?.cwd ?? process.cwd();
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
@@ -160,7 +201,22 @@ export function loadConfig(options?: { cwd?: string }): Config {
   const localUsername = readLocalUsername();
   const identityMetadata: Record<string, unknown> = { local_username: localUsername };
   if (anthropicUserId) {
+    // Standardized coding-agent-v1 key (preferred over local_username)...
+    identityMetadata.user_id = anthropicUserId;
+    // ...and the original key, kept as a DEPRECATED compat alias (≥1 release).
     identityMetadata.anthropic_user_id = anthropicUserId;
+  }
+
+  // coding-agent-v1 static identity literals + versions, merged onto every run.
+  const contractMetadata: Record<string, unknown> = {
+    ls_agent_kind: "coding_agent",
+    ls_integration: "claude-code",
+    ls_agent_runtime: "Claude Code",
+    ls_trace_schema_version: "coding-agent-v1",
+    cwd,
+  };
+  if (LS_INTEGRATION_VERSION) {
+    contractMetadata.ls_integration_version = LS_INTEGRATION_VERSION;
   }
 
   // Attach git repo metadata if available, to attribute runs to a specific codebase.
@@ -169,9 +225,14 @@ export function loadConfig(options?: { cwd?: string }): Config {
   if (repoName != null) {
     repoMetadata.repository_name = repoName.name;
     repoMetadata.repository_provider = repoName.provider;
+    const host = PROVIDER_HOSTS[repoName.provider];
+    if (host) repoMetadata.repository_url = `https://${host}/${repoName.name}`;
   }
+  const gitInfo = getGitInfo(cwd);
+  if (gitInfo.branch) repoMetadata.git_branch = gitInfo.branch;
+  if (gitInfo.commit) repoMetadata.git_commit_sha = gitInfo.commit;
 
-  customMetadata = { ...identityMetadata, ...repoMetadata, ...customMetadata };
+  customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
 
   return {
     apiKey,

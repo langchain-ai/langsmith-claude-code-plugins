@@ -154,6 +154,8 @@ export interface Turn {
   llmCalls: LLMCall[];
   /** Whether the turn is complete (has stop_reason: "end_turn"). If false, the assistant is still responding. */
   isComplete: boolean;
+  /** Claude Code prompt id for this turn → coding-agent-v1 `turn_id`. */
+  promptId?: string;
 }
 
 // ─── Tracing State ─────────────────────────────────────────────────────────
@@ -174,6 +176,10 @@ export interface SessionState {
   current_turn_number?: number;
   /** Current turn start time (ISO string) for duration calculation */
   current_turn_start?: string;
+  /** Permission mode for the current turn → coding-agent-v1 `approval_policy` (root/interrupted). */
+  approval_policy?: string;
+  /** Claude Code CLI version → coding-agent-v1 `ls_agent_runtime_version`. */
+  runtime_version?: string;
   /** Wall-clock time (ms) when the last tool finished, set by PostToolUse */
   last_tool_end_time?: number;
   /** Maps tool_use_id -> wall-clock start time (ms), set by PreToolUse */

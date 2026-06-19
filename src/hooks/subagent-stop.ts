@@ -21,7 +21,7 @@ import type { SubagentStopHookInput } from "../types.js";
 async function main(): Promise<void> {
   const input: SubagentStopHookInput = await readStdin();
 
-  const config = initHook();
+  const config = initHook(input.cwd);
   if (!config) return;
 
   debug(`SubagentStop hook: agent_id=${input.agent_id}, type=${input.agent_type}`);
