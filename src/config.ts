@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import type { RunTreeConfig } from "langsmith";
+import type { StringNodeRule } from "langsmith/anonymizer";
 import { debug, error } from "./logger.js";
 import { execSync } from "node:child_process";
 
@@ -51,6 +52,10 @@ export interface Config {
   replicas?: RunTreeConfig["replicas"];
   /** Custom metadata to attach to root turn runs (parsed from CC_LANGSMITH_METADATA). */
   customMetadata?: Record<string, unknown>;
+  /** Whether to redact detected secrets from traced data before upload. */
+  redact: boolean;
+  /** Extra user-supplied redaction rules (parsed from CC_LANGSMITH_REDACT_EXTRA). */
+  redactExtraRules?: StringNodeRule[];
 }
 
 /**
@@ -153,6 +158,27 @@ export function loadConfig(options?: { cwd?: string }): Config {
     }
   }
 
+  // Secret redaction is on by default; disable with CC_LANGSMITH_REDACT=false|0.
+  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").toLowerCase();
+  const redact = redactEnv !== "false" && redactEnv !== "0";
+
+  // Optional user-supplied redaction rules: JSON array of { pattern, replace }.
+  // `pattern` is a string (compiled with the global flag by the SDK anonymizer).
+  let redactExtraRules: StringNodeRule[] | undefined;
+  const providedExtra = process.env.CC_LANGSMITH_REDACT_EXTRA;
+  if (providedExtra !== undefined) {
+    try {
+      const parsed = JSON.parse(providedExtra);
+      if (Array.isArray(parsed)) {
+        redactExtraRules = parsed;
+      } else {
+        error("CC_LANGSMITH_REDACT_EXTRA must be a JSON array of { pattern, replace }.");
+      }
+    } catch {
+      error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");
+    }
+  }
+
   // Attach identity metadata so every traced run can be attributed to a
   // specific Claude Code installation and local OS user. User-supplied
   // metadata wins on key collision.
@@ -182,5 +208,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
     parentDottedOrder,
     replicas,
     customMetadata,
+    redact,
+    redactExtraRules,
   };
 }

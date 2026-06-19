@@ -40,7 +40,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
+  initTracing(
+    config.apiKey,
+    config.apiBaseUrl,
+    config.replicas,
+    config.redact,
+    config.redactExtraRules,
+  );
 
   debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
 
