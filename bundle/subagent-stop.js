@@ -196,6 +196,22 @@ function loadConfig(options) {
       error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
     }
   }
+  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").toLowerCase();
+  const redact = redactEnv !== "false" && redactEnv !== "0";
+  let redactExtraRules;
+  const providedExtra = process.env.CC_LANGSMITH_REDACT_EXTRA;
+  if (providedExtra !== void 0) {
+    try {
+      const parsed = JSON.parse(providedExtra);
+      if (Array.isArray(parsed)) {
+        redactExtraRules = parsed;
+      } else {
+        error("CC_LANGSMITH_REDACT_EXTRA must be a JSON array of { pattern, replace }.");
+      }
+    } catch {
+      error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");
+    }
+  }
   const anthropicUserId = readAnthropicUserId();
   const localUsername = readLocalUsername();
   const identityMetadata = { local_username: localUsername };
@@ -217,7 +233,9 @@ function loadConfig(options) {
     debug: debug2,
     parentDottedOrder,
     replicas,
-    customMetadata
+    customMetadata,
+    redact,
+    redactExtraRules
   };
 }
 
