@@ -16,6 +16,7 @@ import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import { RunTree } from "langsmith";
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
+import { codingAgentMetadata } from "../metadata.js";
 
 interface StopFailureHookInput {
   session_id: string;
@@ -30,7 +31,7 @@ interface StopFailureHookInput {
 async function main(): Promise<void> {
   const input: StopFailureHookInput = await readStdin();
 
-  const config = initHook();
+  const config = initHook(input.cwd);
   if (!config) return;
 
   debug(`StopFailure hook: session=${input.session_id}, error=${input.error}`);
@@ -62,12 +63,14 @@ async function main(): Promise<void> {
       end_time: new Date().toISOString(),
       error: errorMessage,
       extra: {
-        metadata: {
-          thread_id: input.session_id,
-          ls_integration: "claude-code",
-          turn_number: sessionState.current_turn_number,
-          ...config.customMetadata,
-        },
+        metadata: codingAgentMetadata({
+          sessionId: input.session_id,
+          base: config.customMetadata,
+          turnNumber: sessionState.current_turn_number,
+          runtimeVersion: sessionState.runtime_version,
+          approvalPolicy: sessionState.approval_policy,
+          legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+        }),
       },
     });
     await runTree.patchRun({ excludeInputs: true });

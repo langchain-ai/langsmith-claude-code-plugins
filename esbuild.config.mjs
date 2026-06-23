@@ -1,5 +1,10 @@
 import { build } from "esbuild";
-import { chmodSync } from "node:fs";
+import { chmodSync, readFileSync } from "node:fs";
+
+// Read the plugin version at BUILD TIME and inject it as a global constant.
+// The runtime bundle has no package.json, so we cannot require("./package.json")
+// at runtime — esbuild `define` substitutes the literal into the bundle instead.
+const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"));
 
 const entryPoints = [
   "dist/hooks/user-prompt-submit.js",
@@ -22,6 +27,11 @@ await build({
   // tsc output already has shebangs; esbuild strips them during bundling
   // Mark node builtins as external (they're available at runtime)
   external: ["node:*"],
+  define: {
+    // Build-time injection of the plugin (integration) version. Consumed by
+    // config.ts via `typeof __LS_INTEGRATION_VERSION__`.
+    __LS_INTEGRATION_VERSION__: JSON.stringify(pkg.version),
+  },
 });
 
 // Make hooks executable

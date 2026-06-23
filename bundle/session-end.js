@@ -7944,7 +7944,7 @@ function uuid7() {
 var __version__ = "0.5.19";
 
 // dist/transcript.js
-import { readFileSync as readFileSync3, statSync as statSync2, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync as readFileSync3, statSync as statSync2, fstatSync, openSync, readSync, closeSync } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
   let size;
@@ -8013,6 +8013,36 @@ function readTranscript(filePath, afterLine = -1) {
   } finally {
     closeSync(fd);
   }
+}
+function readRuntimeVersion(filePath) {
+  let fd;
+  try {
+    fd = openSync(filePath, "r");
+    const size = fstatSync(fd).size;
+    if (size === 0)
+      return void 0;
+    const window2 = 64 * 1024;
+    const start = Math.max(0, size - window2);
+    const len = size - start;
+    const buf = Buffer.alloc(len);
+    readSync(fd, buf, 0, len, start);
+    const text = buf.toString("utf-8");
+    const lines = text.split("\n").filter((l) => l.trim() !== "");
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const parsed = JSON.parse(lines[i]);
+        if (typeof parsed.version === "string" && parsed.version.length > 0) {
+          return parsed.version;
+        }
+      } catch {
+      }
+    }
+  } catch {
+  } finally {
+    if (fd !== void 0)
+      closeSync(fd);
+  }
+  return void 0;
 }
 function isHumanMessage(msg) {
   if (msg.type !== "user")
@@ -8130,7 +8160,8 @@ function groupIntoTurns(messages) {
       userContent: currentUser.message.content,
       userTimestamp: currentUser.timestamp,
       llmCalls,
-      isComplete
+      isComplete,
+      promptId: currentUser.promptId
     });
   }
   for (const msg of messages) {
@@ -8229,6 +8260,51 @@ var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 var USER_PROMPT_TURN_NAME = "Claude Code Turn";
 var ASSISTANT_RUN_NAME = "Claude";
 
+// dist/metadata.js
+var LS_AGENT_KIND = "coding_agent";
+var LS_INTEGRATION = "claude-code";
+var LS_AGENT_RUNTIME = "Claude Code";
+var LS_TRACE_SCHEMA_VERSION = "coding-agent-v1";
+function codingAgentMetadata(opts) {
+  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, legacyRole, subagentId, subagentType, toolName, runName, runSpecific } = opts;
+  const meta = {
+    // Identity & grouping — always present.
+    ls_agent_kind: LS_AGENT_KIND,
+    ls_integration: LS_INTEGRATION,
+    ls_agent_runtime: LS_AGENT_RUNTIME,
+    ls_trace_schema_version: LS_TRACE_SCHEMA_VERSION,
+    thread_id: sessionId
+  };
+  if (turnId)
+    meta.turn_id = turnId;
+  if (typeof turnNumber === "number")
+    meta.turn_number = turnNumber;
+  if (runtimeVersion)
+    meta.ls_agent_runtime_version = runtimeVersion;
+  if (approvalPolicy)
+    meta.approval_policy = approvalPolicy;
+  if (legacyRole)
+    meta.ls_agent_type = legacyRole;
+  if (subagentId) {
+    meta.ls_subagent_id = subagentId;
+    meta.agent_id = subagentId;
+  }
+  if (subagentType) {
+    meta.ls_subagent_type = subagentType;
+    meta.agent_type = subagentType;
+  }
+  if (toolName) {
+    meta.tool_name = toolName;
+    if (runName && toolName !== runName)
+      meta.ls_tool_name = toolName;
+  }
+  return {
+    ...meta,
+    ...runSpecific,
+    ...base
+  };
+}
+
 // dist/langsmith.js
 var client = void 0;
 var replicas = void 0;
@@ -8287,7 +8363,8 @@ function buildUsageMetadata(usage) {
   };
 }
 async function traceTurn(options) {
-  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata } = options;
+  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy } = options;
+  const turnId = turn.promptId;
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
   if (!client && !replicas) {
@@ -8319,7 +8396,18 @@ async function traceTurn(options) {
       start_time: turn.userTimestamp,
       trace_id: traceId,
       dotted_order: parentDottedOrder,
-      ...customMetadata ? { extra: { metadata: { ...customMetadata } } } : {}
+      extra: {
+        metadata: codingAgentMetadata({
+          sessionId,
+          base: customMetadata,
+          turnId,
+          turnNumber: turnNum,
+          runtimeVersion,
+          approvalPolicy,
+          legacyRole: "root"
+          // DEPRECATED compat alias ls_agent_type="root".
+        })
+      }
     });
     await runTree.postRun();
   }
@@ -8379,7 +8467,15 @@ async function traceTurn(options) {
         trace_id: traceId,
         dotted_order: toolDottedOrder,
         extra: {
-          metadata: { thread_id: sessionId, ls_integration: "claude-code", ...customMetadata }
+          metadata: codingAgentMetadata({
+            sessionId,
+            base: customMetadata,
+            turnId,
+            turnNumber: turnNum,
+            runtimeVersion,
+            toolName: toolCall.tool_use.name,
+            runName: toolCall.tool_use.name
+          })
         }
       });
       await runTree2.postRun();
@@ -8409,18 +8505,22 @@ async function traceTurn(options) {
         messages: [{ role: "assistant", content: assistantContent }]
       },
       extra: {
-        metadata: {
-          thread_id: sessionId,
-          ls_integration: "claude-code",
-          ls_provider: "anthropic",
-          ls_model_name: llmCall.model,
-          ls_invocation_params: {
-            model: llmCall.model
-          },
-          usage_metadata: buildUsageMetadata(llmCall.usage),
-          ...llmCall.synthetic ? { synthetic: true } : {},
-          ...customMetadata
-        }
+        metadata: codingAgentMetadata({
+          sessionId,
+          base: customMetadata,
+          turnId,
+          turnNumber: turnNum,
+          runtimeVersion,
+          runSpecific: {
+            ls_provider: "anthropic",
+            ls_model_name: llmCall.model,
+            ls_invocation_params: {
+              model: llmCall.model
+            },
+            usage_metadata: buildUsageMetadata(llmCall.usage),
+            ...llmCall.synthetic ? { synthetic: true } : {}
+          }
+        })
       }
     });
     await runTree.patchRun({ excludeInputs: true });
@@ -8451,12 +8551,16 @@ async function traceTurn(options) {
       outputs: { messages: turnOutputs },
       error: error2,
       extra: {
-        metadata: {
-          thread_id: sessionId,
-          ls_integration: "claude-code",
-          turn_number: turnNum,
-          ...customMetadata
-        }
+        metadata: codingAgentMetadata({
+          sessionId,
+          base: customMetadata,
+          turnId,
+          turnNumber: turnNum,
+          runtimeVersion,
+          approvalPolicy,
+          legacyRole: "root"
+          // DEPRECATED compat alias ls_agent_type="root".
+        })
       }
     });
     await runTree.patchRun({ excludeInputs: true });
@@ -8466,18 +8570,21 @@ async function traceTurn(options) {
   return taskRunMap;
 }
 async function closeInterruptedTurn(options) {
-  const { sessionId, sessionState, transcriptPath, project, stateFilePath, customMetadata } = options;
+  const { sessionId, sessionState, transcriptPath, project, stateFilePath, customMetadata, runtimeVersion, approvalPolicy } = options;
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
   let lastLine = sessionState.last_line;
   let turnsTraced = 0;
   let taskRunMap = sessionState.task_run_map ?? {};
+  let turnId;
+  const turnNumber = sessionState.current_turn_number;
   if (transcriptPath) {
     try {
       const { messages, lastLine: newLastLine } = readTranscript(transcriptPath, sessionState.last_line);
       if (messages.length > 0) {
         const turns = groupIntoTurns(messages);
         if (turns.length > 0) {
+          turnId = turns[turns.length - 1].promptId;
           await traceTurn({
             turn: turns[turns.length - 1],
             sessionId,
@@ -8487,7 +8594,10 @@ async function closeInterruptedTurn(options) {
             existingTaskRunMap: taskRunMap,
             tracedToolUseIds: new Set(sessionState.traced_tool_use_ids ?? []),
             traceId: sessionState.current_trace_id,
-            parentDottedOrder: sessionState.current_dotted_order
+            parentDottedOrder: sessionState.current_dotted_order,
+            customMetadata,
+            runtimeVersion,
+            approvalPolicy
           });
           lastLine = newLastLine;
           turnsTraced = 1;
@@ -8508,7 +8618,10 @@ async function closeInterruptedTurn(options) {
         taskRunMap,
         parentTraceId: sessionState.current_trace_id,
         project,
-        customMetadata
+        customMetadata,
+        runtimeVersion,
+        turnId,
+        turnNumber
       });
     } catch (err) {
       error(`Failed to trace pending subagents on interrupt: ${err}`);
@@ -8528,12 +8641,15 @@ async function closeInterruptedTurn(options) {
     end_time: (/* @__PURE__ */ new Date()).toISOString(),
     error: "User interrupt",
     extra: {
-      metadata: {
-        thread_id: sessionId,
-        ls_integration: "claude-code",
-        turn_number: sessionState.current_turn_number,
-        ...customMetadata
-      }
+      metadata: codingAgentMetadata({
+        sessionId,
+        base: customMetadata,
+        turnNumber: sessionState.current_turn_number,
+        runtimeVersion,
+        approvalPolicy,
+        legacyRole: "root"
+        // DEPRECATED compat alias ls_agent_type="root".
+      })
     }
   });
   await runTree.patchRun({ excludeInputs: true });
@@ -8541,7 +8657,7 @@ async function closeInterruptedTurn(options) {
   return { lastLine, turnsTraced };
 }
 async function tracePendingSubagents(options) {
-  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata } = options;
+  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber } = options;
   if (!client && !replicas) {
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
   }
@@ -8585,14 +8701,22 @@ async function tracePendingSubagents(options) {
           trace_id: deferred.trace_id,
           dotted_order: agentToolDottedOrder,
           extra: {
-            metadata: {
-              thread_id: sessionId,
-              ls_integration: "claude-code",
-              tool_name: "Agent",
-              agent_type: toolName,
-              agent_id: subagent.agent_id,
-              ...customMetadata
-            }
+            metadata: codingAgentMetadata({
+              sessionId,
+              base: customMetadata,
+              runtimeVersion,
+              turnId,
+              turnNumber,
+              // run_type "tool" (run name "Agent", native tool "Task").
+              toolName: "Task",
+              runName: "Agent",
+              runSpecific: {
+                agent_type: toolName,
+                // DEPRECATED compat alias.
+                agent_id: subagent.agent_id
+                // DEPRECATED compat alias.
+              }
+            })
           }
         });
         await runTree2.postRun();
@@ -8614,14 +8738,19 @@ async function tracePendingSubagents(options) {
         trace_id: parentTraceId,
         dotted_order: subagentChainDottedOrder,
         extra: {
-          metadata: {
-            thread_id: sessionId,
-            ls_integration: "claude-code",
-            ls_agent_type: "subagent",
-            agent_type: toolName,
-            agent_id: subagent.agent_id,
-            ...customMetadata
-          }
+          metadata: codingAgentMetadata({
+            sessionId,
+            base: customMetadata,
+            runtimeVersion,
+            turnId,
+            turnNumber,
+            legacyRole: "subagent",
+            // DEPRECATED compat alias.
+            subagentId: subagent.agent_id,
+            // → ls_subagent_id (+ agent_id alias).
+            subagentType: toolName
+            // → ls_subagent_type (+ agent_type alias).
+          })
         }
       });
       await runTree.postRun();
@@ -8635,7 +8764,8 @@ async function tracePendingSubagents(options) {
           existingTaskRunMap: void 0,
           traceId: parentTraceId,
           parentDottedOrder: subagentChainDottedOrder,
-          customMetadata
+          customMetadata,
+          runtimeVersion
         });
       }
       log(`Traced subagent ${toolName} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`);
@@ -8650,6 +8780,13 @@ import { readFileSync as readFileSync5 } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
+var LS_INTEGRATION_VERSION = true ? "0.1.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var PROVIDER_HOSTS = {
+  github: "github.com",
+  gitlab: "gitlab.com",
+  bitbucket: "bitbucket.org",
+  devAzure: "dev.azure.com"
+};
 function readAnthropicUserId() {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE;
   if (!homeDir)
@@ -8710,6 +8847,26 @@ function getRepoName(cwd) {
   }
   return void 0;
 }
+function getGitInfo(cwd) {
+  const result = {};
+  try {
+    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+      cwd,
+      encoding: "utf-8",
+      timeout: 5e3
+    }).trim();
+    if (branch && branch !== "HEAD")
+      result.branch = branch;
+  } catch {
+  }
+  try {
+    const commit = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8", timeout: 5e3 }).trim();
+    if (commit)
+      result.commit = commit;
+  } catch {
+  }
+  return result;
+}
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
@@ -8746,15 +8903,34 @@ function loadConfig(options) {
   const localUsername = readLocalUsername();
   const identityMetadata = { local_username: localUsername };
   if (anthropicUserId) {
+    identityMetadata.user_id = anthropicUserId;
     identityMetadata.anthropic_user_id = anthropicUserId;
+  }
+  const contractMetadata = {
+    ls_agent_kind: "coding_agent",
+    ls_integration: "claude-code",
+    ls_agent_runtime: "Claude Code",
+    ls_trace_schema_version: "coding-agent-v1",
+    cwd
+  };
+  if (LS_INTEGRATION_VERSION) {
+    contractMetadata.ls_integration_version = LS_INTEGRATION_VERSION;
   }
   const repoMetadata = {};
   const repoName = getRepoName(cwd);
   if (repoName != null) {
     repoMetadata.repository_name = repoName.name;
     repoMetadata.repository_provider = repoName.provider;
+    const host = PROVIDER_HOSTS[repoName.provider];
+    if (host)
+      repoMetadata.repository_url = `https://${host}/${repoName.name}`;
   }
-  customMetadata = { ...identityMetadata, ...repoMetadata, ...customMetadata };
+  const gitInfo = getGitInfo(cwd);
+  if (gitInfo.branch)
+    repoMetadata.git_branch = gitInfo.branch;
+  if (gitInfo.commit)
+    repoMetadata.git_commit_sha = gitInfo.commit;
+  customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
   return {
     apiKey,
     project,
@@ -8768,8 +8944,8 @@ function loadConfig(options) {
 }
 
 // dist/utils/hook-init.js
-function initHook() {
-  const config = loadConfig();
+function initHook(cwd) {
+  const config = loadConfig({ cwd });
   initLogger(config.debug);
   if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
     return null;
@@ -8804,7 +8980,7 @@ function readStdin() {
 // dist/hooks/session-end.js
 async function main() {
   const input = await readStdin();
-  const config = initHook();
+  const config = initHook(input.cwd);
   if (!config)
     return;
   debug(`SessionEnd hook: session=${input.session_id}, reason=${input.reason}`);
@@ -8816,14 +8992,18 @@ async function main() {
   }
   initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
   debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
+  const expandedTranscript = expandHome(input.transcript_path);
+  const runtimeVersion = sessionState.runtime_version ?? (expandedTranscript ? readRuntimeVersion(expandedTranscript) : void 0);
   try {
     const { lastLine, turnsTraced } = await closeInterruptedTurn({
       sessionId: input.session_id,
       sessionState,
-      transcriptPath: expandHome(input.transcript_path),
+      transcriptPath: expandedTranscript,
       project: config.project,
       stateFilePath: config.stateFilePath,
-      customMetadata: config.customMetadata
+      customMetadata: config.customMetadata,
+      runtimeVersion,
+      approvalPolicy: sessionState.approval_policy
     });
     await atomicUpdateState(config.stateFilePath, (s) => {
       const ss = getSessionState(s, input.session_id);
