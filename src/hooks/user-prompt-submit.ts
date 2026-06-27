@@ -20,10 +20,11 @@ import {
   parseDottedOrder,
 } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
-import { getTranscriptEndLine } from "../transcript.js";
+import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
+import { codingAgentMetadata } from "../metadata.js";
 
 interface UserPromptSubmitHookInput {
   session_id: string;
@@ -40,7 +41,7 @@ async function main(): Promise<void> {
   const hookStartTime = Date.now();
   const input: UserPromptSubmitHookInput = await readStdin();
 
-  const config = initHook();
+  const config = initHook(input.cwd);
   if (!config) return;
 
   debug(`UserPromptSubmit hook started, session=${input.session_id}`);
@@ -62,6 +63,13 @@ async function main(): Promise<void> {
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
+
+  // CLI version (ls_agent_runtime_version); best-effort, Stop backfills if empty.
+  const expandedTranscript = expandHome(input.transcript_path);
+  const runtimeVersion =
+    (expandedTranscript ? readRuntimeVersion(expandedTranscript) : undefined) ??
+    sessionState.runtime_version;
+  const approvalPolicy = input.permission_mode;
 
   // If state is fresh (last_line === -1) but the transcript already has content,
   // skip to the end. This avoids replaying thousands of old messages (which would
@@ -91,6 +99,8 @@ async function main(): Promise<void> {
         project: config.project,
         stateFilePath: config.stateFilePath,
         customMetadata: config.customMetadata,
+        runtimeVersion,
+        approvalPolicy,
       });
       interruptedLastLine = lastLine;
       interruptedTurnsTraced = turnsTraced;
@@ -133,7 +143,17 @@ async function main(): Promise<void> {
     trace_id: traceId,
     dotted_order: dottedOrder,
     ...(parentRunId ? { parent_run_id: parentRunId } : {}),
-    ...(config.customMetadata ? { extra: { metadata: { ...config.customMetadata } } } : {}),
+    extra: {
+      metadata: codingAgentMetadata({
+        sessionId: input.session_id,
+        base: config.customMetadata,
+        // turn_id (promptId) isn't known yet; Stop stamps it on completion.
+        turnNumber: turnNum,
+        runtimeVersion,
+        approvalPolicy,
+        legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+      }),
+    },
   });
 
   await runTree.postRun();
@@ -152,6 +172,9 @@ async function main(): Promise<void> {
         current_parent_run_id: parentRunId,
         current_turn_number: turnNum,
         current_turn_start: startTime,
+        // Persisted so the closing hooks can stamp them onto their runs.
+        approval_policy: approvalPolicy,
+        ...(runtimeVersion ? { runtime_version: runtimeVersion } : {}),
         // Advance past the interrupted turn's messages so Stop doesn't re-trace them
         last_line: interruptedLastLine,
         turn_count: ss.turn_count + interruptedTurnsTraced,

@@ -13,6 +13,7 @@ import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { codingAgentMetadata } from "../metadata.js";
 
 interface PostToolUseHookInput {
   session_id: string;
@@ -31,7 +32,7 @@ interface PostToolUseHookInput {
 async function main(): Promise<void> {
   const input: PostToolUseHookInput = await readStdin();
 
-  const config = initHook();
+  const config = initHook(input.cwd);
   if (!config) return;
 
   // Subagent tool calls are traced by the Stop hook from the transcript.
@@ -99,12 +100,16 @@ async function main(): Promise<void> {
       trace_id: traceId,
       dotted_order: toolDottedOrder,
       extra: {
-        metadata: {
-          thread_id: input.session_id,
-          ls_integration: "claude-code",
-          tool_name: input.tool_name,
-          ...config.customMetadata,
-        },
+        metadata: codingAgentMetadata({
+          sessionId: input.session_id,
+          base: config.customMetadata,
+          // turn_id (promptId) isn't in the PostToolUse payload; turn_number is
+          // sufficient (the contract needs at least one of the two).
+          turnNumber: sessionState.current_turn_number,
+          runtimeVersion: sessionState.runtime_version,
+          toolName: input.tool_name,
+          runName: input.tool_name,
+        }),
       },
     });
     await runTree.postRun();

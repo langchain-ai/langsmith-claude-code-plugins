@@ -7,7 +7,7 @@
  * groups them into turns, and sends traces to LangSmith.
  */
 
-import { readTranscript, groupIntoTurns } from "../transcript.js";
+import { readTranscript, groupIntoTurns, readRuntimeVersion } from "../transcript.js";
 import { log, warn, debug, error } from "../logger.js";
 import {
   loadState,
@@ -22,6 +22,7 @@ import { readStdin } from "../utils/stdin.js";
 import type { StopHookInput } from "../types.js";
 import { RunTree } from "langsmith";
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
+import { codingAgentMetadata } from "../metadata.js";
 
 async function main(): Promise<void> {
   const startTime = Date.now();
@@ -29,7 +30,7 @@ async function main(): Promise<void> {
   // Read hook input from stdin.
   const input: StopHookInput = await readStdin();
 
-  const config = initHook();
+  const config = initHook(input.cwd);
   if (!config) return;
 
   debug(`Stop hook started, session=${input.session_id}`);
@@ -60,6 +61,10 @@ async function main(): Promise<void> {
   const sessionState = getSessionState(state, input.session_id);
 
   debug(`Last line: ${sessionState.last_line}, turn count: ${sessionState.turn_count}`);
+
+  // CLI version + approval policy: prefer state, fall back to the transcript.
+  const runtimeVersion = sessionState.runtime_version ?? readRuntimeVersion(transcriptPath);
+  const approvalPolicy = sessionState.approval_policy ?? input.permission_mode;
 
   // Wait briefly for the transcript writer to flush. Stop fires as soon as the
   // model finishes generating, but the JSONL file write may still be in flight.
@@ -147,6 +152,8 @@ async function main(): Promise<void> {
         turnNum,
         project: config.project,
         customMetadata: config.customMetadata,
+        runtimeVersion,
+        approvalPolicy,
 
         parentRunId,
         existingTaskRunMap,
@@ -183,13 +190,15 @@ async function main(): Promise<void> {
           messages: [{ role: "assistant", content: input.last_assistant_message }],
         },
         extra: {
-          metadata: {
-            thread_id: input.session_id,
-            ls_integration: "claude-code",
-            ls_agent_type: "root",
-            turn_number: sessionState.current_turn_number,
-            ...config.customMetadata,
-          },
+          metadata: codingAgentMetadata({
+            sessionId: input.session_id,
+            base: config.customMetadata,
+            turnId: turns[turns.length - 1]?.promptId,
+            turnNumber: sessionState.current_turn_number,
+            runtimeVersion,
+            approvalPolicy,
+            legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+          }),
         },
       });
       await runTree.patchRun({ excludeInputs: true });
@@ -218,6 +227,9 @@ async function main(): Promise<void> {
       parentTraceId: freshSession.current_trace_id,
       project: config.project,
       customMetadata: config.customMetadata,
+      runtimeVersion,
+      turnId: turns[turns.length - 1]?.promptId,
+      turnNumber: sessionState.current_turn_number,
     });
   }
 

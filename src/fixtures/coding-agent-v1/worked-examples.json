@@ -1,0 +1,138 @@
+{
+  "_comment": "Copy-pasteable worked examples of run.extra.metadata for coding-agent-v1. Uses claude-code as the reference integration. Identity block (ls_agent_kind, ls_integration, ls_agent_runtime, thread_id, ls_trace_schema_version) + versions + turn + repo/git/cwd are emitted by ONE shared helper and merged onto EVERY run. Child runs do NOT inherit parent metadata in LangSmith — the helper must stamp each createChild/run.",
+
+  "root": {
+    "ls_agent_kind": "coding_agent",
+    "ls_integration": "claude-code",
+    "ls_agent_runtime": "Claude Code",
+    "thread_id": "sess_7f3c2a9e1b",
+    "ls_trace_schema_version": "coding-agent-v1",
+
+    "ls_integration_version": "0.4.2",
+    "ls_agent_runtime_version": "1.0.38",
+    "turn_id": "prompt_abc123",
+    "turn_number": 3,
+
+    "repository_url": "https://github.com/langchain-ai/langsmith-claude-code-plugins",
+    "repository_provider": "github",
+    "repository_name": "langsmith-claude-code-plugins",
+    "git_branch": "main",
+    "git_commit_sha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+    "cwd": "/Users/dev/langsmith-claude-code-plugins",
+
+    "user_id": "u_9f3ab21c",
+    "local_username": "dev",
+    "user_email": "dev@example.com",
+    "sandbox_type": "none",
+    "approval_policy": "acceptEdits"
+  },
+
+  "llm": {
+    "ls_agent_kind": "coding_agent",
+    "ls_integration": "claude-code",
+    "ls_agent_runtime": "Claude Code",
+    "thread_id": "sess_7f3c2a9e1b",
+    "ls_trace_schema_version": "coding-agent-v1",
+
+    "ls_integration_version": "0.4.2",
+    "ls_agent_runtime_version": "1.0.38",
+    "turn_id": "prompt_abc123",
+    "turn_number": 3,
+
+    "repository_url": "https://github.com/langchain-ai/langsmith-claude-code-plugins",
+    "repository_provider": "github",
+    "repository_name": "langsmith-claude-code-plugins",
+    "git_branch": "main",
+    "git_commit_sha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+    "cwd": "/Users/dev/langsmith-claude-code-plugins",
+
+    "user_id": "u_9f3ab21c",
+    "local_username": "dev",
+    "user_email": "dev@example.com",
+    "sandbox_type": "none",
+
+    "ls_provider": "anthropic",
+    "ls_model_name": "claude-opus-4-8",
+    "ls_invocation_params": { "max_tokens": 8192, "temperature": 1 },
+    "usage_metadata": { "input_tokens": 12873, "output_tokens": 412, "total_tokens": 13285 }
+  },
+
+  "tool": {
+    "ls_agent_kind": "coding_agent",
+    "ls_integration": "claude-code",
+    "ls_agent_runtime": "Claude Code",
+    "thread_id": "sess_7f3c2a9e1b",
+    "ls_trace_schema_version": "coding-agent-v1",
+
+    "ls_integration_version": "0.4.2",
+    "ls_agent_runtime_version": "1.0.38",
+    "turn_id": "prompt_abc123",
+    "turn_number": 3,
+
+    "repository_url": "https://github.com/langchain-ai/langsmith-claude-code-plugins",
+    "repository_provider": "github",
+    "repository_name": "langsmith-claude-code-plugins",
+    "git_branch": "main",
+    "git_commit_sha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+    "cwd": "/Users/dev/langsmith-claude-code-plugins",
+
+    "user_id": "u_9f3ab21c",
+    "local_username": "dev",
+    "user_email": "dev@example.com",
+    "sandbox_type": "none",
+
+    "ls_tool_name": "Bash"
+  },
+
+  "subagent": {
+    "ls_agent_kind": "coding_agent",
+    "ls_integration": "claude-code",
+    "ls_agent_runtime": "Claude Code",
+    "thread_id": "sess_7f3c2a9e1b",
+    "ls_trace_schema_version": "coding-agent-v1",
+
+    "ls_integration_version": "0.4.2",
+    "ls_agent_runtime_version": "1.0.38",
+    "turn_id": "prompt_abc123",
+    "turn_number": 3,
+
+    "repository_url": "https://github.com/langchain-ai/langsmith-claude-code-plugins",
+    "repository_provider": "github",
+    "repository_name": "langsmith-claude-code-plugins",
+    "git_branch": "main",
+    "git_commit_sha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+    "cwd": "/Users/dev/langsmith-claude-code-plugins",
+
+    "user_id": "u_9f3ab21c",
+    "local_username": "dev",
+    "user_email": "dev@example.com",
+    "sandbox_type": "none",
+
+    "ls_subagent_id": "sub_4d8e1f",
+    "ls_subagent_type": "Explore"
+  },
+
+  "interrupted": {
+    "_comment": "Interrupted/cancelled turn. Same base as root, including approval_policy. turn_id/turn_number still emitted.",
+    "ls_agent_kind": "coding_agent",
+    "ls_integration": "claude-code",
+    "ls_agent_runtime": "Claude Code",
+    "thread_id": "sess_7f3c2a9e1b",
+    "ls_trace_schema_version": "coding-agent-v1",
+    "ls_integration_version": "0.4.2",
+    "ls_agent_runtime_version": "1.0.38",
+    "turn_id": "prompt_abc124",
+    "turn_number": 4,
+    "repository_url": "https://github.com/langchain-ai/langsmith-claude-code-plugins",
+    "repository_provider": "github",
+    "repository_name": "langsmith-claude-code-plugins",
+    "git_branch": "main",
+    "git_commit_sha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+    "cwd": "/Users/dev/langsmith-claude-code-plugins",
+    "user_id": "u_9f3ab21c",
+    "local_username": "dev",
+    "user_email": "dev@example.com",
+    "sandbox_type": "none",
+    "approval_policy": "acceptEdits"
+  }
+}

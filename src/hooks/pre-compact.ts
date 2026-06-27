@@ -23,7 +23,7 @@ interface PreCompactHookInput {
 async function main(): Promise<void> {
   const input: PreCompactHookInput = await readStdin();
 
-  const config = initHook();
+  const config = initHook(input.cwd);
   if (!config) return;
 
   debug(`PreCompact hook started, session=${input.session_id}, trigger=${input.trigger}`);

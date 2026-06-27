@@ -12,6 +12,7 @@ import { initTracing, generateDottedOrderSegment } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { codingAgentMetadata } from "../metadata.js";
 
 interface PostCompactHookInput {
   session_id: string;
@@ -25,7 +26,7 @@ interface PostCompactHookInput {
 async function main(): Promise<void> {
   const input: PostCompactHookInput = await readStdin();
 
-  const config = initHook();
+  const config = initHook(input.cwd);
   if (!config) return;
 
   debug(`PostCompact hook started, session=${input.session_id}, trigger=${input.trigger}`);
@@ -72,12 +73,13 @@ async function main(): Promise<void> {
       dotted_order: dottedOrder,
       ...(parentRunId ? { parent_run_id: parentRunId } : {}),
       extra: {
-        metadata: {
-          thread_id: input.session_id,
-          ls_integration: "claude-code",
-          trigger: input.trigger,
-          ...config.customMetadata,
-        },
+        metadata: codingAgentMetadata({
+          sessionId: input.session_id,
+          base: config.customMetadata,
+          turnNumber: sessionState.current_turn_number,
+          runtimeVersion: sessionState.runtime_version,
+          runSpecific: { trigger: input.trigger },
+        }),
       },
     });
     await runTree.postRun();

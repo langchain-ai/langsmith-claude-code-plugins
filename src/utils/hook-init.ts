@@ -8,9 +8,12 @@ import { initLogger, error } from "../logger.js";
 /**
  * Standard hook startup: load config, init logger, check kill-switch and API key.
  * Returns the Config if tracing should proceed, null if the hook should exit early.
+ *
+ * Pass the hook input's `cwd` so repo/git metadata and the `cwd` contract key
+ * reflect the working directory Claude Code is operating in.
  */
-export function initHook(): Config | null {
-  const config = loadConfig();
+export function initHook(cwd?: string): Config | null {
+  const config = loadConfig({ cwd });
   initLogger(config.debug);
 
   if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {

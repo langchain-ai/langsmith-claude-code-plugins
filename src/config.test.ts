@@ -291,4 +291,57 @@ describe("loadConfig", () => {
       repository_provider: provider,
     });
   });
+
+  describe("coding-agent-v1 contract metadata", () => {
+    it("includes the frozen identity literals and cwd", () => {
+      const config = loadConfig({ cwd });
+      expect(config.customMetadata).toMatchObject({
+        ls_agent_kind: "coding_agent",
+        ls_integration: "claude-code",
+        ls_agent_runtime: "Claude Code",
+        ls_trace_schema_version: "coding-agent-v1",
+        cwd,
+      });
+    });
+
+    it("surfaces the hashed anthropic id as user_id (preferred) and keeps the compat alias", () => {
+      writeFileSync(join(tmpHome, ".claude.json"), JSON.stringify({ userID: "hashed-123" }));
+      const config = loadConfig({ cwd });
+      expect(config.customMetadata).toMatchObject({
+        user_id: "hashed-123",
+        anthropic_user_id: "hashed-123", // DEPRECATED compat alias
+      });
+    });
+
+    it("derives repository_url + git_branch + git_commit_sha", () => {
+      vi.mocked(execSync).mockImplementation((command: string) => {
+        if (command.includes("remote -v")) {
+          const url = "git@github.com:langchain-ai/example.git";
+          return [`origin\t${url} (fetch)`, `origin\t${url} (push)`].join("\n");
+        }
+        if (command.includes("abbrev-ref")) return "feature/my-branch\n";
+        if (command.includes("rev-parse HEAD")) return "deadbeefcafe1234\n";
+        return "";
+      });
+      const config = loadConfig({ cwd: __dirname });
+      expect(config.customMetadata).toMatchObject({
+        repository_name: "langchain-ai/example",
+        repository_provider: "github",
+        repository_url: "https://github.com/langchain-ai/example",
+        git_branch: "feature/my-branch",
+        git_commit_sha: "deadbeefcafe1234",
+      });
+    });
+
+    it("omits git_branch for a detached HEAD", () => {
+      vi.mocked(execSync).mockImplementation((command: string) => {
+        if (command.includes("abbrev-ref")) return "HEAD\n";
+        if (command.includes("rev-parse HEAD")) return "deadbeef\n";
+        return "";
+      });
+      const config = loadConfig({ cwd: __dirname });
+      expect(config.customMetadata).not.toHaveProperty("git_branch");
+      expect(config.customMetadata).toMatchObject({ git_commit_sha: "deadbeef" });
+    });
+  });
 });

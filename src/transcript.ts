@@ -3,7 +3,7 @@
  * messages into Turns (user prompt → LLM calls → tool results).
  */
 
-import { readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
 import type {
   TranscriptMessage,
   AssistantMessage,
@@ -160,6 +160,45 @@ export function getTranscriptEndLine(filePath: string): number {
   } catch {
     return -1;
   }
+}
+
+/**
+ * Read the Claude Code CLI `version` from a transcript tail (→
+ * `ls_agent_runtime_version`). Returns `undefined` if not found.
+ */
+export function readRuntimeVersion(filePath: string): string | undefined {
+  let fd: number | undefined;
+  try {
+    // Open first, then fstat the descriptor (avoids a stat/open TOCTOU race).
+    fd = openSync(filePath, "r");
+    const size = fstatSync(fd).size;
+    if (size === 0) return undefined;
+
+    const window = 64 * 1024; // tail bytes — enough to contain at least one full line
+    const start = Math.max(0, size - window);
+    const len = size - start;
+    const buf = Buffer.alloc(len);
+    readSync(fd, buf, 0, len, start);
+
+    const text = buf.toString("utf-8");
+    const lines = text.split("\n").filter((l) => l.trim() !== "");
+    // Scan from the end for the most recent line carrying a version.
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const parsed = JSON.parse(lines[i]) as { version?: unknown };
+        if (typeof parsed.version === "string" && parsed.version.length > 0) {
+          return parsed.version;
+        }
+      } catch {
+        // Partial/leading line from the tail window or malformed — skip.
+      }
+    }
+  } catch {
+    // File missing or unreadable — non-fatal.
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+  return undefined;
 }
 
 /** Check if a message is a human user prompt (string content, or array content without tool_result blocks — e.g. images). */
@@ -346,6 +385,7 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
       userTimestamp: currentUser.timestamp,
       llmCalls,
       isComplete,
+      promptId: currentUser.promptId,
     });
   }
 

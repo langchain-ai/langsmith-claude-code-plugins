@@ -15,6 +15,7 @@ import { initTracing, closeInterruptedTurn } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { readRuntimeVersion } from "../transcript.js";
 
 interface SessionEndHookInput {
   session_id: string;
@@ -27,7 +28,7 @@ interface SessionEndHookInput {
 async function main(): Promise<void> {
   const input: SessionEndHookInput = await readStdin();
 
-  const config = initHook();
+  const config = initHook(input.cwd);
   if (!config) return;
 
   debug(`SessionEnd hook: session=${input.session_id}, reason=${input.reason}`);
@@ -50,14 +51,21 @@ async function main(): Promise<void> {
 
   debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
 
+  const expandedTranscript = expandHome(input.transcript_path);
+  const runtimeVersion =
+    sessionState.runtime_version ??
+    (expandedTranscript ? readRuntimeVersion(expandedTranscript) : undefined);
+
   try {
     const { lastLine, turnsTraced } = await closeInterruptedTurn({
       sessionId: input.session_id,
       sessionState,
-      transcriptPath: expandHome(input.transcript_path),
+      transcriptPath: expandedTranscript,
       project: config.project,
       stateFilePath: config.stateFilePath,
       customMetadata: config.customMetadata,
+      runtimeVersion,
+      approvalPolicy: sessionState.approval_policy,
     });
 
     await atomicUpdateState(config.stateFilePath, (s) => {
