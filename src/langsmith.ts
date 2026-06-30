@@ -727,6 +727,11 @@ export interface TaskRunEntry {
   run_id: string;
   dotted_order: string;
   deferred?: Record<string, unknown>;
+  /** Subagent type, recorded by SubagentStop; used when closing the Agent run. */
+  agent_type?: string;
+  /** True once SubagentStop has processed this async subagent (the join's
+   *  subagent-side "done" marker, replacing the former open_agent_runs map). */
+  subagent_done?: boolean;
 }
 
 /**
@@ -796,21 +801,34 @@ export async function tracePendingSubagents(options: {
         `Processing subagent ${toolName} (${subagent.agent_id}) under run ${parentToolRunId}`,
       );
 
-      // Read subagent transcript and trace its turns.
+      // Read subagent transcript. We still post the Agent tool run even when the
+      // transcript is empty/unreadable (aborted or not-yet-flushed subagent), so
+      // the run is opened and the launching turn can be drained/finalized normally
+      // — only the inner subagent chain/turns are skipped. (Returning early here
+      // would strand the launching turn open until SessionEnd.)
       const { messages: subagentMessages } = readTranscript(subagent.agent_transcript_path, -1);
-      if (subagentMessages.length === 0) {
-        logger.debug(`Empty subagent transcript: ${subagent.agent_transcript_path}`);
-        continue;
+      const subagentTurns = subagentMessages.length > 0 ? groupIntoTurns(subagentMessages) : [];
+      if (subagentTurns.length === 0) {
+        logger.debug(`Empty/unreadable subagent transcript: ${subagent.agent_transcript_path}`);
       }
 
-      const subagentTurns = groupIntoTurns(subagentMessages);
-
-      // PreToolUse records start time before the tool runs; PostToolUse records
-      // end time after — so deferred times already bracket the subagent's transcript.
       const subagentStartTime =
         (deferred?.start_time as string | undefined) ?? new Date().toISOString();
+      // The Agent tool run and the subagent chain run must span the subagent's own
+      // LLM/tool runs. For a *background* agent the deferred end_time is the launch
+      // time (PostToolUse fires when the Task tool returns at launch, not when the
+      // subagent finishes), which would leave the chain too short to contain its
+      // children. Extend the end to the latest timestamp the subagent transcript
+      // actually contains. (For a synchronous agent the deferred end already covers
+      // it — ISO timestamps compare chronologically, so the max is a no-op.)
+      const lastSubagentActivity = subagentTurns.reduce(
+        (max, t) => t.llmCalls.reduce((m, c) => (c.endTime > m ? c.endTime : m), max),
+        "",
+      );
+      const deferredEnd = (deferred?.end_time as string | undefined) ?? "";
       const subagentEndTime =
-        (deferred?.end_time as string | undefined) ?? new Date().toISOString();
+        (lastSubagentActivity > deferredEnd ? lastSubagentActivity : deferredEnd) ||
+        new Date().toISOString();
 
       // PostToolUse deferred the Agent tool run creation so we can use the
       // real subagent name. Create it now with the correct name and clamped times.
@@ -852,58 +870,62 @@ export async function tracePendingSubagents(options: {
         if (keepAgentToolRunOpen) openedAgentRunIds.push(subagent.agent_id);
       }
 
-      // Create an intermediate chain run as a child of the Agent tool run,
-      // then nest all subagent turns under it.
-      const subagentChainId = uuid7();
-      const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentStartTime, subagentChainId)}`;
+      // Nest the subagent's own work under the Agent tool run — skipped when the
+      // transcript was empty (the Agent tool run above still represents the run).
+      if (subagentTurns.length > 0) {
+        // Create an intermediate chain run as a child of the Agent tool run,
+        // then nest all subagent turns under it.
+        const subagentChainId = uuid7();
+        const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentStartTime, subagentChainId)}`;
 
-      const runTree = new RunTree({
-        client,
-        replicas,
-        id: subagentChainId,
-        name: `${toolName} Subagent`,
-        run_type: "chain",
-        inputs: deferred?.inputs ?? {},
-        outputs: { output: deferred?.outputs },
-        project_name: project,
-        start_time: subagentStartTime,
-        end_time: subagentEndTime,
-        parent_run_id: parentToolRunId,
-        trace_id: parentTraceId,
-        dotted_order: subagentChainDottedOrder,
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId,
-            base: customMetadata,
-            runtimeVersion,
-            turnId,
-            turnNumber,
-            legacyRole: "subagent", // DEPRECATED compat alias.
-            subagentId: subagent.agent_id, // → ls_subagent_id (+ agent_id alias).
-            subagentType: toolName, // → ls_subagent_type (+ agent_type alias).
-          }),
-        },
-      });
-      await runTree.postRun();
-
-      for (let i = 0; i < subagentTurns.length; i++) {
-        await traceTurn({
-          turn: subagentTurns[i],
-          sessionId,
-          turnNum: i + 1,
-          project,
-          parentRunId: subagentChainId,
-          existingTaskRunMap: undefined,
-          traceId: parentTraceId,
-          parentDottedOrder: subagentChainDottedOrder,
-          customMetadata,
-          runtimeVersion,
+        const runTree = new RunTree({
+          client,
+          replicas,
+          id: subagentChainId,
+          name: `${toolName} Subagent`,
+          run_type: "chain",
+          inputs: deferred?.inputs ?? {},
+          outputs: { output: deferred?.outputs },
+          project_name: project,
+          start_time: subagentStartTime,
+          end_time: subagentEndTime,
+          parent_run_id: parentToolRunId,
+          trace_id: parentTraceId,
+          dotted_order: subagentChainDottedOrder,
+          extra: {
+            metadata: codingAgentMetadata({
+              sessionId,
+              base: customMetadata,
+              runtimeVersion,
+              turnId,
+              turnNumber,
+              legacyRole: "subagent", // DEPRECATED compat alias.
+              subagentId: subagent.agent_id, // → ls_subagent_id (+ agent_id alias).
+              subagentType: toolName, // → ls_subagent_type (+ agent_type alias).
+            }),
+          },
         });
-      }
+        await runTree.postRun();
 
-      logger.log(
-        `Traced subagent ${toolName} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`,
-      );
+        for (let i = 0; i < subagentTurns.length; i++) {
+          await traceTurn({
+            turn: subagentTurns[i],
+            sessionId,
+            turnNum: i + 1,
+            project,
+            parentRunId: subagentChainId,
+            existingTaskRunMap: undefined,
+            traceId: parentTraceId,
+            parentDottedOrder: subagentChainDottedOrder,
+            customMetadata,
+            runtimeVersion,
+          });
+        }
+
+        logger.log(
+          `Traced subagent ${toolName} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`,
+        );
+      }
     } catch (err) {
       logger.error(`Failed to trace subagent ${subagent.agent_id}: ${err}`);
     }

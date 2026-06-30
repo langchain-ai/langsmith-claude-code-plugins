@@ -19,6 +19,7 @@ import {
   generateDottedOrderSegment,
   parseDottedOrder,
 } from "../langsmith.js";
+import { finalizeNotificationChain } from "../finalize.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
@@ -84,7 +85,17 @@ async function main(): Promise<void> {
   let interruptedTurnsTraced = 0;
 
   if (sessionState.current_turn_run_id) {
-    debug(`Tracing interrupted turn ${sessionState.current_turn_run_id}`);
+    // A stale current_turn_run_id means the previous turn's Stop never fired. The
+    // usual cause is a user interrupt — but it also happens when several background
+    // agents finish at once: their task-notifications arrive faster than the agent
+    // responds, so a notification turn is superseded by the next before its Stop.
+    // That's not a user interrupt: close it with an accurate status and, since its
+    // launching turn is still deferred, finalize that chain so it doesn't hang.
+    const supersededNotificationAgentId = sessionState.current_notification_agent_id;
+    debug(
+      `Closing stale turn ${sessionState.current_turn_run_id}` +
+        (supersededNotificationAgentId ? " (superseded task-notification)" : " (interrupted)"),
+    );
     try {
       const { lastLine, turnsTraced } = await closeInterruptedTurn({
         sessionId: input.session_id,
@@ -95,9 +106,22 @@ async function main(): Promise<void> {
         customMetadata: config.customMetadata,
         runtimeVersion,
         approvalPolicy,
+        error: supersededNotificationAgentId
+          ? "Superseded by a newer task-notification"
+          : "User interrupt",
       });
       interruptedLastLine = lastLine;
       interruptedTurnsTraced = turnsTraced;
+      if (supersededNotificationAgentId) {
+        await finalizeNotificationChain({
+          stateFilePath: config.stateFilePath,
+          sessionId: input.session_id,
+          project: config.project,
+          customMetadata: config.customMetadata,
+          runtimeVersion,
+          agentId: supersededNotificationAgentId,
+        });
+      }
     } catch (err) {
       error(`Failed to close interrupted turn: ${err}`);
     }
@@ -116,11 +140,11 @@ async function main(): Promise<void> {
 
   // A task-notification turn is the main agent reacting to a finished background
   // subagent. Detect + correlate in one step by matching the prompt against the
-  // agent_ids in task_run_map. We match task_run_map (recorded by PostToolUse at
-  // launch), NOT open_agent_runs (recorded by SubagentStop on finish): when a
-  // background agent finishes while the main agent is idle, the notification's
-  // UserPromptSubmit can fire *before* SubagentStop, so open_agent_runs may not be
-  // set yet — but the launch-time task_run_map entry always is. A notification
+  // agent_ids in task_run_map. We match by the launch-time task_run_map entry
+  // (recorded by PostToolUse), not by whether SubagentStop has finished: a
+  // background agent finishing while the main agent is idle can fire this
+  // notification's UserPromptSubmit *before* SubagentStop, so a finished marker may
+  // not be set yet — but the launch-time entry always is. A notification
   // necessarily references its agent by id, so an id substring match is robust to
   // message-format changes; a 17-char hex id colliding with human text is
   // astronomically unlikely. (Reading origin.kind from the transcript doesn't work
@@ -228,7 +252,6 @@ async function main(): Promise<void> {
         tool_start_times: {},
         pending_subagent_traces: [],
         open_turns: preservedOpenTurns,
-        open_agent_runs: ss.open_agent_runs,
         notification_done_agents: ss.notification_done_agents,
       },
     };

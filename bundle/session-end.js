@@ -8616,6 +8616,9 @@ function turnIdentityFromOpenTurn(turn, ctx) {
     approvalPolicy: turn.approval_policy
   };
 }
+async function completeTurnRun(options) {
+  await patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
+}
 async function closeTurnRun(id, error2) {
   await patchTurnRun(id, { error: error2 });
 }
@@ -8725,15 +8728,16 @@ async function tracePendingSubagents(options) {
       const deferred = taskRunInfo.deferred;
       debug(`Processing subagent ${toolName} (${subagent.agent_id}) under run ${parentToolRunId}`);
       const { messages: subagentMessages } = readTranscript(subagent.agent_transcript_path, -1);
-      if (subagentMessages.length === 0) {
-        debug(`Empty subagent transcript: ${subagent.agent_transcript_path}`);
-        continue;
+      const subagentTurns = subagentMessages.length > 0 ? groupIntoTurns(subagentMessages) : [];
+      if (subagentTurns.length === 0) {
+        debug(`Empty/unreadable subagent transcript: ${subagent.agent_transcript_path}`);
       }
-      const subagentTurns = groupIntoTurns(subagentMessages);
       const subagentStartTime = deferred?.start_time ?? (/* @__PURE__ */ new Date()).toISOString();
-      const subagentEndTime = deferred?.end_time ?? (/* @__PURE__ */ new Date()).toISOString();
+      const lastSubagentActivity = subagentTurns.reduce((max, t) => t.llmCalls.reduce((m, c) => c.endTime > m ? c.endTime : m, max), "");
+      const deferredEnd = deferred?.end_time ?? "";
+      const subagentEndTime = (lastSubagentActivity > deferredEnd ? lastSubagentActivity : deferredEnd) || (/* @__PURE__ */ new Date()).toISOString();
       if (deferred) {
-        const runTree2 = new RunTree({
+        const runTree = new RunTree({
           client,
           replicas,
           id: parentToolRunId,
@@ -8768,58 +8772,60 @@ async function tracePendingSubagents(options) {
             })
           }
         });
-        await runTree2.postRun();
+        await runTree.postRun();
         if (keepAgentToolRunOpen)
           openedAgentRunIds.push(subagent.agent_id);
       }
-      const subagentChainId = uuid7();
-      const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentStartTime, subagentChainId)}`;
-      const runTree = new RunTree({
-        client,
-        replicas,
-        id: subagentChainId,
-        name: `${toolName} Subagent`,
-        run_type: "chain",
-        inputs: deferred?.inputs ?? {},
-        outputs: { output: deferred?.outputs },
-        project_name: project,
-        start_time: subagentStartTime,
-        end_time: subagentEndTime,
-        parent_run_id: parentToolRunId,
-        trace_id: parentTraceId,
-        dotted_order: subagentChainDottedOrder,
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId,
-            base: customMetadata,
-            runtimeVersion,
-            turnId,
-            turnNumber,
-            legacyRole: "subagent",
-            // DEPRECATED compat alias.
-            subagentId: subagent.agent_id,
-            // → ls_subagent_id (+ agent_id alias).
-            subagentType: toolName
-            // → ls_subagent_type (+ agent_type alias).
-          })
-        }
-      });
-      await runTree.postRun();
-      for (let i = 0; i < subagentTurns.length; i++) {
-        await traceTurn({
-          turn: subagentTurns[i],
-          sessionId,
-          turnNum: i + 1,
-          project,
-          parentRunId: subagentChainId,
-          existingTaskRunMap: void 0,
-          traceId: parentTraceId,
-          parentDottedOrder: subagentChainDottedOrder,
-          customMetadata,
-          runtimeVersion
+      if (subagentTurns.length > 0) {
+        const subagentChainId = uuid7();
+        const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentStartTime, subagentChainId)}`;
+        const runTree = new RunTree({
+          client,
+          replicas,
+          id: subagentChainId,
+          name: `${toolName} Subagent`,
+          run_type: "chain",
+          inputs: deferred?.inputs ?? {},
+          outputs: { output: deferred?.outputs },
+          project_name: project,
+          start_time: subagentStartTime,
+          end_time: subagentEndTime,
+          parent_run_id: parentToolRunId,
+          trace_id: parentTraceId,
+          dotted_order: subagentChainDottedOrder,
+          extra: {
+            metadata: codingAgentMetadata({
+              sessionId,
+              base: customMetadata,
+              runtimeVersion,
+              turnId,
+              turnNumber,
+              legacyRole: "subagent",
+              // DEPRECATED compat alias.
+              subagentId: subagent.agent_id,
+              // → ls_subagent_id (+ agent_id alias).
+              subagentType: toolName
+              // → ls_subagent_type (+ agent_type alias).
+            })
+          }
         });
+        await runTree.postRun();
+        for (let i = 0; i < subagentTurns.length; i++) {
+          await traceTurn({
+            turn: subagentTurns[i],
+            sessionId,
+            turnNum: i + 1,
+            project,
+            parentRunId: subagentChainId,
+            existingTaskRunMap: void 0,
+            traceId: parentTraceId,
+            parentDottedOrder: subagentChainDottedOrder,
+            customMetadata,
+            runtimeVersion
+          });
+        }
+        log(`Traced subagent ${toolName} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`);
       }
-      log(`Traced subagent ${toolName} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`);
     } catch (err) {
       error(`Failed to trace subagent ${subagent.agent_id}: ${err}`);
     }
@@ -9078,9 +9084,9 @@ async function main() {
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   const openTurns = sessionState.open_turns ?? {};
-  const openAgentRuns = sessionState.open_agent_runs ?? {};
+  const openAgentRuns = Object.entries(sessionState.task_run_map ?? {}).filter(([, e]) => e.subagent_done);
   const hasOpenTurns = Object.keys(openTurns).length > 0;
-  const hasOpenAgentRuns = Object.keys(openAgentRuns).length > 0;
+  const hasOpenAgentRuns = openAgentRuns.length > 0;
   if (!sessionState.current_turn_run_id && !hasOpenTurns && !hasOpenAgentRuns) {
     debug("No open turn run \u2014 nothing to close");
     return;
@@ -9109,15 +9115,12 @@ async function main() {
       error(`Failed to close interrupted turn on session end: ${err}`);
     }
   }
-  for (const [agentId, agentType] of Object.entries(openAgentRuns)) {
-    const taskRunInfo = sessionState.task_run_map?.[agentId];
-    if (!taskRunInfo)
-      continue;
+  for (const [agentId, taskRunInfo] of openAgentRuns) {
     try {
       await closeAgentToolRun({
         sessionId: input.session_id,
         agentId,
-        agentType,
+        agentType: taskRunInfo.agent_type ?? "",
         taskRunInfo,
         project: config.project,
         customMetadata: config.customMetadata,
@@ -9132,18 +9135,30 @@ async function main() {
     if (turnRunId === sessionState.current_turn_run_id)
       continue;
     try {
-      await closeInterruptedTurn({
-        sessionId: input.session_id,
-        sessionState,
-        transcriptPath: expandedTranscript,
-        project: config.project,
-        stateFilePath: config.stateFilePath,
-        customMetadata: config.customMetadata,
-        runtimeVersion,
-        turn: entry,
-        error: "Session ended before subagents finished"
-      });
-      debug(`Closed deferred turn ${turnRunId} on session end`);
+      if (entry.stop_seen) {
+        await completeTurnRun({
+          ...turnIdentityFromOpenTurn(entry, {
+            sessionId: input.session_id,
+            project: config.project,
+            customMetadata: config.customMetadata
+          }),
+          lastAssistantMessage: entry.last_assistant_message
+        });
+        debug(`Completed deferred turn ${turnRunId} on session end`);
+      } else {
+        await closeInterruptedTurn({
+          sessionId: input.session_id,
+          sessionState,
+          transcriptPath: expandedTranscript,
+          project: config.project,
+          stateFilePath: config.stateFilePath,
+          customMetadata: config.customMetadata,
+          runtimeVersion,
+          turn: entry,
+          error: "Session ended before turn completed"
+        });
+        debug(`Closed interrupted deferred turn ${turnRunId} on session end`);
+      }
     } catch (err) {
       error(`Failed to close deferred turn ${turnRunId} on session end: ${err}`);
     }
@@ -9165,7 +9180,6 @@ async function main() {
         tool_start_times: {},
         pending_subagent_traces: [],
         open_turns: {},
-        open_agent_runs: {},
         current_notification_agent_id: void 0,
         notification_done_agents: []
       }

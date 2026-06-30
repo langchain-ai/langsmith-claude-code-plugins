@@ -194,6 +194,13 @@ export interface SessionState {
       dotted_order: string;
       /** Deferred Agent tool creation info (set by PostToolUse, used by Stop) */
       deferred?: Partial<RunTree>;
+      /** Subagent type (e.g. "Explore"), recorded by SubagentStop. Used when
+       *  closing the Agent tool run. */
+      agent_type?: string;
+      /** True once SubagentStop has processed this (async) subagent and posted its
+       *  Agent tool run. The notification side of the join reads this to know the
+       *  subagent finished (replaces the former separate `open_agent_runs` map). */
+      subagent_done?: boolean;
     }
   >;
   /** tool_use_ids of regular tools already traced by PostToolUse (prevents double-tracing in traceTurn) */
@@ -215,11 +222,6 @@ export interface SessionState {
    *  earlier turn's subagents finish — hence a map, not a single value. The last
    *  SubagentStop to drain a turn's `agent_ids` completes that turn's root run. */
   open_turns?: Record<string, OpenTurn>;
-  /** Async subagents whose Agent tool run was posted *open* (so the
-   *  task-notification turn can nest under it within bounds), keyed by agent_id
-   *  with the agent's type as value. Closed when that notification turn completes,
-   *  or by SessionEnd as a backstop. */
-  open_agent_runs?: Record<string, string>;
   /** When the current turn is a task-notification turn, the agent_id it is for.
    *  Set by UserPromptSubmit (it nests the turn under that agent's tool run), read
    *  by Stop to close the agent tool run + drain its launching turn on completion. */

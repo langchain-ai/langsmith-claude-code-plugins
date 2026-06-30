@@ -317,13 +317,14 @@ async function main(): Promise<void> {
   // chain — but only once its subagent has actually been traced. SubagentStop and
   // this notification turn fire in non-deterministic order; we close the agent's
   // (open) tool run + launching turn from whichever runs LAST. Here (notification
-  // side): if SubagentStop already traced the agent (open_agent_runs has it), we're
-  // last → finalize. Otherwise record this side as done and let SubagentStop do it.
+  // side): if SubagentStop already traced the agent (task_run_map subagent_done is
+  // set), we're last → finalize. Otherwise record this side as done and let
+  // SubagentStop do it.
   if (notificationToFinalize) {
     let finalizeNow = false;
     await atomicUpdateState(config.stateFilePath, (s) => {
       const ss = getSessionState(s, input.session_id);
-      if (ss.open_agent_runs?.[notificationToFinalize!]) {
+      if (ss.task_run_map?.[notificationToFinalize!]?.subagent_done) {
         finalizeNow = true;
         return s;
       }

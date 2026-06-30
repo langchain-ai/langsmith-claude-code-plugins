@@ -93,9 +93,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  let openedAgentRunIds: string[] = [];
   try {
-    openedAgentRunIds = await tracePendingSubagents({
+    await tracePendingSubagents({
       sessionId: input.session_id,
       pendingSubagents: [
         {
@@ -120,48 +119,53 @@ async function main(): Promise<void> {
     error(`Failed to trace background subagent: ${err}`);
   }
 
-  // Record the open Agent tool run, then join with the notification side. The
-  // notification turn and this SubagentStop fire in non-deterministic order; the
-  // agent's tool run + launching turn are closed by whichever runs LAST (so both
-  // the subagent trace and the notification turn are within the tool run's bounds).
-  // Here (subagent side): if the notification turn already completed
-  // (notification_done_agents has us), we're last → finalize. Otherwise leave the
-  // run open for the notification turn's Stop to finalize.
-  if (openedAgentRunIds.includes(input.agent_id)) {
-    let finalizeNow = false;
-    await atomicUpdateState(config.stateFilePath, (s) => {
-      const ss = getSessionState(s, input.session_id);
-      const notifDone = (ss.notification_done_agents ?? []).includes(input.agent_id);
-      if (notifDone) finalizeNow = true;
-      return {
-        ...s,
-        [input.session_id]: {
-          ...ss,
-          open_agent_runs: { ...ss.open_agent_runs, [input.agent_id]: input.agent_type || "" },
-          notification_done_agents: notifDone
-            ? (ss.notification_done_agents ?? []).filter((id) => id !== input.agent_id)
-            : ss.notification_done_agents,
-        },
-      };
-    });
+  // Mark the subagent done on its task_run_map entry, then join with the
+  // notification side. The notification turn and this SubagentStop fire in
+  // non-deterministic order; the agent's tool run + launching turn are closed by
+  // whichever runs LAST. We mark `subagent_done` regardless of whether the trace
+  // succeeded (empty/aborted transcript still leaves an Agent tool run posted), so
+  // the launching turn is always drained and never stranded. If the notification
+  // turn already completed (notification_done_agents has us), we're last → finalize;
+  // otherwise leave it for the notification turn's Stop to finalize.
+  let finalizeNow = false;
+  await atomicUpdateState(config.stateFilePath, (s) => {
+    const ss = getSessionState(s, input.session_id);
+    const entry = ss.task_run_map?.[input.agent_id];
+    const notifDone = (ss.notification_done_agents ?? []).includes(input.agent_id);
+    if (notifDone) finalizeNow = true;
+    return {
+      ...s,
+      [input.session_id]: {
+        ...ss,
+        task_run_map: entry
+          ? {
+              ...ss.task_run_map,
+              [input.agent_id]: {
+                ...entry,
+                agent_type: input.agent_type || entry.agent_type,
+                subagent_done: true,
+              },
+            }
+          : ss.task_run_map,
+        notification_done_agents: notifDone
+          ? (ss.notification_done_agents ?? []).filter((id) => id !== input.agent_id)
+          : ss.notification_done_agents,
+      },
+    };
+  });
 
-    if (finalizeNow) {
-      debug(`Notification already done for ${input.agent_id}; finalizing from SubagentStop`);
-      await finalizeNotificationChain({
-        stateFilePath: config.stateFilePath,
-        sessionId: input.session_id,
-        project: config.project,
-        customMetadata: config.customMetadata,
-        runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
-        agentId: input.agent_id,
-      });
-    } else {
-      debug(`Agent tool run for ${input.agent_id} left open, awaiting task-notification`);
-    }
+  if (finalizeNow) {
+    debug(`Notification already done for ${input.agent_id}; finalizing from SubagentStop`);
+    await finalizeNotificationChain({
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      project: config.project,
+      customMetadata: config.customMetadata,
+      runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
+      agentId: input.agent_id,
+    });
   } else {
-    debug(
-      `No Agent tool run opened for ${input.agent_id} (empty transcript?); SessionEnd backstop`,
-    );
+    debug(`Subagent ${input.agent_id} traced; awaiting task-notification to finalize`);
   }
 
   await flushPendingTraces();

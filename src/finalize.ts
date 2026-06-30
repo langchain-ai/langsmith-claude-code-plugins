@@ -12,7 +12,12 @@
  * that spawned its own background subagent), it loops up the chain.
  */
 
-import { closeAgentToolRun, completeTurnRun, turnIdentityFromOpenTurn } from "./langsmith.js";
+import {
+  closeAgentToolRun,
+  completeTurnRun,
+  flushPendingTraces,
+  turnIdentityFromOpenTurn,
+} from "./langsmith.js";
 import { atomicUpdateState, getSessionState, loadState } from "./state.js";
 import * as logger from "./logger.js";
 import type { OpenTurn } from "./types.js";
@@ -39,7 +44,7 @@ export async function finalizeNotificationChain(opts: {
 
     const launchingTurnId = (taskRunInfo.deferred as Record<string, unknown> | undefined)
       ?.parent_run_id as string | undefined;
-    const agentType = ss.open_agent_runs?.[agentId] ?? "";
+    const agentType = taskRunInfo.agent_type ?? "";
 
     // 1) Close the (open) Agent tool run for this agent.
     try {
@@ -67,8 +72,6 @@ export async function finalizeNotificationChain(opts: {
     await atomicUpdateState(stateFilePath, (s) => {
       const sess = getSessionState(s, sessionId);
       const openTurns = { ...sess.open_turns };
-      const openAgentRuns = { ...sess.open_agent_runs };
-      delete openAgentRuns[drainedAgentId];
       const taskRunMap = { ...sess.task_run_map };
       delete taskRunMap[drainedAgentId];
 
@@ -89,7 +92,6 @@ export async function finalizeNotificationChain(opts: {
         [sessionId]: {
           ...sess,
           open_turns: openTurns,
-          open_agent_runs: openAgentRuns,
           task_run_map: taskRunMap,
         },
       };
@@ -111,4 +113,10 @@ export async function finalizeNotificationChain(opts: {
     // Continue up the chain if the launching turn was itself a notification turn.
     agentId = nextAgentId;
   }
+
+  // Flush our own posted runs before returning — not every caller flushes after
+  // us (e.g. UserPromptSubmit's superseded-notification path), and a hook process
+  // can exit before LangSmith's batch timer fires, dropping the runs. A redundant
+  // flush in callers that do flush (Stop, SubagentStop) is a harmless no-op.
+  await flushPendingTraces();
 }

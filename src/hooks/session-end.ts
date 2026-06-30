@@ -11,7 +11,13 @@
  */
 
 import { debug, error } from "../logger.js";
-import { initTracing, closeInterruptedTurn, closeAgentToolRun } from "../langsmith.js";
+import {
+  initTracing,
+  closeInterruptedTurn,
+  closeAgentToolRun,
+  completeTurnRun,
+  turnIdentityFromOpenTurn,
+} from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -37,9 +43,14 @@ async function main(): Promise<void> {
   const sessionState = getSessionState(state, input.session_id);
 
   const openTurns = sessionState.open_turns ?? {};
-  const openAgentRuns = sessionState.open_agent_runs ?? {};
+  // Agent tool runs left open awaiting a task-notification that never arrived:
+  // task_run_map entries marked subagent_done (traced + posted) but not yet
+  // finalized (finalize deletes the entry).
+  const openAgentRuns = Object.entries(sessionState.task_run_map ?? {}).filter(
+    ([, e]) => e.subagent_done,
+  );
   const hasOpenTurns = Object.keys(openTurns).length > 0;
-  const hasOpenAgentRuns = Object.keys(openAgentRuns).length > 0;
+  const hasOpenAgentRuns = openAgentRuns.length > 0;
 
   if (!sessionState.current_turn_run_id && !hasOpenTurns && !hasOpenAgentRuns) {
     debug("No open turn run — nothing to close");
@@ -80,14 +91,12 @@ async function main(): Promise<void> {
   // Close any Agent tool runs left open for async subagents whose task-notification
   // turn never arrived (agent aborted / session ended first). Close these (children)
   // before their launching turns (parents) below.
-  for (const [agentId, agentType] of Object.entries(openAgentRuns)) {
-    const taskRunInfo = sessionState.task_run_map?.[agentId];
-    if (!taskRunInfo) continue;
+  for (const [agentId, taskRunInfo] of openAgentRuns) {
     try {
       await closeAgentToolRun({
         sessionId: input.session_id,
         agentId,
-        agentType,
+        agentType: taskRunInfo.agent_type ?? "",
         taskRunInfo,
         project: config.project,
         customMetadata: config.customMetadata,
@@ -100,25 +109,40 @@ async function main(): Promise<void> {
   }
 
   // Close any deferred turns whose background subagents never finished before the
-  // session ended, so their root runs aren't left hanging in LangSmith. Same code
-  // path as the interrupted turn above (closeInterruptedTurn) — just a different
-  // status message, since these turns finished their main response but had
-  // subagents still running at session end.
+  // session ended, so their root runs aren't left hanging in LangSmith.
+  //
+  // A deferred turn that has stop_seen=true already produced its main response
+  // (Stop ran and stashed last_assistant_message); only its background subagents
+  // were still running. Complete it with its real outputs — it succeeded, it is
+  // NOT an error. Only a turn whose Stop never fired (stop_seen=false, e.g. the
+  // turn was interrupted before completing) is closed with an error.
   for (const [turnRunId, entry] of Object.entries(openTurns)) {
     if (turnRunId === sessionState.current_turn_run_id) continue; // closed above
     try {
-      await closeInterruptedTurn({
-        sessionId: input.session_id,
-        sessionState,
-        transcriptPath: expandedTranscript,
-        project: config.project,
-        stateFilePath: config.stateFilePath,
-        customMetadata: config.customMetadata,
-        runtimeVersion,
-        turn: entry,
-        error: "Session ended before subagents finished",
-      });
-      debug(`Closed deferred turn ${turnRunId} on session end`);
+      if (entry.stop_seen) {
+        await completeTurnRun({
+          ...turnIdentityFromOpenTurn(entry, {
+            sessionId: input.session_id,
+            project: config.project,
+            customMetadata: config.customMetadata,
+          }),
+          lastAssistantMessage: entry.last_assistant_message,
+        });
+        debug(`Completed deferred turn ${turnRunId} on session end`);
+      } else {
+        await closeInterruptedTurn({
+          sessionId: input.session_id,
+          sessionState,
+          transcriptPath: expandedTranscript,
+          project: config.project,
+          stateFilePath: config.stateFilePath,
+          customMetadata: config.customMetadata,
+          runtimeVersion,
+          turn: entry,
+          error: "Session ended before turn completed",
+        });
+        debug(`Closed interrupted deferred turn ${turnRunId} on session end`);
+      }
     } catch (err) {
       error(`Failed to close deferred turn ${turnRunId} on session end: ${err}`);
     }
@@ -141,7 +165,6 @@ async function main(): Promise<void> {
         tool_start_times: {},
         pending_subagent_traces: [],
         open_turns: {},
-        open_agent_runs: {},
         current_notification_agent_id: undefined,
         notification_done_agents: [],
       },
