@@ -754,7 +754,49 @@ describe("traceTurn", () => {
     expect(lastRunTreeParams).toBeDefined();
     expect(lastRunTreeParams?.replicas).toBeDefined();
     expect(lastRunTreeParams?.replicas).toHaveLength(1);
-    // Client should be undefined when no API key provided
+    // With redaction on (the default), a client is created even without an API
+    // key so replica posts are anonymized rather than falling back to the
+    // shared client, which carries no anonymizer.
+    expect(lastRunTreeParams?.client).toBeDefined();
+  });
+
+  it("uses no client in replicas-only mode when redaction is disabled", async () => {
+    // redact=false restores the original optimization: no explicit client, so
+    // RunTree dispatches replica posts via the shared client.
+    initTracing(
+      undefined,
+      undefined,
+      [
+        {
+          apiUrl: "https://api.smith.langchain.com",
+          apiKey: "ls__key_replica",
+          projectName: "project-replica",
+        },
+      ],
+      false,
+    );
+
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await expect(
+      traceTurn({ turn, sessionId: "session-123", turnNum: 1, project: "test-project" }),
+    ).resolves.not.toThrow();
+
+    expect(lastRunTreeParams?.replicas).toHaveLength(1);
     expect(lastRunTreeParams?.client).toBeUndefined();
   });
 
@@ -926,7 +968,9 @@ describe("traceTurn", () => {
 
     // Verify replicas are passed correctly
     expect(lastRunTreeParams?.replicas).toHaveLength(2);
-    expect(lastRunTreeParams?.client).toBeUndefined();
+    // Redaction is on by default, so a client is created to carry the
+    // anonymizer even though no primary API key was provided.
+    expect(lastRunTreeParams?.client).toBeDefined();
 
     // Verify both project destinations
     const projectNames = (lastRunTreeParams?.replicas as any[])?.map((r) => r.projectName);

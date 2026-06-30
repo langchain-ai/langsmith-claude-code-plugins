@@ -101,6 +101,21 @@ Tool runs include the tool name, inputs, and output content.
 
 Interrupted turns (where the user cancels mid-response) are marked with status `"interrupted"` in LangSmith.
 
+## Secret redaction
+
+By default, the plugin strips common secrets — provider API keys, JWTs, PEM blocks, and structural `NAME=value`, `Authorization`, and URL-credential shapes — from run inputs, outputs, and metadata **before they are uploaded** to LangSmith. Identity/attribution metadata (`anthropic_user_id`, `local_username`) is unaffected; only secret _values_ are redacted.
+
+- Set `CC_LANGSMITH_REDACT` to a falsy value (`false`, `0`, `no`, or `off`) to turn redaction off.
+- Set `CC_LANGSMITH_REDACT_EXTRA` to a JSON array of `{ "pattern": "...", "replace": "..." }` rules to redact additional custom patterns. `pattern` is a regular-expression string; `replace` (optional) is the replacement text. Malformed rules are skipped with a logged error.
+
+```json
+{
+  "env": {
+    "CC_LANGSMITH_REDACT_EXTRA": "[{\"pattern\":\"ACME-[A-Z0-9]{16}\",\"replace\":\"[REDACTED_ACME_KEY]\"}]"
+  }
+}
+```
+
 ## Environment variables
 
 The plugin respects the following environment variables:
@@ -115,6 +130,8 @@ The plugin respects the following environment variables:
 | `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | —                                 | Dotted-order of an existing run to nest all Claude Code traces under                                           |
 | `CC_LANGSMITH_METADATA`            | No       | —                                 | JSON object of custom metadata to attach to all runs (e.g. PR URL, author)                                     |
 | `CC_LANGSMITH_RUNS_ENDPOINTS`      | No       | —                                 | JSON array of replica destinations for multi-project tracing                                                   |
+| `CC_LANGSMITH_REDACT`              | No       | `"true"`                          | Set to a falsy value (`false`/`0`/`no`/`off`) to disable client-side secret redaction before upload            |
+| `CC_LANGSMITH_REDACT_EXTRA`        | No       | —                                 | JSON array of `{ pattern, replace }` custom redaction rules, applied alongside the built-in secret patterns    |
 
 ## Usage with GitHub Actions
 

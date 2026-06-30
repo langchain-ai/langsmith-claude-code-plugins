@@ -36,7 +36,13 @@ async function main(): Promise<void> {
 
   debug(`StopFailure hook: session=${input.session_id}, error=${input.error}`);
 
-  const client = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
+  const client = initTracing(
+    config.apiKey,
+    config.apiBaseUrl,
+    config.replicas,
+    config.redact,
+    config.redactExtraRules,
+  );
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
