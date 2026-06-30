@@ -13070,17 +13070,32 @@ function loadConfig(options) {
       error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
     }
   }
-  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").toLowerCase();
-  const redact = redactEnv !== "false" && redactEnv !== "0";
+  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").trim().toLowerCase();
+  const redact = !["0", "false", "no", "off"].includes(redactEnv);
   let redactExtraRules;
   const providedExtra = process.env.CC_LANGSMITH_REDACT_EXTRA;
   if (providedExtra !== void 0) {
     try {
       const parsed = JSON.parse(providedExtra);
-      if (Array.isArray(parsed)) {
-        redactExtraRules = parsed;
-      } else {
+      if (!Array.isArray(parsed)) {
         error("CC_LANGSMITH_REDACT_EXTRA must be a JSON array of { pattern, replace }.");
+      } else {
+        const validRules = [];
+        for (const rule of parsed) {
+          if (typeof rule !== "object" || rule === null || typeof rule.pattern !== "string" || rule.replace !== void 0 && typeof rule.replace !== "string") {
+            error(`Skipping invalid CC_LANGSMITH_REDACT_EXTRA rule (expected { pattern: string, replace?: string }): ${JSON.stringify(rule)}`);
+            continue;
+          }
+          try {
+            new RegExp(rule.pattern);
+          } catch {
+            error(`Skipping CC_LANGSMITH_REDACT_EXTRA rule with an invalid regex pattern: ${rule.pattern}`);
+            continue;
+          }
+          validRules.push(rule);
+        }
+        if (validRules.length > 0)
+          redactExtraRules = validRules;
       }
     } catch {
       error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");

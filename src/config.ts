@@ -199,9 +199,10 @@ export function loadConfig(options?: { cwd?: string }): Config {
     }
   }
 
-  // Secret redaction is on by default; disable with CC_LANGSMITH_REDACT=false|0.
-  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").toLowerCase();
-  const redact = redactEnv !== "false" && redactEnv !== "0";
+  // Secret redaction is on by default; disable with a falsy CC_LANGSMITH_REDACT
+  // value (false/0/no/off). Normalized to match the codex plugin's parsing.
+  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").trim().toLowerCase();
+  const redact = !["0", "false", "no", "off"].includes(redactEnv);
 
   // Optional user-supplied redaction rules: JSON array of { pattern, replace }.
   // `pattern` is a string (compiled with the global flag by the SDK anonymizer).
@@ -210,10 +211,37 @@ export function loadConfig(options?: { cwd?: string }): Config {
   if (providedExtra !== undefined) {
     try {
       const parsed = JSON.parse(providedExtra);
-      if (Array.isArray(parsed)) {
-        redactExtraRules = parsed;
-      } else {
+      if (!Array.isArray(parsed)) {
         error("CC_LANGSMITH_REDACT_EXTRA must be a JSON array of { pattern, replace }.");
+      } else {
+        // Validate each rule's shape and compile its pattern here, so a malformed
+        // rule surfaces as a logged error instead of throwing inside
+        // createSecretAnonymizer — which would break tracing for the whole session.
+        const validRules: StringNodeRule[] = [];
+        for (const rule of parsed) {
+          if (
+            typeof rule !== "object" ||
+            rule === null ||
+            typeof rule.pattern !== "string" ||
+            (rule.replace !== undefined && typeof rule.replace !== "string")
+          ) {
+            error(
+              `Skipping invalid CC_LANGSMITH_REDACT_EXTRA rule (expected { pattern: string, replace?: string }): ${JSON.stringify(rule)}`,
+            );
+            continue;
+          }
+          try {
+            // Surface invalid regex patterns here rather than at anonymizer build time.
+            new RegExp(rule.pattern);
+          } catch {
+            error(
+              `Skipping CC_LANGSMITH_REDACT_EXTRA rule with an invalid regex pattern: ${rule.pattern}`,
+            );
+            continue;
+          }
+          validRules.push(rule);
+        }
+        if (validRules.length > 0) redactExtraRules = validRules;
       }
     } catch {
       error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");
