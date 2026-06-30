@@ -12288,6 +12288,14 @@ function initTracing(apiKey, apiUrl, providedReplicas, redact = true, extraRedac
   replicas = providedReplicas;
   return client;
 }
+async function flushPendingTraces() {
+  debug("Awaiting pending trace batches...");
+  await Promise.all([
+    client?.awaitPendingTraceBatches(),
+    RunTree.getSharedClient().awaitPendingTraceBatches()
+  ]);
+  debug("Trace batches flushed successfully");
+}
 function generateDottedOrderSegment(time, runId) {
   const iso = typeof time === "string" ? time : new Date(time).toISOString();
   const isoWithMicroseconds = `${iso.slice(0, -1)}000Z`;
@@ -12574,6 +12582,7 @@ async function main() {
   } catch (err) {
     error(`Failed to create compaction run: ${err}`);
   }
+  await flushPendingTraces();
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);
     return {

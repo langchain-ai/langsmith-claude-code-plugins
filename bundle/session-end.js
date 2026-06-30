@@ -13424,6 +13424,7 @@ async function main() {
       error(`Failed to close deferred turn ${turnRunId} on session end: ${err}`);
     }
   }
+  await flushPendingTraces();
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);
     return {

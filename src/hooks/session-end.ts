@@ -17,6 +17,7 @@ import {
   closeAgentToolRun,
   completeTurnRun,
   turnIdentityFromOpenTurn,
+  flushPendingTraces,
 } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
@@ -153,6 +154,11 @@ async function main(): Promise<void> {
       error(`Failed to close deferred turn ${turnRunId} on session end: ${err}`);
     }
   }
+
+  // Flush all the patches posted above (closeAgentToolRun / completeTurnRun don't
+  // flush themselves) before the hook process exits, or the SDK's batch timer may
+  // not fire and the cleanup runs we just closed would never reach LangSmith.
+  await flushPendingTraces();
 
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);
