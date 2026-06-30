@@ -9,7 +9,7 @@
 import { Client, RunTree, RunTreeConfig, uuid7 } from "langsmith";
 import { createSecretAnonymizer } from "langsmith/anonymizer";
 import type { StringNodeRule } from "langsmith/anonymizer";
-import type { Turn, ContentBlock, Usage } from "./types.js";
+import type { Turn, ContentBlock, Usage, OpenTurn, SessionState } from "./types.js";
 import { readTranscript, groupIntoTurns } from "./transcript.js";
 import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
@@ -530,7 +530,7 @@ async function patchTurnRun(
 
 /** Build a TurnRunIdentity from a stored OpenTurn (deferred / awaiting-subagent turn). */
 export function turnIdentityFromOpenTurn(
-  turn: import("./types.js").OpenTurn,
+  turn: OpenTurn,
   ctx: { sessionId: string; project: string; customMetadata?: Record<string, unknown> },
 ): TurnRunIdentity {
   return {
@@ -594,7 +594,7 @@ export async function closeTurnRun(id: TurnRunIdentity, error: string): Promise<
  */
 export async function closeInterruptedTurn(options: {
   sessionId: string;
-  sessionState: import("./types.js").SessionState;
+  sessionState: SessionState;
   transcriptPath: string | undefined;
   project: string;
   stateFilePath: string;
@@ -607,7 +607,7 @@ export async function closeInterruptedTurn(options: {
    *  instead of the live current turn. When set, the transcript / pending-subagent
    *  catch-up tracing is skipped — that turn's content was already traced by Stop;
    *  we only need to close its root run. */
-  turn?: import("./types.js").OpenTurn;
+  turn?: OpenTurn;
   /** Root-run error/status message. Defaults to "User interrupt". */
   error?: string;
 }): Promise<{ lastLine: number; turnsTraced: number }> {
