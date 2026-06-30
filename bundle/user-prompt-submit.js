@@ -13187,7 +13187,7 @@ async function finalizeNotificationChain(opts) {
       const entry = launchingTurnId ? openTurns[launchingTurnId] : void 0;
       if (entry) {
         const remaining = entry.agent_ids.filter((id) => id !== drainedAgentId);
-        if (remaining.length === 0) {
+        if (remaining.length === 0 && entry.stop_seen) {
           toComplete = entry;
           nextAgentId = entry.notification_for_agent_id;
           if (launchingTurnId)

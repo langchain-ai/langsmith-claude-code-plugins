@@ -78,11 +78,18 @@ export async function finalizeNotificationChain(opts: {
       const entry = launchingTurnId ? openTurns[launchingTurnId] : undefined;
       if (entry) {
         const remaining = entry.agent_ids.filter((id) => id !== drainedAgentId);
-        if (remaining.length === 0) {
+        if (remaining.length === 0 && entry.stop_seen) {
+          // Last subagent drained AND the launching turn's Stop has already run
+          // (stop_seen) — it stashed the real last_assistant_message, so complete it.
           toComplete = entry;
           nextAgentId = entry.notification_for_agent_id;
           if (launchingTurnId) delete openTurns[launchingTurnId];
         } else {
+          // Either more subagents pending, or Stop hasn't finished the launching
+          // turn yet (stop_seen=false — e.g. it's still streaming, or was
+          // interrupted). Keep the (possibly emptied) entry rather than completing
+          // it blank here; whichever of Stop / UserPromptSubmit / SessionEnd handles
+          // that turn will close it with its real outputs (or as interrupted).
           openTurns[launchingTurnId!] = { ...entry, agent_ids: remaining };
         }
       }
