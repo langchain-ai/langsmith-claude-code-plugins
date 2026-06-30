@@ -88,16 +88,13 @@ describe("coding-agent-v1 contract", () => {
     const alwaysKeys = KEYS.filter(
       (k) => k.requirement === "always" && k.appliesTo.includes(runType),
     );
-    it.each(alwaysKeys.map((k) => [k.key, k] as const))(
-      "has required key %s",
-      (_name, entry) => {
-        expect(meta[entry.key], `${entry.key} missing`).toBeDefined();
-        expect(checkType(meta[entry.key], entry.type), `${entry.key} wrong type`).toBe(true);
-        if (entry.allowedValues) {
-          expect(entry.allowedValues).toContain(meta[entry.key]);
-        }
-      },
-    );
+    it.each(alwaysKeys.map((k) => [k.key, k] as const))("has required key %s", (_name, entry) => {
+      expect(meta[entry.key], `${entry.key} missing`).toBeDefined();
+      expect(checkType(meta[entry.key], entry.type), `${entry.key} wrong type`).toBe(true);
+      if (entry.allowedValues) {
+        expect(entry.allowedValues).toContain(meta[entry.key]);
+      }
+    });
 
     // "where_known" keys: every source is provided, so all must be present.
     const whereKnownKeys = KEYS.filter(

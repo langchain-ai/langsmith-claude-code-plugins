@@ -25,6 +25,7 @@ import {
 } from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { finalizeNotificationChain } from "../finalize.js";
 import type { StopHookInput } from "../types.js";
 
 async function main(): Promise<void> {
@@ -218,6 +219,10 @@ async function main(): Promise<void> {
   // lives on in open_turns until its subagents drain. Whoever removes the turn from
   // open_turns / clears current_turn_run_id under the lock owns the one completion.
   let completeNow = false;
+  // If this turn is a task-notification turn, the async agent it reports on —
+  // claimed atomically below so only the Stop that actually completes the turn
+  // runs the finalize (guards against a concurrent/re-fired Stop doing it twice).
+  let notificationToFinalize: string | undefined;
   await atomicUpdateState(config.stateFilePath, (latestState) => {
     const latestSession = getSessionState(latestState, input.session_id);
     const updatedState = updateSessionState(
@@ -230,6 +235,10 @@ async function main(): Promise<void> {
       { ...latestSession.task_run_map, ...allTaskRunMaps },
     );
     const s = updatedState[input.session_id];
+
+    // Read the notification marker inside the lock so claiming + clearing it is
+    // atomic with the completion decision.
+    const notifAgentId = latestSession.current_notification_agent_id;
 
     // Drop the sync subagents we just traced from the queue.
     s.pending_subagent_traces = (latestSession.pending_subagent_traces ?? []).filter(
@@ -250,22 +259,30 @@ async function main(): Promise<void> {
           stop_seen: true,
           last_assistant_message: input.last_assistant_message,
           turn_id: lastTurnId,
+          // If this turn is itself a task-notification turn that spawned its own
+          // background subagent, remember the agent to finalize once it drains.
+          notification_for_agent_id: notifAgentId ?? entry.notification_for_agent_id,
         };
         debug(`${remaining.length} background subagent(s) in flight, deferring turn completion`);
       } else {
         // All drained already — complete now and drop the entry.
         completeNow = true;
+        notificationToFinalize = notifAgentId;
         delete openTurns[currentRunId];
       }
     } else {
       // No background subagents for this turn — normal inline completion.
       completeNow = Boolean(currentRunId);
+      if (completeNow) notificationToFinalize = notifAgentId;
     }
     s.open_turns = openTurns;
 
     // The main loop is done with this turn regardless; clear so the next
     // UserPromptSubmit doesn't mistake a deferred turn for an interrupted one.
     s.current_turn_run_id = undefined;
+    // Consume the notification marker; the finalize below (or the deferred
+    // open_turns entry) now owns it.
+    s.current_notification_agent_id = undefined;
     s.traced_tool_use_ids = [];
     s.tool_start_times = {};
     return pruneOldSessions(updatedState);
@@ -293,6 +310,43 @@ async function main(): Promise<void> {
       debug(`Turn run ${currentRunId} completed`);
     } catch (err) {
       error(`Failed to complete turn run: ${err}`);
+    }
+  }
+
+  // If this was a task-notification turn that completed now, finalize the agent's
+  // chain — but only once its subagent has actually been traced. SubagentStop and
+  // this notification turn fire in non-deterministic order; we close the agent's
+  // (open) tool run + launching turn from whichever runs LAST. Here (notification
+  // side): if SubagentStop already traced the agent (open_agent_runs has it), we're
+  // last → finalize. Otherwise record this side as done and let SubagentStop do it.
+  if (notificationToFinalize) {
+    let finalizeNow = false;
+    await atomicUpdateState(config.stateFilePath, (s) => {
+      const ss = getSessionState(s, input.session_id);
+      if (ss.open_agent_runs?.[notificationToFinalize!]) {
+        finalizeNow = true;
+        return s;
+      }
+      return {
+        ...s,
+        [input.session_id]: {
+          ...ss,
+          notification_done_agents: [
+            ...(ss.notification_done_agents ?? []).filter((id) => id !== notificationToFinalize),
+            notificationToFinalize!,
+          ],
+        },
+      };
+    });
+    if (finalizeNow) {
+      await finalizeNotificationChain({
+        stateFilePath: config.stateFilePath,
+        sessionId: input.session_id,
+        project: config.project,
+        customMetadata: config.customMetadata,
+        runtimeVersion,
+        agentId: notificationToFinalize,
+      });
     }
   }
 

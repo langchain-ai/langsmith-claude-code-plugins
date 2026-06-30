@@ -215,6 +215,21 @@ export interface SessionState {
    *  earlier turn's subagents finish — hence a map, not a single value. The last
    *  SubagentStop to drain a turn's `agent_ids` completes that turn's root run. */
   open_turns?: Record<string, OpenTurn>;
+  /** Async subagents whose Agent tool run was posted *open* (so the
+   *  task-notification turn can nest under it within bounds), keyed by agent_id
+   *  with the agent's type as value. Closed when that notification turn completes,
+   *  or by SessionEnd as a backstop. */
+  open_agent_runs?: Record<string, string>;
+  /** When the current turn is a task-notification turn, the agent_id it is for.
+   *  Set by UserPromptSubmit (it nests the turn under that agent's tool run), read
+   *  by Stop to close the agent tool run + drain its launching turn on completion. */
+  current_notification_agent_id?: string;
+  /** agent_ids whose task-notification turn has completed but whose SubagentStop
+   *  hasn't traced the subagent yet (the two fire in non-deterministic order when
+   *  a background agent finishes while the main agent is idle). Whichever of the
+   *  two runs *last* finalizes the agent; this is the notification side's "done"
+   *  marker for that join. */
+  notification_done_agents?: string[];
 }
 
 /**
@@ -240,6 +255,10 @@ export interface OpenTurn {
   stop_seen: boolean;
   /** Background subagents launched by this turn that haven't been traced yet. */
   agent_ids: string[];
+  /** Set when this turn is itself a deferred task-notification turn: the agent_id
+   *  whose tool run + launching turn must be finalized once this turn completes
+   *  (handles a notification turn that spawns its own background subagent). */
+  notification_for_agent_id?: string;
 }
 
 export interface TracingState {

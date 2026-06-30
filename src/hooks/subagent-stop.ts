@@ -11,25 +11,23 @@
  *     so PostToolUse hasn't recorded the Agent tool run yet. We can't trace it
  *     here (no parent run to nest under), so we queue it in
  *     `pending_subagent_traces` for the Stop hook, which runs after PostToolUse.
+ *     The Stop hook traces it and completes the launching turn.
  *
- *  2. BACKGROUND subagent — the Task tool returned at launch, so PostToolUse has
- *     already recorded the Agent tool run. The Stop hook for its turn has very
- *     likely already fired (the main agent stopped while this subagent kept
- *     running), so we trace it here directly, nested under its *launching*
- *     turn's trace (recovered from task_run_map, NOT the session's current turn —
- *     a newer turn may already be active). If this drains the launching turn's
- *     last in-flight subagent and Stop already finished that turn, we complete
- *     the turn's root run too.
+ *  2. ASYNC (background) subagent — the Task tool returned at launch, so
+ *     PostToolUse already recorded the Agent tool run. We trace it now, nested
+ *     under its *launching* turn's trace (recovered from task_run_map, not the
+ *     session's current turn — a newer turn may be active). We leave the Agent
+ *     tool run *open* and the launching turn *deferred*: Claude emits a
+ *     `<task-notification>` turn next, which nests under this Agent run, so it
+ *     can't be closed until that turn completes. The notification turn's Stop
+ *     (via finalizeNotificationChain) closes the Agent run and the launching
+ *     turn; SessionEnd is the backstop if no notification ever arrives.
  */
 
 import { debug, error } from "../logger.js";
 import { atomicUpdateState, getSessionState, loadState } from "../state.js";
-import {
-  initTracing,
-  tracePendingSubagents,
-  completeTurnRun,
-  flushPendingTraces,
-} from "../langsmith.js";
+import { initTracing, tracePendingSubagents, flushPendingTraces } from "../langsmith.js";
+import { finalizeNotificationChain } from "../finalize.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import type { SubagentStopHookInput, OpenTurn } from "../types.js";
@@ -79,11 +77,12 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Case 2: background subagent. Recover the launching turn's trace context from
-  // the deferred Agent tool run, so the subagent nests under the correct turn
-  // even if a newer turn is now active.
+  // Case 2: async (background) subagent. Recover the launching turn's trace
+  // context from the deferred Agent tool run so the subagent nests under the
+  // correct turn even if a newer turn is now active.
   const deferred = taskRunInfo.deferred as Record<string, unknown> | undefined;
-  const turnRunId = (deferred?.parent_run_id as string | undefined) ?? sessionState.current_turn_run_id;
+  const turnRunId =
+    (deferred?.parent_run_id as string | undefined) ?? sessionState.current_turn_run_id;
   const turnTraceId = (deferred?.trace_id as string | undefined) ?? sessionState.current_trace_id;
   const launchingTurn: OpenTurn | undefined = turnRunId
     ? sessionState.open_turns?.[turnRunId]
@@ -94,8 +93,9 @@ async function main(): Promise<void> {
     return;
   }
 
+  let openedAgentRunIds: string[] = [];
   try {
-    await tracePendingSubagents({
+    openedAgentRunIds = await tracePendingSubagents({
       sessionId: input.session_id,
       pendingSubagents: [
         {
@@ -112,63 +112,56 @@ async function main(): Promise<void> {
       runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
       turnId: launchingTurn?.turn_id,
       turnNumber: launchingTurn?.turn_number ?? sessionState.current_turn_number,
+      // Leave the Agent tool run open — the task-notification turn nests under it.
+      keepAgentToolRunOpen: true,
     });
     debug(`Traced background subagent ${input.agent_type} (${input.agent_id})`);
   } catch (err) {
-    // A trace failure (e.g. aborted subagent with an empty transcript) shouldn't
-    // leave the turn open — fall through to drain it from open_turns so the turn
-    // can still complete.
     error(`Failed to trace background subagent: ${err}`);
   }
 
-  // Drain this subagent from its launching turn. If it was the last one and Stop
-  // already finished that turn (stop_seen), complete the turn's root run now. The
-  // lock serializes concurrent SubagentStop hooks; deleting the entry under the
-  // lock ensures exactly one of them completes the run.
-  let completion: OpenTurn | undefined;
-  await atomicUpdateState(config.stateFilePath, (s) => {
-    const ss = getSessionState(s, input.session_id);
-    if (!turnRunId || !ss.open_turns?.[turnRunId]) return s;
+  // Record the open Agent tool run, then join with the notification side. The
+  // notification turn and this SubagentStop fire in non-deterministic order; the
+  // agent's tool run + launching turn are closed by whichever runs LAST (so both
+  // the subagent trace and the notification turn are within the tool run's bounds).
+  // Here (subagent side): if the notification turn already completed
+  // (notification_done_agents has us), we're last → finalize. Otherwise leave the
+  // run open for the notification turn's Stop to finalize.
+  if (openedAgentRunIds.includes(input.agent_id)) {
+    let finalizeNow = false;
+    await atomicUpdateState(config.stateFilePath, (s) => {
+      const ss = getSessionState(s, input.session_id);
+      const notifDone = (ss.notification_done_agents ?? []).includes(input.agent_id);
+      if (notifDone) finalizeNow = true;
+      return {
+        ...s,
+        [input.session_id]: {
+          ...ss,
+          open_agent_runs: { ...ss.open_agent_runs, [input.agent_id]: input.agent_type || "" },
+          notification_done_agents: notifDone
+            ? (ss.notification_done_agents ?? []).filter((id) => id !== input.agent_id)
+            : ss.notification_done_agents,
+        },
+      };
+    });
 
-    const openTurns = { ...ss.open_turns };
-    const entry = openTurns[turnRunId];
-    const remaining = entry.agent_ids.filter((id) => id !== input.agent_id);
-
-    if (remaining.length === 0 && entry.stop_seen) {
-      // Last subagent done and the main turn already finished — we complete it.
-      completion = entry;
-      delete openTurns[turnRunId];
-    } else {
-      // More subagents pending, or Stop hasn't finished the main turn yet (it will
-      // complete the turn itself once it sees an empty agent_ids).
-      openTurns[turnRunId] = { ...entry, agent_ids: remaining };
-    }
-
-    return { ...s, [input.session_id]: { ...ss, open_turns: openTurns } };
-  });
-
-  if (completion) {
-    debug(`Last background subagent done — completing deferred turn ${completion.run_id}`);
-    try {
-      await completeTurnRun({
+    if (finalizeNow) {
+      debug(`Notification already done for ${input.agent_id}; finalizing from SubagentStop`);
+      await finalizeNotificationChain({
+        stateFilePath: config.stateFilePath,
         sessionId: input.session_id,
-        runId: completion.run_id,
-        traceId: completion.trace_id,
-        dottedOrder: completion.dotted_order,
-        parentRunId: completion.parent_run_id,
-        startTime: completion.start_time,
         project: config.project,
-        lastAssistantMessage: completion.last_assistant_message,
         customMetadata: config.customMetadata,
-        turnId: completion.turn_id,
-        turnNumber: completion.turn_number,
-        runtimeVersion: completion.runtime_version,
-        approvalPolicy: completion.approval_policy,
+        runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
+        agentId: input.agent_id,
       });
-      debug(`Deferred turn run ${completion.run_id} completed`);
-    } catch (err) {
-      error(`Failed to complete deferred turn run: ${err}`);
+    } else {
+      debug(`Agent tool run for ${input.agent_id} left open, awaiting task-notification`);
     }
+  } else {
+    debug(
+      `No Agent tool run opened for ${input.agent_id} (empty transcript?); SessionEnd backstop`,
+    );
   }
 
   await flushPendingTraces();

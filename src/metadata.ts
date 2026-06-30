@@ -51,9 +51,7 @@ export interface CodingAgentMetadataOptions {
  * Build the metadata for one run. Merge order (later wins): identity → dynamic
  * → runSpecific → base. Unknown values are omitted (never null/empty).
  */
-export function codingAgentMetadata(
-  opts: CodingAgentMetadataOptions,
-): Record<string, unknown> {
+export function codingAgentMetadata(opts: CodingAgentMetadataOptions): Record<string, unknown> {
   const {
     sessionId,
     base,

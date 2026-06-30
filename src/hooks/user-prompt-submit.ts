@@ -109,11 +109,39 @@ async function main(): Promise<void> {
   const startTime = new Date().toISOString();
   const segment = generateDottedOrderSegment(startTime, runId);
 
-  // If a parent dotted_order is provided, nest this turn under the existing run.
+  // Decide where this turn nests.
   let traceId: string;
   let parentRunId: string | undefined;
   let dottedOrder: string;
-  if (config.parentDottedOrder) {
+
+  // A task-notification turn is the main agent reacting to a finished background
+  // subagent. Detect + correlate in one step by matching the prompt against the
+  // agent_ids in task_run_map. We match task_run_map (recorded by PostToolUse at
+  // launch), NOT open_agent_runs (recorded by SubagentStop on finish): when a
+  // background agent finishes while the main agent is idle, the notification's
+  // UserPromptSubmit can fire *before* SubagentStop, so open_agent_runs may not be
+  // set yet — but the launch-time task_run_map entry always is. A notification
+  // necessarily references its agent by id, so an id substring match is robust to
+  // message-format changes; a 17-char hex id colliding with human text is
+  // astronomically unlikely. (Reading origin.kind from the transcript doesn't work
+  // here either — the prompt's line often isn't flushed to disk when this fires.)
+  // A match nests the turn under that subagent's Agent tool run instead of
+  // cluttering the top-level turn sequence.
+  const notifAgentId = Object.keys(sessionState.task_run_map ?? {}).find((id) =>
+    input.prompt.includes(id),
+  );
+  const agentToolRun = notifAgentId ? sessionState.task_run_map?.[notifAgentId] : undefined;
+  const notificationAgentId = agentToolRun ? notifAgentId : undefined;
+
+  if (agentToolRun) {
+    traceId = parseDottedOrder(agentToolRun.dotted_order).traceId;
+    parentRunId = agentToolRun.run_id;
+    dottedOrder = `${agentToolRun.dotted_order}.${segment}`;
+    debug(
+      `Task-notification for agent ${notifAgentId}, nesting turn under Agent run ${parentRunId}`,
+    );
+  } else if (config.parentDottedOrder) {
+    // If a parent dotted_order is provided, nest this turn under the existing run.
     const parsed = parseDottedOrder(config.parentDottedOrder);
     traceId = parsed.traceId;
     parentRunId = parsed.runId;
@@ -184,18 +212,24 @@ async function main(): Promise<void> {
         current_parent_run_id: parentRunId,
         current_turn_number: turnNum,
         current_turn_start: startTime,
+        // If this is a task-notification turn, record the agent it's for so Stop
+        // closes that agent's tool run + launching turn once this turn completes.
+        current_notification_agent_id: notificationAgentId,
         // Persisted so the closing hooks can stamp them onto their runs.
         approval_policy: approvalPolicy,
         ...(runtimeVersion ? { runtime_version: runtimeVersion } : {}),
         // Advance past the interrupted turn's messages so Stop doesn't re-trace them
         last_line: interruptedLastLine,
         turn_count: ss.turn_count + interruptedTurnsTraced,
-        // Clear this turn's stale data, but keep still-running background subagents.
+        // Clear this turn's stale data, but keep still-running background subagents
+        // and any Agent tool runs left open awaiting their task-notification.
         task_run_map: preservedTaskRunMap,
         traced_tool_use_ids: [],
         tool_start_times: {},
         pending_subagent_traces: [],
         open_turns: preservedOpenTurns,
+        open_agent_runs: ss.open_agent_runs,
+        notification_done_agents: ss.notification_done_agents,
       },
     };
   });

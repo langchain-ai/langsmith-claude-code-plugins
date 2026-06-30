@@ -11,7 +11,7 @@
  */
 
 import { debug, error } from "../logger.js";
-import { initTracing, closeInterruptedTurn } from "../langsmith.js";
+import { initTracing, closeInterruptedTurn, closeAgentToolRun } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -37,9 +37,11 @@ async function main(): Promise<void> {
   const sessionState = getSessionState(state, input.session_id);
 
   const openTurns = sessionState.open_turns ?? {};
+  const openAgentRuns = sessionState.open_agent_runs ?? {};
   const hasOpenTurns = Object.keys(openTurns).length > 0;
+  const hasOpenAgentRuns = Object.keys(openAgentRuns).length > 0;
 
-  if (!sessionState.current_turn_run_id && !hasOpenTurns) {
+  if (!sessionState.current_turn_run_id && !hasOpenTurns && !hasOpenAgentRuns) {
     debug("No open turn run — nothing to close");
     return;
   }
@@ -72,6 +74,28 @@ async function main(): Promise<void> {
       turnsTraced = res.turnsTraced;
     } catch (err) {
       error(`Failed to close interrupted turn on session end: ${err}`);
+    }
+  }
+
+  // Close any Agent tool runs left open for async subagents whose task-notification
+  // turn never arrived (agent aborted / session ended first). Close these (children)
+  // before their launching turns (parents) below.
+  for (const [agentId, agentType] of Object.entries(openAgentRuns)) {
+    const taskRunInfo = sessionState.task_run_map?.[agentId];
+    if (!taskRunInfo) continue;
+    try {
+      await closeAgentToolRun({
+        sessionId: input.session_id,
+        agentId,
+        agentType,
+        taskRunInfo,
+        project: config.project,
+        customMetadata: config.customMetadata,
+        runtimeVersion,
+      });
+      debug(`Closed open Agent tool run ${agentId} on session end`);
+    } catch (err) {
+      error(`Failed to close Agent tool run ${agentId} on session end: ${err}`);
     }
   }
 
@@ -117,6 +141,9 @@ async function main(): Promise<void> {
         tool_start_times: {},
         pending_subagent_traces: [],
         open_turns: {},
+        open_agent_runs: {},
+        current_notification_agent_id: undefined,
+        notification_done_agents: [],
       },
     };
   });
