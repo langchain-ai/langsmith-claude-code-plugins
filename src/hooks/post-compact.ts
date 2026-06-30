@@ -8,7 +8,7 @@
 
 import { RunTree, uuid7 } from "langsmith";
 import { debug, error } from "../logger.js";
-import { initTracing, generateDottedOrderSegment } from "../langsmith.js";
+import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -88,6 +88,10 @@ async function main(): Promise<void> {
   } catch (err) {
     error(`Failed to create compaction run: ${err}`);
   }
+
+  // Flush the compaction run before this async hook exits, or the SDK's batch
+  // timer may not fire and the run would never reach LangSmith.
+  await flushPendingTraces();
 
   // Clear compaction_start_time from state
   await atomicUpdateState(config.stateFilePath, (s) => {

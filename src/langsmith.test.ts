@@ -59,7 +59,117 @@ vi.mock("./logger.js", () => ({
   initLogger: vi.fn(),
 }));
 
-import { initTracing, traceTurn, generateDottedOrderSegment } from "./langsmith.js";
+import {
+  initTracing,
+  traceTurn,
+  completeTurnRun,
+  closeAgentToolRun,
+  generateDottedOrderSegment,
+} from "./langsmith.js";
+
+// ─── completeTurnRun ────────────────────────────────────────────────────────
+
+describe("completeTurnRun", () => {
+  beforeEach(() => {
+    mockCreateRun.mockClear();
+    mockUpdateRun.mockClear();
+    mockAwaitPendingTraceBatches.mockClear();
+    allRunTreeInstances = [];
+    initTracing("test-api-key", "https://test.api.com");
+  });
+
+  it("patches the existing Turn run with the real assistant outputs", async () => {
+    await completeTurnRun({
+      sessionId: "session-123",
+      runId: "turn-run-1",
+      traceId: "trace-1",
+      dottedOrder: "20250101T000000000000Zturn-run-1",
+      parentRunId: undefined,
+      startTime: "2025-01-01T00:00:00Z",
+      project: "test-project",
+      lastAssistantMessage: "Here is my final answer.",
+      turnId: "prompt_abc",
+      turnNumber: 3,
+      runtimeVersion: "2.1.181",
+      approvalPolicy: "default",
+    });
+
+    // Patches (not creates) the root run.
+    expect(mockUpdateRun).toHaveBeenCalledTimes(1);
+    expect(mockCreateRun).not.toHaveBeenCalled();
+
+    const [patchedId, params] = mockUpdateRun.mock.calls[0];
+    expect(patchedId).toBe("turn-run-1");
+    expect(params.name).toBe(USER_PROMPT_TURN_NAME);
+    expect(params.run_type).toBe("chain");
+    expect(params.trace_id).toBe("trace-1");
+    expect(params.end_time).toBeTruthy();
+
+    // The actual assistant message must be the output — not a placeholder.
+    expect(params.outputs).toEqual({
+      messages: [{ role: "assistant", content: "Here is my final answer." }],
+    });
+
+    // Root-run metadata contract.
+    const meta = (params.extra as Record<string, unknown>).metadata as Record<string, unknown>;
+    expect(meta).toMatchObject({
+      turn_id: "prompt_abc",
+      turn_number: 3,
+      approval_policy: "default",
+      ls_agent_type: "root", // DEPRECATED compat alias
+    });
+  });
+});
+
+// ─── closeAgentToolRun ──────────────────────────────────────────────────────
+
+describe("closeAgentToolRun", () => {
+  beforeEach(() => {
+    mockCreateRun.mockClear();
+    mockUpdateRun.mockClear();
+    allRunTreeInstances = [];
+    initTracing("test-api-key", "https://test.api.com");
+  });
+
+  it("patches the open Agent tool run closed, reconstructed from its task_run_map entry", async () => {
+    await closeAgentToolRun({
+      sessionId: "session-123",
+      agentId: "a46e99ad19d864c31",
+      agentType: "Explore",
+      taskRunInfo: {
+        run_id: "agent-tool-run-1",
+        dotted_order: "20250101T000000000000Zagent-tool-run-1",
+        deferred: {
+          trace_id: "trace-N",
+          parent_run_id: "turn-N",
+          start_time: "2025-01-01T00:00:00Z",
+          inputs: { prompt: "explore" },
+          outputs: { agentId: "a46e99ad19d864c31" },
+          project_name: "test-project",
+        },
+      },
+      project: "test-project",
+    });
+
+    // Patches (not creates) the existing Agent tool run.
+    expect(mockUpdateRun).toHaveBeenCalledTimes(1);
+    const [patchedId, params] = mockUpdateRun.mock.calls[0];
+    expect(patchedId).toBe("agent-tool-run-1");
+    expect(params.name).toBe("Agent");
+    expect(params.run_type).toBe("tool");
+    expect(params.trace_id).toBe("trace-N");
+    expect(params.parent_run_id).toBe("turn-N");
+    expect(params.end_time).toBeTruthy();
+
+    const meta = (params.extra as Record<string, unknown>).metadata as Record<string, unknown>;
+    expect(meta).toMatchObject({
+      agent_type: "Explore", // DEPRECATED compat alias
+      agent_id: "a46e99ad19d864c31",
+      ls_tool_name: "Task",
+    });
+    expect(meta.ls_subagent_type).toBeUndefined(); // tool run, not a subagent run
+  });
+});
 
 // ─── generateDottedOrderSegment ─────────────────────────────────────────────
 

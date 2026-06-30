@@ -194,19 +194,73 @@ export interface SessionState {
       dotted_order: string;
       /** Deferred Agent tool creation info (set by PostToolUse, used by Stop) */
       deferred?: Partial<RunTree>;
+      /** Subagent type (e.g. "Explore"), recorded by SubagentStop. Used when
+       *  closing the Agent tool run. */
+      agent_type?: string;
+      /** True once SubagentStop has processed this (async) subagent and posted its
+       *  Agent tool run. The notification side of the join reads this to know the
+       *  subagent finished (replaces the former separate `open_agent_runs` map). */
+      subagent_done?: boolean;
     }
   >;
   /** tool_use_ids of regular tools already traced by PostToolUse (prevents double-tracing in traceTurn) */
   traced_tool_use_ids?: string[];
   /** Wall-clock time (ms) when the last PreCompact hook fired */
   compaction_start_time?: number;
-  /** Pending subagent traces to process (set by SubagentStop, processed by Stop) */
+  /** Pending subagent traces to process (set by SubagentStop, processed by Stop).
+   *  Only used for synchronous subagents, whose SubagentStop fires before
+   *  PostToolUse has recorded the Agent tool run. */
   pending_subagent_traces?: Array<{
     agent_id: string;
     agent_type: string;
     agent_transcript_path: string;
     session_id: string;
   }>;
+  /** Turns that launched background subagents which may outlive the Stop hook,
+   *  keyed by turn run_id. Background subagents run concurrently with the main
+   *  loop, so a later turn can start (and launch its own subagents) before an
+   *  earlier turn's subagents finish — hence a map, not a single value. The last
+   *  SubagentStop to drain a turn's `agent_ids` completes that turn's root run. */
+  open_turns?: Record<string, OpenTurn>;
+  /** When the current turn is a task-notification turn, the agent_id it is for.
+   *  Set by UserPromptSubmit (it nests the turn under that agent's tool run), read
+   *  by Stop to close the agent tool run + drain its launching turn on completion. */
+  current_notification_agent_id?: string;
+  /** agent_ids whose task-notification turn has completed but whose SubagentStop
+   *  hasn't traced the subagent yet (the two fire in non-deterministic order when
+   *  a background agent finishes while the main agent is idle). Whichever of the
+   *  two runs *last* finalizes the agent; this is the notification side's "done"
+   *  marker for that join. */
+  notification_done_agents?: string[];
+}
+
+/**
+ * Completion context for a turn whose background subagents are still in flight.
+ * Holds everything needed to complete (patch) the turn's root run independently
+ * of the session's "current turn", since later turns overwrite the `current_*`
+ * fields while this turn's subagents are still running.
+ */
+export interface OpenTurn {
+  run_id: string;
+  trace_id?: string;
+  dotted_order?: string;
+  parent_run_id?: string;
+  start_time?: string;
+  turn_number?: number;
+  turn_id?: string;
+  runtime_version?: string;
+  approval_policy?: string;
+  /** Final assistant message → root run outputs; set by Stop when the main turn ends. */
+  last_assistant_message?: string;
+  /** True once the Stop hook finished the main turn. Gates completion: a subagent
+   *  that finishes before Stop must not complete the turn prematurely. */
+  stop_seen: boolean;
+  /** Background subagents launched by this turn that haven't been traced yet. */
+  agent_ids: string[];
+  /** Set when this turn is itself a deferred task-notification turn: the agent_id
+   *  whose tool run + launching turn must be finalized once this turn completes
+   *  (handles a notification turn that spawns its own background subagent). */
+  notification_for_agent_id?: string;
 }
 
 export interface TracingState {

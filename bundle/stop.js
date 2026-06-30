@@ -12827,14 +12827,65 @@ async function traceTurn(options) {
   log(`Traced turn ${turnNum}: ${turnRunId} with ${turn.llmCalls.length} LLM call(s) [${status}]`);
   return taskRunMap;
 }
+async function patchTurnRun(id, result) {
+  if (!client && !replicas)
+    throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
+  const runTree = new RunTree({
+    client,
+    replicas,
+    name: USER_PROMPT_TURN_NAME,
+    run_type: "chain",
+    project_name: id.project,
+    id: id.runId,
+    trace_id: id.traceId,
+    dotted_order: id.dottedOrder,
+    parent_run_id: id.parentRunId,
+    start_time: id.startTime,
+    end_time: (/* @__PURE__ */ new Date()).toISOString(),
+    ..."error" in result ? { error: result.error } : { outputs: { messages: [{ role: "assistant", content: result.lastAssistantMessage }] } },
+    extra: {
+      metadata: codingAgentMetadata({
+        sessionId: id.sessionId,
+        base: id.customMetadata,
+        turnId: id.turnId,
+        turnNumber: id.turnNumber,
+        runtimeVersion: id.runtimeVersion,
+        approvalPolicy: id.approvalPolicy,
+        legacyRole: "root"
+        // DEPRECATED compat alias ls_agent_type="root".
+      })
+    }
+  });
+  await runTree.patchRun({ excludeInputs: true });
+}
+function turnIdentityFromOpenTurn(turn, ctx) {
+  return {
+    sessionId: ctx.sessionId,
+    project: ctx.project,
+    customMetadata: ctx.customMetadata,
+    runId: turn.run_id,
+    traceId: turn.trace_id,
+    dottedOrder: turn.dotted_order,
+    parentRunId: turn.parent_run_id,
+    startTime: turn.start_time,
+    turnId: turn.turn_id,
+    turnNumber: turn.turn_number,
+    runtimeVersion: turn.runtime_version,
+    approvalPolicy: turn.approval_policy
+  };
+}
+async function completeTurnRun(options) {
+  await patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
+}
 async function tracePendingSubagents(options) {
-  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber } = options;
+  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen } = options;
+  const openedAgentRunIds = [];
   if (!client && !replicas) {
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
   }
   if (!parentTraceId) {
     warn("Cannot trace subagents: no parent trace ID");
-    return;
+    return openedAgentRunIds;
   }
   for (const subagent of pendingSubagents) {
     try {
@@ -12849,15 +12900,16 @@ async function tracePendingSubagents(options) {
       const deferred = taskRunInfo.deferred;
       debug(`Processing subagent ${toolName} (${subagent.agent_id}) under run ${parentToolRunId}`);
       const { messages: subagentMessages } = readTranscript(subagent.agent_transcript_path, -1);
-      if (subagentMessages.length === 0) {
-        debug(`Empty subagent transcript: ${subagent.agent_transcript_path}`);
-        continue;
+      const subagentTurns = subagentMessages.length > 0 ? groupIntoTurns(subagentMessages) : [];
+      if (subagentTurns.length === 0) {
+        debug(`Empty/unreadable subagent transcript: ${subagent.agent_transcript_path}`);
       }
-      const subagentTurns = groupIntoTurns(subagentMessages);
       const subagentStartTime = deferred?.start_time ?? (/* @__PURE__ */ new Date()).toISOString();
-      const subagentEndTime = deferred?.end_time ?? (/* @__PURE__ */ new Date()).toISOString();
+      const lastSubagentActivity = subagentTurns.reduce((max, t) => t.llmCalls.reduce((m, c) => c.endTime > m ? c.endTime : m, max), "");
+      const deferredEnd = deferred?.end_time ?? "";
+      const subagentEndTime = (lastSubagentActivity > deferredEnd ? lastSubagentActivity : deferredEnd) || (/* @__PURE__ */ new Date()).toISOString();
       if (deferred) {
-        const runTree2 = new RunTree({
+        const runTree = new RunTree({
           client,
           replicas,
           id: parentToolRunId,
@@ -12867,7 +12919,9 @@ async function tracePendingSubagents(options) {
           outputs: { output: deferred.outputs ?? {} },
           project_name: deferred.project_name,
           start_time: subagentStartTime,
-          end_time: subagentEndTime,
+          // Leave open for async agents — the task-notification turn nests under
+          // this run, so it can't be closed until that turn completes.
+          end_time: keepAgentToolRunOpen ? void 0 : subagentEndTime,
           parent_run_id: deferred.parent_run_id,
           trace_id: deferred.trace_id,
           dotted_order: agentToolDottedOrder,
@@ -12890,60 +12944,104 @@ async function tracePendingSubagents(options) {
             })
           }
         });
-        await runTree2.postRun();
+        await runTree.postRun();
+        if (keepAgentToolRunOpen)
+          openedAgentRunIds.push(subagent.agent_id);
       }
-      const subagentChainId = uuid7();
-      const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentStartTime, subagentChainId)}`;
-      const runTree = new RunTree({
-        client,
-        replicas,
-        id: subagentChainId,
-        name: `${toolName} Subagent`,
-        run_type: "chain",
-        inputs: deferred?.inputs ?? {},
-        outputs: { output: deferred?.outputs },
-        project_name: project,
-        start_time: subagentStartTime,
-        end_time: subagentEndTime,
-        parent_run_id: parentToolRunId,
-        trace_id: parentTraceId,
-        dotted_order: subagentChainDottedOrder,
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId,
-            base: customMetadata,
-            runtimeVersion,
-            turnId,
-            turnNumber,
-            legacyRole: "subagent",
-            // DEPRECATED compat alias.
-            subagentId: subagent.agent_id,
-            // → ls_subagent_id (+ agent_id alias).
-            subagentType: toolName
-            // → ls_subagent_type (+ agent_type alias).
-          })
-        }
-      });
-      await runTree.postRun();
-      for (let i = 0; i < subagentTurns.length; i++) {
-        await traceTurn({
-          turn: subagentTurns[i],
-          sessionId,
-          turnNum: i + 1,
-          project,
-          parentRunId: subagentChainId,
-          existingTaskRunMap: void 0,
-          traceId: parentTraceId,
-          parentDottedOrder: subagentChainDottedOrder,
-          customMetadata,
-          runtimeVersion
+      if (subagentTurns.length > 0) {
+        const subagentChainId = uuid7();
+        const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentStartTime, subagentChainId)}`;
+        const runTree = new RunTree({
+          client,
+          replicas,
+          id: subagentChainId,
+          name: `${toolName} Subagent`,
+          run_type: "chain",
+          inputs: deferred?.inputs ?? {},
+          outputs: { output: deferred?.outputs },
+          project_name: project,
+          start_time: subagentStartTime,
+          end_time: subagentEndTime,
+          parent_run_id: parentToolRunId,
+          trace_id: parentTraceId,
+          dotted_order: subagentChainDottedOrder,
+          extra: {
+            metadata: codingAgentMetadata({
+              sessionId,
+              base: customMetadata,
+              runtimeVersion,
+              turnId,
+              turnNumber,
+              legacyRole: "subagent",
+              // DEPRECATED compat alias.
+              subagentId: subagent.agent_id,
+              // → ls_subagent_id (+ agent_id alias).
+              subagentType: toolName
+              // → ls_subagent_type (+ agent_type alias).
+            })
+          }
         });
+        await runTree.postRun();
+        for (let i = 0; i < subagentTurns.length; i++) {
+          await traceTurn({
+            turn: subagentTurns[i],
+            sessionId,
+            turnNum: i + 1,
+            project,
+            parentRunId: subagentChainId,
+            existingTaskRunMap: void 0,
+            traceId: parentTraceId,
+            parentDottedOrder: subagentChainDottedOrder,
+            customMetadata,
+            runtimeVersion
+          });
+        }
+        log(`Traced subagent ${toolName} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`);
       }
-      log(`Traced subagent ${toolName} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`);
     } catch (err) {
       error(`Failed to trace subagent ${subagent.agent_id}: ${err}`);
     }
   }
+  return openedAgentRunIds;
+}
+async function closeAgentToolRun(options) {
+  if (!client && !replicas)
+    throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
+  const deferred = options.taskRunInfo.deferred ?? {};
+  const toolName = options.agentType || "Agent";
+  const runTree = new RunTree({
+    client,
+    replicas,
+    id: options.taskRunInfo.run_id,
+    name: "Agent",
+    run_type: "tool",
+    inputs: { input: deferred.inputs ?? {} },
+    outputs: { output: deferred.outputs ?? {} },
+    project_name: deferred.project_name ?? options.project,
+    start_time: deferred.start_time,
+    end_time: (/* @__PURE__ */ new Date()).toISOString(),
+    parent_run_id: deferred.parent_run_id,
+    trace_id: deferred.trace_id,
+    dotted_order: options.taskRunInfo.dotted_order,
+    extra: {
+      metadata: codingAgentMetadata({
+        sessionId: options.sessionId,
+        base: options.customMetadata,
+        runtimeVersion: options.runtimeVersion,
+        turnId: options.turnId,
+        turnNumber: options.turnNumber,
+        toolName: "Task",
+        runName: "Agent",
+        runSpecific: {
+          agent_type: toolName,
+          // DEPRECATED compat alias.
+          agent_id: options.agentId
+          // DEPRECATED compat alias.
+        }
+      })
+    }
+  });
+  await runTree.patchRun({ excludeInputs: true });
 }
 
 // dist/config.js
@@ -13181,6 +13279,78 @@ function readStdin() {
   });
 }
 
+// dist/finalize.js
+async function finalizeNotificationChain(opts) {
+  const { stateFilePath, sessionId, project, customMetadata, runtimeVersion } = opts;
+  let agentId = opts.agentId;
+  while (agentId) {
+    const ss = getSessionState(loadState(stateFilePath), sessionId);
+    const taskRunInfo = ss.task_run_map?.[agentId];
+    if (!taskRunInfo) {
+      debug(`finalizeNotificationChain: no task run for ${agentId}, stopping`);
+      break;
+    }
+    const launchingTurnId = taskRunInfo.deferred?.parent_run_id;
+    const agentType = taskRunInfo.agent_type ?? "";
+    try {
+      await closeAgentToolRun({
+        sessionId,
+        agentId,
+        agentType,
+        taskRunInfo,
+        project,
+        customMetadata,
+        runtimeVersion,
+        turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0
+      });
+    } catch (err) {
+      error(`Failed to close Agent tool run for ${agentId}: ${err}`);
+    }
+    let toComplete;
+    let nextAgentId;
+    const drainedAgentId = agentId;
+    await atomicUpdateState(stateFilePath, (s) => {
+      const sess = getSessionState(s, sessionId);
+      const openTurns = { ...sess.open_turns };
+      const taskRunMap = { ...sess.task_run_map };
+      delete taskRunMap[drainedAgentId];
+      const entry = launchingTurnId ? openTurns[launchingTurnId] : void 0;
+      if (entry) {
+        const remaining = entry.agent_ids.filter((id) => id !== drainedAgentId);
+        if (remaining.length === 0 && entry.stop_seen) {
+          toComplete = entry;
+          nextAgentId = entry.notification_for_agent_id;
+          if (launchingTurnId)
+            delete openTurns[launchingTurnId];
+        } else {
+          openTurns[launchingTurnId] = { ...entry, agent_ids: remaining };
+        }
+      }
+      return {
+        ...s,
+        [sessionId]: {
+          ...sess,
+          open_turns: openTurns,
+          task_run_map: taskRunMap
+        }
+      };
+    });
+    if (toComplete) {
+      try {
+        await completeTurnRun({
+          ...turnIdentityFromOpenTurn(toComplete, { sessionId, project, customMetadata }),
+          lastAssistantMessage: toComplete.last_assistant_message
+        });
+        debug(`Completed launching turn ${toComplete.run_id} after notification chain`);
+      } catch (err) {
+        error(`Failed to complete launching turn ${toComplete.run_id}: ${err}`);
+      }
+    }
+    agentId = nextAgentId;
+  }
+  await flushPendingTraces();
+}
+
 // dist/hooks/stop.js
 async function main() {
   const startTime = Date.now();
@@ -13198,7 +13368,7 @@ async function main() {
     warn(`Invalid input: session=${input.session_id}, transcript=${transcriptPath}`);
     return;
   }
-  const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
+  initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   debug(`Last line: ${sessionState.last_line}, turn count: ${sessionState.turn_count}`);
@@ -13272,47 +13442,12 @@ async function main() {
       error(`Failed to trace turn ${turnNum}: ${err}`);
     }
   }
-  if (currentRunId) {
-    debug(`Completing Turn run ${currentRunId}`);
-    try {
-      const runTree = new RunTree({
-        client: client2,
-        replicas: config.replicas,
-        name: USER_PROMPT_TURN_NAME,
-        run_type: "chain",
-        project_name: config.project,
-        id: currentRunId,
-        trace_id: currentTraceId,
-        dotted_order: currentDottedOrder,
-        parent_run_id: currentParentRunId,
-        start_time: sessionState.current_turn_start,
-        end_time: (/* @__PURE__ */ new Date()).toISOString(),
-        outputs: {
-          messages: [{ role: "assistant", content: input.last_assistant_message }]
-        },
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId: input.session_id,
-            base: config.customMetadata,
-            turnId: turns[turns.length - 1]?.promptId,
-            turnNumber: sessionState.current_turn_number,
-            runtimeVersion,
-            approvalPolicy,
-            legacyRole: "root"
-            // DEPRECATED compat alias ls_agent_type="root".
-          })
-        }
-      });
-      await runTree.patchRun({ excludeInputs: true });
-      debug(`Turn run ${currentRunId} completed`);
-    } catch (err) {
-      error(`Failed to complete turn run: ${err}`);
-    }
-  }
   const freshState = loadState(config.stateFilePath);
   const freshSession = getSessionState(freshState, input.session_id);
   const mergedTaskRunMap = { ...freshSession.task_run_map, ...allTaskRunMaps };
+  const lastTurnId = turns[turns.length - 1]?.promptId;
   const pendingSubagents = freshSession.pending_subagent_traces || [];
+  const processedAgentIds = /* @__PURE__ */ new Set();
   if (pendingSubagents.length > 0) {
     debug(`Processing ${pendingSubagents.length} pending subagent trace(s)`);
     await tracePendingSubagents({
@@ -13323,11 +13458,15 @@ async function main() {
       project: config.project,
       customMetadata: config.customMetadata,
       runtimeVersion,
-      turnId: turns[turns.length - 1]?.promptId,
+      turnId: lastTurnId,
       turnNumber: sessionState.current_turn_number
     });
+    for (const sa of pendingSubagents)
+      processedAgentIds.add(sa.agent_id);
   }
   const savedLastLine = tracedTurns > 0 ? lastLine : sessionState.last_line;
+  let completeNow = false;
+  let notificationToFinalize;
   await atomicUpdateState(config.stateFilePath, (latestState) => {
     const latestSession = getSessionState(latestState, input.session_id);
     const updatedState = updateSessionState(
@@ -13339,12 +13478,95 @@ async function main() {
       // wins on conflicts since it has the fully resolved data from traceTurn.
       { ...latestSession.task_run_map, ...allTaskRunMaps }
     );
-    updatedState[input.session_id].current_turn_run_id = void 0;
-    updatedState[input.session_id].pending_subagent_traces = [];
-    updatedState[input.session_id].traced_tool_use_ids = [];
-    updatedState[input.session_id].tool_start_times = {};
+    const s = updatedState[input.session_id];
+    const notifAgentId = latestSession.current_notification_agent_id;
+    s.pending_subagent_traces = (latestSession.pending_subagent_traces ?? []).filter((sa) => !processedAgentIds.has(sa.agent_id));
+    const openTurns = { ...latestSession.open_turns };
+    const entry = currentRunId ? openTurns[currentRunId] : void 0;
+    if (currentRunId && entry) {
+      const remaining = entry.agent_ids.filter((id) => !processedAgentIds.has(id));
+      if (remaining.length > 0) {
+        openTurns[currentRunId] = {
+          ...entry,
+          agent_ids: remaining,
+          stop_seen: true,
+          last_assistant_message: input.last_assistant_message,
+          turn_id: lastTurnId,
+          // If this turn is itself a task-notification turn that spawned its own
+          // background subagent, remember the agent to finalize once it drains.
+          notification_for_agent_id: notifAgentId ?? entry.notification_for_agent_id
+        };
+        debug(`${remaining.length} background subagent(s) in flight, deferring turn completion`);
+      } else {
+        completeNow = true;
+        notificationToFinalize = notifAgentId;
+        delete openTurns[currentRunId];
+      }
+    } else {
+      completeNow = Boolean(currentRunId);
+      if (completeNow)
+        notificationToFinalize = notifAgentId;
+    }
+    s.open_turns = openTurns;
+    s.current_turn_run_id = void 0;
+    s.current_notification_agent_id = void 0;
+    s.traced_tool_use_ids = [];
+    s.tool_start_times = {};
     return pruneOldSessions(updatedState);
   });
+  if (completeNow && currentRunId) {
+    debug(`Completing Turn run ${currentRunId}`);
+    try {
+      await completeTurnRun({
+        sessionId: input.session_id,
+        runId: currentRunId,
+        traceId: currentTraceId,
+        dottedOrder: currentDottedOrder,
+        parentRunId: currentParentRunId,
+        startTime: sessionState.current_turn_start,
+        project: config.project,
+        lastAssistantMessage: input.last_assistant_message,
+        customMetadata: config.customMetadata,
+        turnId: lastTurnId,
+        turnNumber: sessionState.current_turn_number,
+        runtimeVersion,
+        approvalPolicy
+      });
+      debug(`Turn run ${currentRunId} completed`);
+    } catch (err) {
+      error(`Failed to complete turn run: ${err}`);
+    }
+  }
+  if (notificationToFinalize) {
+    let finalizeNow = false;
+    await atomicUpdateState(config.stateFilePath, (s) => {
+      const ss = getSessionState(s, input.session_id);
+      if (ss.task_run_map?.[notificationToFinalize]?.subagent_done) {
+        finalizeNow = true;
+        return s;
+      }
+      return {
+        ...s,
+        [input.session_id]: {
+          ...ss,
+          notification_done_agents: [
+            ...(ss.notification_done_agents ?? []).filter((id) => id !== notificationToFinalize),
+            notificationToFinalize
+          ]
+        }
+      };
+    });
+    if (finalizeNow) {
+      await finalizeNotificationChain({
+        stateFilePath: config.stateFilePath,
+        sessionId: input.session_id,
+        project: config.project,
+        customMetadata: config.customMetadata,
+        runtimeVersion,
+        agentId: notificationToFinalize
+      });
+    }
+  }
   await flushPendingTraces();
   const duration = ((Date.now() - startTime) / 1e3).toFixed(1);
   log(`Processed ${tracedTurns} turns in ${duration}s`);

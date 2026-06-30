@@ -141,6 +141,33 @@ async function main(): Promise<void> {
                   } as Record<string, unknown>,
                 },
               },
+              // Register this subagent under its launching turn. For background
+              // agents the Task tool returns at launch, so this records the turn
+              // as having work in flight before Stop fires — letting Stop know it
+              // must defer completion until SubagentStop drains it. We also stash
+              // the turn's completion context here so the turn's root run can be
+              // completed later even after a newer turn overwrites `current_*`.
+              open_turns: {
+                ...freshSession.open_turns,
+                [parentRunId]: {
+                  ...freshSession.open_turns?.[parentRunId],
+                  run_id: parentRunId,
+                  trace_id: traceId,
+                  dotted_order: parentDottedOrder,
+                  parent_run_id: sessionState.current_parent_run_id,
+                  start_time: sessionState.current_turn_start,
+                  turn_number: sessionState.current_turn_number,
+                  runtime_version: sessionState.runtime_version,
+                  approval_policy: sessionState.approval_policy,
+                  stop_seen: freshSession.open_turns?.[parentRunId]?.stop_seen ?? false,
+                  agent_ids: [
+                    ...(freshSession.open_turns?.[parentRunId]?.agent_ids ?? []).filter(
+                      (id) => id !== agentId,
+                    ),
+                    agentId,
+                  ],
+                },
+              },
             }
           : {
               // Record tool_use_id so traceTurn skips it (avoids double-tracing).
