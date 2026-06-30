@@ -156,6 +156,24 @@ async function main(): Promise<void> {
 
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);
+
+    // Preserve state for background subagents from prior turns that are still
+    // running (they outlive their turn's Stop hook). We keep their Agent tool run
+    // info in task_run_map so their traces still nest correctly, and keep their
+    // turns in open_turns so the last SubagentStop can complete them. But we drop
+    // the turn we just closed as interrupted above — it's already finalized, so a
+    // late SubagentStop should still trace the subagent but not re-complete it.
+    const inflightAgentIds = new Set(
+      Object.values(ss.open_turns ?? {}).flatMap((t) => t.agent_ids),
+    );
+    const preservedTaskRunMap = Object.fromEntries(
+      Object.entries(ss.task_run_map ?? {}).filter(([id]) => inflightAgentIds.has(id)),
+    );
+    const preservedOpenTurns = { ...ss.open_turns };
+    if (sessionState.current_turn_run_id) {
+      delete preservedOpenTurns[sessionState.current_turn_run_id];
+    }
+
     return {
       ...s,
       [input.session_id]: {
@@ -172,11 +190,12 @@ async function main(): Promise<void> {
         // Advance past the interrupted turn's messages so Stop doesn't re-trace them
         last_line: interruptedLastLine,
         turn_count: ss.turn_count + interruptedTurnsTraced,
-        // Clear interrupted turn's stale data
-        task_run_map: {},
+        // Clear this turn's stale data, but keep still-running background subagents.
+        task_run_map: preservedTaskRunMap,
         traced_tool_use_ids: [],
         tool_start_times: {},
         pending_subagent_traces: [],
+        open_turns: preservedOpenTurns,
       },
     };
   });

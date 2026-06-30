@@ -8619,9 +8619,40 @@ async function traceTurn(options) {
   return taskRunMap;
 }
 async function closeInterruptedTurn(options) {
-  const { sessionId, sessionState, transcriptPath, project, stateFilePath, customMetadata, runtimeVersion, approvalPolicy } = options;
+  const { sessionId, sessionState, transcriptPath, project, stateFilePath, customMetadata, runtimeVersion, approvalPolicy, turn, error: errorMessage = "User interrupt" } = options;
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
+  if (turn) {
+    const runTree2 = new RunTree({
+      client,
+      replicas,
+      id: turn.run_id,
+      run_type: "chain",
+      trace_id: turn.trace_id,
+      name: USER_PROMPT_TURN_NAME,
+      project_name: project,
+      dotted_order: turn.dotted_order,
+      parent_run_id: turn.parent_run_id,
+      start_time: turn.start_time,
+      end_time: (/* @__PURE__ */ new Date()).toISOString(),
+      error: errorMessage,
+      extra: {
+        metadata: codingAgentMetadata({
+          sessionId,
+          base: customMetadata,
+          turnId: turn.turn_id,
+          turnNumber: turn.turn_number,
+          runtimeVersion: turn.runtime_version ?? runtimeVersion,
+          approvalPolicy: turn.approval_policy ?? approvalPolicy,
+          legacyRole: "root"
+          // DEPRECATED compat alias ls_agent_type="root".
+        })
+      }
+    });
+    await runTree2.patchRun({ excludeInputs: true });
+    await flushPendingTraces();
+    return { lastLine: sessionState.last_line, turnsTraced: 0 };
+  }
   let lastLine = sessionState.last_line;
   let turnsTraced = 0;
   let taskRunMap = sessionState.task_run_map ?? {};
@@ -8688,7 +8719,7 @@ async function closeInterruptedTurn(options) {
     parent_run_id: sessionState.current_parent_run_id,
     start_time: sessionState.current_turn_start,
     end_time: (/* @__PURE__ */ new Date()).toISOString(),
-    error: "User interrupt",
+    error: errorMessage,
     extra: {
       metadata: codingAgentMetadata({
         sessionId,
@@ -9120,6 +9151,12 @@ async function main() {
   debug(`Created initial run ${runId} for turn ${turnNum}`);
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);
+    const inflightAgentIds = new Set(Object.values(ss.open_turns ?? {}).flatMap((t) => t.agent_ids));
+    const preservedTaskRunMap = Object.fromEntries(Object.entries(ss.task_run_map ?? {}).filter(([id]) => inflightAgentIds.has(id)));
+    const preservedOpenTurns = { ...ss.open_turns };
+    if (sessionState.current_turn_run_id) {
+      delete preservedOpenTurns[sessionState.current_turn_run_id];
+    }
     return {
       ...s,
       [input.session_id]: {
@@ -9136,11 +9173,12 @@ async function main() {
         // Advance past the interrupted turn's messages so Stop doesn't re-trace them
         last_line: interruptedLastLine,
         turn_count: ss.turn_count + interruptedTurnsTraced,
-        // Clear interrupted turn's stale data
-        task_run_map: {},
+        // Clear this turn's stale data, but keep still-running background subagents.
+        task_run_map: preservedTaskRunMap,
         traced_tool_use_ids: [],
         tool_start_times: {},
-        pending_subagent_traces: []
+        pending_subagent_traces: [],
+        open_turns: preservedOpenTurns
       }
     };
   });

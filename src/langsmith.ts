@@ -450,6 +450,65 @@ export async function traceTurn(
   return taskRunMap;
 }
 
+// ─── Turn run completion ─────────────────────────────────────────────────────
+
+/**
+ * Complete (patch) the root "Turn" run created by UserPromptSubmit.
+ *
+ * Shared by the Stop hook (normal completion) and SubagentStop (when a turn's
+ * background subagents outlive the Stop hook, so the last SubagentStop must
+ * close the Turn run instead). Both paths build an identical run so the trace
+ * looks the same regardless of which hook finalizes it.
+ */
+export async function completeTurnRun(options: {
+  sessionId: string;
+  runId: string;
+  traceId?: string;
+  dottedOrder?: string;
+  parentRunId?: string;
+  startTime?: string;
+  project: string;
+  /** Final assistant message → root run outputs. */
+  lastAssistantMessage?: string;
+  customMetadata?: Record<string, unknown>;
+  turnId?: string;
+  turnNumber?: number;
+  runtimeVersion?: string;
+  approvalPolicy?: string;
+}): Promise<void> {
+  if (!client && !replicas)
+    throw new Error("LangSmith client not initialized — call initTracing() first");
+
+  const runTree = new RunTree({
+    client,
+    replicas,
+    name: USER_PROMPT_TURN_NAME,
+    run_type: "chain",
+    project_name: options.project,
+    id: options.runId,
+    trace_id: options.traceId,
+    dotted_order: options.dottedOrder,
+    parent_run_id: options.parentRunId,
+    start_time: options.startTime,
+    end_time: new Date().toISOString(),
+    outputs: {
+      messages: [{ role: "assistant", content: options.lastAssistantMessage }],
+    },
+    extra: {
+      metadata: codingAgentMetadata({
+        sessionId: options.sessionId,
+        base: options.customMetadata,
+        turnId: options.turnId,
+        turnNumber: options.turnNumber,
+        runtimeVersion: options.runtimeVersion,
+        approvalPolicy: options.approvalPolicy,
+        legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+      }),
+    },
+  });
+  await runTree.patchRun({ excludeInputs: true });
+}
+
 // ─── Interrupted turn recovery ──────────────────────────────────────────────
 
 /**
@@ -474,6 +533,13 @@ export async function closeInterruptedTurn(options: {
   runtimeVersion?: string;
   /** Permission mode → `approval_policy` for the interrupted root turn. */
   approvalPolicy?: string;
+  /** Close an explicit (already-fully-traced) deferred turn from open_turns
+   *  instead of the live current turn. When set, the transcript / pending-subagent
+   *  catch-up tracing is skipped — that turn's content was already traced by Stop;
+   *  we only need to close its root run. */
+  turn?: import("./types.js").OpenTurn;
+  /** Root-run error/status message. Defaults to "User interrupt". */
+  error?: string;
 }): Promise<{ lastLine: number; turnsTraced: number }> {
   const {
     sessionId,
@@ -484,9 +550,44 @@ export async function closeInterruptedTurn(options: {
     customMetadata,
     runtimeVersion,
     approvalPolicy,
+    turn,
+    error: errorMessage = "User interrupt",
   } = options;
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized — call initTracing() first");
+
+  // Fast path: closing an explicit deferred turn (already traced by Stop). Just
+  // patch its root run with the error message; no transcript/subagent catch-up.
+  if (turn) {
+    const runTree = new RunTree({
+      client,
+      replicas,
+      id: turn.run_id,
+      run_type: "chain",
+      trace_id: turn.trace_id,
+      name: USER_PROMPT_TURN_NAME,
+      project_name: project,
+      dotted_order: turn.dotted_order,
+      parent_run_id: turn.parent_run_id,
+      start_time: turn.start_time,
+      end_time: new Date().toISOString(),
+      error: errorMessage,
+      extra: {
+        metadata: codingAgentMetadata({
+          sessionId,
+          base: customMetadata,
+          turnId: turn.turn_id,
+          turnNumber: turn.turn_number,
+          runtimeVersion: turn.runtime_version ?? runtimeVersion,
+          approvalPolicy: turn.approval_policy ?? approvalPolicy,
+          legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+        }),
+      },
+    });
+    await runTree.patchRun({ excludeInputs: true });
+    await flushPendingTraces();
+    return { lastLine: sessionState.last_line, turnsTraced: 0 };
+  }
 
   let lastLine = sessionState.last_line;
   let turnsTraced = 0;
@@ -566,7 +667,7 @@ export async function closeInterruptedTurn(options: {
     parent_run_id: sessionState.current_parent_run_id,
     start_time: sessionState.current_turn_start,
     end_time: new Date().toISOString(),
-    error: "User interrupt",
+    error: errorMessage,
     extra: {
       metadata: codingAgentMetadata({
         sessionId,
@@ -579,7 +680,7 @@ export async function closeInterruptedTurn(options: {
     },
   });
 
-  // Close the parent turn run with "User interrupt".
+  // Close the parent turn run with the error message.
   await runTree.patchRun({ excludeInputs: true });
 
   await flushPendingTraces();

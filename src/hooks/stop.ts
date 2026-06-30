@@ -16,13 +16,16 @@ import {
   updateSessionState,
   pruneOldSessions,
 } from "../state.js";
-import { initTracing, traceTurn, tracePendingSubagents, flushPendingTraces } from "../langsmith.js";
+import {
+  initTracing,
+  traceTurn,
+  tracePendingSubagents,
+  completeTurnRun,
+  flushPendingTraces,
+} from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import type { StopHookInput } from "../types.js";
-import { RunTree } from "langsmith";
-import { USER_PROMPT_TURN_NAME } from "../constants.js";
-import { codingAgentMetadata } from "../metadata.js";
 
 async function main(): Promise<void> {
   const startTime = Date.now();
@@ -48,7 +51,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const client = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
+  initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
 
   // Load state and read new messages.
   const state = loadState(config.stateFilePath);
@@ -162,46 +165,6 @@ async function main(): Promise<void> {
     }
   }
 
-  // Complete the Turn run created by UserPromptSubmit
-  if (currentRunId) {
-    debug(`Completing Turn run ${currentRunId}`);
-
-    // We need to patch the existing run with end time
-    try {
-      const runTree = new RunTree({
-        client,
-        replicas: config.replicas,
-        name: USER_PROMPT_TURN_NAME,
-        run_type: "chain",
-        project_name: config.project,
-        id: currentRunId,
-        trace_id: currentTraceId,
-        dotted_order: currentDottedOrder,
-        parent_run_id: currentParentRunId,
-        start_time: sessionState.current_turn_start,
-        end_time: new Date().toISOString(),
-        outputs: {
-          messages: [{ role: "assistant", content: input.last_assistant_message }],
-        },
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId: input.session_id,
-            base: config.customMetadata,
-            turnId: turns[turns.length - 1]?.promptId,
-            turnNumber: sessionState.current_turn_number,
-            runtimeVersion,
-            approvalPolicy,
-            legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
-          }),
-        },
-      });
-      await runTree.patchRun({ excludeInputs: true });
-      debug(`Turn run ${currentRunId} completed`);
-    } catch (err) {
-      error(`Failed to complete turn run: ${err}`);
-    }
-  }
-
   // Re-read state so we pick up writes from SubagentStop and PostToolUse
   // that may have landed while we were tracing the main transcript.
   const freshState = loadState(config.stateFilePath);
@@ -210,8 +173,13 @@ async function main(): Promise<void> {
   // Merge task_run_map entries written by PostToolUse with those from traceTurn
   const mergedTaskRunMap = { ...freshSession.task_run_map, ...allTaskRunMaps };
 
-  // Process any pending subagent traces queued by SubagentStop
+  const lastTurnId = turns[turns.length - 1]?.promptId;
+
+  // Process any pending subagent traces queued by SubagentStop. These are
+  // synchronous subagents whose SubagentStop fired before PostToolUse recorded
+  // the Agent tool run, so they were queued for us to trace here instead.
   const pendingSubagents = freshSession.pending_subagent_traces || [];
+  const processedAgentIds = new Set<string>();
   if (pendingSubagents.length > 0) {
     debug(`Processing ${pendingSubagents.length} pending subagent trace(s)`);
     await tracePendingSubagents({
@@ -222,9 +190,10 @@ async function main(): Promise<void> {
       project: config.project,
       customMetadata: config.customMetadata,
       runtimeVersion,
-      turnId: turns[turns.length - 1]?.promptId,
+      turnId: lastTurnId,
       turnNumber: sessionState.current_turn_number,
     });
+    for (const sa of pendingSubagents) processedAgentIds.add(sa.agent_id);
   }
 
   // Save updated state — re-read inside the lock so we don't clobber
@@ -236,6 +205,19 @@ async function main(): Promise<void> {
   // Keeping last_line at its previous value lets the next Stop re-read from
   // the same position and pick up the complete turn.
   const savedLastLine = tracedTurns > 0 ? lastLine : sessionState.last_line;
+
+  // Decide — atomically, inside the lock — whether to complete this turn's run
+  // now or defer to the last SubagentStop. PostToolUse records each launched Agent
+  // under its turn in open_turns[turnRunId].agent_ids; SubagentStop (background) or
+  // this hook (sync, above) drains them as they're traced. If any background
+  // subagent for THIS turn is still in flight when we read inside the lock, we must
+  // defer so the turn's duration spans that work — recording stop_seen + the real
+  // outputs in the same write, so a SubagentStop finishing concurrently can't drain
+  // the turn without also seeing it's safe to complete. We always clear
+  // current_turn_run_id (the main loop is done with this turn); a deferred turn
+  // lives on in open_turns until its subagents drain. Whoever removes the turn from
+  // open_turns / clears current_turn_run_id under the lock owns the one completion.
+  let completeNow = false;
   await atomicUpdateState(config.stateFilePath, (latestState) => {
     const latestSession = getSessionState(latestState, input.session_id);
     const updatedState = updateSessionState(
@@ -247,13 +229,72 @@ async function main(): Promise<void> {
       // wins on conflicts since it has the fully resolved data from traceTurn.
       { ...latestSession.task_run_map, ...allTaskRunMaps },
     );
-    // Clear fields that are no longer needed
-    updatedState[input.session_id].current_turn_run_id = undefined;
-    updatedState[input.session_id].pending_subagent_traces = [];
-    updatedState[input.session_id].traced_tool_use_ids = [];
-    updatedState[input.session_id].tool_start_times = {};
+    const s = updatedState[input.session_id];
+
+    // Drop the sync subagents we just traced from the queue.
+    s.pending_subagent_traces = (latestSession.pending_subagent_traces ?? []).filter(
+      (sa) => !processedAgentIds.has(sa.agent_id),
+    );
+
+    const openTurns = { ...latestSession.open_turns };
+    const entry = currentRunId ? openTurns[currentRunId] : undefined;
+
+    if (currentRunId && entry) {
+      // This turn launched background subagents. Drain the ones we just traced and
+      // mark the main turn finished, stashing the outputs only this hook carries.
+      const remaining = entry.agent_ids.filter((id) => !processedAgentIds.has(id));
+      if (remaining.length > 0) {
+        openTurns[currentRunId] = {
+          ...entry,
+          agent_ids: remaining,
+          stop_seen: true,
+          last_assistant_message: input.last_assistant_message,
+          turn_id: lastTurnId,
+        };
+        debug(`${remaining.length} background subagent(s) in flight, deferring turn completion`);
+      } else {
+        // All drained already — complete now and drop the entry.
+        completeNow = true;
+        delete openTurns[currentRunId];
+      }
+    } else {
+      // No background subagents for this turn — normal inline completion.
+      completeNow = Boolean(currentRunId);
+    }
+    s.open_turns = openTurns;
+
+    // The main loop is done with this turn regardless; clear so the next
+    // UserPromptSubmit doesn't mistake a deferred turn for an interrupted one.
+    s.current_turn_run_id = undefined;
+    s.traced_tool_use_ids = [];
+    s.tool_start_times = {};
     return pruneOldSessions(updatedState);
   });
+
+  // Complete the Turn run created by UserPromptSubmit (unless deferred above).
+  if (completeNow && currentRunId) {
+    debug(`Completing Turn run ${currentRunId}`);
+    try {
+      await completeTurnRun({
+        sessionId: input.session_id,
+        runId: currentRunId,
+        traceId: currentTraceId,
+        dottedOrder: currentDottedOrder,
+        parentRunId: currentParentRunId,
+        startTime: sessionState.current_turn_start,
+        project: config.project,
+        lastAssistantMessage: input.last_assistant_message,
+        customMetadata: config.customMetadata,
+        turnId: lastTurnId,
+        turnNumber: sessionState.current_turn_number,
+        runtimeVersion,
+        approvalPolicy,
+      });
+      debug(`Turn run ${currentRunId} completed`);
+    } catch (err) {
+      error(`Failed to complete turn run: ${err}`);
+    }
+  }
 
   // Flush pending batches to ensure all traces are sent before hook exits.
   await flushPendingTraces();

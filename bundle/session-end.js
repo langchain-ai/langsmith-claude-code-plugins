@@ -8570,9 +8570,40 @@ async function traceTurn(options) {
   return taskRunMap;
 }
 async function closeInterruptedTurn(options) {
-  const { sessionId, sessionState, transcriptPath, project, stateFilePath, customMetadata, runtimeVersion, approvalPolicy } = options;
+  const { sessionId, sessionState, transcriptPath, project, stateFilePath, customMetadata, runtimeVersion, approvalPolicy, turn, error: errorMessage = "User interrupt" } = options;
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
+  if (turn) {
+    const runTree2 = new RunTree({
+      client,
+      replicas,
+      id: turn.run_id,
+      run_type: "chain",
+      trace_id: turn.trace_id,
+      name: USER_PROMPT_TURN_NAME,
+      project_name: project,
+      dotted_order: turn.dotted_order,
+      parent_run_id: turn.parent_run_id,
+      start_time: turn.start_time,
+      end_time: (/* @__PURE__ */ new Date()).toISOString(),
+      error: errorMessage,
+      extra: {
+        metadata: codingAgentMetadata({
+          sessionId,
+          base: customMetadata,
+          turnId: turn.turn_id,
+          turnNumber: turn.turn_number,
+          runtimeVersion: turn.runtime_version ?? runtimeVersion,
+          approvalPolicy: turn.approval_policy ?? approvalPolicy,
+          legacyRole: "root"
+          // DEPRECATED compat alias ls_agent_type="root".
+        })
+      }
+    });
+    await runTree2.patchRun({ excludeInputs: true });
+    await flushPendingTraces();
+    return { lastLine: sessionState.last_line, turnsTraced: 0 };
+  }
   let lastLine = sessionState.last_line;
   let turnsTraced = 0;
   let taskRunMap = sessionState.task_run_map ?? {};
@@ -8639,7 +8670,7 @@ async function closeInterruptedTurn(options) {
     parent_run_id: sessionState.current_parent_run_id,
     start_time: sessionState.current_turn_start,
     end_time: (/* @__PURE__ */ new Date()).toISOString(),
-    error: "User interrupt",
+    error: errorMessage,
     extra: {
       metadata: codingAgentMetadata({
         sessionId,
@@ -8986,48 +9017,77 @@ async function main() {
   debug(`SessionEnd hook: session=${input.session_id}, reason=${input.reason}`);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
-  if (!sessionState.current_turn_run_id) {
+  const openTurns = sessionState.open_turns ?? {};
+  const hasOpenTurns = Object.keys(openTurns).length > 0;
+  if (!sessionState.current_turn_run_id && !hasOpenTurns) {
     debug("No open turn run \u2014 nothing to close");
     return;
   }
   initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
-  debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
   const expandedTranscript = expandHome(input.transcript_path);
   const runtimeVersion = sessionState.runtime_version ?? (expandedTranscript ? readRuntimeVersion(expandedTranscript) : void 0);
-  try {
-    const { lastLine, turnsTraced } = await closeInterruptedTurn({
-      sessionId: input.session_id,
-      sessionState,
-      transcriptPath: expandedTranscript,
-      project: config.project,
-      stateFilePath: config.stateFilePath,
-      customMetadata: config.customMetadata,
-      runtimeVersion,
-      approvalPolicy: sessionState.approval_policy
-    });
-    await atomicUpdateState(config.stateFilePath, (s) => {
-      const ss = getSessionState(s, input.session_id);
-      return {
-        ...s,
-        [input.session_id]: {
-          ...ss,
-          last_line: lastLine,
-          turn_count: ss.turn_count + turnsTraced,
-          current_turn_run_id: void 0,
-          current_trace_id: void 0,
-          current_dotted_order: void 0,
-          current_parent_run_id: void 0,
-          task_run_map: {},
-          traced_tool_use_ids: [],
-          tool_start_times: {},
-          pending_subagent_traces: []
-        }
-      };
-    });
-    debug(`Closed interrupted turn run on session end (reason=${input.reason})`);
-  } catch (err) {
-    error(`Failed to close interrupted turn on session end: ${err}`);
+  let lastLine = sessionState.last_line;
+  let turnsTraced = 0;
+  if (sessionState.current_turn_run_id) {
+    debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
+    try {
+      const res = await closeInterruptedTurn({
+        sessionId: input.session_id,
+        sessionState,
+        transcriptPath: expandedTranscript,
+        project: config.project,
+        stateFilePath: config.stateFilePath,
+        customMetadata: config.customMetadata,
+        runtimeVersion,
+        approvalPolicy: sessionState.approval_policy
+      });
+      lastLine = res.lastLine;
+      turnsTraced = res.turnsTraced;
+    } catch (err) {
+      error(`Failed to close interrupted turn on session end: ${err}`);
+    }
   }
+  for (const [turnRunId, entry] of Object.entries(openTurns)) {
+    if (turnRunId === sessionState.current_turn_run_id)
+      continue;
+    try {
+      await closeInterruptedTurn({
+        sessionId: input.session_id,
+        sessionState,
+        transcriptPath: expandedTranscript,
+        project: config.project,
+        stateFilePath: config.stateFilePath,
+        customMetadata: config.customMetadata,
+        runtimeVersion,
+        turn: entry,
+        error: "Session ended before subagents finished"
+      });
+      debug(`Closed deferred turn ${turnRunId} on session end`);
+    } catch (err) {
+      error(`Failed to close deferred turn ${turnRunId} on session end: ${err}`);
+    }
+  }
+  await atomicUpdateState(config.stateFilePath, (s) => {
+    const ss = getSessionState(s, input.session_id);
+    return {
+      ...s,
+      [input.session_id]: {
+        ...ss,
+        last_line: lastLine,
+        turn_count: ss.turn_count + turnsTraced,
+        current_turn_run_id: void 0,
+        current_trace_id: void 0,
+        current_dotted_order: void 0,
+        current_parent_run_id: void 0,
+        task_run_map: {},
+        traced_tool_use_ids: [],
+        tool_start_times: {},
+        pending_subagent_traces: [],
+        open_turns: {}
+      }
+    };
+  });
+  debug(`Session end cleanup complete (reason=${input.reason})`);
 }
 main().catch((err) => {
   try {
