@@ -29,7 +29,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var require_eventemitter3 = __commonJS({
   "node_modules/.pnpm/eventemitter3@4.0.7/node_modules/eventemitter3/index.js"(exports, module) {
     "use strict";
-    var has = Object.prototype.hasOwnProperty;
+    var has2 = Object.prototype.hasOwnProperty;
     var prefix = "~";
     function Events() {
     }
@@ -64,7 +64,7 @@ var require_eventemitter3 = __commonJS({
       var names = [], events, name;
       if (this._eventsCount === 0) return names;
       for (name in events = this._events) {
-        if (has.call(events, name)) names.push(prefix ? name.slice(1) : name);
+        if (has2.call(events, name)) names.push(prefix ? name.slice(1) : name);
       }
       if (Object.getOwnPropertySymbols) {
         return names.concat(Object.getOwnPropertySymbols(events));
@@ -332,7 +332,7 @@ var require_dist = __commonJS({
     var timeoutError = new p_timeout_1.TimeoutError();
     var PQueue2 = class extends EventEmitter {
       constructor(options) {
-        var _a, _b, _c, _d;
+        var _a2, _b, _c, _d;
         super();
         this._intervalCount = 0;
         this._intervalEnd = 0;
@@ -341,7 +341,7 @@ var require_dist = __commonJS({
         this._resolveIdle = empty;
         options = Object.assign({ carryoverConcurrencyCount: false, intervalCap: Infinity, interval: 0, concurrency: Infinity, autoStart: true, queueClass: priority_queue_1.default }, options);
         if (!(typeof options.intervalCap === "number" && options.intervalCap >= 1)) {
-          throw new TypeError(`Expected \`intervalCap\` to be a number from 1 and up, got \`${(_b = (_a = options.intervalCap) === null || _a === void 0 ? void 0 : _a.toString()) !== null && _b !== void 0 ? _b : ""}\` (${typeof options.intervalCap})`);
+          throw new TypeError(`Expected \`intervalCap\` to be a number from 1 and up, got \`${(_b = (_a2 = options.intervalCap) === null || _a2 === void 0 ? void 0 : _a2.toString()) !== null && _b !== void 0 ? _b : ""}\` (${typeof options.intervalCap})`);
         }
         if (options.interval === void 0 || !(Number.isFinite(options.interval) && options.interval >= 0)) {
           throw new TypeError(`Expected \`interval\` to be a finite number >= 0, got \`${(_d = (_c = options.interval) === null || _c === void 0 ? void 0 : _c.toString()) !== null && _d !== void 0 ? _d : ""}\` (${typeof options.interval})`);
@@ -976,43 +976,48 @@ function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, c
   };
 }
 
-// node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/regex.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/regex.js
 var regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
 
-// node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/validate.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/validate.js
 function validate(uuid) {
   return typeof uuid === "string" && regex_default.test(uuid);
 }
 var validate_default = validate;
 
-// node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/parse.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/parse.js
 function parse(uuid) {
   if (!validate_default(uuid)) {
     throw TypeError("Invalid UUID");
   }
   let v;
-  const arr2 = new Uint8Array(16);
-  arr2[0] = (v = parseInt(uuid.slice(0, 8), 16)) >>> 24;
-  arr2[1] = v >>> 16 & 255;
-  arr2[2] = v >>> 8 & 255;
-  arr2[3] = v & 255;
-  arr2[4] = (v = parseInt(uuid.slice(9, 13), 16)) >>> 8;
-  arr2[5] = v & 255;
-  arr2[6] = (v = parseInt(uuid.slice(14, 18), 16)) >>> 8;
-  arr2[7] = v & 255;
-  arr2[8] = (v = parseInt(uuid.slice(19, 23), 16)) >>> 8;
-  arr2[9] = v & 255;
-  arr2[10] = (v = parseInt(uuid.slice(24, 36), 16)) / 1099511627776 & 255;
-  arr2[11] = v / 4294967296 & 255;
-  arr2[12] = v >>> 24 & 255;
-  arr2[13] = v >>> 16 & 255;
-  arr2[14] = v >>> 8 & 255;
-  arr2[15] = v & 255;
-  return arr2;
+  return Uint8Array.of(
+    (v = parseInt(uuid.slice(0, 8), 16)) >>> 24,
+    v >>> 16 & 255,
+    v >>> 8 & 255,
+    v & 255,
+    // Parse ........-####-....-....-............
+    (v = parseInt(uuid.slice(9, 13), 16)) >>> 8,
+    v & 255,
+    // Parse ........-....-####-....-............
+    (v = parseInt(uuid.slice(14, 18), 16)) >>> 8,
+    v & 255,
+    // Parse ........-....-....-####-............
+    (v = parseInt(uuid.slice(19, 23), 16)) >>> 8,
+    v & 255,
+    // Parse ........-....-....-....-############
+    // (Use "/" to avoid 32-bit truncation when bit-shifting high-order bytes)
+    (v = parseInt(uuid.slice(24, 36), 16)) / 1099511627776 & 255,
+    v / 4294967296 & 255,
+    v >>> 24 & 255,
+    v >>> 16 & 255,
+    v >>> 8 & 255,
+    v & 255
+  );
 }
 var parse_default = parse;
 
-// node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/stringify.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/stringify.js
 var byteToHex = [];
 for (let i = 0; i < 256; ++i) {
   byteToHex.push((i + 256).toString(16).slice(1));
@@ -1021,82 +1026,32 @@ function unsafeStringify(arr2, offset = 0) {
   return (byteToHex[arr2[offset + 0]] + byteToHex[arr2[offset + 1]] + byteToHex[arr2[offset + 2]] + byteToHex[arr2[offset + 3]] + "-" + byteToHex[arr2[offset + 4]] + byteToHex[arr2[offset + 5]] + "-" + byteToHex[arr2[offset + 6]] + byteToHex[arr2[offset + 7]] + "-" + byteToHex[arr2[offset + 8]] + byteToHex[arr2[offset + 9]] + "-" + byteToHex[arr2[offset + 10]] + byteToHex[arr2[offset + 11]] + byteToHex[arr2[offset + 12]] + byteToHex[arr2[offset + 13]] + byteToHex[arr2[offset + 14]] + byteToHex[arr2[offset + 15]]).toLowerCase();
 }
 
-// node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/rng.js
-import crypto from "node:crypto";
-var rnds8Pool = new Uint8Array(256);
-var poolPtr = rnds8Pool.length;
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/rng.js
+var rnds8 = new Uint8Array(16);
 function rng() {
-  if (poolPtr > rnds8Pool.length - 16) {
-    crypto.randomFillSync(rnds8Pool);
-    poolPtr = 0;
-  }
-  return rnds8Pool.slice(poolPtr, poolPtr += 16);
+  return crypto.getRandomValues(rnds8);
 }
 
-// node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/v35.js
-function stringToBytes(str) {
-  str = unescape(encodeURIComponent(str));
-  const bytes = [];
-  for (let i = 0; i < str.length; ++i) {
-    bytes.push(str.charCodeAt(i));
-  }
-  return bytes;
-}
-var DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
-var URL2 = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
-function v35(name, version, hashfunc) {
-  function generateUUID(value, namespace, buf, offset) {
-    var _namespace;
-    if (typeof value === "string") {
-      value = stringToBytes(value);
-    }
-    if (typeof namespace === "string") {
-      namespace = parse_default(namespace);
-    }
-    if (((_namespace = namespace) === null || _namespace === void 0 ? void 0 : _namespace.length) !== 16) {
-      throw TypeError("Namespace must be array-like (16 iterable integer values, 0-255)");
-    }
-    let bytes = new Uint8Array(16 + value.length);
-    bytes.set(namespace);
-    bytes.set(value, namespace.length);
-    bytes = hashfunc(bytes);
-    bytes[6] = bytes[6] & 15 | version;
-    bytes[8] = bytes[8] & 63 | 128;
-    if (buf) {
-      offset = offset || 0;
-      for (let i = 0; i < 16; ++i) {
-        buf[offset + i] = bytes[i];
-      }
-      return buf;
-    }
-    return unsafeStringify(bytes);
-  }
-  try {
-    generateUUID.name = name;
-  } catch (err) {
-  }
-  generateUUID.DNS = DNS;
-  generateUUID.URL = URL2;
-  return generateUUID;
-}
-
-// node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/native.js
-import crypto2 from "node:crypto";
-var native_default = {
-  randomUUID: crypto2.randomUUID
-};
-
-// node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/v4.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v4.js
 function v4(options, buf, offset) {
-  if (native_default.randomUUID && !buf && !options) {
-    return native_default.randomUUID();
+  if (!buf && !options && crypto.randomUUID) {
+    return crypto.randomUUID();
   }
+  return _v4(options, buf, offset);
+}
+function _v4(options, buf, offset) {
   options = options || {};
-  const rnds = options.random || (options.rng || rng)();
+  const rnds = options.random ?? options.rng?.() ?? rng();
+  if (rnds.length < 16) {
+    throw new Error("Random bytes length must be >= 16");
+  }
   rnds[6] = rnds[6] & 15 | 64;
   rnds[8] = rnds[8] & 63 | 128;
   if (buf) {
     offset = offset || 0;
+    if (offset < 0 || offset + 16 > buf.length) {
+      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
+    }
     for (let i = 0; i < 16; ++i) {
       buf[offset + i] = rnds[i];
     }
@@ -1106,90 +1061,184 @@ function v4(options, buf, offset) {
 }
 var v4_default = v4;
 
-// node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/sha1.js
-import crypto3 from "node:crypto";
-function sha1(bytes) {
-  if (Array.isArray(bytes)) {
-    bytes = Buffer.from(bytes);
-  } else if (typeof bytes === "string") {
-    bytes = Buffer.from(bytes, "utf8");
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/sha1.js
+function f(s, x, y, z) {
+  switch (s) {
+    case 0:
+      return x & y ^ ~x & z;
+    case 1:
+      return x ^ y ^ z;
+    case 2:
+      return x & y ^ x & z ^ y & z;
+    case 3:
+      return x ^ y ^ z;
   }
-  return crypto3.createHash("sha1").update(bytes).digest();
+}
+function ROTL(x, n2) {
+  return x << n2 | x >>> 32 - n2;
+}
+function sha1(bytes) {
+  const K = [1518500249, 1859775393, 2400959708, 3395469782];
+  const H = [1732584193, 4023233417, 2562383102, 271733878, 3285377520];
+  const newBytes = new Uint8Array(bytes.length + 1);
+  newBytes.set(bytes);
+  newBytes[bytes.length] = 128;
+  bytes = newBytes;
+  const l = bytes.length / 4 + 2;
+  const N = Math.ceil(l / 16);
+  const M = new Array(N);
+  for (let i = 0; i < N; ++i) {
+    const arr2 = new Uint32Array(16);
+    for (let j = 0; j < 16; ++j) {
+      arr2[j] = bytes[i * 64 + j * 4] << 24 | bytes[i * 64 + j * 4 + 1] << 16 | bytes[i * 64 + j * 4 + 2] << 8 | bytes[i * 64 + j * 4 + 3];
+    }
+    M[i] = arr2;
+  }
+  M[N - 1][14] = (bytes.length - 1) * 8 / 2 ** 32;
+  M[N - 1][14] = Math.floor(M[N - 1][14]);
+  M[N - 1][15] = (bytes.length - 1) * 8 & 4294967295;
+  for (let i = 0; i < N; ++i) {
+    const W = new Uint32Array(80);
+    for (let t = 0; t < 16; ++t) {
+      W[t] = M[i][t];
+    }
+    for (let t = 16; t < 80; ++t) {
+      W[t] = ROTL(W[t - 3] ^ W[t - 8] ^ W[t - 14] ^ W[t - 16], 1);
+    }
+    let a = H[0];
+    let b = H[1];
+    let c = H[2];
+    let d = H[3];
+    let e = H[4];
+    for (let t = 0; t < 80; ++t) {
+      const s = Math.floor(t / 20);
+      const T = ROTL(a, 5) + f(s, b, c, d) + e + K[s] + W[t] >>> 0;
+      e = d;
+      d = c;
+      c = ROTL(b, 30) >>> 0;
+      b = a;
+      a = T;
+    }
+    H[0] = H[0] + a >>> 0;
+    H[1] = H[1] + b >>> 0;
+    H[2] = H[2] + c >>> 0;
+    H[3] = H[3] + d >>> 0;
+    H[4] = H[4] + e >>> 0;
+  }
+  return Uint8Array.of(H[0] >> 24, H[0] >> 16, H[0] >> 8, H[0], H[1] >> 24, H[1] >> 16, H[1] >> 8, H[1], H[2] >> 24, H[2] >> 16, H[2] >> 8, H[2], H[3] >> 24, H[3] >> 16, H[3] >> 8, H[3], H[4] >> 24, H[4] >> 16, H[4] >> 8, H[4]);
 }
 var sha1_default = sha1;
 
-// node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/v5.js
-var v5 = v35("v5", 80, sha1_default);
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v35.js
+function stringToBytes(str) {
+  str = unescape(encodeURIComponent(str));
+  const bytes = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; ++i) {
+    bytes[i] = str.charCodeAt(i);
+  }
+  return bytes;
+}
+var DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+var URL2 = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
+function v35(version, hash, value, namespace, buf, offset) {
+  const valueBytes = typeof value === "string" ? stringToBytes(value) : value;
+  const namespaceBytes = typeof namespace === "string" ? parse_default(namespace) : namespace;
+  if (typeof namespace === "string") {
+    namespace = parse_default(namespace);
+  }
+  if (namespace?.length !== 16) {
+    throw TypeError("Namespace must be array-like (16 iterable integer values, 0-255)");
+  }
+  let bytes = new Uint8Array(16 + valueBytes.length);
+  bytes.set(namespaceBytes);
+  bytes.set(valueBytes, namespaceBytes.length);
+  bytes = hash(bytes);
+  bytes[6] = bytes[6] & 15 | version;
+  bytes[8] = bytes[8] & 63 | 128;
+  if (buf) {
+    offset ??= 0;
+    if (offset < 0 || offset + 16 > buf.length) {
+      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
+    }
+    for (let i = 0; i < 16; ++i) {
+      buf[offset + i] = bytes[i];
+    }
+    return buf;
+  }
+  return unsafeStringify(bytes);
+}
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v5.js
+function v5(value, namespace, buf, offset) {
+  return v35(80, sha1_default, value, namespace, buf, offset);
+}
+v5.DNS = DNS;
+v5.URL = URL2;
 var v5_default = v5;
 
-// node_modules/.pnpm/uuid@10.0.0/node_modules/uuid/dist/esm-node/v7.js
-var _seqLow = null;
-var _seqHigh = null;
-var _msecs = 0;
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v7.js
+var _state = {};
 function v7(options, buf, offset) {
-  options = options || {};
-  let i = buf && offset || 0;
-  const b = buf || new Uint8Array(16);
-  const rnds = options.random || (options.rng || rng)();
-  const msecs = options.msecs !== void 0 ? options.msecs : Date.now();
-  let seq = options.seq !== void 0 ? options.seq : null;
-  let seqHigh = _seqHigh;
-  let seqLow = _seqLow;
-  if (msecs > _msecs && options.msecs === void 0) {
-    _msecs = msecs;
-    if (seq !== null) {
-      seqHigh = null;
-      seqLow = null;
-    }
-  }
-  if (seq !== null) {
-    if (seq > 2147483647) {
-      seq = 2147483647;
-    }
-    seqHigh = seq >>> 19 & 4095;
-    seqLow = seq & 524287;
-  }
-  if (seqHigh === null || seqLow === null) {
-    seqHigh = rnds[6] & 127;
-    seqHigh = seqHigh << 8 | rnds[7];
-    seqLow = rnds[8] & 63;
-    seqLow = seqLow << 8 | rnds[9];
-    seqLow = seqLow << 5 | rnds[10] >>> 3;
-  }
-  if (msecs + 1e4 > _msecs && seq === null) {
-    if (++seqLow > 524287) {
-      seqLow = 0;
-      if (++seqHigh > 4095) {
-        seqHigh = 0;
-        _msecs++;
-      }
-    }
+  let bytes;
+  if (options) {
+    bytes = v7Bytes(options.random ?? options.rng?.() ?? rng(), options.msecs, options.seq, buf, offset);
   } else {
-    _msecs = msecs;
+    const now = Date.now();
+    const rnds = rng();
+    updateV7State(_state, now, rnds);
+    bytes = v7Bytes(rnds, _state.msecs, _state.seq, buf, offset);
   }
-  _seqHigh = seqHigh;
-  _seqLow = seqLow;
-  b[i++] = _msecs / 1099511627776 & 255;
-  b[i++] = _msecs / 4294967296 & 255;
-  b[i++] = _msecs / 16777216 & 255;
-  b[i++] = _msecs / 65536 & 255;
-  b[i++] = _msecs / 256 & 255;
-  b[i++] = _msecs & 255;
-  b[i++] = seqHigh >>> 4 & 15 | 112;
-  b[i++] = seqHigh & 255;
-  b[i++] = seqLow >>> 13 & 63 | 128;
-  b[i++] = seqLow >>> 5 & 255;
-  b[i++] = seqLow << 3 & 255 | rnds[10] & 7;
-  b[i++] = rnds[11];
-  b[i++] = rnds[12];
-  b[i++] = rnds[13];
-  b[i++] = rnds[14];
-  b[i++] = rnds[15];
-  return buf || unsafeStringify(b);
+  return buf ?? unsafeStringify(bytes);
+}
+function updateV7State(state, now, rnds) {
+  state.msecs ??= -Infinity;
+  state.seq ??= 0;
+  if (now > state.msecs) {
+    state.seq = rnds[6] << 23 | rnds[7] << 16 | rnds[8] << 8 | rnds[9];
+    state.msecs = now;
+  } else {
+    state.seq = state.seq + 1 | 0;
+    if (state.seq === 0) {
+      state.msecs++;
+    }
+  }
+  return state;
+}
+function v7Bytes(rnds, msecs, seq, buf, offset = 0) {
+  if (rnds.length < 16) {
+    throw new Error("Random bytes length must be >= 16");
+  }
+  if (!buf) {
+    buf = new Uint8Array(16);
+    offset = 0;
+  } else {
+    if (offset < 0 || offset + 16 > buf.length) {
+      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
+    }
+  }
+  msecs ??= Date.now();
+  seq ??= rnds[6] * 127 << 24 | rnds[7] << 16 | rnds[8] << 8 | rnds[9];
+  buf[offset++] = msecs / 1099511627776 & 255;
+  buf[offset++] = msecs / 4294967296 & 255;
+  buf[offset++] = msecs / 16777216 & 255;
+  buf[offset++] = msecs / 65536 & 255;
+  buf[offset++] = msecs / 256 & 255;
+  buf[offset++] = msecs & 255;
+  buf[offset++] = 112 | seq >>> 28 & 15;
+  buf[offset++] = seq >>> 20 & 255;
+  buf[offset++] = 128 | seq >>> 14 & 63;
+  buf[offset++] = seq >>> 6 & 255;
+  buf[offset++] = seq << 2 & 255 | rnds[10] & 3;
+  buf[offset++] = rnds[11];
+  buf[offset++] = rnds[12];
+  buf[offset++] = rnds[13];
+  buf[offset++] = rnds[14];
+  buf[offset++] = rnds[15];
+  return buf;
 }
 var v7_default = v7;
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/experimental/otel/constants.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/experimental/otel/constants.js
 var GEN_AI_OPERATION_NAME = "gen_ai.operation.name";
 var GEN_AI_SYSTEM = "gen_ai.system";
 var GEN_AI_REQUEST_MODEL = "gen_ai.request.model";
@@ -1223,8 +1272,9 @@ var LANGSMITH_METADATA = "langsmith.metadata";
 var LANGSMITH_TAGS = "langsmith.span.tags";
 var LANGSMITH_REQUEST_STREAMING = "langsmith.request.streaming";
 var LANGSMITH_REQUEST_HEADERS = "langsmith.request.headers";
+var LANGSMITH_USAGE_METADATA = "langsmith.usage_metadata";
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/env.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/env.js
 var globalEnv;
 var isBrowser = () => typeof window !== "undefined" && typeof window.document !== "undefined";
 var isWebWorker = () => typeof globalThis === "object" && globalThis.constructor && globalThis.constructor.name === "DedicatedWorkerGlobalScope";
@@ -1279,6 +1329,7 @@ function getLangSmithEnvVarsMetadata() {
     "LANGSMITH_API_KEY",
     "LANGSMITH_ENDPOINT",
     "LANGSMITH_TRACING_V2",
+    "LANGSMITH_CONFIG_FILE",
     "LANGSMITH_PROJECT",
     "LANGSMITH_SESSION"
   ];
@@ -1307,7 +1358,7 @@ function getLangSmithEnvironmentVariables() {
         }
       }
     }
-  } catch (e) {
+  } catch (_e) {
   }
   return envVars;
 }
@@ -1317,7 +1368,7 @@ function getEnvironmentVariable(name) {
       // eslint-disable-next-line no-process-env
       process.env?.[name]
     ) : void 0;
-  } catch (e) {
+  } catch (_e) {
     return void 0;
   }
 }
@@ -1363,8 +1414,29 @@ function getShas() {
 function getOtelEnabled() {
   return getEnvironmentVariable("OTEL_ENABLED") === "true" || getLangSmithEnvironmentVariable("OTEL_ENABLED") === "true";
 }
+var _VALID_TRACING_MODES = /* @__PURE__ */ new Set(["langsmith", "otel"]);
+function resolveTracingMode(configValue) {
+  if (configValue !== void 0) {
+    return configValue;
+  }
+  const envMode = getLangSmithEnvironmentVariable("TRACING_MODE");
+  if (envMode !== void 0 && envMode !== "") {
+    const lower = envMode.toLowerCase();
+    if (!_VALID_TRACING_MODES.has(lower)) {
+      throw new Error(`Invalid LANGSMITH_TRACING_MODE=${JSON.stringify(envMode)}. Must be one of: ${[..._VALID_TRACING_MODES].sort().join(", ")}`);
+    }
+    if (getOtelEnabled()) {
+      console.warn("Both LANGSMITH_TRACING_MODE and the legacy OTEL_ENABLED / LANGSMITH_OTEL_ENABLED env vars are set. LANGSMITH_TRACING_MODE takes precedence.");
+    }
+    return lower;
+  }
+  if (getOtelEnabled()) {
+    return "otel";
+  }
+  return "langsmith";
+}
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/singletons/otel.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/otel.js
 var MockTracer = class {
   constructor() {
     Object.defineProperty(this, "hasWarned", {
@@ -1375,8 +1447,8 @@ var MockTracer = class {
     });
   }
   startActiveSpan(_name, ...args) {
-    if (!this.hasWarned && getOtelEnabled()) {
-      console.warn('You have enabled OTEL export via the `OTEL_ENABLED` or `LANGSMITH_OTEL_ENABLED` environment variable, but have not initialized the required OTEL instances. Please add:\n```\nimport { initializeOTEL } from "langsmith/experimental/otel/setup";\ninitializeOTEL();\n```\nat the beginning of your code.');
+    if (!this.hasWarned && resolveTracingMode() === "otel") {
+      console.warn('OTel tracing mode is active (via LANGSMITH_TRACING_MODE, OTEL_ENABLED, or LANGSMITH_OTEL_ENABLED), but the required OTEL instances have not been initialized. Please add:\n```\nimport { initializeOTEL } from "langsmith/experimental/otel/setup";\ninitializeOTEL();\n```\nat the beginning of your code.');
       this.hasWarned = true;
     }
     let fn;
@@ -1470,7 +1542,7 @@ function getDefaultOTLPTracerComponents() {
   return OTELProviderSingleton.getDefaultOTLPTracerComponents();
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/experimental/otel/translator.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/experimental/otel/translator.js
 var WELL_KNOWN_OPERATION_NAMES = {
   llm: "chat",
   tool: "execute_tool",
@@ -1480,6 +1552,9 @@ var WELL_KNOWN_OPERATION_NAMES = {
 };
 function getOperationName(runType) {
   return WELL_KNOWN_OPERATION_NAMES[runType] || runType;
+}
+function isPrimitive(value) {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
 }
 var LangSmithToOTELTranslator = class {
   constructor() {
@@ -1594,6 +1669,9 @@ var LangSmithToOTELTranslator = class {
     if (modelName) {
       span.setAttribute(GEN_AI_REQUEST_MODEL, modelName);
     }
+    if (runInfo.extra?.metadata?.usage_metadata && typeof runInfo.extra.metadata.usage_metadata === "object") {
+      span.setAttribute(LANGSMITH_USAGE_METADATA, JSON.stringify(runInfo.extra.metadata.usage_metadata));
+    }
     if ("prompt_tokens" in runInfo && typeof runInfo.prompt_tokens === "number") {
       span.setAttribute(GEN_AI_USAGE_INPUT_TOKENS, runInfo.prompt_tokens);
     }
@@ -1607,7 +1685,7 @@ var LangSmithToOTELTranslator = class {
     const metadata = runInfo.extra?.metadata || {};
     for (const [key, value] of Object.entries(metadata)) {
       if (value !== null && value !== void 0) {
-        span.setAttribute(`${LANGSMITH_METADATA}.${key}`, String(value));
+        span.setAttribute(`${LANGSMITH_METADATA}.${key}`, isPrimitive(value) ? String(value) : JSON.stringify(value));
       }
     }
     const tags = runInfo.tags;
@@ -1744,6 +1822,7 @@ var LangSmithToOTELTranslator = class {
           }
           if (outputs.usage_metadata && typeof outputs.usage_metadata === "object") {
             const usageMetadata = outputs.usage_metadata;
+            span.setAttribute(LANGSMITH_USAGE_METADATA, JSON.stringify(usageMetadata));
             if (usageMetadata.input_token_details) {
               span.setAttribute(GEN_AI_USAGE_INPUT_TOKEN_DETAILS, JSON.stringify(usageMetadata.input_token_details));
             }
@@ -1811,7 +1890,7 @@ var LangSmithToOTELTranslator = class {
   }
 };
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/is-network-error/index.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/is-network-error/index.js
 var objectToString = Object.prototype.toString;
 var isError = (value) => objectToString.call(value) === "[object Error]";
 var errorMessages = /* @__PURE__ */ new Set([
@@ -1850,7 +1929,7 @@ function isNetworkError(error2) {
   return errorMessages.has(message);
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/p-retry/index.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/p-retry/index.js
 function validateRetries(retries) {
   if (typeof retries === "number") {
     if (retries < 0) {
@@ -2023,11 +2102,11 @@ async function pRetry(input, options = {}) {
   throw new Error("Retry attempts exhausted without throwing an error.");
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/p-queue.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/p-queue.js
 var import_p_queue = __toESM(require_dist(), 1);
 var PQueue = "default" in import_p_queue.default ? import_p_queue.default.default : import_p_queue.default;
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/async_caller.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/async_caller.js
 var STATUS_RETRYABLE = [
   408,
   // Request Timeout
@@ -2155,7 +2234,7 @@ var AsyncCaller = class {
   }
 };
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/messages.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/messages.js
 function isLangChainMessage(message) {
   return typeof message?._getType === "function";
 }
@@ -2170,7 +2249,2452 @@ function convertLangChainMessageToExample(message) {
   return converted;
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/warn.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/uuid.js
+var uuid4 = function() {
+  const { crypto: crypto2 } = globalThis;
+  if (crypto2?.randomUUID) {
+    uuid4 = crypto2.randomUUID.bind(crypto2);
+    return crypto2.randomUUID();
+  }
+  const u8 = new Uint8Array(1);
+  const randomByte = crypto2 ? () => crypto2.getRandomValues(u8)[0] : () => Math.random() * 255 & 255;
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (+c ^ randomByte() & 15 >> +c / 4).toString(16));
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/errors.js
+function isAbortError(err) {
+  return typeof err === "object" && err !== null && // Spec-compliant fetch implementations
+  ("name" in err && err.name === "AbortError" || // Expo fetch
+  "message" in err && String(err.message).includes("FetchRequestCanceledException"));
+}
+var castToError = (err) => {
+  if (err instanceof Error)
+    return err;
+  if (typeof err === "object" && err !== null) {
+    try {
+      if (Object.prototype.toString.call(err) === "[object Error]") {
+        const error2 = new Error(err.message, err.cause ? { cause: err.cause } : {});
+        if (err.stack)
+          error2.stack = err.stack;
+        if (err.cause && !error2.cause)
+          error2.cause = err.cause;
+        if (err.name)
+          error2.name = err.name;
+        return error2;
+      }
+    } catch {
+    }
+    try {
+      return new Error(JSON.stringify(err));
+    } catch {
+    }
+  }
+  return new Error(err);
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/error.js
+var LangsmithError = class extends Error {
+};
+var APIError = class _APIError extends LangsmithError {
+  constructor(status, error2, message, headers) {
+    super(`${_APIError.makeMessage(status, error2, message)}`);
+    Object.defineProperty(this, "status", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "headers", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "error", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    this.status = status;
+    this.headers = headers;
+    this.error = error2;
+  }
+  static makeMessage(status, error2, message) {
+    const msg = error2?.message ? typeof error2.message === "string" ? error2.message : JSON.stringify(error2.message) : error2 ? JSON.stringify(error2) : message;
+    if (status && msg) {
+      return `${status} ${msg}`;
+    }
+    if (status) {
+      return `${status} status code (no body)`;
+    }
+    if (msg) {
+      return msg;
+    }
+    return "(no status code or body)";
+  }
+  static generate(status, errorResponse, message, headers) {
+    if (!status || !headers) {
+      return new APIConnectionError({ message, cause: castToError(errorResponse) });
+    }
+    const error2 = errorResponse;
+    if (status === 400) {
+      return new BadRequestError(status, error2, message, headers);
+    }
+    if (status === 401) {
+      return new AuthenticationError(status, error2, message, headers);
+    }
+    if (status === 403) {
+      return new PermissionDeniedError(status, error2, message, headers);
+    }
+    if (status === 404) {
+      return new NotFoundError(status, error2, message, headers);
+    }
+    if (status === 409) {
+      return new ConflictError(status, error2, message, headers);
+    }
+    if (status === 422) {
+      return new UnprocessableEntityError(status, error2, message, headers);
+    }
+    if (status === 429) {
+      return new RateLimitError(status, error2, message, headers);
+    }
+    if (status >= 500) {
+      return new InternalServerError(status, error2, message, headers);
+    }
+    return new _APIError(status, error2, message, headers);
+  }
+};
+var APIUserAbortError = class extends APIError {
+  constructor({ message } = {}) {
+    super(void 0, void 0, message || "Request was aborted.", void 0);
+  }
+};
+var APIConnectionError = class extends APIError {
+  constructor({ message, cause }) {
+    super(void 0, void 0, message || "Connection error.", void 0);
+    if (cause)
+      this.cause = cause;
+  }
+};
+var APIConnectionTimeoutError = class extends APIConnectionError {
+  constructor({ message } = {}) {
+    super({ message: message ?? "Request timed out." });
+  }
+};
+var BadRequestError = class extends APIError {
+};
+var AuthenticationError = class extends APIError {
+};
+var PermissionDeniedError = class extends APIError {
+};
+var NotFoundError = class extends APIError {
+};
+var ConflictError = class extends APIError {
+};
+var UnprocessableEntityError = class extends APIError {
+};
+var RateLimitError = class extends APIError {
+};
+var InternalServerError = class extends APIError {
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/values.js
+var startsWithSchemeRegexp = /^[a-z][a-z0-9+.-]*:/i;
+var isAbsoluteURL = (url) => {
+  return startsWithSchemeRegexp.test(url);
+};
+var isArray = (val) => (isArray = Array.isArray, isArray(val));
+var isReadonlyArray = isArray;
+function maybeObj(x) {
+  if (typeof x !== "object") {
+    return {};
+  }
+  return x ?? {};
+}
+function isEmptyObj(obj) {
+  if (!obj)
+    return true;
+  for (const _k in obj)
+    return false;
+  return true;
+}
+function hasOwn(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+var validatePositiveInteger = (name, n2) => {
+  if (typeof n2 !== "number" || !Number.isInteger(n2)) {
+    throw new LangsmithError(`${name} must be an integer`);
+  }
+  if (n2 < 0) {
+    throw new LangsmithError(`${name} must be a positive integer`);
+  }
+  return n2;
+};
+var safeJSON = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return void 0;
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/sleep.js
+var sleep2 = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/version.js
+var VERSION = "0.0.1";
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/detect-platform.js
+function getDetectedPlatform() {
+  if (typeof Deno !== "undefined" && Deno.build != null) {
+    return "deno";
+  }
+  if (typeof EdgeRuntime !== "undefined") {
+    return "edge";
+  }
+  if (Object.prototype.toString.call(typeof globalThis.process !== "undefined" ? globalThis.process : 0) === "[object process]") {
+    return "node";
+  }
+  return "unknown";
+}
+var getPlatformProperties = () => {
+  const detectedPlatform = getDetectedPlatform();
+  if (detectedPlatform === "deno") {
+    return {
+      "X-Stainless-Lang": "js",
+      "X-Stainless-Package-Version": VERSION,
+      "X-Stainless-OS": normalizePlatform(Deno.build.os),
+      "X-Stainless-Arch": normalizeArch(Deno.build.arch),
+      "X-Stainless-Runtime": "deno",
+      "X-Stainless-Runtime-Version": typeof Deno.version === "string" ? Deno.version : Deno.version?.deno ?? "unknown"
+    };
+  }
+  if (typeof EdgeRuntime !== "undefined") {
+    return {
+      "X-Stainless-Lang": "js",
+      "X-Stainless-Package-Version": VERSION,
+      "X-Stainless-OS": "Unknown",
+      "X-Stainless-Arch": `other:${EdgeRuntime}`,
+      "X-Stainless-Runtime": "edge",
+      "X-Stainless-Runtime-Version": globalThis.process.version
+    };
+  }
+  if (detectedPlatform === "node") {
+    return {
+      "X-Stainless-Lang": "js",
+      "X-Stainless-Package-Version": VERSION,
+      "X-Stainless-OS": normalizePlatform(globalThis.process.platform ?? "unknown"),
+      "X-Stainless-Arch": normalizeArch(globalThis.process.arch ?? "unknown"),
+      "X-Stainless-Runtime": "node",
+      "X-Stainless-Runtime-Version": globalThis.process.version ?? "unknown"
+    };
+  }
+  const browserInfo = getBrowserInfo();
+  if (browserInfo) {
+    return {
+      "X-Stainless-Lang": "js",
+      "X-Stainless-Package-Version": VERSION,
+      "X-Stainless-OS": "Unknown",
+      "X-Stainless-Arch": "unknown",
+      "X-Stainless-Runtime": `browser:${browserInfo.browser}`,
+      "X-Stainless-Runtime-Version": browserInfo.version
+    };
+  }
+  return {
+    "X-Stainless-Lang": "js",
+    "X-Stainless-Package-Version": VERSION,
+    "X-Stainless-OS": "Unknown",
+    "X-Stainless-Arch": "unknown",
+    "X-Stainless-Runtime": "unknown",
+    "X-Stainless-Runtime-Version": "unknown"
+  };
+};
+function getBrowserInfo() {
+  if (typeof navigator === "undefined" || !navigator) {
+    return null;
+  }
+  const browserPatterns = [
+    { key: "edge", pattern: /Edge(?:\W+(\d+)\.(\d+)(?:\.(\d+))?)?/ },
+    { key: "ie", pattern: /MSIE(?:\W+(\d+)\.(\d+)(?:\.(\d+))?)?/ },
+    { key: "ie", pattern: /Trident(?:.*rv\:(\d+)\.(\d+)(?:\.(\d+))?)?/ },
+    { key: "chrome", pattern: /Chrome(?:\W+(\d+)\.(\d+)(?:\.(\d+))?)?/ },
+    { key: "firefox", pattern: /Firefox(?:\W+(\d+)\.(\d+)(?:\.(\d+))?)?/ },
+    { key: "safari", pattern: /(?:Version\W+(\d+)\.(\d+)(?:\.(\d+))?)?(?:\W+Mobile\S*)?\W+Safari/ }
+  ];
+  for (const { key, pattern } of browserPatterns) {
+    const match = pattern.exec(navigator.userAgent);
+    if (match) {
+      const major = match[1] || 0;
+      const minor = match[2] || 0;
+      const patch = match[3] || 0;
+      return { browser: key, version: `${major}.${minor}.${patch}` };
+    }
+  }
+  return null;
+}
+var normalizeArch = (arch) => {
+  if (arch === "x32")
+    return "x32";
+  if (arch === "x86_64" || arch === "x64")
+    return "x64";
+  if (arch === "arm")
+    return "arm";
+  if (arch === "aarch64" || arch === "arm64")
+    return "arm64";
+  if (arch)
+    return `other:${arch}`;
+  return "unknown";
+};
+var normalizePlatform = (platform) => {
+  platform = platform.toLowerCase();
+  if (platform.includes("ios"))
+    return "iOS";
+  if (platform === "android")
+    return "Android";
+  if (platform === "darwin")
+    return "MacOS";
+  if (platform === "win32")
+    return "Windows";
+  if (platform === "freebsd")
+    return "FreeBSD";
+  if (platform === "openbsd")
+    return "OpenBSD";
+  if (platform === "linux")
+    return "Linux";
+  if (platform)
+    return `Other:${platform}`;
+  return "Unknown";
+};
+var _platformHeaders;
+var getPlatformHeaders = () => {
+  return _platformHeaders ??= getPlatformProperties();
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/shims.js
+function getDefaultFetch() {
+  if (typeof fetch !== "undefined") {
+    return fetch;
+  }
+  throw new Error("`fetch` is not defined as a global; Either pass `fetch` to the client, `new Langsmith({ fetch })` or polyfill the global, `globalThis.fetch = fetch`");
+}
+function makeReadableStream(...args) {
+  const ReadableStream2 = globalThis.ReadableStream;
+  if (typeof ReadableStream2 === "undefined") {
+    throw new Error("`ReadableStream` is not defined as a global; You will need to polyfill it, `globalThis.ReadableStream = ReadableStream`");
+  }
+  return new ReadableStream2(...args);
+}
+function ReadableStreamFrom(iterable) {
+  let iter = Symbol.asyncIterator in iterable ? iterable[Symbol.asyncIterator]() : iterable[Symbol.iterator]();
+  return makeReadableStream({
+    start() {
+    },
+    async pull(controller) {
+      const { done, value } = await iter.next();
+      if (done) {
+        controller.close();
+      } else {
+        controller.enqueue(value);
+      }
+    },
+    async cancel() {
+      await iter.return?.();
+    }
+  });
+}
+async function CancelReadableStream(stream) {
+  if (stream === null || typeof stream !== "object")
+    return;
+  if (stream[Symbol.asyncIterator]) {
+    await stream[Symbol.asyncIterator]().return?.();
+    return;
+  }
+  const reader = stream.getReader();
+  const cancelPromise = reader.cancel();
+  reader.releaseLock();
+  await cancelPromise;
+}
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/request-options.js
+var FallbackEncoder = ({ headers, body }) => {
+  return {
+    bodyHeaders: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(body)
+  };
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/qs/formats.js
+var default_format = "RFC3986";
+var default_formatter = (v) => String(v);
+var formatters = {
+  RFC1738: (v) => String(v).replace(/%20/g, "+"),
+  RFC3986: default_formatter
+};
+var RFC1738 = "RFC1738";
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/qs/utils.js
+var has = (obj, key) => (has = Object.hasOwn ?? Function.prototype.call.bind(Object.prototype.hasOwnProperty), has(obj, key));
+var hex_table = /* @__PURE__ */ (() => {
+  const array = [];
+  for (let i = 0; i < 256; ++i) {
+    array.push("%" + ((i < 16 ? "0" : "") + i.toString(16)).toUpperCase());
+  }
+  return array;
+})();
+var limit = 1024;
+var encode = (str, _defaultEncoder, charset, _kind, format) => {
+  if (str.length === 0) {
+    return str;
+  }
+  let string = str;
+  if (typeof str === "symbol") {
+    string = Symbol.prototype.toString.call(str);
+  } else if (typeof str !== "string") {
+    string = String(str);
+  }
+  if (charset === "iso-8859-1") {
+    return escape(string).replace(/%u[0-9a-f]{4}/gi, function($0) {
+      return "%26%23" + parseInt($0.slice(2), 16) + "%3B";
+    });
+  }
+  let out = "";
+  for (let j = 0; j < string.length; j += limit) {
+    const segment = string.length >= limit ? string.slice(j, j + limit) : string;
+    const arr2 = [];
+    for (let i = 0; i < segment.length; ++i) {
+      let c = segment.charCodeAt(i);
+      if (c === 45 || // -
+      c === 46 || // .
+      c === 95 || // _
+      c === 126 || // ~
+      c >= 48 && c <= 57 || // 0-9
+      c >= 65 && c <= 90 || // a-z
+      c >= 97 && c <= 122 || // A-Z
+      format === RFC1738 && (c === 40 || c === 41)) {
+        arr2[arr2.length] = segment.charAt(i);
+        continue;
+      }
+      if (c < 128) {
+        arr2[arr2.length] = hex_table[c];
+        continue;
+      }
+      if (c < 2048) {
+        arr2[arr2.length] = hex_table[192 | c >> 6] + hex_table[128 | c & 63];
+        continue;
+      }
+      if (c < 55296 || c >= 57344) {
+        arr2[arr2.length] = hex_table[224 | c >> 12] + hex_table[128 | c >> 6 & 63] + hex_table[128 | c & 63];
+        continue;
+      }
+      i += 1;
+      c = 65536 + ((c & 1023) << 10 | segment.charCodeAt(i) & 1023);
+      arr2[arr2.length] = hex_table[240 | c >> 18] + hex_table[128 | c >> 12 & 63] + hex_table[128 | c >> 6 & 63] + hex_table[128 | c & 63];
+    }
+    out += arr2.join("");
+  }
+  return out;
+};
+function is_buffer(obj) {
+  if (!obj || typeof obj !== "object") {
+    return false;
+  }
+  return !!(obj.constructor && obj.constructor.isBuffer && obj.constructor.isBuffer(obj));
+}
+function maybe_map(val, fn) {
+  if (isArray(val)) {
+    const mapped = [];
+    for (let i = 0; i < val.length; i += 1) {
+      mapped.push(fn(val[i]));
+    }
+    return mapped;
+  }
+  return fn(val);
+}
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/qs/stringify.js
+var array_prefix_generators = {
+  brackets(prefix) {
+    return String(prefix) + "[]";
+  },
+  comma: "comma",
+  indices(prefix, key) {
+    return String(prefix) + "[" + key + "]";
+  },
+  repeat(prefix) {
+    return String(prefix);
+  }
+};
+var push_to_array = function(arr2, value_or_array) {
+  Array.prototype.push.apply(arr2, isArray(value_or_array) ? value_or_array : [value_or_array]);
+};
+var toISOString;
+var defaults = {
+  addQueryPrefix: false,
+  allowDots: false,
+  allowEmptyArrays: false,
+  arrayFormat: "indices",
+  charset: "utf-8",
+  charsetSentinel: false,
+  delimiter: "&",
+  encode: true,
+  encodeDotInKeys: false,
+  encoder: encode,
+  encodeValuesOnly: false,
+  format: default_format,
+  formatter: default_formatter,
+  /** @deprecated */
+  indices: false,
+  serializeDate(date) {
+    return (toISOString ??= Function.prototype.call.bind(Date.prototype.toISOString))(date);
+  },
+  skipNulls: false,
+  strictNullHandling: false
+};
+function is_non_nullish_primitive(v) {
+  return typeof v === "string" || typeof v === "number" || typeof v === "boolean" || typeof v === "symbol" || typeof v === "bigint";
+}
+var sentinel = {};
+function inner_stringify(object, prefix, generateArrayPrefix, commaRoundTrip, allowEmptyArrays, strictNullHandling, skipNulls, encodeDotInKeys, encoder2, filter, sort, allowDots, serializeDate, format, formatter, encodeValuesOnly, charset, sideChannel) {
+  let obj = object;
+  let tmp_sc = sideChannel;
+  let step = 0;
+  let find_flag = false;
+  while ((tmp_sc = tmp_sc.get(sentinel)) !== void 0 && !find_flag) {
+    const pos = tmp_sc.get(object);
+    step += 1;
+    if (typeof pos !== "undefined") {
+      if (pos === step) {
+        throw new RangeError("Cyclic object value");
+      } else {
+        find_flag = true;
+      }
+    }
+    if (typeof tmp_sc.get(sentinel) === "undefined") {
+      step = 0;
+    }
+  }
+  if (typeof filter === "function") {
+    obj = filter(prefix, obj);
+  } else if (obj instanceof Date) {
+    obj = serializeDate?.(obj);
+  } else if (generateArrayPrefix === "comma" && isArray(obj)) {
+    obj = maybe_map(obj, function(value) {
+      if (value instanceof Date) {
+        return serializeDate?.(value);
+      }
+      return value;
+    });
+  }
+  if (obj === null) {
+    if (strictNullHandling) {
+      return encoder2 && !encodeValuesOnly ? (
+        // @ts-expect-error
+        encoder2(prefix, defaults.encoder, charset, "key", format)
+      ) : prefix;
+    }
+    obj = "";
+  }
+  if (is_non_nullish_primitive(obj) || is_buffer(obj)) {
+    if (encoder2) {
+      const key_value = encodeValuesOnly ? prefix : encoder2(prefix, defaults.encoder, charset, "key", format);
+      return [
+        formatter?.(key_value) + "=" + // @ts-expect-error
+        formatter?.(encoder2(obj, defaults.encoder, charset, "value", format))
+      ];
+    }
+    return [formatter?.(prefix) + "=" + formatter?.(String(obj))];
+  }
+  const values = [];
+  if (typeof obj === "undefined") {
+    return values;
+  }
+  let obj_keys;
+  if (generateArrayPrefix === "comma" && isArray(obj)) {
+    if (encodeValuesOnly && encoder2) {
+      obj = maybe_map(obj, encoder2);
+    }
+    obj_keys = [{ value: obj.length > 0 ? obj.join(",") || null : void 0 }];
+  } else if (isArray(filter)) {
+    obj_keys = filter;
+  } else {
+    const keys = Object.keys(obj);
+    obj_keys = sort ? keys.sort(sort) : keys;
+  }
+  const encoded_prefix = encodeDotInKeys ? String(prefix).replace(/\./g, "%2E") : String(prefix);
+  const adjusted_prefix = commaRoundTrip && isArray(obj) && obj.length === 1 ? encoded_prefix + "[]" : encoded_prefix;
+  if (allowEmptyArrays && isArray(obj) && obj.length === 0) {
+    return adjusted_prefix + "[]";
+  }
+  for (let j = 0; j < obj_keys.length; ++j) {
+    const key = obj_keys[j];
+    const value = (
+      // @ts-ignore
+      typeof key === "object" && typeof key.value !== "undefined" ? key.value : obj[key]
+    );
+    if (skipNulls && value === null) {
+      continue;
+    }
+    const encoded_key = allowDots && encodeDotInKeys ? key.replace(/\./g, "%2E") : key;
+    const key_prefix = isArray(obj) ? typeof generateArrayPrefix === "function" ? generateArrayPrefix(adjusted_prefix, encoded_key) : adjusted_prefix : adjusted_prefix + (allowDots ? "." + encoded_key : "[" + encoded_key + "]");
+    sideChannel.set(object, step);
+    const valueSideChannel = /* @__PURE__ */ new WeakMap();
+    valueSideChannel.set(sentinel, sideChannel);
+    push_to_array(values, inner_stringify(
+      value,
+      key_prefix,
+      generateArrayPrefix,
+      commaRoundTrip,
+      allowEmptyArrays,
+      strictNullHandling,
+      skipNulls,
+      encodeDotInKeys,
+      // @ts-ignore
+      generateArrayPrefix === "comma" && encodeValuesOnly && isArray(obj) ? null : encoder2,
+      filter,
+      sort,
+      allowDots,
+      serializeDate,
+      format,
+      formatter,
+      encodeValuesOnly,
+      charset,
+      valueSideChannel
+    ));
+  }
+  return values;
+}
+function normalize_stringify_options(opts = defaults) {
+  if (typeof opts.allowEmptyArrays !== "undefined" && typeof opts.allowEmptyArrays !== "boolean") {
+    throw new TypeError("`allowEmptyArrays` option can only be `true` or `false`, when provided");
+  }
+  if (typeof opts.encodeDotInKeys !== "undefined" && typeof opts.encodeDotInKeys !== "boolean") {
+    throw new TypeError("`encodeDotInKeys` option can only be `true` or `false`, when provided");
+  }
+  if (opts.encoder !== null && typeof opts.encoder !== "undefined" && typeof opts.encoder !== "function") {
+    throw new TypeError("Encoder has to be a function.");
+  }
+  const charset = opts.charset || defaults.charset;
+  if (typeof opts.charset !== "undefined" && opts.charset !== "utf-8" && opts.charset !== "iso-8859-1") {
+    throw new TypeError("The charset option must be either utf-8, iso-8859-1, or undefined");
+  }
+  let format = default_format;
+  if (typeof opts.format !== "undefined") {
+    if (!has(formatters, opts.format)) {
+      throw new TypeError("Unknown format option provided.");
+    }
+    format = opts.format;
+  }
+  const formatter = formatters[format];
+  let filter = defaults.filter;
+  if (typeof opts.filter === "function" || isArray(opts.filter)) {
+    filter = opts.filter;
+  }
+  let arrayFormat;
+  if (opts.arrayFormat && opts.arrayFormat in array_prefix_generators) {
+    arrayFormat = opts.arrayFormat;
+  } else if ("indices" in opts) {
+    arrayFormat = opts.indices ? "indices" : "repeat";
+  } else {
+    arrayFormat = defaults.arrayFormat;
+  }
+  if ("commaRoundTrip" in opts && typeof opts.commaRoundTrip !== "boolean") {
+    throw new TypeError("`commaRoundTrip` must be a boolean, or absent");
+  }
+  const allowDots = typeof opts.allowDots === "undefined" ? !!opts.encodeDotInKeys === true ? true : defaults.allowDots : !!opts.allowDots;
+  return {
+    addQueryPrefix: typeof opts.addQueryPrefix === "boolean" ? opts.addQueryPrefix : defaults.addQueryPrefix,
+    // @ts-ignore
+    allowDots,
+    allowEmptyArrays: typeof opts.allowEmptyArrays === "boolean" ? !!opts.allowEmptyArrays : defaults.allowEmptyArrays,
+    arrayFormat,
+    charset,
+    charsetSentinel: typeof opts.charsetSentinel === "boolean" ? opts.charsetSentinel : defaults.charsetSentinel,
+    commaRoundTrip: !!opts.commaRoundTrip,
+    delimiter: typeof opts.delimiter === "undefined" ? defaults.delimiter : opts.delimiter,
+    encode: typeof opts.encode === "boolean" ? opts.encode : defaults.encode,
+    encodeDotInKeys: typeof opts.encodeDotInKeys === "boolean" ? opts.encodeDotInKeys : defaults.encodeDotInKeys,
+    encoder: typeof opts.encoder === "function" ? opts.encoder : defaults.encoder,
+    encodeValuesOnly: typeof opts.encodeValuesOnly === "boolean" ? opts.encodeValuesOnly : defaults.encodeValuesOnly,
+    filter,
+    format,
+    formatter,
+    serializeDate: typeof opts.serializeDate === "function" ? opts.serializeDate : defaults.serializeDate,
+    skipNulls: typeof opts.skipNulls === "boolean" ? opts.skipNulls : defaults.skipNulls,
+    // @ts-ignore
+    sort: typeof opts.sort === "function" ? opts.sort : null,
+    strictNullHandling: typeof opts.strictNullHandling === "boolean" ? opts.strictNullHandling : defaults.strictNullHandling
+  };
+}
+function stringify(object, opts = {}) {
+  let obj = object;
+  const options = normalize_stringify_options(opts);
+  let obj_keys;
+  let filter;
+  if (typeof options.filter === "function") {
+    filter = options.filter;
+    obj = filter("", obj);
+  } else if (isArray(options.filter)) {
+    filter = options.filter;
+    obj_keys = filter;
+  }
+  const keys = [];
+  if (typeof obj !== "object" || obj === null) {
+    return "";
+  }
+  const generateArrayPrefix = array_prefix_generators[options.arrayFormat];
+  const commaRoundTrip = generateArrayPrefix === "comma" && options.commaRoundTrip;
+  if (!obj_keys) {
+    obj_keys = Object.keys(obj);
+  }
+  if (options.sort) {
+    obj_keys.sort(options.sort);
+  }
+  const sideChannel = /* @__PURE__ */ new WeakMap();
+  for (let i = 0; i < obj_keys.length; ++i) {
+    const key = obj_keys[i];
+    if (options.skipNulls && obj[key] === null) {
+      continue;
+    }
+    push_to_array(keys, inner_stringify(
+      obj[key],
+      key,
+      // @ts-expect-error
+      generateArrayPrefix,
+      commaRoundTrip,
+      options.allowEmptyArrays,
+      options.strictNullHandling,
+      options.skipNulls,
+      options.encodeDotInKeys,
+      options.encode ? options.encoder : null,
+      options.filter,
+      options.sort,
+      options.allowDots,
+      options.serializeDate,
+      options.format,
+      options.formatter,
+      options.encodeValuesOnly,
+      options.charset,
+      sideChannel
+    ));
+  }
+  const joined = keys.join(options.delimiter);
+  let prefix = options.addQueryPrefix === true ? "?" : "";
+  if (options.charsetSentinel) {
+    if (options.charset === "iso-8859-1") {
+      prefix += "utf8=%26%2310003%3B&";
+    } else {
+      prefix += "utf8=%E2%9C%93&";
+    }
+  }
+  return joined.length > 0 ? prefix + joined : "";
+}
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/query.js
+function stringifyQuery(query) {
+  return stringify(query, { arrayFormat: "comma" });
+}
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/log.js
+var levelNumbers = {
+  off: 0,
+  error: 200,
+  warn: 300,
+  info: 400,
+  debug: 500
+};
+var parseLogLevel = (maybeLevel, sourceName, client2) => {
+  if (!maybeLevel) {
+    return void 0;
+  }
+  if (hasOwn(levelNumbers, maybeLevel)) {
+    return maybeLevel;
+  }
+  loggerFor(client2).warn(`${sourceName} was set to ${JSON.stringify(maybeLevel)}, expected one of ${JSON.stringify(Object.keys(levelNumbers))}`);
+  return void 0;
+};
+function noop() {
+}
+function makeLogFn(fnLevel, logger, logLevel) {
+  if (!logger || levelNumbers[fnLevel] > levelNumbers[logLevel]) {
+    return noop;
+  } else {
+    return logger[fnLevel].bind(logger);
+  }
+}
+var noopLogger = {
+  error: noop,
+  warn: noop,
+  info: noop,
+  debug: noop
+};
+var cachedLoggers = /* @__PURE__ */ new WeakMap();
+function loggerFor(client2) {
+  const logger = client2.logger;
+  const logLevel = client2.logLevel ?? "off";
+  if (!logger) {
+    return noopLogger;
+  }
+  const cachedLogger = cachedLoggers.get(logger);
+  if (cachedLogger && cachedLogger[0] === logLevel) {
+    return cachedLogger[1];
+  }
+  const levelLogger = {
+    error: makeLogFn("error", logger, logLevel),
+    warn: makeLogFn("warn", logger, logLevel),
+    info: makeLogFn("info", logger, logLevel),
+    debug: makeLogFn("debug", logger, logLevel)
+  };
+  cachedLoggers.set(logger, [logLevel, levelLogger]);
+  return levelLogger;
+}
+var formatRequestDetails = (details) => {
+  if (details.options) {
+    details.options = { ...details.options };
+    delete details.options["headers"];
+  }
+  if (details.headers) {
+    details.headers = Object.fromEntries((details.headers instanceof Headers ? [...details.headers] : Object.entries(details.headers)).map(([name, value]) => [
+      name,
+      name.toLowerCase() === "authorization" || name.toLowerCase() === "api-key" || name.toLowerCase() === "x-api-key" || name.toLowerCase() === "cookie" || name.toLowerCase() === "set-cookie" || name.toLowerCase() === "x-tenant-id" ? "***" : value
+    ]));
+  }
+  if ("retryOfRequestLogID" in details) {
+    if (details.retryOfRequestLogID) {
+      details.retryOf = details.retryOfRequestLogID;
+    }
+    delete details.retryOfRequestLogID;
+  }
+  return details;
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/parse.js
+async function defaultParseResponse(client2, props) {
+  const { response, requestLogID, retryOfRequestLogID, startTime } = props;
+  const body = await (async () => {
+    if (response.status === 204) {
+      return null;
+    }
+    if (props.options.__binaryResponse) {
+      return response;
+    }
+    const contentType = response.headers.get("content-type");
+    const mediaType = contentType?.split(";")[0]?.trim();
+    const isJSON = mediaType?.includes("application/json") || mediaType?.endsWith("+json");
+    if (isJSON) {
+      const contentLength = response.headers.get("content-length");
+      if (contentLength === "0") {
+        return void 0;
+      }
+      const json = await response.json();
+      return json;
+    }
+    const text = await response.text();
+    return text;
+  })();
+  loggerFor(client2).debug(`[${requestLogID}] response parsed`, formatRequestDetails({
+    retryOfRequestLogID,
+    url: response.url,
+    status: response.status,
+    body,
+    durationMs: Date.now() - startTime
+  }));
+  return body;
+}
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/api-promise.js
+var __classPrivateFieldSet = function(receiver, state, value, kind, f2) {
+  if (kind === "m") throw new TypeError("Private method is not writable");
+  if (kind === "a" && !f2) throw new TypeError("Private accessor was defined without a setter");
+  if (typeof state === "function" ? receiver !== state || !f2 : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
+  return kind === "a" ? f2.call(receiver, value) : f2 ? f2.value = value : state.set(receiver, value), value;
+};
+var __classPrivateFieldGet = function(receiver, state, kind, f2) {
+  if (kind === "a" && !f2) throw new TypeError("Private accessor was defined without a getter");
+  if (typeof state === "function" ? receiver !== state || !f2 : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
+  return kind === "m" ? f2 : kind === "a" ? f2.call(receiver) : f2 ? f2.value : state.get(receiver);
+};
+var _APIPromise_client;
+var APIPromise = class _APIPromise extends Promise {
+  constructor(client2, responsePromise, parseResponse = defaultParseResponse) {
+    super((resolve) => {
+      resolve(null);
+    });
+    Object.defineProperty(this, "responsePromise", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: responsePromise
+    });
+    Object.defineProperty(this, "parseResponse", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: parseResponse
+    });
+    Object.defineProperty(this, "parsedPromise", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    _APIPromise_client.set(this, void 0);
+    __classPrivateFieldSet(this, _APIPromise_client, client2, "f");
+  }
+  _thenUnwrap(transform) {
+    return new _APIPromise(__classPrivateFieldGet(this, _APIPromise_client, "f"), this.responsePromise, async (client2, props) => transform(await this.parseResponse(client2, props), props));
+  }
+  /**
+   * Gets the raw `Response` instance instead of parsing the response
+   * data.
+   *
+   * If you want to parse the response body but still get the `Response`
+   * instance, you can use {@link withResponse()}.
+   *
+   * 👋 Getting the wrong TypeScript type for `Response`?
+   * Try setting `"moduleResolution": "NodeNext"` or add `"lib": ["DOM"]`
+   * to your `tsconfig.json`.
+   */
+  asResponse() {
+    return this.responsePromise.then((p) => p.response);
+  }
+  /**
+   * Gets the parsed response data and the raw `Response` instance.
+   *
+   * If you just want to get the raw `Response` instance without parsing it,
+   * you can use {@link asResponse()}.
+   *
+   * 👋 Getting the wrong TypeScript type for `Response`?
+   * Try setting `"moduleResolution": "NodeNext"` or add `"lib": ["DOM"]`
+   * to your `tsconfig.json`.
+   */
+  async withResponse() {
+    const [data, response] = await Promise.all([this.parse(), this.asResponse()]);
+    return { data, response };
+  }
+  parse() {
+    if (!this.parsedPromise) {
+      this.parsedPromise = this.responsePromise.then((data) => this.parseResponse(__classPrivateFieldGet(this, _APIPromise_client, "f"), data));
+    }
+    return this.parsedPromise;
+  }
+  then(onfulfilled, onrejected) {
+    return this.parse().then(onfulfilled, onrejected);
+  }
+  catch(onrejected) {
+    return this.parse().catch(onrejected);
+  }
+  finally(onfinally) {
+    return this.parse().finally(onfinally);
+  }
+};
+_APIPromise_client = /* @__PURE__ */ new WeakMap();
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/pagination.js
+var __classPrivateFieldSet2 = function(receiver, state, value, kind, f2) {
+  if (kind === "m") throw new TypeError("Private method is not writable");
+  if (kind === "a" && !f2) throw new TypeError("Private accessor was defined without a setter");
+  if (typeof state === "function" ? receiver !== state || !f2 : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
+  return kind === "a" ? f2.call(receiver, value) : f2 ? f2.value = value : state.set(receiver, value), value;
+};
+var __classPrivateFieldGet2 = function(receiver, state, kind, f2) {
+  if (kind === "a" && !f2) throw new TypeError("Private accessor was defined without a getter");
+  if (typeof state === "function" ? receiver !== state || !f2 : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
+  return kind === "m" ? f2 : kind === "a" ? f2.call(receiver) : f2 ? f2.value : state.get(receiver);
+};
+var _AbstractPage_client;
+var AbstractPage = class {
+  constructor(client2, response, body, options) {
+    _AbstractPage_client.set(this, void 0);
+    Object.defineProperty(this, "options", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "response", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "body", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    __classPrivateFieldSet2(this, _AbstractPage_client, client2, "f");
+    this.options = options;
+    this.response = response;
+    this.body = body;
+  }
+  hasNextPage() {
+    const items = this.getPaginatedItems();
+    if (!items.length)
+      return false;
+    return this.nextPageRequestOptions() != null;
+  }
+  async getNextPage() {
+    const nextOptions = this.nextPageRequestOptions();
+    if (!nextOptions) {
+      throw new LangsmithError("No next page expected; please check `.hasNextPage()` before calling `.getNextPage()`.");
+    }
+    return await __classPrivateFieldGet2(this, _AbstractPage_client, "f").requestAPIList(this.constructor, nextOptions);
+  }
+  async *iterPages() {
+    let page = this;
+    yield page;
+    while (page.hasNextPage()) {
+      page = await page.getNextPage();
+      yield page;
+    }
+  }
+  async *[(_AbstractPage_client = /* @__PURE__ */ new WeakMap(), Symbol.asyncIterator)]() {
+    for await (const page of this.iterPages()) {
+      for (const item of page.getPaginatedItems()) {
+        yield item;
+      }
+    }
+  }
+};
+var PagePromise = class extends APIPromise {
+  constructor(client2, request, Page) {
+    super(client2, request, async (client3, props) => new Page(client3, props.response, await defaultParseResponse(client3, props), props.options));
+  }
+  /**
+   * Allow auto-paginating iteration on an unawaited list call, eg:
+   *
+   *    for await (const item of client.items.list()) {
+   *      console.log(item)
+   *    }
+   */
+  async *[Symbol.asyncIterator]() {
+    const page = await this;
+    for await (const item of page) {
+      yield item;
+    }
+  }
+};
+var OffsetPaginationTopLevelArray = class extends AbstractPage {
+  constructor(client2, response, body, options) {
+    super(client2, response, body, options);
+    Object.defineProperty(this, "items", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    this.items = body || [];
+  }
+  getPaginatedItems() {
+    return this.items ?? [];
+  }
+  nextPageRequestOptions() {
+    const offset = this.options.query.offset ?? 0;
+    const length = this.getPaginatedItems().length;
+    const currentCount = offset + length;
+    return {
+      ...this.options,
+      query: {
+        ...maybeObj(this.options.query),
+        offset: currentCount
+      }
+    };
+  }
+};
+var OffsetPaginationOnlineEvaluators = class extends AbstractPage {
+  constructor(client2, response, body, options) {
+    super(client2, response, body, options);
+    Object.defineProperty(this, "evaluators", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "total", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    this.evaluators = body.evaluators || [];
+    this.total = body.total || 0;
+  }
+  getPaginatedItems() {
+    return this.evaluators ?? [];
+  }
+  nextPageRequestOptions() {
+    const offset = this.options.query.offset ?? 0;
+    const length = this.getPaginatedItems().length;
+    const currentCount = offset + length;
+    return {
+      ...this.options,
+      query: {
+        ...maybeObj(this.options.query),
+        offset: currentCount
+      }
+    };
+  }
+};
+var OffsetPaginationInsightsClusteringJobs = class extends AbstractPage {
+  constructor(client2, response, body, options) {
+    super(client2, response, body, options);
+    Object.defineProperty(this, "clustering_jobs", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    this.clustering_jobs = body.clustering_jobs || [];
+  }
+  getPaginatedItems() {
+    return this.clustering_jobs ?? [];
+  }
+  nextPageRequestOptions() {
+    const offset = this.options.query.offset ?? 0;
+    const length = this.getPaginatedItems().length;
+    const currentCount = offset + length;
+    return {
+      ...this.options,
+      query: {
+        ...maybeObj(this.options.query),
+        offset: currentCount
+      }
+    };
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/uploads.js
+var checkFileSupport = () => {
+  if (typeof File === "undefined") {
+    const { process: process2 } = globalThis;
+    const isOldNode = typeof process2?.versions?.node === "string" && parseInt(process2.versions.node.split(".")) < 20;
+    throw new Error("`File` is not defined as a global, which is required for file uploads." + (isOldNode ? " Update to Node 20 LTS or newer, or set `globalThis.File` to `import('node:buffer').File`." : ""));
+  }
+};
+function makeFile(fileBits, fileName, options) {
+  checkFileSupport();
+  return new File(fileBits, fileName ?? "unknown_file", options);
+}
+function getName(value) {
+  return (typeof value === "object" && value !== null && ("name" in value && value.name && String(value.name) || "url" in value && value.url && String(value.url) || "filename" in value && value.filename && String(value.filename) || "path" in value && value.path && String(value.path)) || "").split(/[\\/]/).pop() || void 0;
+}
+var isAsyncIterable = (value) => value != null && typeof value === "object" && typeof value[Symbol.asyncIterator] === "function";
+var multipartFormRequestOptions = async (opts, fetch2) => {
+  return { ...opts, body: await createForm(opts.body, fetch2) };
+};
+var supportsFormDataMap = /* @__PURE__ */ new WeakMap();
+function supportsFormData(fetchObject) {
+  const fetch2 = typeof fetchObject === "function" ? fetchObject : fetchObject.fetch;
+  const cached = supportsFormDataMap.get(fetch2);
+  if (cached)
+    return cached;
+  const promise = (async () => {
+    try {
+      const FetchResponse = "Response" in fetch2 ? fetch2.Response : (await fetch2("data:,")).constructor;
+      const data = new FormData();
+      if (data.toString() === await new FetchResponse(data).text()) {
+        return false;
+      }
+      return true;
+    } catch {
+      return true;
+    }
+  })();
+  supportsFormDataMap.set(fetch2, promise);
+  return promise;
+}
+var createForm = async (body, fetch2) => {
+  if (!await supportsFormData(fetch2)) {
+    throw new TypeError("The provided fetch function does not support file uploads with the current global FormData class.");
+  }
+  const form = new FormData();
+  await Promise.all(Object.entries(body || {}).map(([key, value]) => addFormValue(form, key, value)));
+  return form;
+};
+var isNamedBlob = (value) => value instanceof Blob && "name" in value;
+var addFormValue = async (form, key, value) => {
+  if (value === void 0)
+    return;
+  if (value == null) {
+    throw new TypeError(`Received null for "${key}"; to pass null in FormData, you must use the string 'null'`);
+  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    form.append(key, String(value));
+  } else if (value instanceof Response) {
+    form.append(key, makeFile([await value.blob()], getName(value)));
+  } else if (isAsyncIterable(value)) {
+    form.append(key, makeFile([await new Response(ReadableStreamFrom(value)).blob()], getName(value)));
+  } else if (isNamedBlob(value)) {
+    form.append(key, value, getName(value));
+  } else if (Array.isArray(value)) {
+    await Promise.all(value.map((entry) => addFormValue(form, key + "[]", entry)));
+  } else if (typeof value === "object") {
+    await Promise.all(Object.entries(value).map(([name, prop]) => addFormValue(form, `${key}[${name}]`, prop)));
+  } else {
+    throw new TypeError(`Invalid value given to form, expected a string, number, boolean, object, Array, File or Blob but got ${value} instead`);
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/to-file.js
+var isBlobLike = (value) => value != null && typeof value === "object" && typeof value.size === "number" && typeof value.type === "string" && typeof value.text === "function" && typeof value.slice === "function" && typeof value.arrayBuffer === "function";
+var isFileLike = (value) => value != null && typeof value === "object" && typeof value.name === "string" && typeof value.lastModified === "number" && isBlobLike(value);
+var isResponseLike = (value) => value != null && typeof value === "object" && typeof value.url === "string" && typeof value.blob === "function";
+async function toFile(value, name, options) {
+  checkFileSupport();
+  value = await value;
+  if (isFileLike(value)) {
+    if (value instanceof File) {
+      return value;
+    }
+    return makeFile([await value.arrayBuffer()], value.name);
+  }
+  if (isResponseLike(value)) {
+    const blob = await value.blob();
+    name ||= new URL(value.url).pathname.split(/[\\/]/).pop();
+    return makeFile(await getBytes(blob), name, options);
+  }
+  const parts = await getBytes(value);
+  name ||= getName(value);
+  if (!options?.type) {
+    const type = parts.find((part) => typeof part === "object" && "type" in part && part.type);
+    if (typeof type === "string") {
+      options = { ...options, type };
+    }
+  }
+  return makeFile(parts, name, options);
+}
+async function getBytes(value) {
+  let parts = [];
+  if (typeof value === "string" || ArrayBuffer.isView(value) || // includes Uint8Array, Buffer, etc.
+  value instanceof ArrayBuffer) {
+    parts.push(value);
+  } else if (isBlobLike(value)) {
+    parts.push(value instanceof Blob ? value : await value.arrayBuffer());
+  } else if (isAsyncIterable(value)) {
+    for await (const chunk of value) {
+      parts.push(...await getBytes(chunk));
+    }
+  } else {
+    const constructor = value?.constructor?.name;
+    throw new Error(`Unexpected data type: ${typeof value}${constructor ? `; constructor: ${constructor}` : ""}${propsForError(value)}`);
+  }
+  return parts;
+}
+function propsForError(value) {
+  if (typeof value !== "object" || value === null)
+    return "";
+  const props = Object.getOwnPropertyNames(value);
+  return `; props: [${props.map((p) => `"${p}"`).join(", ")}]`;
+}
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/resource.js
+var APIResource = class {
+  constructor(client2) {
+    Object.defineProperty(this, "_client", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    this._client = client2;
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/path.js
+function encodeURIPath(str) {
+  return str.replace(/[^A-Za-z0-9\-._~!$&'()*+,;=:@]+/g, encodeURIComponent);
+}
+var EMPTY = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.create(null));
+var createPathTagFunction = (pathEncoder = encodeURIPath) => function path3(statics, ...params) {
+  if (statics.length === 1)
+    return statics[0];
+  let postPath = false;
+  const invalidSegments = [];
+  const path4 = statics.reduce((previousValue, currentValue, index) => {
+    if (/[?#]/.test(currentValue)) {
+      postPath = true;
+    }
+    const value = params[index];
+    let encoded = (postPath ? encodeURIComponent : pathEncoder)("" + value);
+    if (index !== params.length && (value == null || typeof value === "object" && // handle values from other realms
+    value.toString === Object.getPrototypeOf(Object.getPrototypeOf(value.hasOwnProperty ?? EMPTY) ?? EMPTY)?.toString)) {
+      encoded = value + "";
+      invalidSegments.push({
+        start: previousValue.length + currentValue.length,
+        length: encoded.length,
+        error: `Value of type ${Object.prototype.toString.call(value).slice(8, -1)} is not a valid path parameter`
+      });
+    }
+    return previousValue + currentValue + (index === params.length ? "" : encoded);
+  }, "");
+  const pathOnly = path4.split(/[?#]/, 1)[0];
+  const invalidSegmentPattern = /(?<=^|\/)(?:\.|%2e){1,2}(?=\/|$)/gi;
+  let match;
+  while ((match = invalidSegmentPattern.exec(pathOnly)) !== null) {
+    invalidSegments.push({
+      start: match.index,
+      length: match[0].length,
+      error: `Value "${match[0]}" can't be safely passed as a path parameter`
+    });
+  }
+  invalidSegments.sort((a, b) => a.start - b.start);
+  if (invalidSegments.length > 0) {
+    let lastEnd = 0;
+    const underline = invalidSegments.reduce((acc, segment) => {
+      const spaces = " ".repeat(segment.start - lastEnd);
+      const arrows = "^".repeat(segment.length);
+      lastEnd = segment.start + segment.length;
+      return acc + spaces + arrows;
+    }, "");
+    throw new LangsmithError(`Path parameters result in path with invalid segments:
+${invalidSegments.map((e) => e.error).join("\n")}
+${path4}
+${underline}`);
+  }
+  return path4;
+};
+var path = /* @__PURE__ */ createPathTagFunction(encodeURIPath);
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/comparative.js
+var Comparative = class extends APIResource {
+  /**
+   * Create a comparative experiment.
+   */
+  create(body, options) {
+    return this._client.post("/api/v1/datasets/comparative", { body, ...options });
+  }
+  /**
+   * Delete a specific comparative experiment.
+   */
+  delete(comparativeExperimentID, options) {
+    return this._client.delete(path`/api/v1/datasets/comparative/${comparativeExperimentID}`, options);
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/experiments.js
+var Experiments = class extends APIResource {
+  /**
+   * Stream grouped and aggregated experiments.
+   */
+  grouped(datasetID, body, options) {
+    return this._client.post(path`/api/v1/datasets/${datasetID}/experiments/grouped`, { body, ...options });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/group.js
+var Group = class extends APIResource {
+  /**
+   * Fetch examples for a dataset, and fetch the runs for each example if they are
+   * associated with the given session_ids.
+   */
+  runs(datasetID, body, options) {
+    return this._client.post(path`/api/v1/datasets/${datasetID}/group/runs`, { body, ...options });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/runs.js
+var Runs = class extends APIResource {
+  /**
+   * Fetch examples for a dataset, and fetch the runs for each example if they are
+   * associated with the given session_ids.
+   */
+  create(datasetID, params, options) {
+    const { format, ...body } = params;
+    return this._client.post(path`/api/v1/datasets/${datasetID}/runs`, {
+      query: { format },
+      body,
+      ...options
+    });
+  }
+  /**
+   * Fetch the number of regressions/improvements for each example in a dataset,
+   * between sessions[0] and sessions[1].
+   */
+  delta(datasetID, body, options) {
+    return this._client.post(path`/api/v1/datasets/${datasetID}/runs/delta`, { body, ...options });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/share.js
+var Share = class extends APIResource {
+  /**
+   * Share a dataset.
+   */
+  create(datasetID, params = {}, options) {
+    const { share_projects } = params ?? {};
+    return this._client.put(path`/api/v1/datasets/${datasetID}/share`, {
+      query: { share_projects },
+      ...options
+    });
+  }
+  /**
+   * Get the state of sharing a dataset
+   */
+  retrieve(datasetID, options) {
+    return this._client.get(path`/api/v1/datasets/${datasetID}/share`, options);
+  }
+  /**
+   * Unshare a dataset.
+   */
+  deleteAll(datasetID, options) {
+    return this._client.delete(path`/api/v1/datasets/${datasetID}/share`, options);
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/splits.js
+var Splits = class extends APIResource {
+  /**
+   * Update Dataset Splits
+   */
+  create(datasetID, body, options) {
+    return this._client.put(path`/api/v1/datasets/${datasetID}/splits`, { body, ...options });
+  }
+  /**
+   * Get Dataset Splits
+   */
+  retrieve(datasetID, query = {}, options) {
+    return this._client.get(path`/api/v1/datasets/${datasetID}/splits`, { query, ...options });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/versions.js
+var Versions = class extends APIResource {
+  /**
+   * Get dataset versions.
+   */
+  list(datasetID, query = {}, options) {
+    return this._client.getAPIList(path`/api/v1/datasets/${datasetID}/versions`, OffsetPaginationTopLevelArray, { query, ...options });
+  }
+  /**
+   * Get diff between two dataset versions.
+   */
+  retrieveDiff(datasetID, query, options) {
+    return this._client.get(path`/api/v1/datasets/${datasetID}/versions/diff`, { query, ...options });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/datasets.js
+var Datasets = class extends APIResource {
+  constructor() {
+    super(...arguments);
+    Object.defineProperty(this, "versions", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Versions(this._client)
+    });
+    Object.defineProperty(this, "runs", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Runs(this._client)
+    });
+    Object.defineProperty(this, "group", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Group(this._client)
+    });
+    Object.defineProperty(this, "experiments", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Experiments(this._client)
+    });
+    Object.defineProperty(this, "share", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Share(this._client)
+    });
+    Object.defineProperty(this, "comparative", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Comparative(this._client)
+    });
+    Object.defineProperty(this, "splits", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Splits(this._client)
+    });
+  }
+  /**
+   * Create a new dataset.
+   */
+  create(body, options) {
+    return this._client.post("/api/v1/datasets", { body, ...options });
+  }
+  /**
+   * Get a specific dataset.
+   */
+  retrieve(datasetID, options) {
+    return this._client.get(path`/api/v1/datasets/${datasetID}`, options);
+  }
+  /**
+   * Update a specific dataset.
+   */
+  update(datasetID, body, options) {
+    return this._client.patch(path`/api/v1/datasets/${datasetID}`, { body, ...options });
+  }
+  /**
+   * Get all datasets by query params and owner.
+   */
+  list(params = {}, options) {
+    const { datatype, ...query } = params ?? {};
+    return this._client.getAPIList("/api/v1/datasets", OffsetPaginationTopLevelArray, {
+      query: { data_type: datatype, ...query },
+      ...options
+    });
+  }
+  /**
+   * Delete a specific dataset.
+   */
+  delete(datasetID, options) {
+    return this._client.delete(path`/api/v1/datasets/${datasetID}`, options);
+  }
+  /**
+   * Clone a dataset.
+   */
+  clone(body, options) {
+    return this._client.post("/api/v1/datasets/clone", { body, ...options });
+  }
+  /**
+   * Download a dataset as CSV format.
+   */
+  retrieveCsv(datasetID, query = {}, options) {
+    return this._client.get(path`/api/v1/datasets/${datasetID}/csv`, { query, ...options });
+  }
+  /**
+   * Download a dataset as CSV format.
+   */
+  retrieveJSONL(datasetID, query = {}, options) {
+    return this._client.get(path`/api/v1/datasets/${datasetID}/jsonl`, { query, ...options });
+  }
+  /**
+   * Download a dataset as OpenAI Evals Jsonl format.
+   */
+  retrieveOpenAI(datasetID, query = {}, options) {
+    return this._client.get(path`/api/v1/datasets/${datasetID}/openai`, { query, ...options });
+  }
+  /**
+   * Download a dataset as OpenAI Jsonl format.
+   */
+  retrieveOpenAIFt(datasetID, query = {}, options) {
+    return this._client.get(path`/api/v1/datasets/${datasetID}/openai_ft`, { query, ...options });
+  }
+  /**
+   * Get dataset version by as_of or exact tag.
+   */
+  retrieveVersion(datasetID, query = {}, options) {
+    return this._client.get(path`/api/v1/datasets/${datasetID}/version`, { query, ...options });
+  }
+  /**
+   * Set a tag on a dataset version.
+   */
+  updateTags(datasetID, body, options) {
+    return this._client.put(path`/api/v1/datasets/${datasetID}/tags`, { body, ...options });
+  }
+  /**
+   * Create a new dataset from a CSV or JSONL file.
+   */
+  upload(body, options) {
+    return this._client.post("/api/v1/datasets/upload", multipartFormRequestOptions({ body, ...options }, this._client));
+  }
+};
+Datasets.Versions = Versions;
+Datasets.Runs = Runs;
+Datasets.Group = Group;
+Datasets.Experiments = Experiments;
+Datasets.Share = Share;
+Datasets.Comparative = Comparative;
+Datasets.Splits = Splits;
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/info.js
+var Info = class extends APIResource {
+  /**
+   * Get information about the current deployment of LangSmith.
+   */
+  list(options) {
+    return this._client.get("/api/v1/info", options);
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/headers.js
+var brand_privateNullableHeaders = /* @__PURE__ */ Symbol("brand.privateNullableHeaders");
+function* iterateHeaders(headers) {
+  if (!headers)
+    return;
+  if (brand_privateNullableHeaders in headers) {
+    const { values, nulls } = headers;
+    yield* values.entries();
+    for (const name of nulls) {
+      yield [name, null];
+    }
+    return;
+  }
+  let shouldClear = false;
+  let iter;
+  if (headers instanceof Headers) {
+    iter = headers.entries();
+  } else if (isReadonlyArray(headers)) {
+    iter = headers;
+  } else {
+    shouldClear = true;
+    iter = Object.entries(headers ?? {});
+  }
+  for (let row of iter) {
+    const name = row[0];
+    if (typeof name !== "string")
+      throw new TypeError("expected header name to be a string");
+    const values = isReadonlyArray(row[1]) ? row[1] : [row[1]];
+    let didClear = false;
+    for (const value of values) {
+      if (value === void 0)
+        continue;
+      if (shouldClear && !didClear) {
+        didClear = true;
+        yield [name, null];
+      }
+      yield [name, value];
+    }
+  }
+}
+var buildHeaders = (newHeaders) => {
+  const targetHeaders = new Headers();
+  const nullHeaders = /* @__PURE__ */ new Set();
+  for (const headers of newHeaders) {
+    const seenHeaders = /* @__PURE__ */ new Set();
+    for (const [name, value] of iterateHeaders(headers)) {
+      const lowerName = name.toLowerCase();
+      if (!seenHeaders.has(lowerName)) {
+        targetHeaders.delete(name);
+        seenHeaders.add(lowerName);
+      }
+      if (value === null) {
+        targetHeaders.delete(name);
+        nullHeaders.add(lowerName);
+      } else {
+        targetHeaders.append(name, value);
+        nullHeaders.delete(lowerName);
+      }
+    }
+  }
+  return { [brand_privateNullableHeaders]: true, values: targetHeaders, nulls: nullHeaders };
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/online-evaluators.js
+var OnlineEvaluators = class extends APIResource {
+  /**
+   * Create a new LLM or code evaluator for the current workspace.
+   */
+  create(body, options) {
+    return this._client.post("/v1/platform/evaluators", { body, ...options });
+  }
+  /**
+   * Retrieve a single evaluator by its ID.
+   */
+  retrieve(evaluatorID, options) {
+    return this._client.get(path`/v1/platform/evaluators/${evaluatorID}`, options);
+  }
+  /**
+   * Update an existing evaluator's name, LLM configuration, or code configuration.
+   */
+  update(evaluatorID, body, options) {
+    return this._client.patch(path`/v1/platform/evaluators/${evaluatorID}`, { body, ...options });
+  }
+  /**
+   * List evaluators for the current workspace, with optional filtering by type,
+   * name, tag, feedback key, or resource ID.
+   */
+  list(query = {}, options) {
+    return this._client.getAPIList("/v1/platform/evaluators", OffsetPaginationOnlineEvaluators, { query, ...options });
+  }
+  /**
+   * Delete an evaluator. When delete_run_rules is true, all run rules referencing
+   * this evaluator are deleted first (same tenant). Associated llm_evaluators and
+   * code_evaluators rows are removed by foreign-key cascade when the evaluator row
+   * is deleted.
+   */
+  delete(evaluatorID, params = {}, options) {
+    const { delete_run_rules } = params ?? {};
+    return this._client.delete(path`/v1/platform/evaluators/${evaluatorID}`, {
+      query: { delete_run_rules },
+      ...options,
+      headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
+    });
+  }
+  /**
+   * Delete multiple evaluators by their IDs. Returns per-item success/failure.
+   */
+  bulkDelete(params, options) {
+    const { evaluator_ids, delete_run_rules } = params;
+    return this._client.delete("/v1/platform/evaluators", {
+      query: { evaluator_ids, delete_run_rules },
+      ...options
+    });
+  }
+  /**
+   * Returns per-day LLM evaluator spend for the requested 7-day period, grouped by
+   * evaluator, resource, or run rule. Exactly one of group_by, evaluator_id,
+   * session_id, or dataset_id is required. resource_id, type, and feedback_key may
+   * be supplied with group_by to narrow listing aggregations.
+   */
+  spend(query, options) {
+    return this._client.get("/v1/platform/evaluators/spend", { query, ...options });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/sessions/insights.js
+var Insights = class extends APIResource {
+  /**
+   * Create an insights job.
+   */
+  create(sessionID, body, options) {
+    return this._client.post(path`/api/v1/sessions/${sessionID}/insights`, { body, ...options });
+  }
+  /**
+   * Update a session cluster job.
+   */
+  update(jobID, params, options) {
+    const { session_id, ...body } = params;
+    return this._client.patch(path`/api/v1/sessions/${session_id}/insights/${jobID}`, { body, ...options });
+  }
+  /**
+   * Get all clusters for a session.
+   */
+  list(sessionID, query = {}, options) {
+    return this._client.getAPIList(path`/api/v1/sessions/${sessionID}/insights`, OffsetPaginationInsightsClusteringJobs, { query, ...options });
+  }
+  /**
+   * Delete a session cluster job.
+   */
+  delete(jobID, params, options) {
+    const { session_id } = params;
+    return this._client.delete(path`/api/v1/sessions/${session_id}/insights/${jobID}`, options);
+  }
+  /**
+   * Get a specific cluster job for a session.
+   */
+  retrieveJob(jobID, params, options) {
+    const { session_id } = params;
+    return this._client.get(path`/api/v1/sessions/${session_id}/insights/${jobID}`, options);
+  }
+  /**
+   * Get all runs for a cluster job, optionally filtered by cluster.
+   */
+  retrieveRuns(jobID, params, options) {
+    const { session_id, ...query } = params;
+    return this._client.get(path`/api/v1/sessions/${session_id}/insights/${jobID}/runs`, {
+      query,
+      ...options
+    });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/sessions/sessions.js
+var Sessions = class extends APIResource {
+  constructor() {
+    super(...arguments);
+    Object.defineProperty(this, "insights", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Insights(this._client)
+    });
+  }
+  /**
+   * Create a new session.
+   */
+  create(params, options) {
+    const { upsert, ...body } = params;
+    return this._client.post("/api/v1/sessions", { query: { upsert }, body, ...options });
+  }
+  /**
+   * Get a specific session.
+   */
+  retrieve(sessionID, params = {}, options) {
+    const { accept, ...query } = params ?? {};
+    return this._client.get(path`/api/v1/sessions/${sessionID}`, {
+      query,
+      ...options,
+      headers: buildHeaders([{ ...accept != null ? { accept } : void 0 }, options?.headers])
+    });
+  }
+  /**
+   * Update a session.
+   */
+  update(sessionID, body, options) {
+    return this._client.patch(path`/api/v1/sessions/${sessionID}`, { body, ...options });
+  }
+  /**
+   * Get all sessions.
+   */
+  list(params = {}, options) {
+    const { accept, ...query } = params ?? {};
+    return this._client.getAPIList("/api/v1/sessions", OffsetPaginationTopLevelArray, {
+      query,
+      ...options,
+      headers: buildHeaders([{ ...accept != null ? { accept } : void 0 }, options?.headers])
+    });
+  }
+  /**
+   * Delete a specific session.
+   */
+  delete(sessionID, options) {
+    return this._client.delete(path`/api/v1/sessions/${sessionID}`, options);
+  }
+  /**
+   * Get a prebuilt dashboard for a tracing project.
+   */
+  dashboard(sessionID, params, options) {
+    const { accept, ...body } = params;
+    return this._client.post(path`/api/v1/sessions/${sessionID}/dashboard`, {
+      body,
+      ...options,
+      headers: buildHeaders([{ ...accept != null ? { accept } : void 0 }, options?.headers])
+    });
+  }
+};
+Sessions.Insights = Insights;
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/env.js
+var readEnv = (env) => {
+  if (typeof globalThis.process !== "undefined") {
+    return globalThis.process.env?.[env]?.trim() || void 0;
+  }
+  if (typeof globalThis.Deno !== "undefined") {
+    return globalThis.Deno.env?.get?.(env)?.trim() || void 0;
+  }
+  return void 0;
+};
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/client.js
+var __classPrivateFieldSet3 = function(receiver, state, value, kind, f2) {
+  if (kind === "m") throw new TypeError("Private method is not writable");
+  if (kind === "a" && !f2) throw new TypeError("Private accessor was defined without a setter");
+  if (typeof state === "function" ? receiver !== state || !f2 : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
+  return kind === "a" ? f2.call(receiver, value) : f2 ? f2.value = value : state.set(receiver, value), value;
+};
+var __classPrivateFieldGet3 = function(receiver, state, kind, f2) {
+  if (kind === "a" && !f2) throw new TypeError("Private accessor was defined without a getter");
+  if (typeof state === "function" ? receiver !== state || !f2 : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
+  return kind === "m" ? f2 : kind === "a" ? f2.call(receiver) : f2 ? f2.value : state.get(receiver);
+};
+var _Langsmith_instances;
+var _a;
+var _Langsmith_encoder;
+var _Langsmith_baseURLOverridden;
+var Langsmith = class {
+  /**
+   * API Client for interfacing with the LangChain API.
+   *
+   * @param {string | null | undefined} [opts.apiKey=process.env['LANGSMITH_API_KEY'] ?? null]
+   * @param {string | null | undefined} [opts.tenantID=process.env['LANGSMITH_TENANT_ID'] ?? null]
+   * @param {string} [opts.baseURL=process.env['LANGCHAIN_BASE_URL'] ?? https://api.smith.langchain.com/] - Override the default base URL for the API.
+   * @param {number} [opts.timeout=1.5 minutes] - The maximum amount of time (in milliseconds) the client will wait for a response before timing out.
+   * @param {MergedRequestInit} [opts.fetchOptions] - Additional `RequestInit` options to be passed to `fetch` calls.
+   * @param {Fetch} [opts.fetch] - Specify a custom `fetch` function implementation.
+   * @param {number} [opts.maxRetries=2] - The maximum number of times the client will retry a request.
+   * @param {HeadersLike} opts.defaultHeaders - Default headers to include with every request to the API.
+   * @param {Record<string, string | undefined>} opts.defaultQuery - Default query parameters to include with every request to the API.
+   */
+  constructor({ baseURL = readEnv("LANGCHAIN_BASE_URL"), apiKey = readEnv("LANGSMITH_API_KEY") ?? null, tenantID = readEnv("LANGSMITH_TENANT_ID") ?? null, ...opts } = {}) {
+    _Langsmith_instances.add(this);
+    Object.defineProperty(this, "apiKey", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "tenantID", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "baseURL", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "maxRetries", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "timeout", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "logger", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "logLevel", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "fetchOptions", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "fetch", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    _Langsmith_encoder.set(this, void 0);
+    Object.defineProperty(this, "idempotencyHeader", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "_options", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "sessions", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Sessions(this)
+    });
+    Object.defineProperty(this, "datasets", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Datasets(this)
+    });
+    Object.defineProperty(this, "onlineEvaluators", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new OnlineEvaluators(this)
+    });
+    Object.defineProperty(this, "info", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Info(this)
+    });
+    const options = {
+      apiKey,
+      tenantID,
+      ...opts,
+      baseURL: baseURL || `https://api.smith.langchain.com/`
+    };
+    this.baseURL = options.baseURL;
+    this.timeout = options.timeout ?? _a.DEFAULT_TIMEOUT;
+    this.logger = options.logger ?? console;
+    const defaultLogLevel = "warn";
+    this.logLevel = defaultLogLevel;
+    this.logLevel = parseLogLevel(options.logLevel, "ClientOptions.logLevel", this) ?? parseLogLevel(readEnv("LANGCHAIN_LOG"), "process.env['LANGCHAIN_LOG']", this) ?? defaultLogLevel;
+    this.fetchOptions = options.fetchOptions;
+    this.maxRetries = options.maxRetries ?? 2;
+    this.fetch = options.fetch ?? getDefaultFetch();
+    __classPrivateFieldSet3(this, _Langsmith_encoder, FallbackEncoder, "f");
+    const customHeadersEnv = readEnv("LANGCHAIN_CUSTOM_HEADERS");
+    if (customHeadersEnv) {
+      const parsed = {};
+      for (const line of customHeadersEnv.split("\n")) {
+        const colon = line.indexOf(":");
+        if (colon >= 0) {
+          parsed[line.substring(0, colon).trim()] = line.substring(colon + 1).trim();
+        }
+      }
+      options.defaultHeaders = { ...parsed, ...options.defaultHeaders };
+    }
+    this._options = options;
+    this.apiKey = apiKey;
+    this.tenantID = tenantID;
+  }
+  /**
+   * Create a new client instance re-using the same options given to the current client with optional overriding.
+   */
+  withOptions(options) {
+    const client2 = new this.constructor({
+      ...this._options,
+      baseURL: this.baseURL,
+      maxRetries: this.maxRetries,
+      timeout: this.timeout,
+      logger: this.logger,
+      logLevel: this.logLevel,
+      fetch: this.fetch,
+      fetchOptions: this.fetchOptions,
+      apiKey: this.apiKey,
+      tenantID: this.tenantID,
+      ...options
+    });
+    return client2;
+  }
+  defaultQuery() {
+    return this._options.defaultQuery;
+  }
+  validateHeaders({ values, nulls }) {
+    if (this.apiKey && values.get("x-api-key")) {
+      return;
+    }
+    if (nulls.has("x-api-key")) {
+      return;
+    }
+    if (this.tenantID && values.get("x-tenant-id")) {
+      return;
+    }
+    if (nulls.has("x-tenant-id")) {
+      return;
+    }
+    throw new Error('Could not resolve authentication method. Expected either apiKey or tenantID to be set. Or for one of the "X-API-Key" or "X-Tenant-Id" headers to be explicitly omitted');
+  }
+  async authHeaders(opts) {
+    return buildHeaders([await this.apiKeyAuth(opts), await this.tenantIDAuth(opts)]);
+  }
+  async apiKeyAuth(opts) {
+    if (this.apiKey == null) {
+      return void 0;
+    }
+    return buildHeaders([{ "X-API-Key": this.apiKey }]);
+  }
+  async tenantIDAuth(opts) {
+    if (this.tenantID == null) {
+      return void 0;
+    }
+    return buildHeaders([{ "X-Tenant-Id": this.tenantID }]);
+  }
+  stringifyQuery(query) {
+    return stringifyQuery(query);
+  }
+  getUserAgent() {
+    return `${this.constructor.name}/JS ${VERSION}`;
+  }
+  defaultIdempotencyKey() {
+    return `stainless-node-retry-${uuid4()}`;
+  }
+  makeStatusError(status, error2, message, headers) {
+    return APIError.generate(status, error2, message, headers);
+  }
+  buildURL(path3, query, defaultBaseURL) {
+    const baseURL = !__classPrivateFieldGet3(this, _Langsmith_instances, "m", _Langsmith_baseURLOverridden).call(this) && defaultBaseURL || this.baseURL;
+    const url = isAbsoluteURL(path3) ? new URL(path3) : new URL(baseURL + (baseURL.endsWith("/") && path3.startsWith("/") ? path3.slice(1) : path3));
+    const defaultQuery = this.defaultQuery();
+    const pathQuery = Object.fromEntries(url.searchParams);
+    if (!isEmptyObj(defaultQuery) || !isEmptyObj(pathQuery)) {
+      query = { ...pathQuery, ...defaultQuery, ...query };
+    }
+    if (typeof query === "object" && query && !Array.isArray(query)) {
+      url.search = this.stringifyQuery(query);
+    }
+    return url.toString();
+  }
+  /**
+   * Used as a callback for mutating the given `FinalRequestOptions` object.
+   */
+  async prepareOptions(options) {
+  }
+  /**
+   * Used as a callback for mutating the given `RequestInit` object.
+   *
+   * This is useful for cases where you want to add certain headers based off of
+   * the request properties, e.g. `method` or `url`.
+   */
+  async prepareRequest(request, { url, options }) {
+  }
+  get(path3, opts) {
+    return this.methodRequest("get", path3, opts);
+  }
+  post(path3, opts) {
+    return this.methodRequest("post", path3, opts);
+  }
+  patch(path3, opts) {
+    return this.methodRequest("patch", path3, opts);
+  }
+  put(path3, opts) {
+    return this.methodRequest("put", path3, opts);
+  }
+  delete(path3, opts) {
+    return this.methodRequest("delete", path3, opts);
+  }
+  methodRequest(method, path3, opts) {
+    return this.request(Promise.resolve(opts).then((opts2) => {
+      return { method, path: path3, ...opts2 };
+    }));
+  }
+  request(options, remainingRetries = null) {
+    return new APIPromise(this, this.makeRequest(options, remainingRetries, void 0));
+  }
+  async makeRequest(optionsInput, retriesRemaining, retryOfRequestLogID) {
+    const options = await optionsInput;
+    const maxRetries = options.maxRetries ?? this.maxRetries;
+    if (retriesRemaining == null) {
+      retriesRemaining = maxRetries;
+    }
+    await this.prepareOptions(options);
+    const { req, url, timeout } = await this.buildRequest(options, {
+      retryCount: maxRetries - retriesRemaining
+    });
+    await this.prepareRequest(req, { url, options });
+    const requestLogID = "log_" + (Math.random() * (1 << 24) | 0).toString(16).padStart(6, "0");
+    const retryLogStr = retryOfRequestLogID === void 0 ? "" : `, retryOf: ${retryOfRequestLogID}`;
+    const startTime = Date.now();
+    loggerFor(this).debug(`[${requestLogID}] sending request`, formatRequestDetails({
+      retryOfRequestLogID,
+      method: options.method,
+      url,
+      options,
+      headers: req.headers
+    }));
+    if (options.signal?.aborted) {
+      throw new APIUserAbortError();
+    }
+    const controller = new AbortController();
+    const response = await this.fetchWithTimeout(url, req, timeout, controller).catch(castToError);
+    const headersTime = Date.now();
+    if (response instanceof globalThis.Error) {
+      const retryMessage = `retrying, ${retriesRemaining} attempts remaining`;
+      if (options.signal?.aborted) {
+        throw new APIUserAbortError();
+      }
+      const isTimeout = isAbortError(response) || /timed? ?out/i.test(String(response) + ("cause" in response ? String(response.cause) : ""));
+      if (retriesRemaining) {
+        loggerFor(this).info(`[${requestLogID}] connection ${isTimeout ? "timed out" : "failed"} - ${retryMessage}`);
+        loggerFor(this).debug(`[${requestLogID}] connection ${isTimeout ? "timed out" : "failed"} (${retryMessage})`, formatRequestDetails({
+          retryOfRequestLogID,
+          url,
+          durationMs: headersTime - startTime,
+          message: response.message
+        }));
+        return this.retryRequest(options, retriesRemaining, retryOfRequestLogID ?? requestLogID);
+      }
+      loggerFor(this).info(`[${requestLogID}] connection ${isTimeout ? "timed out" : "failed"} - error; no more retries left`);
+      loggerFor(this).debug(`[${requestLogID}] connection ${isTimeout ? "timed out" : "failed"} (error; no more retries left)`, formatRequestDetails({
+        retryOfRequestLogID,
+        url,
+        durationMs: headersTime - startTime,
+        message: response.message
+      }));
+      if (isTimeout) {
+        throw new APIConnectionTimeoutError();
+      }
+      throw new APIConnectionError({ cause: response });
+    }
+    const responseInfo = `[${requestLogID}${retryLogStr}] ${req.method} ${url} ${response.ok ? "succeeded" : "failed"} with status ${response.status} in ${headersTime - startTime}ms`;
+    if (!response.ok) {
+      const shouldRetry = await this.shouldRetry(response);
+      if (retriesRemaining && shouldRetry) {
+        const retryMessage2 = `retrying, ${retriesRemaining} attempts remaining`;
+        await CancelReadableStream(response.body);
+        loggerFor(this).info(`${responseInfo} - ${retryMessage2}`);
+        loggerFor(this).debug(`[${requestLogID}] response error (${retryMessage2})`, formatRequestDetails({
+          retryOfRequestLogID,
+          url: response.url,
+          status: response.status,
+          headers: response.headers,
+          durationMs: headersTime - startTime
+        }));
+        return this.retryRequest(options, retriesRemaining, retryOfRequestLogID ?? requestLogID, response.headers);
+      }
+      const retryMessage = shouldRetry ? `error; no more retries left` : `error; not retryable`;
+      loggerFor(this).info(`${responseInfo} - ${retryMessage}`);
+      const errText = await response.text().catch((err2) => castToError(err2).message);
+      const errJSON = safeJSON(errText);
+      const errMessage = errJSON ? void 0 : errText;
+      loggerFor(this).debug(`[${requestLogID}] response error (${retryMessage})`, formatRequestDetails({
+        retryOfRequestLogID,
+        url: response.url,
+        status: response.status,
+        headers: response.headers,
+        message: errMessage,
+        durationMs: Date.now() - startTime
+      }));
+      const err = this.makeStatusError(response.status, errJSON, errMessage, response.headers);
+      throw err;
+    }
+    loggerFor(this).info(responseInfo);
+    loggerFor(this).debug(`[${requestLogID}] response start`, formatRequestDetails({
+      retryOfRequestLogID,
+      url: response.url,
+      status: response.status,
+      headers: response.headers,
+      durationMs: headersTime - startTime
+    }));
+    return { response, options, controller, requestLogID, retryOfRequestLogID, startTime };
+  }
+  getAPIList(path3, Page, opts) {
+    return this.requestAPIList(Page, opts && "then" in opts ? opts.then((opts2) => ({ method: "get", path: path3, ...opts2 })) : { method: "get", path: path3, ...opts });
+  }
+  requestAPIList(Page, options) {
+    const request = this.makeRequest(options, null, void 0);
+    return new PagePromise(this, request, Page);
+  }
+  async fetchWithTimeout(url, init, ms, controller) {
+    const { signal, method, ...options } = init || {};
+    const abort = this._makeAbort(controller);
+    if (signal)
+      signal.addEventListener("abort", abort, { once: true });
+    const timeout = setTimeout(abort, ms);
+    const isReadableBody = globalThis.ReadableStream && options.body instanceof globalThis.ReadableStream || typeof options.body === "object" && options.body !== null && Symbol.asyncIterator in options.body;
+    const fetchOptions = {
+      signal: controller.signal,
+      ...isReadableBody ? { duplex: "half" } : {},
+      method: "GET",
+      ...options
+    };
+    if (method) {
+      fetchOptions.method = method.toUpperCase();
+    }
+    try {
+      return await this.fetch.call(void 0, url, fetchOptions);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  async shouldRetry(response) {
+    const shouldRetryHeader = response.headers.get("x-should-retry");
+    if (shouldRetryHeader === "true")
+      return true;
+    if (shouldRetryHeader === "false")
+      return false;
+    if (response.status === 408)
+      return true;
+    if (response.status === 409)
+      return true;
+    if (response.status === 429)
+      return true;
+    if (response.status >= 500)
+      return true;
+    return false;
+  }
+  async retryRequest(options, retriesRemaining, requestLogID, responseHeaders) {
+    let timeoutMillis;
+    const retryAfterMillisHeader = responseHeaders?.get("retry-after-ms");
+    if (retryAfterMillisHeader) {
+      const timeoutMs = parseFloat(retryAfterMillisHeader);
+      if (!Number.isNaN(timeoutMs)) {
+        timeoutMillis = timeoutMs;
+      }
+    }
+    const retryAfterHeader = responseHeaders?.get("retry-after");
+    if (retryAfterHeader && !timeoutMillis) {
+      const timeoutSeconds = parseFloat(retryAfterHeader);
+      if (!Number.isNaN(timeoutSeconds)) {
+        timeoutMillis = timeoutSeconds * 1e3;
+      } else {
+        timeoutMillis = Date.parse(retryAfterHeader) - Date.now();
+      }
+    }
+    if (timeoutMillis === void 0) {
+      const maxRetries = options.maxRetries ?? this.maxRetries;
+      timeoutMillis = this.calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries);
+    }
+    await sleep2(timeoutMillis);
+    return this.makeRequest(options, retriesRemaining - 1, requestLogID);
+  }
+  calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries) {
+    const initialRetryDelay = 0.5;
+    const maxRetryDelay = 16;
+    const numRetries = maxRetries - retriesRemaining;
+    const sleepSeconds = Math.min(initialRetryDelay * Math.pow(2, numRetries), maxRetryDelay);
+    const jitter = 1 - Math.random() * 0.25;
+    return sleepSeconds * jitter * 1e3;
+  }
+  async buildRequest(inputOptions, { retryCount = 0 } = {}) {
+    const options = { ...inputOptions };
+    const { method, path: path3, query, defaultBaseURL } = options;
+    const url = this.buildURL(path3, query, defaultBaseURL);
+    if ("timeout" in options)
+      validatePositiveInteger("timeout", options.timeout);
+    options.timeout = options.timeout ?? this.timeout;
+    const { bodyHeaders, body } = this.buildBody({ options });
+    const reqHeaders = await this.buildHeaders({ options: inputOptions, method, bodyHeaders, retryCount });
+    const req = {
+      method,
+      headers: reqHeaders,
+      ...options.signal && { signal: options.signal },
+      ...globalThis.ReadableStream && body instanceof globalThis.ReadableStream && { duplex: "half" },
+      ...body && { body },
+      ...this.fetchOptions ?? {},
+      ...options.fetchOptions ?? {}
+    };
+    return { req, url, timeout: options.timeout };
+  }
+  async buildHeaders({ options, method, bodyHeaders, retryCount }) {
+    let idempotencyHeaders = {};
+    if (this.idempotencyHeader && method !== "get") {
+      if (!options.idempotencyKey)
+        options.idempotencyKey = this.defaultIdempotencyKey();
+      idempotencyHeaders[this.idempotencyHeader] = options.idempotencyKey;
+    }
+    const headers = buildHeaders([
+      idempotencyHeaders,
+      {
+        Accept: "application/json",
+        "User-Agent": this.getUserAgent(),
+        "X-Stainless-Retry-Count": String(retryCount),
+        ...options.timeout ? { "X-Stainless-Timeout": String(Math.trunc(options.timeout / 1e3)) } : {},
+        ...getPlatformHeaders()
+      },
+      await this.authHeaders(options),
+      this._options.defaultHeaders,
+      bodyHeaders,
+      options.headers
+    ]);
+    this.validateHeaders(headers);
+    return headers.values;
+  }
+  _makeAbort(controller) {
+    return () => controller.abort();
+  }
+  buildBody({ options: { body, headers: rawHeaders } }) {
+    if (!body) {
+      return { bodyHeaders: void 0, body: void 0 };
+    }
+    const headers = buildHeaders([rawHeaders]);
+    if (
+      // Pass raw type verbatim
+      ArrayBuffer.isView(body) || body instanceof ArrayBuffer || body instanceof DataView || typeof body === "string" && // Preserve legacy string encoding behavior for now
+      headers.values.has("content-type") || // `Blob` is superset of `File`
+      globalThis.Blob && body instanceof globalThis.Blob || // `FormData` -> `multipart/form-data`
+      body instanceof FormData || // `URLSearchParams` -> `application/x-www-form-urlencoded`
+      body instanceof URLSearchParams || // Send chunked stream (each chunk has own `length`)
+      globalThis.ReadableStream && body instanceof globalThis.ReadableStream
+    ) {
+      return { bodyHeaders: void 0, body };
+    } else if (typeof body === "object" && (Symbol.asyncIterator in body || Symbol.iterator in body && "next" in body && typeof body.next === "function")) {
+      return { bodyHeaders: void 0, body: ReadableStreamFrom(body) };
+    } else if (typeof body === "object" && headers.values.get("content-type") === "application/x-www-form-urlencoded") {
+      return {
+        bodyHeaders: { "content-type": "application/x-www-form-urlencoded" },
+        body: this.stringifyQuery(body)
+      };
+    } else {
+      return __classPrivateFieldGet3(this, _Langsmith_encoder, "f").call(this, { body, headers });
+    }
+  }
+};
+_a = Langsmith, _Langsmith_encoder = /* @__PURE__ */ new WeakMap(), _Langsmith_instances = /* @__PURE__ */ new WeakSet(), _Langsmith_baseURLOverridden = function _Langsmith_baseURLOverridden2() {
+  return this.baseURL !== "https://api.smith.langchain.com/";
+};
+Object.defineProperty(Langsmith, "Langsmith", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: _a
+});
+Object.defineProperty(Langsmith, "DEFAULT_TIMEOUT", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: 9e4
+});
+Object.defineProperty(Langsmith, "LangsmithError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: LangsmithError
+});
+Object.defineProperty(Langsmith, "APIError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: APIError
+});
+Object.defineProperty(Langsmith, "APIConnectionError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: APIConnectionError
+});
+Object.defineProperty(Langsmith, "APIConnectionTimeoutError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: APIConnectionTimeoutError
+});
+Object.defineProperty(Langsmith, "APIUserAbortError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: APIUserAbortError
+});
+Object.defineProperty(Langsmith, "NotFoundError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: NotFoundError
+});
+Object.defineProperty(Langsmith, "ConflictError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: ConflictError
+});
+Object.defineProperty(Langsmith, "RateLimitError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: RateLimitError
+});
+Object.defineProperty(Langsmith, "BadRequestError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: BadRequestError
+});
+Object.defineProperty(Langsmith, "AuthenticationError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: AuthenticationError
+});
+Object.defineProperty(Langsmith, "InternalServerError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: InternalServerError
+});
+Object.defineProperty(Langsmith, "PermissionDeniedError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: PermissionDeniedError
+});
+Object.defineProperty(Langsmith, "UnprocessableEntityError", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: UnprocessableEntityError
+});
+Object.defineProperty(Langsmith, "toFile", {
+  enumerable: true,
+  configurable: true,
+  writable: true,
+  value: toFile
+});
+Langsmith.Sessions = Sessions;
+Langsmith.Datasets = Datasets;
+Langsmith.OnlineEvaluators = OnlineEvaluators;
+Langsmith.Info = Info;
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/warn.js
 var warnedMessages = {};
 function warnOnce(message) {
   if (!warnedMessages[message]) {
@@ -2179,7 +4703,7 @@ function warnOnce(message) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/xxhash/xxhash.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/xxhash/xxhash.js
 var n = (n2) => BigInt(n2);
 var PRIME32_1 = n("0x9E3779B1");
 var PRIME32_2 = n("0x85EBCA77");
@@ -2459,7 +4983,7 @@ function xxh128ToBytes(hash128) {
   return result;
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/_uuid.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/_uuid.js
 var UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function assertUuid(str, which) {
   if (!UUID_REGEX.test(str)) {
@@ -2521,7 +5045,10 @@ function nonCryptographicUuid7Deterministic(originalId, key) {
   return bytesToUuid(b);
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/error.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/constants.js
+var _MIN_BACKEND_VERSION = "0.16.5rc1";
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/error.js
 function getInvalidPromptIdentifierMsg(identifier) {
   return `Invalid prompt identifier format: "${identifier}". Expected one of:
   - "prompt-name" (for private prompts)
@@ -2558,6 +5085,9 @@ var LangSmithNotFoundError = class extends Error {
 function isLangSmithNotFoundError(error2) {
   return error2 != null && typeof error2 === "object" && "name" in error2 && error2?.name === "LangSmithNotFoundError";
 }
+function isLangSmithConflictError(error2) {
+  return error2 != null && typeof error2 === "object" && "name" in error2 && error2?.name === "LangSmithConflictError";
+}
 async function raiseForStatus(response, context, consumeOnSuccess) {
   let errorBody;
   if (response.ok) {
@@ -2573,7 +5103,7 @@ async function raiseForStatus(response, context, consumeOnSuccess) {
       if (errorCode === "org_scoped_key_requires_workspace") {
         errorBody = "This API key is org-scoped and requires workspace specification. Please provide 'workspaceId' parameter, or set LANGSMITH_WORKSPACE_ID environment variable.";
       }
-    } catch (e) {
+    } catch (_e) {
       const errorWithStatus = new Error(`${response.status} ${response.statusText}`);
       errorWithStatus.status = response?.status;
       throw errorWithStatus;
@@ -2582,7 +5112,7 @@ async function raiseForStatus(response, context, consumeOnSuccess) {
   if (errorBody === void 0) {
     try {
       errorBody = await response.text();
-    } catch (e) {
+    } catch (_e) {
       errorBody = "";
     }
   }
@@ -2614,8 +5144,8 @@ function isConflictingEndpointsError(err) {
   return typeof err === "object" && err !== null && err.code === ERR_CONFLICTING_ENDPOINTS;
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/prompts.js
-function parsePromptIdentifier(identifier) {
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/prompts.js
+function parseHubIdentifier(identifier) {
   if (!identifier || identifier.split("/").length > 2 || identifier.startsWith("/") || identifier.endsWith("/") || identifier.split(":").length > 2) {
     throw new Error(getInvalidPromptIdentifierMsg(identifier));
   }
@@ -2635,11 +5165,11 @@ function parsePromptIdentifier(identifier) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/fs.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/fs.js
 import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
-var path = nodePath;
+var path2 = nodePath;
 async function mkdir2(dir) {
   await nodeFsPromises.mkdir(dir, { recursive: true });
 }
@@ -2675,8 +5205,21 @@ function unlinkSync3(filePath) {
 function readFileSync4(filePath) {
   return nodeFs.readFileSync(filePath, "utf-8");
 }
+async function mkdirExclusive(dir) {
+  await nodeFsPromises.mkdir(dir, { mode: 448 });
+}
+function statMtimeMs(filePath) {
+  try {
+    return nodeFs.statSync(filePath).mtimeMs;
+  } catch {
+    return void 0;
+  }
+}
+async function rmRecursive(filePath) {
+  await nodeFsPromises.rm(filePath, { recursive: true, force: true });
+}
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/prompt_cache/index.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/prompt_cache/index.js
 function isStale(entry, ttlSeconds) {
   if (ttlSeconds === null) {
     return false;
@@ -2839,7 +5382,7 @@ var PromptCache = class {
     for (const [key, entry] of this.cache.entries()) {
       entries[key] = entry.value;
     }
-    const dir = path.dirname(filePath);
+    const dir = path2.dirname(filePath);
     if (!existsSync2(dir)) {
       mkdirSync4(dir);
     }
@@ -2950,7 +5493,7 @@ var PromptCache = class {
 };
 var promptCacheSingleton = new PromptCache();
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/singletons/fetch.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/fetch.js
 var DEFAULT_FETCH_IMPLEMENTATION = (...args) => fetch(...args);
 var globalFetchSupportsWebStreaming = void 0;
 var LANGSMITH_FETCH_IMPLEMENTATION_KEY = /* @__PURE__ */ Symbol.for("ls:fetch_implementation");
@@ -2975,7 +5518,358 @@ var _getFetchImplementation = (debug2) => {
   };
 };
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/fast-safe-stringify/index.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/profile-lock.js
+var LOCK_POLL_INTERVAL_MS = 10;
+var LOCK_STALE_AFTER_MS = 1e4;
+var LOCK_METADATA_FILE = "created_at";
+function sleep3(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function isEEXIST(err) {
+  return typeof err === "object" && err !== null && err.code === "EEXIST";
+}
+function lockMetadataLines(lockDir) {
+  try {
+    return readFileSync4(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
+  } catch {
+    return void 0;
+  }
+}
+function lockCreatedAtMs(lockDir) {
+  const lines = lockMetadataLines(lockDir);
+  if (lines && lines[0] && lines[0].trim()) {
+    const parsed = Date.parse(lines[0].trim());
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return statMtimeMs(lockDir);
+}
+function lockOwner(lockDir) {
+  const lines = lockMetadataLines(lockDir);
+  if (lines && lines.length >= 2 && lines[1].trim()) {
+    return lines[1].trim();
+  }
+  return void 0;
+}
+async function removeStaleLock(lockDir) {
+  const createdAt = lockCreatedAtMs(lockDir);
+  if (createdAt === void 0 || Date.now() - createdAt <= LOCK_STALE_AFTER_MS) {
+    return false;
+  }
+  await rmRecursive(lockDir);
+  return true;
+}
+async function acquireOAuthRefreshLock(configPath, deadline) {
+  const lockDir = `${configPath}.oauth.lock.lock`;
+  const parent = path2.dirname(lockDir);
+  if (parent) {
+    await mkdir2(parent);
+  }
+  const owner = globalThis.crypto.randomUUID();
+  for (; ; ) {
+    try {
+      await mkdirExclusive(lockDir);
+    } catch (err) {
+      if (!isEEXIST(err)) {
+        throw err;
+      }
+      if (!await removeStaleLock(lockDir)) {
+        if (Date.now() >= deadline) {
+          throw new Error("timed out acquiring OAuth refresh lock");
+        }
+        await sleep3(Math.min(LOCK_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())));
+      }
+      continue;
+    }
+    try {
+      await writeFileAtomic(path2.join(lockDir, LOCK_METADATA_FILE), `${(/* @__PURE__ */ new Date()).toISOString()}
+${owner}
+`);
+    } catch (err) {
+      await rmRecursive(lockDir);
+      throw err;
+    }
+    break;
+  }
+  return {
+    async release() {
+      if (lockOwner(lockDir) === owner) {
+        await rmRecursive(lockDir);
+      }
+    }
+  };
+}
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/profiles.js
+var DEFAULT_API_URL = "https://api.smith.langchain.com";
+var OAUTH_CLIENT_ID = "langsmith-cli";
+var TOKEN_REFRESH_LEEWAY_MS = 6e4;
+var TOKEN_REFRESH_TIMEOUT_MS = 1e4;
+function isBrowserLikeRuntime() {
+  const env = getEnv();
+  return env === "browser" || env === "webworker";
+}
+function getProfileConfigPath() {
+  const explicitPath = getEnvironmentVariable("LANGSMITH_CONFIG_FILE");
+  if (explicitPath) {
+    return explicitPath;
+  }
+  const home = getEnvironmentVariable("HOME") ?? getEnvironmentVariable("USERPROFILE");
+  if (!home) {
+    return void 0;
+  }
+  return path2.join(home, ".langsmith", "config.json");
+}
+function resolveProfileName(config) {
+  const envProfile = getEnvironmentVariable("LANGSMITH_PROFILE");
+  if (envProfile) {
+    return envProfile;
+  }
+  if (config.current_profile) {
+    return config.current_profile;
+  }
+  if (config.profiles?.default) {
+    return "default";
+  }
+  return void 0;
+}
+function loadProfileState() {
+  if (isBrowserLikeRuntime()) {
+    return void 0;
+  }
+  const configPath = getProfileConfigPath();
+  if (!configPath || !existsSync2(configPath)) {
+    return void 0;
+  }
+  try {
+    const config = JSON.parse(readFileSync4(configPath));
+    const profileName = resolveProfileName(config);
+    const profile = profileName ? config.profiles?.[profileName] : void 0;
+    if (!profileName || !profile) {
+      return void 0;
+    }
+    return { configPath, config, profileName, profile };
+  } catch {
+    return void 0;
+  }
+}
+function hasValue(value) {
+  return value !== void 0 && value !== null && value.trim() !== "";
+}
+function trimConfigValue(value) {
+  return value?.trim().replace(/^["']|["']$/g, "");
+}
+function shouldRefreshProfileToken(profile) {
+  const oauth = profile.oauth;
+  if (!oauth?.refresh_token) {
+    return false;
+  }
+  if (!oauth.access_token) {
+    return true;
+  }
+  if (!oauth.expires_at) {
+    return false;
+  }
+  const expiresAt = Date.parse(oauth.expires_at);
+  if (Number.isNaN(expiresAt)) {
+    return false;
+  }
+  return expiresAt <= Date.now() + TOKEN_REFRESH_LEEWAY_MS;
+}
+function normalizeConfigUrl(apiUrl) {
+  let normalized = apiUrl;
+  while (normalized.endsWith("/")) {
+    normalized = normalized.slice(0, -1);
+  }
+  const apiV1Suffix = "/api/v1";
+  return normalized.endsWith(apiV1Suffix) ? normalized.slice(0, -apiV1Suffix.length) : normalized;
+}
+function applyTokenResponse(profile, token) {
+  profile.oauth ??= {};
+  if (token.access_token) {
+    profile.oauth.access_token = token.access_token;
+  }
+  if (token.refresh_token) {
+    profile.oauth.refresh_token = token.refresh_token;
+  }
+  if (typeof token.expires_in === "number" && token.expires_in > 0) {
+    profile.oauth.expires_at = new Date(Date.now() + token.expires_in * 1e3).toISOString();
+  }
+}
+function getAbortReason(signal) {
+  return signal.reason ?? new Error("The operation was aborted.");
+}
+async function waitForAbortSignal(promise, signal) {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    throw getAbortReason(signal);
+  }
+  let cleanup;
+  const abortPromise = new Promise((_, reject) => {
+    const onAbort = () => {
+      reject(getAbortReason(signal));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    cleanup = () => {
+      signal.removeEventListener("abort", onAbort);
+    };
+  });
+  try {
+    return await Promise.race([promise, abortPromise]);
+  } finally {
+    cleanup?.();
+  }
+}
+function loadProfileClientConfig() {
+  const state = loadProfileState();
+  const profile = state?.profile;
+  if (!state || !profile) {
+    return {};
+  }
+  const apiKey = trimConfigValue(profile.api_key);
+  const oauthAccessToken = trimConfigValue(profile.oauth?.access_token);
+  const oauthRefreshToken = trimConfigValue(profile.oauth?.refresh_token);
+  return {
+    apiUrl: profile.api_url,
+    apiKey,
+    workspaceId: profile.workspace_id,
+    oauthAccessToken,
+    oauthRefreshToken,
+    profileAuth: apiKey || oauthAccessToken || oauthRefreshToken ? new ProfileAuth(state) : void 0
+  };
+}
+var ProfileAuth = class {
+  constructor(state) {
+    Object.defineProperty(this, "state", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: state
+    });
+    Object.defineProperty(this, "refreshPromise", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "managedAuthorizationValue", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    this.rememberProfileAuthHeader(this.currentAuthHeader());
+  }
+  currentAuthHeader() {
+    const header = currentAuthHeaderFromProfile(this.state.profile);
+    this.rememberProfileAuthHeader(header);
+    return header;
+  }
+  async getAuthHeader(fetchImplementation, signal) {
+    if (shouldRefreshProfileToken(this.state.profile)) {
+      if (!this.refreshPromise) {
+        this.refreshPromise = this.refreshOAuthToken(fetchImplementation).finally(() => {
+          this.refreshPromise = void 0;
+        });
+      }
+      await waitForAbortSignal(this.refreshPromise, signal);
+    }
+    const header = authHeaderFromProfile(this.state.profile);
+    this.rememberProfileAuthHeader(header);
+    return header;
+  }
+  isProfileAuthorizationHeader(value) {
+    return value === this.managedAuthorizationValue;
+  }
+  reloadProfile() {
+    try {
+      const config = JSON.parse(readFileSync4(this.state.configPath));
+      const profile = config.profiles?.[this.state.profileName];
+      if (!profile) {
+        return void 0;
+      }
+      this.state.config = config;
+      this.state.profile = profile;
+      return profile;
+    } catch {
+      return void 0;
+    }
+  }
+  async refreshOAuthToken(fetchImplementation) {
+    const refreshToken = this.state.profile.oauth?.refresh_token;
+    if (!refreshToken) {
+      return;
+    }
+    const refreshApiUrl = trimConfigValue(this.state.profile.api_url) ?? DEFAULT_API_URL;
+    const deadline = Date.now() + TOKEN_REFRESH_TIMEOUT_MS;
+    let lock;
+    try {
+      lock = await acquireOAuthRefreshLock(this.state.configPath, deadline);
+      const fresh = this.reloadProfile();
+      if (fresh && !shouldRefreshProfileToken(this.state.profile)) {
+        return;
+      }
+      const body = new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: OAUTH_CLIENT_ID,
+        refresh_token: this.state.profile.oauth?.refresh_token ?? refreshToken
+      });
+      const response = await fetchImplementation(`${normalizeConfigUrl(refreshApiUrl)}/oauth/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: body.toString(),
+        signal: AbortSignal.timeout(Math.max(0, deadline - Date.now()))
+      });
+      if (!response.ok) {
+        return;
+      }
+      const token = await response.json();
+      if (!token.access_token) {
+        return;
+      }
+      applyTokenResponse(this.state.profile, token);
+      this.state.config.profiles ??= {};
+      this.state.config.profiles[this.state.profileName] = this.state.profile;
+      await writeFileAtomic(this.state.configPath, `${JSON.stringify(this.state.config, null, 2)}
+`);
+    } catch {
+      return;
+    } finally {
+      await lock?.release();
+    }
+  }
+  rememberProfileAuthHeader(header) {
+    this.managedAuthorizationValue = header?.name === "Authorization" ? header.value : void 0;
+  }
+};
+function currentAuthHeaderFromProfile(profile) {
+  const oauthAccessToken = trimConfigValue(profile.oauth?.access_token);
+  if (oauthAccessToken) {
+    return { name: "Authorization", value: `Bearer ${oauthAccessToken}` };
+  }
+  if (trimConfigValue(profile.oauth?.refresh_token)) {
+    return void 0;
+  }
+  return authHeaderFromProfile(profile);
+}
+function authHeaderFromProfile(profile) {
+  const oauthAccessToken = trimConfigValue(profile.oauth?.access_token);
+  if (oauthAccessToken) {
+    return { name: "Authorization", value: `Bearer ${oauthAccessToken}` };
+  }
+  const apiKey = trimConfigValue(profile.api_key);
+  if (apiKey) {
+    return { name: "x-api-key", value: apiKey };
+  }
+  return void 0;
+}
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/fast-safe-stringify/index.js
 var LIMIT_REPLACE_NODE = "[...]";
 var CIRCULAR_REPLACE_NODE = { result: "[Circular]" };
 var arr = [];
@@ -3021,6 +5915,144 @@ function createDefaultReplacer(userReplacer) {
     }
     return serializeWellKnownTypes(val);
   };
+}
+function estimateSerializedSize(value) {
+  try {
+    let estimateString = function(s) {
+      const n2 = byteLen(s);
+      if (n2 > maxStringLen)
+        maxStringLen = n2;
+      return n2 + 2;
+    }, estimateByteArrayJson = function(byteLength) {
+      if (byteLength === 0)
+        return 2;
+      return 2 + byteLength * 4;
+    }, isDropped = function(v) {
+      return v === void 0 || typeof v === "function" || typeof v === "symbol";
+    }, estimateInArray = function(v) {
+      if (v === void 0 || typeof v === "function" || typeof v === "symbol") {
+        return 4;
+      }
+      return estimate(v);
+    }, estimate = function(val) {
+      if (val === null)
+        return 4;
+      if (val === void 0)
+        return 0;
+      const t = typeof val;
+      if (t === "boolean")
+        return 5;
+      if (t === "number") {
+        if (!Number.isFinite(val))
+          return 4;
+        return val.toString().length;
+      }
+      if (t === "bigint") {
+        return val.toString().length + 2;
+      }
+      if (t === "string")
+        return estimateString(val);
+      if (t === "function" || t === "symbol")
+        return 0;
+      const obj = val;
+      if (obj instanceof Date)
+        return 26;
+      if (obj instanceof RegExp)
+        return byteLen(obj.toString()) + 2;
+      if (obj instanceof Error) {
+        const name = obj.name ?? "";
+        const message = obj.message ?? "";
+        return 22 + byteLen(name) + byteLen(message);
+      }
+      if (typeof Buffer !== "undefined" && obj instanceof Buffer) {
+        return 28 + estimateByteArrayJson(obj.byteLength);
+      }
+      if (ArrayBuffer.isView(obj)) {
+        if (obj instanceof DataView) {
+          return 2;
+        }
+        const len = obj.length ?? 0;
+        const isFloat = obj instanceof Float32Array || obj instanceof Float64Array;
+        const perElement = isFloat ? 30 : 12;
+        return 2 + len * perElement;
+      }
+      if (obj instanceof ArrayBuffer) {
+        return 2;
+      }
+      if (ancestors.has(obj)) {
+        return 24;
+      }
+      if (typeof obj.toJSON === "function") {
+        let projected;
+        try {
+          projected = obj.toJSON("");
+        } catch {
+          return 16;
+        }
+        ancestors.add(obj);
+        const size3 = estimate(projected);
+        ancestors.delete(obj);
+        return size3;
+      }
+      ancestors.add(obj);
+      let size2;
+      if (Array.isArray(obj)) {
+        size2 = 2;
+        const len = obj.length;
+        for (let i = 0; i < len; i++) {
+          size2 += estimateInArray(obj[i]);
+          if (i < len - 1)
+            size2 += 1;
+        }
+      } else if (obj instanceof Map) {
+        size2 = 2;
+        let emitted = 0;
+        for (const [k, v] of obj) {
+          if (isDropped(v))
+            continue;
+          if (emitted > 0)
+            size2 += 1;
+          const keyStr = typeof k === "string" ? k : String(k);
+          size2 += byteLen(keyStr) + 3;
+          size2 += estimate(v);
+          emitted++;
+        }
+      } else if (obj instanceof Set) {
+        size2 = 2;
+        let emitted = 0;
+        for (const v of obj) {
+          if (emitted > 0)
+            size2 += 1;
+          size2 += estimateInArray(v);
+          emitted++;
+        }
+      } else {
+        size2 = 2;
+        let emitted = 0;
+        const keys = Object.keys(obj);
+        for (let i = 0; i < keys.length; i++) {
+          const key = keys[i];
+          const v = obj[key];
+          if (isDropped(v))
+            continue;
+          if (emitted > 0)
+            size2 += 1;
+          size2 += byteLen(key) + 3;
+          size2 += estimate(v);
+          emitted++;
+        }
+      }
+      ancestors.delete(obj);
+      return size2;
+    };
+    const ancestors = /* @__PURE__ */ new Set();
+    let maxStringLen = 0;
+    const byteLen = typeof Buffer !== "undefined" && typeof Buffer.byteLength === "function" ? (s) => Buffer.byteLength(s, "utf8") : (s) => s.length;
+    const size = estimate(value);
+    return { size, maxStringLen };
+  } catch {
+    return { size: serialize(value).length, maxStringLen: 0 };
+  }
 }
 function serialize(obj, errorContext, replacer, spacer, options) {
   try {
@@ -3127,7 +6159,303 @@ function replaceGetterValues(replacer) {
   };
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/client.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/worker_threads.js
+import { Worker as NodeWorker } from "node:worker_threads";
+var Worker = NodeWorker;
+var WORKER_THREADS_AVAILABLE = true;
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/serialize_worker.js
+var WORKER_SOURCE = (
+  /* js */
+  `
+const { parentPort } = require("worker_threads");
+
+const CIRCULAR_REPLACE_NODE = { result: "[Circular]" };
+
+function serializeWellKnownTypes(val) {
+  if (val && typeof val === "object") {
+    if (val instanceof Map) return Object.fromEntries(val);
+    if (val instanceof Set) return Array.from(val);
+    if (val instanceof Date) return val.toISOString();
+    if (val instanceof RegExp) return val.toString();
+    if (val instanceof Error) return { name: val.name, message: val.message };
+  } else if (typeof val === "bigint") {
+    return val.toString();
+  }
+  return val;
+}
+
+function defaultReplacer(_key, val) {
+  return serializeWellKnownTypes(val);
+}
+
+// Decirculate in-place: replace circular refs with { result: "[Circular]" }
+// then restore after stringify. Mirrors fast-safe-stringify's decirc().
+const restoreStack = [];
+function decirc(val, k, stack, parent) {
+  if (typeof val === "object" && val !== null) {
+    for (let i = 0; i < stack.length; i++) {
+      if (stack[i] === val) {
+        const orig = parent[k];
+        parent[k] = CIRCULAR_REPLACE_NODE;
+        restoreStack.push([parent, k, orig]);
+        return;
+      }
+    }
+    stack.push(val);
+    if (Array.isArray(val)) {
+      for (let i = 0; i < val.length; i++) decirc(val[i], i, stack, val);
+    } else {
+      const normalized = serializeWellKnownTypes(val);
+      // Only recurse into normalized if it's still an object (arrays/objects),
+      // else it was replaced with a primitive (e.g. Date -> string).
+      if (normalized === val) {
+        const keys = Object.keys(val);
+        for (let i = 0; i < keys.length; i++) decirc(val[keys[i]], keys[i], stack, val);
+      }
+    }
+    stack.pop();
+  }
+}
+
+function serialize(obj) {
+  try {
+    return JSON.stringify(obj, defaultReplacer);
+  } catch (e) {
+    if (!String(e && e.message).includes("Converting circular structure to JSON")) {
+      return "[Unserializable]";
+    }
+    decirc(obj, "", [], { "": obj });
+    try {
+      return JSON.stringify(obj, defaultReplacer);
+    } catch (_) {
+      return "[unable to serialize, circular reference is too complex to analyze]";
+    } finally {
+      while (restoreStack.length) {
+        const [p, k, v] = restoreStack.pop();
+        p[k] = v;
+      }
+    }
+  }
+}
+
+parentPort.on("message", (msg) => {
+  const { id, op, payload } = msg;
+  try {
+    if (op === "serialize") {
+      const str = serialize(payload);
+      const buf = Buffer.from(str, "utf8");
+      // Slice into its own ArrayBuffer so we can transfer without dragging
+      // unrelated bytes from any shared pool buffer.
+      const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+      parentPort.postMessage({ id, bytes: ab, length: buf.byteLength }, [ab]);
+    } else if (op === "ping") {
+      parentPort.postMessage({ id });
+    } else {
+      parentPort.postMessage({ id, error: "unknown op: " + op });
+    }
+  } catch (e) {
+    parentPort.postMessage({ id, error: String((e && e.message) || e) });
+  }
+});
+`
+);
+var SerializeWorker = class {
+  constructor() {
+    Object.defineProperty(this, "worker", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: null
+    });
+    Object.defineProperty(this, "nextId", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: 1
+    });
+    Object.defineProperty(this, "pending", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: /* @__PURE__ */ new Map()
+    });
+    Object.defineProperty(this, "disabled", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: false
+    });
+    Object.defineProperty(this, "startPromise", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: null
+    });
+  }
+  /**
+   * Try to construct the worker. Returns false if the runtime can't support
+   * it -- in that case callers must fall back to synchronous serialization.
+   * Kept async so callers don't have to branch on runtime -- the promise
+   * resolves synchronously on the microtask queue when the worker module
+   * is available, which is the common Node CJS/ESM path.
+   */
+  async ensureStarted() {
+    if (this.disabled)
+      return false;
+    if (this.worker !== null)
+      return true;
+    if (this.startPromise !== null)
+      return this.startPromise;
+    this.startPromise = this._start();
+    try {
+      return await this.startPromise;
+    } finally {
+      this.startPromise = null;
+    }
+  }
+  async _start() {
+    if (!WORKER_THREADS_AVAILABLE || Worker === null) {
+      this.disabled = true;
+      return false;
+    }
+    try {
+      const worker = new Worker(WORKER_SOURCE, { eval: true });
+      worker.on("message", (msg) => {
+        const p = this.pending.get(msg.id);
+        if (!p)
+          return;
+        this.pending.delete(msg.id);
+        if (msg.error) {
+          p.reject(new Error(msg.error));
+        } else if (msg.bytes && typeof msg.length === "number") {
+          p.resolve(new Uint8Array(msg.bytes, 0, msg.length));
+        } else {
+          p.reject(new Error("worker returned malformed message"));
+        }
+      });
+      worker.on("error", (err) => {
+        for (const [, p] of this.pending)
+          p.reject(err);
+        this.pending.clear();
+        this.disabled = true;
+        this.worker = null;
+      });
+      worker.on("exit", (code) => {
+        for (const [, p] of this.pending) {
+          p.reject(new Error(`worker exited with code ${code}`));
+        }
+        this.pending.clear();
+        this.worker = null;
+      });
+      worker.unref();
+      this.worker = worker;
+      return true;
+    } catch {
+      this.disabled = true;
+      return false;
+    }
+  }
+  /**
+   * Serialize a payload off-thread. Rejects with DataCloneError (or similar)
+   * if the payload contains non-cloneable values -- callers must catch and
+   * fall back to synchronous serialize().
+   *
+   * Resolves with null if the worker subsystem is unavailable entirely,
+   * so the caller can fall back without paying try/catch overhead.
+   */
+  async serialize(payload) {
+    const ok = await this.ensureStarted();
+    if (!ok)
+      return null;
+    const id = this.nextId++;
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      try {
+        this.worker.postMessage({ id, op: "serialize", payload });
+      } catch (e) {
+        this.pending.delete(id);
+        reject(e);
+      }
+    });
+  }
+  async terminate() {
+    if (this.worker) {
+      await this.worker.terminate();
+      this.worker = null;
+    }
+    for (const [, p] of this.pending) {
+      p.reject(new Error("worker terminated"));
+    }
+    this.pending.clear();
+  }
+};
+var sharedWorker = null;
+function getSharedSerializeWorker() {
+  if (sharedWorker === null)
+    sharedWorker = new SerializeWorker();
+  return sharedWorker;
+}
+var LARGE_STRING_THRESHOLD = 64 * 1024;
+var NODE_BUDGET = 2048;
+function hasLargeString(value, threshold = LARGE_STRING_THRESHOLD, nodeBudget = NODE_BUDGET) {
+  if (value === null || typeof value !== "object") {
+    return typeof value === "string" && value.length >= threshold;
+  }
+  const stack = [value];
+  const seen = /* @__PURE__ */ new Set();
+  let visited = 0;
+  while (stack.length > 0) {
+    if (visited++ >= nodeBudget)
+      return false;
+    const cur = stack.pop();
+    if (cur === null || cur === void 0)
+      continue;
+    const t = typeof cur;
+    if (t === "string") {
+      if (cur.length >= threshold)
+        return true;
+      continue;
+    }
+    if (t !== "object")
+      continue;
+    const obj = cur;
+    if (seen.has(obj))
+      continue;
+    seen.add(obj);
+    if (obj instanceof Date || obj instanceof RegExp || obj instanceof Error || obj instanceof ArrayBuffer || ArrayBuffer.isView(obj)) {
+      continue;
+    }
+    if (Array.isArray(obj)) {
+      for (let i = obj.length - 1; i >= 0; i--)
+        stack.push(obj[i]);
+      continue;
+    }
+    if (obj instanceof Map) {
+      for (const [, v] of obj)
+        stack.push(v);
+      continue;
+    }
+    if (obj instanceof Set) {
+      for (const v of obj)
+        stack.push(v);
+      continue;
+    }
+    const keys = Object.keys(obj);
+    for (let i = keys.length - 1; i >= 0; i--) {
+      stack.push(obj[keys[i]]);
+    }
+  }
+  return false;
+}
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/client.js
+function assertPullPublicPromptAllowed(promptIdentifier, dangerouslyPullPublicPrompt) {
+  const [owner] = parseHubIdentifier(promptIdentifier);
+  if (owner !== "-" && !dangerouslyPullPublicPrompt) {
+    throw new Error("Pulling a public prompt by owner/name is disabled by default because prompts may contain untrusted serialized LangChain objects. If you trust this prompt, set `dangerouslyPullPublicPrompt: true` to acknowledge the risk.");
+  }
+}
 function _ensureUTCTimestamp(ts) {
   if (typeof ts === "string" && ts.length > 0 && !ts.includes("Z") && !ts.includes("+") && !ts.includes("-", 10)) {
     return ts + "Z";
@@ -3210,11 +6538,22 @@ function _formatFeedbackScore(score) {
   }
   return score;
 }
+function _checkBackendVersion(version, minVersion = _MIN_BACKEND_VERSION) {
+  const parse2 = (v) => v.split(".").map((s) => parseInt(s, 10));
+  const [maj, min, pat] = parse2(version);
+  const [rMaj, rMin, rPat] = parse2(minVersion);
+  if (isNaN(maj) || isNaN(min) || isNaN(pat) || isNaN(rMaj) || isNaN(rMin) || isNaN(rPat)) {
+    console.warn(`[LANGSMITH]: Could not parse backend version ${JSON.stringify(version)} for compatibility check.`);
+    return;
+  }
+  if (maj < rMaj || maj === rMaj && min < rMin || maj === rMaj && min === rMin && pat < rPat) {
+    console.warn(`[LANGSMITH]: Backend version ${JSON.stringify(version)} is older than the minimum version required by this SDK (${JSON.stringify(minVersion)}). Some features may not work as expected.`);
+  }
+}
 var DEFAULT_UNCOMPRESSED_BATCH_SIZE_LIMIT_BYTES = 24 * 1024 * 1024;
 var DEFAULT_MAX_SIZE_BYTES = 1024 * 1024 * 1024;
 var SERVER_INFO_REQUEST_TIMEOUT_MS = 1e4;
 var DEFAULT_BATCH_SIZE_LIMIT = 100;
-var DEFAULT_API_URL = "https://api.smith.langchain.com";
 var AutoBatchQueue = class {
   constructor(maxSizeBytes) {
     Object.defineProperty(this, "items", {
@@ -3245,7 +6584,7 @@ var AutoBatchQueue = class {
     const itemPromise = new Promise((resolve) => {
       itemPromiseResolve = resolve;
     });
-    const size = serialize(item.item, `Serializing run with id: ${item.item.id}`).length;
+    const size = estimateSerializedSize(item.item).size;
     if (this.sizeBytes + size > this.maxSizeBytes && this.items.length > 0) {
       console.warn(`AutoBatchQueue size limit (${this.maxSizeBytes} bytes) exceeded. Dropping run with id: ${item.item.id}. Current queue size: ${this.sizeBytes} bytes, attempted addition: ${size} bytes.`);
       itemPromiseResolve();
@@ -3299,8 +6638,179 @@ var AutoBatchQueue = class {
   }
 };
 var Client = class _Client {
+  get tracingMode() {
+    return this._tracingMode;
+  }
   get _fetch() {
-    return this.fetchImplementation || _getFetchImplementation(this.debug);
+    const fetchImplementation = this.fetchImplementation || _getFetchImplementation(this.debug);
+    return (async (input, init) => {
+      let authHeader;
+      const profileManagedAuthorization = this.getProfileManagedAuthorizationHeader(init);
+      if (this.apiKey !== void 0) {
+        authHeader = { name: "x-api-key", value: `${this.apiKey}` };
+      } else if (!this.hasExplicitAuthHeader(init, profileManagedAuthorization)) {
+        authHeader = await this.profileAuth?.getAuthHeader(fetchImplementation, init?.signal);
+      }
+      return fetchImplementation(input, this.applyCurrentAuthHeaders(init, authHeader, profileManagedAuthorization));
+    });
+  }
+  getProfileManagedAuthorizationHeader(init) {
+    if (!init?.headers || !this.profileAuth) {
+      return void 0;
+    }
+    const authorization = new Headers(init.headers).get("Authorization");
+    if (!hasValue(authorization)) {
+      return void 0;
+    }
+    return this.profileAuth.isProfileAuthorizationHeader(authorization ?? "") ? authorization ?? void 0 : void 0;
+  }
+  isProfileManagedAuthorizationHeader(value, profileManagedAuthorization) {
+    return value === profileManagedAuthorization || this.profileAuth?.isProfileAuthorizationHeader(value) === true;
+  }
+  hasExplicitAuthHeader(init, profileManagedAuthorization) {
+    if (!init?.headers) {
+      return false;
+    }
+    const headers = new Headers(init.headers);
+    if (hasValue(headers.get("x-api-key"))) {
+      return true;
+    }
+    const authorization = headers.get("Authorization");
+    if (!hasValue(authorization)) {
+      return false;
+    }
+    return !this.isProfileManagedAuthorizationHeader(authorization ?? "", profileManagedAuthorization);
+  }
+  applyCurrentAuthHeaders(init, authHeader, profileManagedAuthorization) {
+    if (!authHeader) {
+      return init;
+    }
+    const applyAuth = (headers2) => {
+      if (this.apiKey !== void 0 && authHeader.name === "x-api-key") {
+        headers2.delete("Authorization");
+        if (!headers2.has("x-api-key")) {
+          headers2.set("x-api-key", authHeader.value);
+        }
+        return headers2;
+      }
+      if (authHeader.name === "Authorization") {
+        if (hasValue(headers2.get("x-api-key"))) {
+          return headers2;
+        }
+        const authorization3 = headers2.get("Authorization");
+        if (hasValue(authorization3) && !this.isProfileManagedAuthorizationHeader(authorization3 ?? "", profileManagedAuthorization)) {
+          return headers2;
+        }
+        headers2.set("Authorization", authHeader.value);
+        return headers2;
+      }
+      const authorization2 = headers2.get("Authorization");
+      if (hasValue(authorization2) && !this.isProfileManagedAuthorizationHeader(authorization2 ?? "", profileManagedAuthorization)) {
+        return headers2;
+      }
+      if (hasValue(authorization2)) {
+        headers2.delete("Authorization");
+      }
+      if (!headers2.has("x-api-key")) {
+        headers2.set("x-api-key", authHeader.value);
+      }
+      return headers2;
+    };
+    if (!init) {
+      return {
+        headers: { [authHeader.name]: authHeader.value }
+      };
+    }
+    if (init.headers instanceof Headers) {
+      return { ...init, headers: applyAuth(new Headers(init.headers)) };
+    }
+    if (Array.isArray(init.headers)) {
+      return { ...init, headers: applyAuth(new Headers(init.headers)) };
+    }
+    const headers = {
+      ...init.headers ?? {}
+    };
+    const getHeaderKey = (name) => Object.keys(headers).find((key) => key.toLowerCase() === name);
+    const getHeader = (name) => {
+      const key = getHeaderKey(name);
+      return key ? headers[key] : void 0;
+    };
+    const hasApiKey = hasValue(getHeader("x-api-key"));
+    const authorization = getHeader("authorization");
+    const hasExplicitAuthorization = hasValue(authorization) && !this.isProfileManagedAuthorizationHeader(authorization ?? "", profileManagedAuthorization);
+    if (this.apiKey !== void 0 && authHeader.name === "x-api-key") {
+      const authorizationKey = getHeaderKey("authorization");
+      if (authorizationKey) {
+        delete headers[authorizationKey];
+      }
+      if (!hasApiKey) {
+        headers["x-api-key"] = authHeader.value;
+      }
+      return { ...init, headers };
+    }
+    if (authHeader.name === "Authorization") {
+      if (!hasApiKey && !hasExplicitAuthorization) {
+        const authorizationKey = getHeaderKey("authorization");
+        if (authorizationKey && authorizationKey !== "Authorization") {
+          delete headers[authorizationKey];
+        }
+        headers.Authorization = authHeader.value;
+      }
+      return { ...init, headers };
+    }
+    if (!hasExplicitAuthorization) {
+      const authorizationKey = getHeaderKey("authorization");
+      if (authorizationKey) {
+        delete headers[authorizationKey];
+      }
+      if (!hasApiKey) {
+        headers["x-api-key"] = authHeader.value;
+      }
+    }
+    return { ...init, headers };
+  }
+  /**
+   * Serialize a payload for tracing, optionally offloading the work to a
+   * Node worker thread when the runtime supports worker_threads.
+   *
+   * Falls back to synchronous serialization when:
+   *  - manualFlushMode is enabled (serverless: worker boot cost > benefit)
+   *  - worker_threads is unavailable (non-Node runtimes)
+   *  - the payload contains values that can't be structured-cloned across
+   *    threads (functions, non-cloneable class instances, streams, etc.)
+   *  - the worker throws for any other reason
+   *
+   * In all fallback cases the returned bytes are identical to the sync path.
+   */
+  _trackDrain(promise) {
+    this._pendingDrains.add(promise);
+    promise.finally(() => {
+      this._pendingDrains.delete(promise);
+    });
+  }
+  async _serializeBody(payload, errorContext) {
+    if (this.manualFlushMode) {
+      return serialize(payload, errorContext);
+    }
+    if (!hasLargeString(payload)) {
+      return serialize(payload, errorContext);
+    }
+    if (this._serializeWorker === void 0) {
+      this._serializeWorker = getSharedSerializeWorker();
+    }
+    if (this._serializeWorker === null) {
+      return serialize(payload, errorContext);
+    }
+    try {
+      const bytes = await this._serializeWorker.serialize(payload);
+      if (bytes === null) {
+        this._serializeWorker = null;
+        return serialize(payload, errorContext);
+      }
+      return bytes;
+    } catch {
+      return serialize(payload, errorContext);
+    }
   }
   constructor(config = {}) {
     Object.defineProperty(this, "apiKey", {
@@ -3358,6 +6868,12 @@ var Client = class _Client {
       value: void 0
     });
     Object.defineProperty(this, "hideOutputs", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "hideMetadata", {
       enumerable: true,
       configurable: true,
       writable: true,
@@ -3423,6 +6939,12 @@ var Client = class _Client {
       writable: true,
       value: void 0
     });
+    Object.defineProperty(this, "openAPIClient", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
     Object.defineProperty(this, "settings", {
       enumerable: true,
       configurable: true,
@@ -3459,11 +6981,29 @@ var Client = class _Client {
       writable: true,
       value: false
     });
+    Object.defineProperty(this, "_serializeWorker", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "_pendingDrains", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: /* @__PURE__ */ new Set()
+    });
     Object.defineProperty(this, "langSmithToOTELTranslator", {
       enumerable: true,
       configurable: true,
       writable: true,
       value: void 0
+    });
+    Object.defineProperty(this, "_tracingMode", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: "langsmith"
     });
     Object.defineProperty(this, "fetchImplementation", {
       enumerable: true,
@@ -3483,11 +7023,17 @@ var Client = class _Client {
       writable: true,
       value: void 0
     });
+    Object.defineProperty(this, "profileAuth", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
     Object.defineProperty(this, "multipartStreamingDisabled", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: false
+      value: getLangSmithEnvironmentVariable("DISABLE_MULTIPART_STREAMING") === "true"
     });
     Object.defineProperty(this, "_multipartDisabled", {
       enumerable: true,
@@ -3531,12 +7077,14 @@ var Client = class _Client {
     if (this.apiUrl.endsWith("/")) {
       this.apiUrl = this.apiUrl.slice(0, -1);
     }
-    this.apiKey = trimQuotes(config.apiKey ?? defaultConfig.apiKey);
+    const configuredApiKey = trimQuotes(config.apiKey ?? defaultConfig.apiKey);
+    this.apiKey = hasValue(configuredApiKey) ? configuredApiKey : void 0;
+    this.profileAuth = this.apiKey !== void 0 ? void 0 : defaultConfig.profileAuth;
     this.webUrl = trimQuotes(config.webUrl ?? defaultConfig.webUrl);
     if (this.webUrl?.endsWith("/")) {
       this.webUrl = this.webUrl.slice(0, -1);
     }
-    this.workspaceId = trimQuotes(config.workspaceId ?? getLangSmithEnvironmentVariable("WORKSPACE_ID"));
+    this.workspaceId = trimQuotes(config.workspaceId ?? defaultConfig.workspaceId);
     this.timeout_ms = config.timeout_ms ?? 9e4;
     this.caller = new AsyncCaller({
       ...config.callerOptions ?? {},
@@ -3568,6 +7116,7 @@ var Client = class _Client {
     });
     this.hideInputs = config.hideInputs ?? config.anonymizer ?? defaultConfig.hideInputs;
     this.hideOutputs = config.hideOutputs ?? config.anonymizer ?? defaultConfig.hideOutputs;
+    this.hideMetadata = config.hideMetadata ?? defaultConfig.hideMetadata;
     this.omitTracedRuntimeInfo = config.omitTracedRuntimeInfo ?? false;
     this.autoBatchTracing = config.autoBatchTracing ?? this.autoBatchTracing;
     this.autoBatchQueue = new AutoBatchQueue(maxMemory);
@@ -3575,8 +7124,10 @@ var Client = class _Client {
     this.batchSizeBytesLimit = config.batchSizeBytesLimit;
     this.batchSizeLimit = config.batchSizeLimit;
     this.fetchOptions = config.fetchOptions || {};
+    this.openAPIClient = this._newOpenAPIClient();
     this.manualFlushMode = config.manualFlushMode ?? this.manualFlushMode;
-    if (getOtelEnabled()) {
+    this._tracingMode = resolveTracingMode(config.tracingMode);
+    if (this._tracingMode === "otel") {
       this.langSmithToOTELTranslator = new LangSmithToOTELTranslator();
     }
     this.cachedLSEnvVarsForMetadata = getLangSmithEnvVarsMetadata();
@@ -3598,16 +7149,27 @@ var Client = class _Client {
     this._customHeaders = config.headers ?? {};
   }
   static getDefaultClientConfig() {
-    const apiKey = getLangSmithEnvironmentVariable("API_KEY");
-    const apiUrl = getLangSmithEnvironmentVariable("ENDPOINT") ?? DEFAULT_API_URL;
+    const profileConfig = loadProfileClientConfig();
+    const envApiKey = getLangSmithEnvironmentVariable("API_KEY");
+    const envApiUrl = getLangSmithEnvironmentVariable("ENDPOINT");
+    const envWorkspaceId = getLangSmithEnvironmentVariable("WORKSPACE_ID");
+    const envAuthSet = hasValue(envApiKey);
+    const apiUrl = envApiUrl ?? profileConfig.apiUrl ?? DEFAULT_API_URL;
+    const workspaceId = envWorkspaceId ?? profileConfig.workspaceId;
     const hideInputs = getLangSmithEnvironmentVariable("HIDE_INPUTS") === "true";
     const hideOutputs = getLangSmithEnvironmentVariable("HIDE_OUTPUTS") === "true";
+    const hideMetadata = getLangSmithEnvironmentVariable("HIDE_METADATA") === "true";
     return {
       apiUrl,
-      apiKey,
+      apiKey: envApiKey,
       webUrl: void 0,
       hideInputs,
-      hideOutputs
+      hideOutputs,
+      hideMetadata,
+      workspaceId,
+      oauthAccessToken: !envAuthSet ? profileConfig.oauthAccessToken : void 0,
+      oauthRefreshToken: !envAuthSet ? profileConfig.oauthRefreshToken : void 0,
+      profileAuth: !envAuthSet ? profileConfig.profileAuth : void 0
     };
   }
   getHostUrl() {
@@ -3631,6 +7193,9 @@ var Client = class _Client {
     } else if (this.apiUrl.split(".", 1)[0].includes("aws")) {
       this.webUrl = "https://aws.smith.langchain.com";
       return this.webUrl;
+    } else if (this.apiUrl.split(".", 1)[0].includes("apac")) {
+      this.webUrl = "https://apac.smith.langchain.com";
+      return this.webUrl;
     } else if (this.apiUrl.split(".", 1)[0].includes("beta")) {
       this.webUrl = "https://beta.smith.langchain.com";
       return this.webUrl;
@@ -3644,8 +7209,13 @@ var Client = class _Client {
       "User-Agent": `langsmith-js/${__version__}`,
       ...this._customHeaders
     };
-    if (this.apiKey) {
+    if (this.apiKey !== void 0) {
       headers["x-api-key"] = `${this.apiKey}`;
+    } else {
+      const profileAuthHeader = this.profileAuth?.currentAuthHeader();
+      if (profileAuthHeader) {
+        headers[profileAuthHeader.name] = profileAuthHeader.value;
+      }
     }
     if (this.workspaceId) {
       headers["x-tenant-id"] = this.workspaceId;
@@ -3663,9 +7233,28 @@ var Client = class _Client {
   set headers(value) {
     this._customHeaders = value ?? {};
   }
-  _getPlatformEndpointPath(path2) {
+  _getOpenAPIBaseUrl() {
+    return this.apiUrl.endsWith("/v1") ? this.apiUrl.slice(0, -3) : this.apiUrl;
+  }
+  _newOpenAPIClient() {
+    const defaultHeaders = this.apiKey === void 0 && this.workspaceId === void 0 ? { "X-API-Key": null } : void 0;
+    const { method: _method, headers: _headers, body: _body, signal: _signal, ...openAPIFetchOptions } = this.fetchOptions;
+    return new Langsmith({
+      apiKey: this.apiKey,
+      tenantID: this.workspaceId,
+      baseURL: this._getOpenAPIBaseUrl(),
+      timeout: this.timeout_ms,
+      fetch: this._fetch,
+      fetchOptions: openAPIFetchOptions,
+      defaultHeaders
+    });
+  }
+  _getPlatformEndpointPath(path3) {
     const needsV1Prefix = this.apiUrl.slice(-3) !== "/v1" && this.apiUrl.slice(-4) !== "/v1/";
-    return needsV1Prefix ? `/v1/platform/${path2}` : `/platform/${path2}`;
+    return needsV1Prefix ? `/v1/platform/${path3}` : `/platform/${path3}`;
+  }
+  get onlineEvaluators() {
+    return this.openAPIClient.onlineEvaluators;
   }
   async processInputs(inputs) {
     if (this.hideInputs === false) {
@@ -3691,6 +7280,18 @@ var Client = class _Client {
     }
     return outputs;
   }
+  async processMetadata(metadata) {
+    if (this.hideMetadata === false) {
+      return metadata;
+    }
+    if (this.hideMetadata === true) {
+      return {};
+    }
+    if (typeof this.hideMetadata === "function") {
+      return this.hideMetadata(metadata);
+    }
+    return metadata;
+  }
   /**
    * Filter content from new_token events to prevent streaming LLM output
    * from being uploaded via events.
@@ -3715,14 +7316,20 @@ var Client = class _Client {
     if (runParams.outputs !== void 0) {
       runParams.outputs = await this.processOutputs(runParams.outputs);
     }
+    if (runParams.extra != null && "metadata" in runParams.extra) {
+      runParams.extra = {
+        ...runParams.extra,
+        metadata: await this.processMetadata(runParams.extra.metadata)
+      };
+    }
     if (runParams.events !== void 0) {
       runParams.events = this._filterNewTokenEvents(runParams.events);
     }
     return runParams;
   }
-  async _getResponse(path2, queryParams) {
+  async _getResponse(path3, queryParams) {
     const paramsString = queryParams?.toString() ?? "";
-    const url = `${this.apiUrl}${path2}?${paramsString}`;
+    const url = `${this.apiUrl}${path3}?${paramsString}`;
     const response = await this.caller.call(async () => {
       const res = await this._fetch(url, {
         method: "GET",
@@ -3730,22 +7337,22 @@ var Client = class _Client {
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions
       });
-      await raiseForStatus(res, `fetch ${path2}`);
+      await raiseForStatus(res, `fetch ${path3}`);
       return res;
     });
     return response;
   }
-  async _get(path2, queryParams) {
-    const response = await this._getResponse(path2, queryParams);
+  async _get(path3, queryParams) {
+    const response = await this._getResponse(path3, queryParams);
     return response.json();
   }
-  async *_getPaginated(path2, queryParams = new URLSearchParams(), transform) {
+  async *_getPaginated(path3, queryParams = new URLSearchParams(), transform) {
     let offset = Number(queryParams.get("offset")) || 0;
-    const limit = Number(queryParams.get("limit")) || 100;
+    const limit2 = Number(queryParams.get("limit")) || 100;
     while (true) {
       queryParams.set("offset", String(offset));
-      queryParams.set("limit", String(limit));
-      const url = `${this.apiUrl}${path2}?${queryParams}`;
+      queryParams.set("limit", String(limit2));
+      const url = `${this.apiUrl}${path3}?${queryParams}`;
       const response = await this.caller.call(async () => {
         const res = await this._fetch(url, {
           method: "GET",
@@ -3753,7 +7360,7 @@ var Client = class _Client {
           signal: AbortSignal.timeout(this.timeout_ms),
           ...this.fetchOptions
         });
-        await raiseForStatus(res, `fetch ${path2}`);
+        await raiseForStatus(res, `fetch ${path3}`);
         return res;
       });
       const items = transform ? transform(await response.json()) : await response.json();
@@ -3761,18 +7368,18 @@ var Client = class _Client {
         break;
       }
       yield items;
-      if (items.length < limit) {
+      if (items.length < limit2) {
         break;
       }
       offset += items.length;
     }
   }
-  async *_getCursorPaginatedList(path2, body = null, requestMethod = "POST", dataKey = "runs") {
+  async *_getCursorPaginatedList(path3, body = null, requestMethod = "POST", dataKey = "runs") {
     const bodyParams = body ? { ...body } : {};
     while (true) {
       const body2 = JSON.stringify(bodyParams);
       const response = await this.caller.call(async () => {
-        const res = await this._fetch(`${this.apiUrl}${path2}`, {
+        const res = await this._fetch(`${this.apiUrl}${path3}`, {
           method: requestMethod,
           headers: {
             ...this._mergedHeaders,
@@ -3782,7 +7389,7 @@ var Client = class _Client {
           ...this.fetchOptions,
           body: body2
         });
-        await raiseForStatus(res, `fetch ${path2}`);
+        await raiseForStatus(res, `fetch ${path3}`);
         return res;
       });
       const responseBody = await response.json();
@@ -3916,7 +7523,7 @@ var Client = class _Client {
         body_base64: bodyBuffer.toString("base64")
       });
       const filename = `trace_${Date.now()}_${v4_default().slice(0, 8)}.json`;
-      const filepath = path.join(directory, filename);
+      const filepath = path2.join(directory, filename);
       if (!_Client._fallbackDirsCreated.has(directory)) {
         await mkdir2(directory);
         _Client._fallbackDirsCreated.add(directory);
@@ -3924,10 +7531,10 @@ var Client = class _Client {
       if (maxBytes !== void 0 && maxBytes > 0) {
         try {
           const entries = await readdir2(directory);
-          const traceFiles = entries.filter((f) => f.startsWith("trace_") && f.endsWith(".json"));
+          const traceFiles = entries.filter((f2) => f2.startsWith("trace_") && f2.endsWith(".json"));
           let total = 0;
           for (const name of traceFiles) {
-            const { size } = await stat2(path.join(directory, name));
+            const { size } = await stat2(path2.join(directory, name));
             total += size;
           }
           if (total >= maxBytes) {
@@ -4026,18 +7633,18 @@ var Client = class _Client {
     const sizeLimitBytes = await this._getBatchSizeLimitBytes();
     const sizeLimit = await this._getBatchSizeLimit();
     if (this.autoBatchQueue.sizeBytes > sizeLimitBytes || this.autoBatchQueue.items.length > sizeLimit) {
-      void this.drainAutoBatchQueue({
+      this._trackDrain(this.drainAutoBatchQueue({
         batchSizeLimitBytes: sizeLimitBytes,
         batchSizeLimit: sizeLimit
-      });
+      }));
     }
     if (this.autoBatchQueue.items.length > 0) {
       this.autoBatchTimeout = setTimeout(() => {
         this.autoBatchTimeout = void 0;
-        void this.drainAutoBatchQueue({
+        this._trackDrain(this.drainAutoBatchQueue({
           batchSizeLimitBytes: sizeLimitBytes,
           batchSizeLimit: sizeLimit
-        });
+        }));
       }, this.autoBatchAggregationDelayMs);
     }
     return itemPromise;
@@ -4046,7 +7653,7 @@ var Client = class _Client {
     const response = await this.caller.call(async () => {
       const res = await this._fetch(`${this.apiUrl}/info`, {
         method: "GET",
-        headers: { Accept: "application/json" },
+        headers: { ...this._mergedHeaders, Accept: "application/json" },
         signal: AbortSignal.timeout(SERVER_INFO_REQUEST_TIMEOUT_MS),
         ...this.fetchOptions
       });
@@ -4065,6 +7672,9 @@ var Client = class _Client {
         if (this._serverInfo === void 0) {
           try {
             this._serverInfo = await this._getServerInfo();
+            if (this._serverInfo?.version) {
+              _checkBackendVersion(this._serverInfo.version);
+            }
           } catch (e) {
             console.warn(`[LANGSMITH]: Failed to fetch info on supported operations. Falling back to batch operations and default limits. Info: ${e.status ?? "Unspecified status code"} ${e.message}`);
           }
@@ -4207,7 +7817,7 @@ var Client = class _Client {
     }
     if (batchChunks.post.length > 0 || batchChunks.patch.length > 0) {
       const runIds = batchChunks.post.map((item) => item.id).concat(batchChunks.patch.map((item) => item.id)).join(",");
-      await this._postBatchIngestRuns(serialize(batchChunks, `Ingesting runs with ids: ${runIds}`), options);
+      await this._postBatchIngestRuns(await this._serializeBody(batchChunks, `Ingesting runs with ids: ${runIds}`), options);
     }
   }
   async _postBatchIngestRuns(body, options) {
@@ -4299,7 +7909,7 @@ var Client = class _Client {
       for (const originalPayload of payloads) {
         const { inputs, outputs, events, extra, error: error2, serialized, attachments, ...payload } = originalPayload;
         const fields = { inputs, outputs, events, extra, error: error2, serialized };
-        const stringifiedPayload = serialize(payload, `Serializing for multipart ingestion of run with id: ${payload.id}`);
+        const stringifiedPayload = await this._serializeBody(payload, `Serializing for multipart ingestion of run with id: ${payload.id}`);
         accumulatedParts.push({
           name: `${method}.${payload.id}`,
           payload: new Blob([stringifiedPayload], {
@@ -4311,7 +7921,7 @@ var Client = class _Client {
           if (value === void 0) {
             continue;
           }
-          const stringifiedValue = serialize(value, `Serializing ${key} for multipart ingestion of run with id: ${payload.id}`);
+          const stringifiedValue = await this._serializeBody(value, `Serializing ${key} for multipart ingestion of run with id: ${payload.id}`);
           accumulatedParts.push({
             name: `${method}.${payload.id}.${key}`,
             payload: new Blob([stringifiedValue], {
@@ -4477,6 +8087,12 @@ Context: ${context}`);
     }
     if (run.outputs) {
       run.outputs = await this.processOutputs(run.outputs);
+    }
+    if (run.extra != null && "metadata" in run.extra) {
+      run.extra = {
+        ...run.extra,
+        metadata: await this.processMetadata(run.extra.metadata)
+      };
     }
     if (run.events) {
       run.events = this._filterNewTokenEvents(run.events);
@@ -4678,7 +8294,7 @@ Context: ${context}`);
    * });
    */
   async *listRuns(props) {
-    const { projectId, projectName, parentRunId, traceId, referenceExampleId, startTime, executionOrder, isRoot, runType, error: error2, id, query, filter, traceFilter, treeFilter, limit, select, order } = props;
+    const { projectId, projectName, parentRunId, traceId, referenceExampleId, startTime, executionOrder, isRoot, runType, error: error2, id, query, filter, traceFilter, treeFilter, limit: limit2, select, order } = props;
     let projectIds = [];
     if (projectId) {
       projectIds = Array.isArray(projectId) ? projectId : [projectId];
@@ -4730,7 +8346,7 @@ Context: ${context}`);
       start_time: startTime ? startTime.toISOString() : null,
       error: error2,
       id,
-      limit,
+      limit: limit2,
       trace: traceId,
       select: select ? select : default_select,
       is_root: isRoot,
@@ -4742,12 +8358,12 @@ Context: ${context}`);
     let runsYielded = 0;
     for await (const runs of this._getCursorPaginatedList("/runs/query", body)) {
       const normalized = runs.map(_normalizeRunTimestamps);
-      if (limit) {
-        if (runsYielded >= limit) {
+      if (limit2) {
+        if (runsYielded >= limit2) {
           break;
         }
-        if (normalized.length + runsYielded > limit) {
-          const newRuns = normalized.slice(0, limit - runsYielded);
+        if (normalized.length + runsYielded > limit2) {
+          const newRuns = normalized.slice(0, limit2 - runsYielded);
           yield* newRuns;
           break;
         }
@@ -4759,7 +8375,7 @@ Context: ${context}`);
     }
   }
   async *listGroupRuns(props) {
-    const { projectId, projectName, groupBy, filter, startTime, endTime, limit, offset } = props;
+    const { projectId, projectName, groupBy, filter, startTime, endTime, limit: limit2, offset } = props;
     const sessionId = projectId || (await this.readProject({ projectName })).id;
     const baseBody = {
       session_id: sessionId,
@@ -4767,11 +8383,11 @@ Context: ${context}`);
       filter,
       start_time: startTime ? startTime.toISOString() : null,
       end_time: endTime ? endTime.toISOString() : null,
-      limit: Number(limit) || 100
+      limit: Number(limit2) || 100
     };
     let currentOffset = Number(offset) || 0;
-    const path2 = "/runs/group";
-    const url = `${this.apiUrl}${path2}`;
+    const path3 = "/runs/group";
+    const url = `${this.apiUrl}${path3}`;
     while (true) {
       const currentBody = {
         ...baseBody,
@@ -4790,7 +8406,7 @@ Context: ${context}`);
           ...this.fetchOptions,
           body
         });
-        await raiseForStatus(res, `Failed to fetch ${path2}`);
+        await raiseForStatus(res, `Failed to fetch ${path3}`);
         return res;
       });
       const items = await response.json();
@@ -4808,7 +8424,7 @@ Context: ${context}`);
     }
   }
   async *readThread(props) {
-    const { threadId, projectId, projectName, isRoot = true, limit, filter: userFilter, order = "asc" } = props;
+    const { threadId, projectId, projectName, isRoot = true, limit: limit2, filter: userFilter, order = "asc" } = props;
     if (!projectId && !projectName) {
       throw new Error("threadId requires projectId or projectName");
     }
@@ -4818,13 +8434,13 @@ Context: ${context}`);
       projectId: projectId ?? void 0,
       projectName: projectName ?? void 0,
       isRoot,
-      limit,
+      limit: limit2,
       filter: combinedFilter,
       order
     });
   }
   async listThreads(props) {
-    const { projectId, projectName, limit, offset = 0, filter, startTime, isRoot = true } = props;
+    const { projectId, projectName, limit: limit2, offset = 0, filter, startTime, isRoot = true } = props;
     if (!projectId && !projectName) {
       throw new Error("Either projectId or projectName must be provided");
     }
@@ -4921,7 +8537,7 @@ Context: ${context}`);
       return bMax.localeCompare(aMax);
     });
     const withOffset = offset > 0 ? result.slice(offset) : result;
-    const withLimit = limit !== void 0 ? withOffset.slice(0, limit) : withOffset;
+    const withLimit = limit2 !== void 0 ? withOffset.slice(0, limit2) : withOffset;
     return withLimit;
   }
   async getRunStats({ id, trace, parentRun, runType, projectNames, projectIds, referenceExampleIds, startTime, endTime, error: error2, query, filter, traceFilter, treeFilter, isRoot, dataSourceType }) {
@@ -5167,7 +8783,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       _hostUrl: this.getHostUrl()
     }));
   }
-  async createProject({ projectName, description = null, metadata = null, upsert = false, projectExtra = null, referenceDatasetId = null }) {
+  async createProject({ projectName, description = null, metadata = null, upsert = false, projectExtra = null, referenceDatasetId = null, numExamples = null, numRepetitions = null, evaluatorKeys = null }) {
     const upsert_ = upsert ? `?upsert=true` : "";
     const endpoint = `${this.apiUrl}/sessions${upsert_}`;
     const extra = projectExtra || {};
@@ -5181,6 +8797,15 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     };
     if (referenceDatasetId !== null) {
       body["reference_dataset_id"] = referenceDatasetId;
+    }
+    if (numExamples != null) {
+      body["num_examples"] = numExamples;
+    }
+    if (numRepetitions != null) {
+      body["num_repetitions"] = numRepetitions;
+    }
+    if (evaluatorKeys != null && evaluatorKeys.length > 0) {
+      body["evaluator_keys"] = evaluatorKeys;
     }
     const serializedBody = JSON.stringify(body);
     const response = await this.caller.call(async () => {
@@ -5224,20 +8849,20 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     return result;
   }
   async hasProject({ projectId, projectName }) {
-    let path2 = "/sessions";
+    let path3 = "/sessions";
     const params = new URLSearchParams();
     if (projectId !== void 0 && projectName !== void 0) {
       throw new Error("Must provide either projectName or projectId, not both");
     } else if (projectId !== void 0) {
       assertUuid(projectId);
-      path2 += `/${projectId}`;
+      path3 += `/${projectId}`;
     } else if (projectName !== void 0) {
       params.append("name", projectName);
     } else {
       throw new Error("Must provide projectName or projectId");
     }
     const response = await this.caller.call(async () => {
-      const res = await this._fetch(`${this.apiUrl}${path2}?${params}`, {
+      const res = await this._fetch(`${this.apiUrl}${path3}?${params}`, {
         method: "GET",
         headers: this._mergedHeaders,
         signal: AbortSignal.timeout(this.timeout_ms),
@@ -5255,18 +8880,18 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         return result.length > 0;
       }
       return true;
-    } catch (e) {
+    } catch (_e) {
       return false;
     }
   }
   async readProject({ projectId, projectName, includeStats }) {
-    let path2 = "/sessions";
+    let path3 = "/sessions";
     const params = new URLSearchParams();
     if (projectId !== void 0 && projectName !== void 0) {
       throw new Error("Must provide either projectName or projectId, not both");
     } else if (projectId !== void 0) {
       assertUuid(projectId);
-      path2 += `/${projectId}`;
+      path3 += `/${projectId}`;
     } else if (projectName !== void 0) {
       params.append("name", projectName);
     } else {
@@ -5275,7 +8900,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     if (includeStats !== void 0) {
       params.append("include_stats", includeStats.toString());
     }
-    const response = await this._get(path2, params);
+    const response = await this._get(path3, params);
     let result;
     if (Array.isArray(response)) {
       if (response.length === 0) {
@@ -5439,19 +9064,19 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     return result;
   }
   async readDataset({ datasetId, datasetName }) {
-    let path2 = "/datasets";
+    let path3 = "/datasets";
     const params = new URLSearchParams({ limit: "1" });
     if (datasetId && datasetName) {
       throw new Error("Must provide either datasetName or datasetId, not both");
     } else if (datasetId) {
       assertUuid(datasetId);
-      path2 += `/${datasetId}`;
+      path3 += `/${datasetId}`;
     } else if (datasetName) {
       params.append("name", datasetName);
     } else {
       throw new Error("Must provide datasetName or datasetId");
     }
-    const response = await this._get(path2, params);
+    const response = await this._get(path3, params);
     let result;
     if (Array.isArray(response)) {
       if (response.length === 0) {
@@ -5495,22 +9120,22 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     return response;
   }
   async readDatasetOpenaiFinetuning({ datasetId, datasetName }) {
-    const path2 = "/datasets";
+    const path3 = "/datasets";
     if (datasetId !== void 0) {
     } else if (datasetName !== void 0) {
       datasetId = (await this.readDataset({ datasetName })).id;
     } else {
       throw new Error("Must provide either datasetName or datasetId");
     }
-    const response = await this._getResponse(`${path2}/${datasetId}/openai_ft`);
+    const response = await this._getResponse(`${path3}/${datasetId}/openai_ft`);
     const datasetText = await response.text();
     const dataset = datasetText.trim().split("\n").map((line) => JSON.parse(line));
     return dataset;
   }
-  async *listDatasets({ limit = 100, offset = 0, datasetIds, datasetName, datasetNameContains, metadata } = {}) {
-    const path2 = "/datasets";
+  async *listDatasets({ limit: limit2 = 100, offset = 0, datasetIds, datasetName, datasetNameContains, metadata } = {}) {
+    const path3 = "/datasets";
     const params = new URLSearchParams({
-      limit: limit.toString(),
+      limit: limit2.toString(),
       offset: offset.toString()
     });
     if (datasetIds !== void 0) {
@@ -5527,7 +9152,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     if (metadata !== void 0) {
       params.append("metadata", JSON.stringify(metadata));
     }
-    for await (const datasets of this._getPaginated(path2, params)) {
+    for await (const datasets of this._getPaginated(path3, params)) {
       yield* datasets;
     }
   }
@@ -5599,7 +9224,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     });
   }
   async deleteDataset({ datasetId, datasetName }) {
-    let path2 = "/datasets";
+    let path3 = "/datasets";
     let datasetId_ = datasetId;
     if (datasetId !== void 0 && datasetName !== void 0) {
       throw new Error("Must provide either datasetName or datasetId, not both");
@@ -5609,18 +9234,18 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     if (datasetId_ !== void 0) {
       assertUuid(datasetId_);
-      path2 += `/${datasetId_}`;
+      path3 += `/${datasetId_}`;
     } else {
       throw new Error("Must provide datasetName or datasetId");
     }
     await this.caller.call(async () => {
-      const res = await this._fetch(this.apiUrl + path2, {
+      const res = await this._fetch(this.apiUrl + path3, {
         method: "DELETE",
         headers: this._mergedHeaders,
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions
       });
-      await raiseForStatus(res, `delete ${path2}`, true);
+      await raiseForStatus(res, `delete ${path3}`, true);
       return res;
     });
   }
@@ -5729,8 +9354,8 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
   }
   async readExample(exampleId) {
     assertUuid(exampleId);
-    const path2 = `/examples/${exampleId}`;
-    const rawExample = await this._get(path2);
+    const path3 = `/examples/${exampleId}`;
+    const rawExample = await this._get(path3);
     const { attachment_urls, ...rest } = rawExample;
     const example = rest;
     if (attachment_urls) {
@@ -5744,7 +9369,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     return example;
   }
-  async *listExamples({ datasetId, datasetName, exampleIds, asOf, splits, inlineS3Urls, metadata, limit, offset, filter, includeAttachments } = {}) {
+  async *listExamples({ datasetId, datasetName, exampleIds, asOf, splits, inlineS3Urls, metadata, limit: limit2, offset, filter, includeAttachments } = {}) {
     let datasetId_;
     if (datasetId !== void 0 && datasetName !== void 0) {
       throw new Error("Must provide either datasetName or datasetId, not both");
@@ -5777,8 +9402,8 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       const serializedMetadata = JSON.stringify(metadata);
       params.append("metadata", serializedMetadata);
     }
-    if (limit !== void 0) {
-      params.append("limit", limit.toString());
+    if (limit2 !== void 0) {
+      params.append("limit", limit2.toString());
     }
     if (offset !== void 0) {
       params.append("offset", offset.toString());
@@ -5806,22 +9431,22 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         yield example;
         i++;
       }
-      if (limit !== void 0 && i >= limit) {
+      if (limit2 !== void 0 && i >= limit2) {
         break;
       }
     }
   }
   async deleteExample(exampleId) {
     assertUuid(exampleId);
-    const path2 = `/examples/${exampleId}`;
+    const path3 = `/examples/${exampleId}`;
     await this.caller.call(async () => {
-      const res = await this._fetch(this.apiUrl + path2, {
+      const res = await this._fetch(this.apiUrl + path3, {
         method: "DELETE",
         headers: this._mergedHeaders,
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions
       });
-      await raiseForStatus(res, `delete ${path2}`, true);
+      await raiseForStatus(res, `delete ${path3}`, true);
       return res;
     });
   }
@@ -5834,9 +9459,9 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
   async deleteExamples(exampleIds, options) {
     exampleIds.forEach((id) => assertUuid(id));
     if (options?.hardDelete) {
-      const path2 = this._getPlatformEndpointPath("datasets/examples/delete");
+      const path3 = this._getPlatformEndpointPath("datasets/examples/delete");
       await this.caller.call(async () => {
-        const res = await this._fetch(`${this.apiUrl}${path2}`, {
+        const res = await this._fetch(`${this.apiUrl}${path3}`, {
           method: "POST",
           headers: {
             ...this._mergedHeaders,
@@ -6001,7 +9626,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       return res;
     });
   }
-  async createFeedback(runId, key, { score, value, correction, comment, sourceInfo, feedbackSourceType = "api", sourceRunId, feedbackId, feedbackConfig, projectId, comparativeExperimentId, sessionId, startTime }) {
+  async createFeedback(runId, key, { score, value, correction, comment, sourceInfo, feedbackSourceType = "api", sourceRunId, feedbackId, feedbackConfig, projectId, comparativeExperimentId, sessionId, startTime, extendTraceRetention }) {
     if (!runId && !projectId) {
       throw new Error("One of runId or projectId must be provided");
     }
@@ -6030,7 +9655,8 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       comparative_experiment_id: comparativeExperimentId,
       feedbackConfig,
       session_id: sessionId ?? projectId,
-      start_time: startTime
+      start_time: startTime,
+      extend_trace_retention: extendTraceRetention
     };
     const body = JSON.stringify(feedback);
     const url = `${this.apiUrl}/feedback`;
@@ -6077,21 +9703,21 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
   }
   async readFeedback(feedbackId) {
     assertUuid(feedbackId);
-    const path2 = `/feedback/${feedbackId}`;
-    const response = await this._get(path2);
+    const path3 = `/feedback/${feedbackId}`;
+    const response = await this._get(path3);
     return response;
   }
   async deleteFeedback(feedbackId) {
     assertUuid(feedbackId);
-    const path2 = `/feedback/${feedbackId}`;
+    const path3 = `/feedback/${feedbackId}`;
     await this.caller.call(async () => {
-      const res = await this._fetch(this.apiUrl + path2, {
+      const res = await this._fetch(this.apiUrl + path3, {
         method: "DELETE",
         headers: this._mergedHeaders,
         signal: AbortSignal.timeout(this.timeout_ms),
         ...this.fetchOptions
       });
-      await raiseForStatus(res, `delete ${path2}`, true);
+      await raiseForStatus(res, `delete ${path3}`, true);
       return res;
     });
   }
@@ -6300,7 +9926,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    * @returns An async iterator of FeedbackConfigSchema objects
    */
   async *listFeedbackConfigs(options = {}) {
-    const { feedbackKeys, nameContains, limit } = options;
+    const { feedbackKeys, nameContains, limit: limit2 } = options;
     const params = new URLSearchParams();
     if (feedbackKeys) {
       feedbackKeys.forEach((key) => {
@@ -6309,12 +9935,12 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     if (nameContains)
       params.append("name_contains", nameContains);
-    params.append("limit", (limit !== void 0 ? Math.min(limit, 100) : 100).toString());
+    params.append("limit", (limit2 !== void 0 ? Math.min(limit2, 100) : 100).toString());
     let count = 0;
     for await (const configs of this._getPaginated("/feedback-configs", params)) {
       yield* configs;
       count += configs.length;
-      if (limit !== void 0 && count >= limit)
+      if (limit2 !== void 0 && count >= limit2)
         break;
     }
   }
@@ -6378,7 +10004,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    * @returns An iterator of AnnotationQueue objects
    */
   async *listAnnotationQueues(options = {}) {
-    const { queueIds, name, nameContains, limit } = options;
+    const { queueIds, name, nameContains, limit: limit2 } = options;
     const params = new URLSearchParams();
     if (queueIds) {
       queueIds.forEach((id, i) => {
@@ -6390,12 +10016,12 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       params.append("name", name);
     if (nameContains)
       params.append("name_contains", nameContains);
-    params.append("limit", (limit !== void 0 ? Math.min(limit, 100) : 100).toString());
+    params.append("limit", (limit2 !== void 0 ? Math.min(limit2, 100) : 100).toString());
     let count = 0;
     for await (const queues of this._getPaginated("/annotation-queues", params)) {
       yield* queues;
       count++;
-      if (limit !== void 0 && count >= limit)
+      if (limit2 !== void 0 && count >= limit2)
         break;
     }
   }
@@ -6543,6 +10169,33 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     return _normalizeRunTimestamps(run);
   }
   /**
+   * List the runs in an annotation queue.
+   * @param queueId - The ID of the annotation queue
+   * @param options - The options for listing runs in the annotation queue
+   * @param options.status - Filter runs by review status. If omitted, returns
+   * runs across all review states.
+   * @param options.limit - The maximum number of runs to return
+   * @returns An iterator of RunWithAnnotationQueueInfo objects
+   */
+  async *listRunsFromAnnotationQueue(queueId, options = {}) {
+    const { status, limit: userLimit } = options;
+    const params = new URLSearchParams();
+    const limit2 = userLimit !== void 0 && Number.isFinite(userLimit) ? Math.min(userLimit, 100) : 100;
+    if (status)
+      params.append("status", status);
+    params.append("limit", limit2.toString());
+    let count = 0;
+    const path3 = `/annotation-queues/${assertUuid(queueId, "queueId")}/runs`;
+    for await (const runs of this._getPaginated(path3, params)) {
+      for (const run of runs) {
+        yield _normalizeRunTimestamps(run);
+        count++;
+        if (count >= limit2)
+          return;
+      }
+    }
+  }
+  /**
    * Delete a run from an an annotation queue.
    * @param queueId - The ID of the annotation queue to delete the run from
    * @param queueRunId - The ID of the run to delete from the annotation queue
@@ -6605,8 +10258,25 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     return json.commits[0].commit_hash;
   }
+  async _createCommitTags(promptOwnerAndName, commitId, tags) {
+    const tagList = typeof tags === "string" ? [tags] : tags;
+    await Promise.all(tagList.map(async (tag) => this.caller.call(async () => {
+      const res = await this._fetch(`${this.apiUrl}/repos/${promptOwnerAndName}/tags`, {
+        method: "POST",
+        headers: {
+          ...this._mergedHeaders,
+          "Content-Type": "application/json"
+        },
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions,
+        body: JSON.stringify({ tag_name: tag, commit_id: commitId })
+      });
+      await raiseForStatus(res, "create commit tag");
+      return res;
+    })));
+  }
   async _likeOrUnlikePrompt(promptIdentifier, like) {
-    const [owner, promptName, _] = parsePromptIdentifier(promptIdentifier);
+    const [owner, promptName, _] = parseHubIdentifier(promptIdentifier);
     const body = JSON.stringify({ like });
     const response = await this.caller.call(async () => {
       const res = await this._fetch(`${this.apiUrl}/likes/${owner}/${promptName}`, {
@@ -6625,7 +10295,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     return response.json();
   }
   async _getPromptUrl(promptIdentifier) {
-    const [owner, promptName, commitHash] = parsePromptIdentifier(promptIdentifier);
+    const [owner, promptName, commitHash] = parseHubIdentifier(promptIdentifier);
     if (!await this._currentTenantIsOwner(owner)) {
       if (commitHash !== "latest") {
         return `${this.getHostUrl()}/hub/${owner}/${promptName}/${commitHash.substring(0, 8)}`;
@@ -6714,7 +10384,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    * ```
    */
   async *listCommits(promptIdentifier) {
-    const [owner, promptName, _] = parsePromptIdentifier(promptIdentifier);
+    const [owner, promptName, _] = parseHubIdentifier(promptIdentifier);
     for await (const commits of this._getPaginated(`/commits/${owner}/${promptName}/`, new URLSearchParams(), (res) => res.commits)) {
       yield* commits;
     }
@@ -6777,7 +10447,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    * ```
    */
   async getPrompt(promptIdentifier) {
-    const [owner, promptName, _] = parsePromptIdentifier(promptIdentifier);
+    const [owner, promptName, _] = parseHubIdentifier(promptIdentifier);
     const response = await this.caller.call(async () => {
       const res = await this._fetch(`${this.apiUrl}/repos/${owner}/${promptName}`, {
         method: "GET",
@@ -6835,7 +10505,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
 
         https://smith.langchain.com/prompts`);
     }
-    const [owner, promptName, _] = parsePromptIdentifier(promptIdentifier);
+    const [owner, promptName, _] = parseHubIdentifier(promptIdentifier);
     if (!await this._currentTenantIsOwner(owner)) {
       throw await this._ownerConflictError("create a prompt", owner);
     }
@@ -6869,6 +10539,8 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    * @param object - The prompt object/manifest to commit (e.g., ChatPromptTemplate, messages array, etc.)
    * @param options - Optional configuration for the commit
    * @param options.parentCommitHash - The parent commit hash. Defaults to "latest" (the most recent commit).
+   * @param options.tags - A tag or list of tags to apply to the commit.
+   * @param options.description - A description for the commit.
    * @returns A Promise that resolves to the URL of the newly created commit
    * @throws {Error} If the prompt does not exist
    * @example
@@ -6884,9 +10556,9 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    * const commitUrl = await client.createCommit("my-prompt", template);
    * console.log(`Commit created: ${commitUrl}`);
    *
-   * // Create a commit based on a specific parent commit
+   * // Create a commit with tags
    * const commitUrl2 = await client.createCommit("my-prompt", template, {
-   *   parentCommitHash: "abc123def456"
+   *   tags: ["production", "v1"]
    * });
    * ```
    */
@@ -6894,7 +10566,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     if (!await this.promptExists(promptIdentifier)) {
       throw new Error("Prompt does not exist, you must create it first.");
     }
-    const [owner, promptName, _] = parsePromptIdentifier(promptIdentifier);
+    const [owner, promptName, _] = parseHubIdentifier(promptIdentifier);
     const resolvedParentCommitHash = options?.parentCommitHash === "latest" || !options?.parentCommitHash ? await this._getLatestCommitHash(`${owner}/${promptName}`) : options?.parentCommitHash;
     const payload = {
       manifest: JSON.parse(JSON.stringify(object)),
@@ -6919,7 +10591,11 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       return res;
     });
     const result = await response.json();
-    return this._getPromptUrl(`${owner}/${promptName}${result.commit_hash ? `:${result.commit_hash}` : ""}`);
+    const commit = result.commit ?? result;
+    if (options?.tags) {
+      await this._createCommitTags(`${owner}/${promptName}`, commit.id, options.tags);
+    }
+    return this._getPromptUrl(`${owner}/${promptName}${commit.commit_hash ? `:${commit.commit_hash}` : ""}`);
   }
   /**
    * Update examples with attachments using multipart form data.
@@ -7078,7 +10754,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     if (!await this.promptExists(promptIdentifier)) {
       throw new Error("Prompt does not exist, you must create it first.");
     }
-    const [owner, promptName] = parsePromptIdentifier(promptIdentifier);
+    const [owner, promptName] = parseHubIdentifier(promptIdentifier);
     if (!await this._currentTenantIsOwner(owner)) {
       throw await this._ownerConflictError("update a prompt", owner);
     }
@@ -7117,7 +10793,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     if (!await this.promptExists(promptIdentifier)) {
       throw new Error("Prompt does not exist, you must create it first.");
     }
-    const [owner, promptName, _] = parsePromptIdentifier(promptIdentifier);
+    const [owner, promptName, _] = parseHubIdentifier(promptIdentifier);
     if (!await this._currentTenantIsOwner(owner)) {
       throw await this._ownerConflictError("delete a prompt", owner);
     }
@@ -7145,7 +10821,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
    * Fetch a prompt commit directly from the API (bypassing cache).
    */
   async _fetchPromptFromApi(promptIdentifier, options) {
-    const [owner, promptName, commitHash] = parsePromptIdentifier(promptIdentifier);
+    const [owner, promptName, commitHash] = parseHubIdentifier(promptIdentifier);
     const response = await this.caller.call(async () => {
       const res = await this._fetch(`${this.apiUrl}/commits/${owner}/${promptName}/${commitHash}${options?.includeModel ? "?include_model=true" : ""}`, {
         method: "GET",
@@ -7162,10 +10838,34 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       repo: promptName,
       commit_hash: result.commit_hash,
       manifest: result.manifest,
-      examples: result.examples
+      examples: result.examples,
+      hub_model_config: result.model_config,
+      hub_model_provider: result.model_provider
     };
   }
+  /**
+   * Pull a prompt commit from the LangSmith API.
+   *
+   * Public prompts referenced by owner/name cross a trust boundary because the
+   * prompt manifest may contain serialized LangChain objects and configuration
+   * that affect runtime behavior. For example, a prompt can intentionally
+   * configure a model with a custom base URL, headers, model name, or other
+   * constructor arguments. These are supported features, but they also mean the
+   * prompt contents should be treated as executable configuration rather than
+   * plain text.
+   *
+   * Set `dangerouslyPullPublicPrompt: true` only after reviewing and trusting
+   * the prompt contents, not merely the publishing account. Prompts from your
+   * own or your organization's account can still be unsafe if that account or
+   * prompt was compromised.
+   *
+   * When pulling a trusted external prompt, prefer pinning to a specific commit
+   * rather than following a mutable latest version. Using `includeModel: true`
+   * increases risk and should be avoided for public prompts or prompts outside
+   * your own organization.
+   */
   async pullPromptCommit(promptIdentifier, options) {
+    assertPullPublicPromptAllowed(promptIdentifier, options?.dangerouslyPullPublicPrompt);
     const refreshFunc = this._fetchPromptFromApi.bind(this, promptIdentifier, options);
     if (!options?.skipCache && this._promptCache) {
       const cacheKey = this._getPromptCacheKey(promptIdentifier, options?.includeModel);
@@ -7182,19 +10882,38 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
   /**
    * This method should not be used directly, use `import { pull } from "langchain/hub"` instead.
    * Using this method directly returns the JSON string of the prompt rather than a LangChain object.
+   *
+   * Public prompts referenced by owner/name cross a trust boundary because the
+   * prompt manifest may contain serialized LangChain objects and configuration
+   * that affect runtime behavior. For example, a prompt can intentionally
+   * configure a model with a custom base URL, headers, model name, or other
+   * constructor arguments. These are supported features, but they also mean the
+   * prompt contents should be treated as executable configuration rather than
+   * plain text.
+   *
+   * Set `dangerouslyPullPublicPrompt: true` only after reviewing and trusting
+   * the prompt contents, not merely the publishing account. Prompts from your
+   * own or your organization's account can still be unsafe if that account or
+   * prompt was compromised.
+   *
+   * When pulling a trusted external prompt, prefer pinning to a specific commit
+   * rather than following a mutable latest version. Using `includeModel: true`
+   * increases risk and should be avoided for public prompts or prompts outside
+   * your own organization.
    * @private
    */
   async _pullPrompt(promptIdentifier, options) {
     const promptObject = await this.pullPromptCommit(promptIdentifier, {
       includeModel: options?.includeModel,
-      skipCache: options?.skipCache
+      skipCache: options?.skipCache,
+      dangerouslyPullPublicPrompt: options?.dangerouslyPullPublicPrompt
     });
     const prompt = JSON.stringify(promptObject.manifest);
     return prompt;
   }
   async pushPrompt(promptIdentifier, options) {
     if (await this.promptExists(promptIdentifier)) {
-      if (options && Object.keys(options).some((key) => key !== "object")) {
+      if (options && ["description", "readme", "tags", "isPublic"].some((key) => options[key] !== void 0)) {
         await this.updatePrompt(promptIdentifier, {
           description: options?.description,
           readme: options?.readme,
@@ -7215,9 +10934,250 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     const url = await this.createCommit(promptIdentifier, options?.object, {
       parentCommitHash: options?.parentCommitHash,
+      tags: options?.commitTags,
       description: options?.commitDescription
     });
     return url;
+  }
+  /**
+   * Check if an agent repo exists.
+   */
+  async agentExists(identifier) {
+    const [owner, name] = parseHubIdentifier(identifier);
+    return this._repoExists(owner, name);
+  }
+  /**
+   * Check if a skill repo exists.
+   */
+  async skillExists(identifier) {
+    const [owner, name] = parseHubIdentifier(identifier);
+    return this._repoExists(owner, name);
+  }
+  /**
+   * Pull an agent directory from Hub.
+   * @param identifier The identifier (owner/name[:version]).
+   * @param options.version Commit hash or tag; overrides identifier's version.
+   */
+  async pullAgent(identifier, options) {
+    return await this._pullDirectory(identifier, "agent", options?.version);
+  }
+  /**
+   * Pull a skill directory from Hub.
+   */
+  async pullSkill(identifier, options) {
+    return await this._pullDirectory(identifier, "skill", options?.version);
+  }
+  /**
+   * Push an agent to Hub. Creates the repo if missing, patches metadata if
+   * provided, then commits the given files.
+   * @returns The URL of the resulting commit.
+   */
+  async pushAgent(identifier, options) {
+    return this._pushDirectory(identifier, "agent", options);
+  }
+  /**
+   * Push a skill to Hub.
+   */
+  async pushSkill(identifier, options) {
+    return this._pushDirectory(identifier, "skill", options);
+  }
+  /**
+   * Delete an agent and all its owned child file repos.
+   */
+  async deleteAgent(identifier) {
+    return this._deleteDirectory(identifier);
+  }
+  /**
+   * Delete a skill and all its owned child file repos.
+   */
+  async deleteSkill(identifier) {
+    return this._deleteDirectory(identifier);
+  }
+  /**
+   * List agent repos. Yields one at a time, auto-paginating.
+   */
+  async *listAgents(options) {
+    yield* this._listReposByType("agent", options);
+  }
+  /**
+   * List skill repos. Yields one at a time, auto-paginating.
+   */
+  async *listSkills(options) {
+    yield* this._listReposByType("skill", options);
+  }
+  async *_listReposByType(repoType, options) {
+    const params = new URLSearchParams();
+    params.append("repo_type", repoType);
+    params.append("is_archived", (!!options?.isArchived).toString());
+    if (options?.isPublic !== void 0) {
+      params.append("is_public", options.isPublic.toString());
+    }
+    if (options?.query) {
+      params.append("query", options.query);
+    }
+    for await (const repos of this._getPaginated("/repos", params, (res) => res.repos)) {
+      yield* repos;
+    }
+  }
+  async _pullDirectory(identifier, repoType, version) {
+    const [owner, name, parsedVersion] = parseHubIdentifier(identifier);
+    const resolvedVersion = version ?? (parsedVersion !== "latest" ? parsedVersion : void 0);
+    const url = new URL(`${this.apiUrl}${this._getPlatformEndpointPath(`hub/repos/${owner}/${name}/directories`)}`);
+    url.searchParams.set("repo_type", repoType);
+    if (resolvedVersion) {
+      url.searchParams.set("commit", resolvedVersion);
+    }
+    const response = await this.caller.call(async () => {
+      const res = await this._fetch(url.toString(), {
+        method: "GET",
+        headers: this._mergedHeaders,
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions
+      });
+      await raiseForStatus(res, "pull directory");
+      return res;
+    });
+    return await response.json();
+  }
+  async _pushDirectory(identifier, repoType, options) {
+    if (options.parentCommit !== void 0 && (options.parentCommit.length < 8 || options.parentCommit.length > 64)) {
+      throw new Error("parent_commit must be 8-64 characters");
+    }
+    const [owner, name] = parseHubIdentifier(identifier);
+    if (!await this._currentTenantIsOwner(owner)) {
+      throw await this._ownerConflictError(`push ${repoType}`, owner);
+    }
+    if (await this._repoExists(owner, name)) {
+      if (options.description !== void 0 || options.readme !== void 0 || options.tags !== void 0 || options.isPublic !== void 0) {
+        await this._updateRepoMetadata(owner, name, options);
+      }
+    } else {
+      const REPO_HANDLE_PATTERN = /^[a-z][a-z0-9-_]*$/;
+      if (!REPO_HANDLE_PATTERN.test(name)) {
+        throw new Error(`Invalid repo_handle ${JSON.stringify(name)}: must match ${REPO_HANDLE_PATTERN}`);
+      }
+      await this._createRepo(name, repoType, options);
+    }
+    const body = { files: options.files };
+    if (options.parentCommit) {
+      body.parent_commit = options.parentCommit;
+    }
+    const response = await this.caller.call(async () => {
+      const res = await this._fetch(`${this.apiUrl}${this._getPlatformEndpointPath(`hub/repos/${owner}/${name}/directories/commits`)}`, {
+        method: "POST",
+        headers: {
+          ...this._mergedHeaders,
+          "Content-Type": "application/json"
+        },
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions,
+        body: JSON.stringify(body)
+      });
+      await raiseForStatus(res, `push ${repoType}`);
+      return res;
+    });
+    const data = await response.json();
+    const commitHash = data.commit.commit_hash;
+    const settings = await this._getSettings();
+    const query = new URLSearchParams({ organizationId: settings.id });
+    return `${this.getHostUrl()}/context/${name}/${commitHash.slice(0, 8)}?${query.toString()}`;
+  }
+  async _deleteDirectory(identifier) {
+    const [owner, name] = parseHubIdentifier(identifier);
+    if (!await this._currentTenantIsOwner(owner)) {
+      throw await this._ownerConflictError("delete", owner);
+    }
+    await this.caller.call(async () => {
+      const res = await this._fetch(`${this.apiUrl}${this._getPlatformEndpointPath(`hub/repos/${owner}/${name}/directories`)}`, {
+        method: "DELETE",
+        headers: this._mergedHeaders,
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions
+      });
+      await raiseForStatus(res, "delete directory");
+      return res;
+    });
+  }
+  async _repoExists(owner, name) {
+    try {
+      await this.caller.call(async () => {
+        const res = await this._fetch(`${this.apiUrl}/repos/${owner}/${name}`, {
+          method: "GET",
+          headers: this._mergedHeaders,
+          signal: AbortSignal.timeout(this.timeout_ms),
+          ...this.fetchOptions
+        });
+        await raiseForStatus(res, "check repo exists");
+        return res;
+      });
+      return true;
+    } catch (e) {
+      if (isLangSmithNotFoundError(e)) {
+        return false;
+      }
+      throw e;
+    }
+  }
+  async _createRepo(name, repoType, options) {
+    const body = {
+      repo_handle: name,
+      repo_type: repoType,
+      is_public: !!options.isPublic
+    };
+    if (options.description !== void 0)
+      body.description = options.description;
+    if (options.readme !== void 0)
+      body.readme = options.readme;
+    if (options.tags !== void 0)
+      body.tags = options.tags;
+    try {
+      await this.caller.call(async () => {
+        const res = await this._fetch(`${this.apiUrl}/repos/`, {
+          method: "POST",
+          headers: {
+            ...this._mergedHeaders,
+            "Content-Type": "application/json"
+          },
+          signal: AbortSignal.timeout(this.timeout_ms),
+          ...this.fetchOptions,
+          body: JSON.stringify(body)
+        });
+        await raiseForStatus(res, `create ${repoType}`);
+        return res;
+      });
+    } catch (e) {
+      if (isLangSmithConflictError(e)) {
+        return;
+      }
+      throw e;
+    }
+  }
+  async _updateRepoMetadata(owner, name, options) {
+    const body = {};
+    if (options.description !== void 0)
+      body.description = options.description;
+    if (options.readme !== void 0)
+      body.readme = options.readme;
+    if (options.tags !== void 0)
+      body.tags = options.tags;
+    if (options.isPublic !== void 0)
+      body.is_public = options.isPublic;
+    if (Object.keys(body).length === 0)
+      return;
+    await this.caller.call(async () => {
+      const res = await this._fetch(`${this.apiUrl}/repos/${owner}/${name}`, {
+        method: "PATCH",
+        headers: {
+          ...this._mergedHeaders,
+          "Content-Type": "application/json"
+        },
+        signal: AbortSignal.timeout(this.timeout_ms),
+        ...this.fetchOptions,
+        body: JSON.stringify(body)
+      });
+      await raiseForStatus(res, "update repo metadata");
+      return res;
+    });
   }
   /**
      * Clone a public dataset to your own langsmith tenant.
@@ -7282,7 +11242,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       } else {
         throw new Error(`Invalid public ${kind} URL: ${urlOrToken}`);
       }
-    } catch (error2) {
+    } catch (_error) {
       throw new Error(`Invalid public ${kind} URL or token: ${urlOrToken}`);
     }
   }
@@ -7322,6 +11282,9 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       return Promise.resolve();
     }
     await new Promise((resolve) => setTimeout(resolve, 1));
+    while (this._pendingDrains.size > 0) {
+      await Promise.all([...this._pendingDrains]);
+    }
     await Promise.all([
       ...this.autoBatchQueue.items.map(({ itemPromise }) => itemPromise),
       this.batchIngestCaller.queue.onIdle()
@@ -7329,6 +11292,33 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     if (this.langSmithToOTELTranslator !== void 0) {
       await getDefaultOTLPTracerComponents()?.DEFAULT_LANGSMITH_SPAN_PROCESSOR?.forceFlush();
     }
+  }
+  /**
+   * Returns a string representation of the Client instance.
+   * This method is called when the object is converted to a string
+   * or logged, ensuring sensitive information like API keys is not exposed.
+   *
+   * @returns A string representation of the Client.
+   */
+  toString() {
+    const params = [`apiUrl=${JSON.stringify(this.apiUrl)}`];
+    if (this.webUrl !== void 0) {
+      params.push(`webUrl=${JSON.stringify(this.webUrl)}`);
+    }
+    if (this.workspaceId !== void 0) {
+      params.push(`workspaceId=${JSON.stringify(this.workspaceId)}`);
+    }
+    return `[LangSmithClient ${params.join(" ")}]`;
+  }
+  /**
+   * Custom inspect method for Node.js.
+   * This method is called when the object is inspected in the Node.js REPL
+   * or with console.log, ensuring sensitive information like API keys is not exposed.
+   *
+   * @returns A string representation of the Client for inspection.
+   */
+  [/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")]() {
+    return this.toString();
   }
 };
 Object.defineProperty(Client, "_fallbackDirsCreated", {
@@ -7341,8 +11331,8 @@ function isExampleCreate(input) {
   return "dataset_id" in input || "dataset_name" in input;
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/env.js
-var isTracingEnabled = (tracingEnabled) => {
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/env.js
+var isEnvTracingEnabled = (tracingEnabled) => {
   if (tracingEnabled !== void 0) {
     return tracingEnabled;
   }
@@ -7350,11 +11340,11 @@ var isTracingEnabled = (tracingEnabled) => {
   return !!envVars.find((envVar) => getLangSmithEnvironmentVariable(envVar) === "true");
 };
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/singletons/constants.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/constants.js
 var _LC_CONTEXT_VARIABLES_KEY = /* @__PURE__ */ Symbol.for("lc:context_variables");
 var _REPLICA_TRACE_ROOTS_KEY = /* @__PURE__ */ Symbol.for("langsmith:replica_trace_roots");
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/context_vars.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/context_vars.js
 function getContextVar(runTree, key) {
   if (_LC_CONTEXT_VARIABLES_KEY in runTree) {
     const contextVars = runTree[_LC_CONTEXT_VARIABLES_KEY];
@@ -7371,13 +11361,13 @@ function setContextVar(runTree, key, value) {
   runTree[_LC_CONTEXT_VARIABLES_KEY] = contextVars;
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/utils/project.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/project.js
 var getDefaultProjectName = () => {
   return getLangSmithEnvironmentVariable("PROJECT") ?? getEnvironmentVariable("LANGCHAIN_SESSION") ?? // TODO: Deprecate
   "default";
 };
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/run_trees.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/run_trees.js
 var TIMESTAMP_LENGTH = 36;
 var UUID_NAMESPACE_DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 function getReplicaKey(replica) {
@@ -7960,7 +11950,7 @@ var RunTree = class _RunTree {
     try {
       const runtimeEnv = getRuntimeEnvironment();
       if (this.replicas && this.replicas.length > 0) {
-        for (const { projectName, apiKey, apiUrl, workspaceId, reroot } of this.replicas) {
+        for (const { projectName, apiKey, apiUrl, workspaceId, reroot, client: replicaClient } of this.replicas) {
           const runCreate = this._remapForProject({
             projectName: projectName ?? this.project_name,
             runtimeEnv,
@@ -7971,7 +11961,8 @@ var RunTree = class _RunTree {
             apiKey,
             workspaceId
           });
-          await this.client.createRun(runCreate, {
+          const targetClient = replicaClient ?? this.client;
+          await targetClient.createRun(runCreate, {
             apiKey,
             apiUrl,
             workspaceId
@@ -7994,7 +11985,7 @@ var RunTree = class _RunTree {
   }
   async patchRun(options) {
     if (this.replicas && this.replicas.length > 0) {
-      for (const { projectName, apiKey, apiUrl, workspaceId, updates, reroot } of this.replicas) {
+      for (const { projectName, apiKey, apiUrl, workspaceId, updates, reroot, client: replicaClient } of this.replicas) {
         const runData = this._remapForProject({
           projectName: projectName ?? this.project_name,
           runtimeEnv: void 0,
@@ -8027,7 +12018,8 @@ var RunTree = class _RunTree {
         if (!options?.excludeInputs) {
           updatePayload.inputs = runData.inputs;
         }
-        await this.client.updateRun(runData.id, updatePayload, {
+        const targetClient = replicaClient ?? this.client;
+        await targetClient.updateRun(runData.id, updatePayload, {
           apiKey,
           apiUrl,
           workspaceId
@@ -8091,7 +12083,7 @@ var RunTree = class _RunTree {
     let parentRun;
     let projectName;
     let client2;
-    let tracingEnabled = isTracingEnabled();
+    let tracingEnabled = isEnvTracingEnabled();
     if (callbackManager) {
       const parentRunId = callbackManager?.getParentRunId?.() ?? "";
       const langChainTracer = callbackManager?.handlers?.find((handler) => handler?.name == "langchain_tracer");
@@ -8278,13 +12270,248 @@ function _checkEndpointEnvUnset(parsed) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/uuid.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/uuid.js
 function uuid7() {
   return v7_default();
 }
 
-// node_modules/.pnpm/langsmith@0.5.19/node_modules/langsmith/dist/index.js
-var __version__ = "0.5.19";
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/traceable.js
+var MockAsyncLocalStorage = class {
+  getStore() {
+    return void 0;
+  }
+  run(_, callback) {
+    return callback();
+  }
+};
+var TRACING_ALS_KEY = /* @__PURE__ */ Symbol.for("ls:tracing_async_local_storage");
+var mockAsyncLocalStorage = new MockAsyncLocalStorage();
+var AsyncLocalStorageProvider = class {
+  getInstance() {
+    return globalThis[TRACING_ALS_KEY] ?? mockAsyncLocalStorage;
+  }
+  initializeGlobalInstance(instance) {
+    if (globalThis[TRACING_ALS_KEY] === void 0) {
+      globalThis[TRACING_ALS_KEY] = instance;
+    }
+  }
+};
+var AsyncLocalStorageProviderSingleton = new AsyncLocalStorageProvider();
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/index.js
+var __version__ = "0.7.11";
+
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/anonymizer/index.js
+function extractStringNodes(data, options) {
+  const parsedOptions = { ...options, maxDepth: options.maxDepth ?? 10 };
+  const queue = [[data, 0, "", null, ""]];
+  let nextId = 0;
+  const result = [];
+  while (queue.length > 0) {
+    const task = queue.shift();
+    if (task == null)
+      continue;
+    const [value, depth, path3, parent, key] = task;
+    if (typeof value === "string") {
+      result.push({
+        value,
+        path: path3,
+        parent,
+        key,
+        _id: nextId++
+      });
+    } else if (Array.isArray(value)) {
+      if (depth >= parsedOptions.maxDepth)
+        continue;
+      for (let i = 0; i < value.length; i++) {
+        queue.push([
+          value[i],
+          depth + 1,
+          `${path3}[${i}]`,
+          value,
+          String(i)
+        ]);
+      }
+    } else if (typeof value === "object" && value != null) {
+      if (depth >= parsedOptions.maxDepth)
+        continue;
+      for (const [k, nestedValue] of Object.entries(value)) {
+        queue.push([
+          nestedValue,
+          depth + 1,
+          path3 ? `${path3}.${k}` : k,
+          value,
+          k
+        ]);
+      }
+    }
+  }
+  return result;
+}
+function deepClone(data) {
+  return JSON.parse(JSON.stringify(data));
+}
+function createAnonymizer(replacer, options) {
+  return (data) => {
+    let mutateValue = deepClone(data);
+    const nodes = extractStringNodes(mutateValue, {
+      maxDepth: options?.maxDepth
+    });
+    const processor = Array.isArray(replacer) ? (() => {
+      const replacers = replacer.map(({ pattern, type, replace }) => {
+        if (type != null && type !== "pattern")
+          throw new Error("Invalid anonymizer type");
+        return [
+          typeof pattern === "string" ? new RegExp(pattern, "g") : pattern,
+          replace ?? "[redacted]"
+        ];
+      });
+      if (replacers.length === 0)
+        throw new Error("No replacers provided");
+      return {
+        maskNodes: (nodes2) => {
+          return nodes2.reduce((memo, item) => {
+            const newValue = replacers.reduce((value, [regex, replace]) => {
+              const result = value.replace(regex, replace);
+              regex.lastIndex = 0;
+              return result;
+            }, item.value);
+            if (newValue !== item.value) {
+              memo.push({ ...item, value: newValue });
+            }
+            return memo;
+          }, []);
+        }
+      };
+    })() : typeof replacer === "function" ? {
+      maskNodes: (nodes2) => nodes2.reduce((memo, item) => {
+        const newValue = replacer(item.value, item.path);
+        if (newValue !== item.value) {
+          memo.push({ ...item, value: newValue });
+        }
+        return memo;
+      }, [])
+    } : replacer;
+    const nodesById = /* @__PURE__ */ new Map();
+    for (const node of nodes) {
+      nodesById.set(node._id, node);
+    }
+    const toUpdate = processor.maskNodes(nodes);
+    for (const node of toUpdate) {
+      if (node.path === "") {
+        mutateValue = node.value;
+      } else {
+        const asInternal = node;
+        const internal = asInternal._id !== void 0 ? nodesById.get(asInternal._id) : nodes.find((n2) => n2.path === node.path);
+        if (internal) {
+          internal.parent[internal.key] = node.value;
+        }
+      }
+    }
+    return mutateValue;
+  };
+}
+var SECRET_PLACEHOLDER = "[SECRET_DETECTED]";
+var DEFAULT_SECRET_RULES = [
+  // ── Provider API keys (prefix-anchored) ─────────────────────────────────
+  // Anthropic
+  { pattern: /sk-ant-[A-Za-z0-9_-]{20,}/g, replace: SECRET_PLACEHOLDER },
+  // OpenAI: project / service-account / admin keys, then legacy `sk-...`
+  {
+    pattern: /sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}/g,
+    replace: SECRET_PLACEHOLDER
+  },
+  { pattern: /sk-[A-Za-z0-9]{32,}/g, replace: SECRET_PLACEHOLDER },
+  // LangSmith (keys are multi-segment: lsv2_pt_<key>_<tail> — match the
+  // full underscore-delimited tail so none of it leaks past the placeholder)
+  {
+    pattern: /lsv2_(?:pt|sk)_[A-Za-z0-9]{32,}(?:_[A-Za-z0-9]+)*/g,
+    replace: SECRET_PLACEHOLDER
+  },
+  { pattern: /ls__[A-Za-z0-9]{16,}/g, replace: SECRET_PLACEHOLDER },
+  // GitHub personal access / app tokens
+  { pattern: /gh[pousr]_[A-Za-z0-9]{36,}/g, replace: SECRET_PLACEHOLDER },
+  { pattern: /github_pat_[A-Za-z0-9_]{82}/g, replace: SECRET_PLACEHOLDER },
+  // GitLab personal access token
+  { pattern: /glpat-[A-Za-z0-9_-]{20,}/g, replace: SECRET_PLACEHOLDER },
+  // AWS access key id (covers AKIA/ASIA/ABIA/ACCA/A3T* prefixes)
+  {
+    pattern: /\b(?:AKIA|ASIA|ABIA|ACCA|A3T[A-Z0-9])[0-9A-Z]{16}\b/g,
+    replace: SECRET_PLACEHOLDER
+  },
+  // Google API key + OAuth access token
+  { pattern: /AIza[0-9A-Za-z_-]{35}/g, replace: SECRET_PLACEHOLDER },
+  { pattern: /ya29\.[0-9A-Za-z_-]+/g, replace: SECRET_PLACEHOLDER },
+  // Slack tokens (bot/user + app-level) + incoming webhooks
+  { pattern: /xox[baprs]-[A-Za-z0-9-]{10,}/g, replace: SECRET_PLACEHOLDER },
+  { pattern: /xapp-\d-[A-Za-z0-9-]{10,}/g, replace: SECRET_PLACEHOLDER },
+  {
+    pattern: /https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/]+/g,
+    replace: SECRET_PLACEHOLDER
+  },
+  // Stripe
+  {
+    pattern: /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{20,}\b/g,
+    replace: SECRET_PLACEHOLDER
+  },
+  // npm
+  { pattern: /npm_[A-Za-z0-9]{36}/g, replace: SECRET_PLACEHOLDER },
+  // PyPI upload token
+  {
+    pattern: /pypi-AgEIcHlwaS[A-Za-z0-9_-]{50,}/g,
+    replace: SECRET_PLACEHOLDER
+  },
+  // SendGrid
+  {
+    pattern: /SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/g,
+    replace: SECRET_PLACEHOLDER
+  },
+  // ── Structured tokens ────────────────────────────────────────────────────
+  // JWT (header.payload.signature)
+  {
+    pattern: /eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+    replace: SECRET_PLACEHOLDER
+  },
+  // PEM private key blocks (RSA/EC/OPENSSH/DSA/plain + PGP "...KEY BLOCK")
+  {
+    pattern: /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY(?: BLOCK)?-----[\s\S]+?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY(?: BLOCK)?-----/g,
+    replace: SECRET_PLACEHOLDER
+  },
+  // ── Structural / contextual (sensitive NAME + assignment) ─────────────────
+  // KEY=value or "key": "value" where the name looks sensitive. Keep the name
+  // and separator ($1), redact the value. Notes:
+  //  - (?![A-Za-z0-9]) after the keyword requires a component boundary, so
+  //    `token` matches `api_token`/`mytoken` but NOT `tokenizer`/`tokens`.
+  //  - the value may start with an auth scheme word (Bearer/Token/Basic) so a
+  //    `X-Api-Key: Bearer <tok>` shape redacts the credential, not just "Bearer".
+  //  - value excludes & and ; so query-string params past the secret survive.
+  //  - requires a 6+ char value so short non-secret values are not touched.
+  {
+    pattern: /\b([A-Za-z0-9_.-]*(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|AUTH[_-]?TOKEN|CLIENT[_-]?SECRET)(?![A-Za-z0-9])(?:[_.-][A-Za-z0-9]+)*["']?\s*[:=]\s*["']?)(?:(?:bearer|token|basic)\s+)?[^\s"'&;]{6,}/gi,
+    replace: `$1${SECRET_PLACEHOLDER}`
+  },
+  // Authorization / API-key headers. Keep the header name + separator ($1$2)
+  // and an optional scheme ($3); redact the credential.
+  {
+    pattern: /\b(authorization|x-api-key|x-auth-token)(["']?\s*[:=]\s*["']?)(bearer\s+|token\s+|basic\s+)?[A-Za-z0-9._~+/-]{8,}=*/gi,
+    replace: `$1$2$3${SECRET_PLACEHOLDER}`
+  },
+  // Bare "Bearer <token>" (any case; the scheme word is preserved via $1).
+  {
+    pattern: /\b(Bearer\s+)[A-Za-z0-9._~+/-]{10,}=*/gi,
+    replace: `$1${SECRET_PLACEHOLDER}`
+  },
+  // Credentials embedded in URLs: proto://user:PASS@host -> redact PASS only.
+  // Username is optional so proto://:PASS@host (empty user) is still covered.
+  {
+    pattern: /\b([a-z][a-z0-9+.-]*:\/\/[^:@/\s]*:)[^@/\s]+(@)/gi,
+    replace: `$1${SECRET_PLACEHOLDER}$2`
+  }
+];
+function createSecretAnonymizer(options) {
+  const rules = [...DEFAULT_SECRET_RULES, ...options?.extraRules ?? []];
+  return createAnonymizer(rules, { maxDepth: options?.maxDepth ?? 24 });
+}
 
 // dist/constants.js
 var USER_PROMPT_TURN_NAME = "Claude Code Turn";
@@ -8338,9 +12565,10 @@ function codingAgentMetadata(opts) {
 // dist/langsmith.js
 var client = void 0;
 var replicas = void 0;
-function initTracing(apiKey, apiUrl, providedReplicas) {
-  if (apiKey) {
-    client = new Client({ apiKey, apiUrl });
+function initTracing(apiKey, apiUrl, providedReplicas, redact = true, extraRedactionRules) {
+  const anonymizer = redact ? createSecretAnonymizer(extraRedactionRules ? { extraRules: extraRedactionRules } : void 0) : void 0;
+  if (apiKey || anonymizer && providedReplicas) {
+    client = new Client({ apiKey: apiKey || void 0, apiUrl, anonymizer });
   } else {
     client = void 0;
   }
@@ -8842,6 +13070,37 @@ function loadConfig(options) {
       error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
     }
   }
+  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").trim().toLowerCase();
+  const redact = !["0", "false", "no", "off"].includes(redactEnv);
+  let redactExtraRules;
+  const providedExtra = process.env.CC_LANGSMITH_REDACT_EXTRA;
+  if (providedExtra !== void 0) {
+    try {
+      const parsed = JSON.parse(providedExtra);
+      if (!Array.isArray(parsed)) {
+        error("CC_LANGSMITH_REDACT_EXTRA must be a JSON array of { pattern, replace }.");
+      } else {
+        const validRules = [];
+        for (const rule of parsed) {
+          if (typeof rule !== "object" || rule === null || typeof rule.pattern !== "string" || rule.replace !== void 0 && typeof rule.replace !== "string") {
+            error(`Skipping invalid CC_LANGSMITH_REDACT_EXTRA rule (expected { pattern: string, replace?: string }): ${JSON.stringify(rule)}`);
+            continue;
+          }
+          try {
+            new RegExp(rule.pattern);
+          } catch {
+            error(`Skipping CC_LANGSMITH_REDACT_EXTRA rule with an invalid regex pattern: ${rule.pattern}`);
+            continue;
+          }
+          validRules.push(rule);
+        }
+        if (validRules.length > 0)
+          redactExtraRules = validRules;
+      }
+    } catch {
+      error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");
+    }
+  }
   const anthropicUserId = readAnthropicUserId();
   const localUsername = readLocalUsername();
   const identityMetadata = { local_username: localUsername };
@@ -8882,7 +13141,9 @@ function loadConfig(options) {
     debug: debug2,
     parentDottedOrder,
     replicas: replicas2,
-    customMetadata
+    customMetadata,
+    redact,
+    redactExtraRules
   };
 }
 
@@ -8899,8 +13160,8 @@ function initHook(cwd) {
   }
   return config;
 }
-function expandHome(path2) {
-  return path2?.replace(/^~/, process.env.HOME ?? "");
+function expandHome(path3) {
+  return path3?.replace(/^~/, process.env.HOME ?? "");
 }
 
 // dist/utils/stdin.js
@@ -8937,7 +13198,7 @@ async function main() {
     warn(`Invalid input: session=${input.session_id}, transcript=${transcriptPath}`);
     return;
   }
-  const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
+  const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   debug(`Last line: ${sessionState.last_line}, turn count: ${sessionState.turn_count}`);

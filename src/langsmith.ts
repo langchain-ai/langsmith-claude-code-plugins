@@ -7,6 +7,8 @@
  */
 
 import { Client, RunTree, RunTreeConfig, uuid7 } from "langsmith";
+import { createSecretAnonymizer } from "langsmith/anonymizer";
+import type { StringNodeRule } from "langsmith/anonymizer";
 import type { Turn, ContentBlock, Usage } from "./types.js";
 import { readTranscript, groupIntoTurns } from "./transcript.js";
 import { loadState, getSessionState } from "./state.js";
@@ -23,9 +25,25 @@ export function initTracing(
   apiKey?: string,
   apiUrl?: string,
   providedReplicas?: RunTreeConfig["replicas"],
+  redact: boolean = true,
+  extraRedactionRules?: StringNodeRule[],
 ) {
-  if (apiKey) {
-    client = new Client({ apiKey, apiUrl });
+  // When redaction is on, attach an anonymizer that strips common secrets from
+  // run inputs/outputs/metadata client-side, before upload. Because every
+  // RunTree here is created with this client, the anonymizer also covers
+  // replica destinations (they reuse the run's client unless given their own).
+  const anonymizer = redact
+    ? createSecretAnonymizer(
+        extraRedactionRules ? { extraRules: extraRedactionRules } : undefined,
+      )
+    : undefined;
+
+  // Construct a client whenever tracing is active. With redaction on we build
+  // one even without an apiKey when replicas are present (each replica carries
+  // its own auth), so replica posts can't fall back to the shared client —
+  // which would not have the anonymizer configured.
+  if (apiKey || (anonymizer && providedReplicas)) {
+    client = new Client({ apiKey: apiKey || undefined, apiUrl, anonymizer });
   } else {
     client = undefined;
   }

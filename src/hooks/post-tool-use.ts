@@ -42,7 +42,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  const client = initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
+  const client = initTracing(
+    config.apiKey,
+    config.apiBaseUrl,
+    config.replicas,
+    config.redact,
+    config.redactExtraRules,
+  );
 
   // Load state to get current turn's run ID (created by UserPromptSubmit)
   const state = loadState(config.stateFilePath);

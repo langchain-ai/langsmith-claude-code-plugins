@@ -26,6 +26,8 @@ describe("loadConfig", () => {
     delete process.env.CC_LANGSMITH_DEBUG;
     delete process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
     delete process.env.CC_LANGSMITH_METADATA;
+    delete process.env.CC_LANGSMITH_REDACT;
+    delete process.env.CC_LANGSMITH_REDACT_EXTRA;
 
     // Point HOME at an empty temp dir so tests don't read the real ~/.claude.json.
     tmpHome = mkdtempSync(join(tmpdir(), "ls-cc-test-"));
@@ -195,6 +197,66 @@ describe("loadConfig", () => {
     const config = loadConfig({ cwd });
     expect(config.customMetadata).toMatchObject({ local_username: expect.any(String) });
     console.error = originalError;
+  });
+
+  describe("secret redaction", () => {
+    it("defaults redact to true", () => {
+      expect(loadConfig({ cwd }).redact).toBe(true);
+    });
+
+    it.each(["false", "0", "no", "off", "FALSE", " Off "])(
+      "disables redaction with %j (normalized)",
+      (value) => {
+        process.env.CC_LANGSMITH_REDACT = value;
+        expect(loadConfig({ cwd }).redact).toBe(false);
+      },
+    );
+
+    it.each(["true", "1", "yes", "on", ""])("keeps redaction on for %j", (value) => {
+      process.env.CC_LANGSMITH_REDACT = value;
+      expect(loadConfig({ cwd }).redact).toBe(true);
+    });
+
+    it("parses CC_LANGSMITH_REDACT_EXTRA into rules", () => {
+      process.env.CC_LANGSMITH_REDACT_EXTRA = JSON.stringify([
+        { pattern: "sk-[a-z0-9]+", replace: "[REDACTED]" },
+        { pattern: "token=\\w+" },
+      ]);
+      expect(loadConfig({ cwd }).redactExtraRules).toEqual([
+        { pattern: "sk-[a-z0-9]+", replace: "[REDACTED]" },
+        { pattern: "token=\\w+" },
+      ]);
+    });
+
+    it("returns undefined rules when CC_LANGSMITH_REDACT_EXTRA not set", () => {
+      expect(loadConfig({ cwd }).redactExtraRules).toBeUndefined();
+    });
+
+    it("skips malformed rules but keeps valid ones", () => {
+      process.env.CC_LANGSMITH_REDACT_EXTRA = JSON.stringify([
+        { pattern: "ok" },
+        { replace: "no pattern" }, // missing pattern
+        { pattern: 123 }, // non-string pattern
+        { pattern: "valid", replace: 5 }, // non-string replace
+        { pattern: "(" }, // invalid regex
+      ]);
+      expect(loadConfig({ cwd }).redactExtraRules).toEqual([{ pattern: "ok" }]);
+    });
+
+    it("returns undefined when every rule is malformed", () => {
+      process.env.CC_LANGSMITH_REDACT_EXTRA = JSON.stringify([{ replace: "x" }]);
+      expect(loadConfig({ cwd }).redactExtraRules).toBeUndefined();
+    });
+
+    it("rejects a non-array CC_LANGSMITH_REDACT_EXTRA", () => {
+      process.env.CC_LANGSMITH_REDACT_EXTRA = JSON.stringify({ pattern: "x" });
+      expect(loadConfig({ cwd }).redactExtraRules).toBeUndefined();
+    });
+
+    it("handles invalid JSON in CC_LANGSMITH_REDACT_EXTRA gracefully", () => {
+      process.env.CC_LANGSMITH_REDACT_EXTRA = "not valid json";
+      expect(loadConfig({ cwd }).redactExtraRules).toBeUndefined();
+    });
   });
 
   describe("Anthropic user ID", () => {
