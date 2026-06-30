@@ -131,28 +131,32 @@ describe("closeAgentToolRun", () => {
     initTracing("test-api-key", "https://test.api.com");
   });
 
-  it("patches the open Agent tool run closed, reconstructed from its task_run_map entry", async () => {
+  const taskRunInfo = {
+    run_id: "agent-tool-run-1",
+    dotted_order: "20250101T000000000000Zagent-tool-run-1",
+    deferred: {
+      trace_id: "trace-N",
+      parent_run_id: "turn-N",
+      start_time: "2025-01-01T00:00:00Z",
+      inputs: { prompt: "explore" },
+      outputs: { agentId: "a46e99ad19d864c31" },
+      project_name: "test-project",
+    },
+  };
+
+  it("patches the open Agent tool run closed when wasOpen=true", async () => {
     await closeAgentToolRun({
       sessionId: "session-123",
       agentId: "a46e99ad19d864c31",
       agentType: "Explore",
-      taskRunInfo: {
-        run_id: "agent-tool-run-1",
-        dotted_order: "20250101T000000000000Zagent-tool-run-1",
-        deferred: {
-          trace_id: "trace-N",
-          parent_run_id: "turn-N",
-          start_time: "2025-01-01T00:00:00Z",
-          inputs: { prompt: "explore" },
-          outputs: { agentId: "a46e99ad19d864c31" },
-          project_name: "test-project",
-        },
-      },
+      taskRunInfo,
       project: "test-project",
+      wasOpen: true,
     });
 
     // Patches (not creates) the existing Agent tool run.
     expect(mockUpdateRun).toHaveBeenCalledTimes(1);
+    expect(mockCreateRun).not.toHaveBeenCalled();
     const [patchedId, params] = mockUpdateRun.mock.calls[0];
     expect(patchedId).toBe("agent-tool-run-1");
     expect(params.name).toBe("Agent");
@@ -160,6 +164,7 @@ describe("closeAgentToolRun", () => {
     expect(params.trace_id).toBe("trace-N");
     expect(params.parent_run_id).toBe("turn-N");
     expect(params.end_time).toBeTruthy();
+    expect(params.error).toBeUndefined();
 
     const meta = (params.extra as Record<string, unknown>).metadata as Record<string, unknown>;
     expect(meta).toMatchObject({
@@ -168,6 +173,27 @@ describe("closeAgentToolRun", () => {
       ls_tool_name: "Task",
     });
     expect(meta.ls_subagent_type).toBeUndefined(); // tool run, not a subagent run
+  });
+
+  it("creates the Agent tool run already-closed with an error when wasOpen=false (killed subagent)", async () => {
+    await closeAgentToolRun({
+      sessionId: "session-123",
+      agentId: "a46e99ad19d864c31",
+      agentType: "Explore",
+      taskRunInfo,
+      project: "test-project",
+      wasOpen: false,
+      error: "Subagent killed",
+    });
+
+    // Creates (not patches) — SubagentStop never posted it open.
+    expect(mockCreateRun).toHaveBeenCalledTimes(1);
+    expect(mockUpdateRun).not.toHaveBeenCalled();
+    const params = mockCreateRun.mock.calls[0][0];
+    expect(params.id).toBe("agent-tool-run-1");
+    expect(params.name).toBe("Agent");
+    expect(params.end_time).toBeTruthy();
+    expect(params.error).toBe("Subagent killed");
   });
 });
 

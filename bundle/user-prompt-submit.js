@@ -13128,6 +13128,7 @@ async function closeAgentToolRun(options) {
     parent_run_id: deferred.parent_run_id,
     trace_id: deferred.trace_id,
     dotted_order: options.taskRunInfo.dotted_order,
+    ...options.error ? { error: options.error } : {},
     extra: {
       metadata: codingAgentMetadata({
         sessionId: options.sessionId,
@@ -13146,13 +13147,18 @@ async function closeAgentToolRun(options) {
       })
     }
   });
-  await runTree.patchRun({ excludeInputs: true });
+  if (options.wasOpen) {
+    await runTree.patchRun({ excludeInputs: true });
+  } else {
+    await runTree.postRun();
+  }
 }
 
 // dist/finalize.js
 async function finalizeNotificationChain(opts) {
   const { stateFilePath, sessionId, project, customMetadata, runtimeVersion } = opts;
   let agentId = opts.agentId;
+  let interrupted = opts.interrupted ?? false;
   while (agentId) {
     const ss = getSessionState(loadState(stateFilePath), sessionId);
     const taskRunInfo = ss.task_run_map?.[agentId];
@@ -13171,7 +13177,9 @@ async function finalizeNotificationChain(opts) {
         project,
         customMetadata,
         runtimeVersion,
-        turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0
+        turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0,
+        wasOpen: Boolean(taskRunInfo.subagent_done),
+        error: interrupted ? "Subagent killed" : void 0
       });
     } catch (err) {
       error(`Failed to close Agent tool run for ${agentId}: ${err}`);
@@ -13217,6 +13225,7 @@ async function finalizeNotificationChain(opts) {
       }
     }
     agentId = nextAgentId;
+    interrupted = false;
   }
   await flushPendingTraces();
 }
@@ -13508,7 +13517,10 @@ async function main() {
           project: config.project,
           customMetadata: config.customMetadata,
           runtimeVersion,
-          agentId: supersededNotificationAgentId
+          agentId: supersededNotificationAgentId,
+          // Carry the killed marker through this path too, in case the killed
+          // subagent's notification turn was itself superseded before its Stop.
+          interrupted: sessionState.current_notification_interrupted
         });
       }
     } catch (err) {
@@ -13525,6 +13537,8 @@ async function main() {
   const notifAgentId = Object.keys(sessionState.task_run_map ?? {}).find((id) => input.prompt.includes(id));
   const agentToolRun = notifAgentId ? sessionState.task_run_map?.[notifAgentId] : void 0;
   const notificationAgentId = agentToolRun ? notifAgentId : void 0;
+  const notificationStatus = notificationAgentId ? /<status>([^<]+)<\/status>/.exec(input.prompt)?.[1] : void 0;
+  const notificationInterrupted = Boolean(notificationStatus && notificationStatus !== "completed");
   if (agentToolRun) {
     traceId = parseDottedOrder(agentToolRun.dotted_order).traceId;
     parentRunId = agentToolRun.run_id;
@@ -13589,6 +13603,7 @@ async function main() {
         // If this is a task-notification turn, record the agent it's for so Stop
         // closes that agent's tool run + launching turn once this turn completes.
         current_notification_agent_id: notificationAgentId,
+        current_notification_interrupted: notificationInterrupted,
         // Persisted so the closing hooks can stamp them onto their runs.
         approval_policy: approvalPolicy,
         ...runtimeVersion ? { runtime_version: runtimeVersion } : {},

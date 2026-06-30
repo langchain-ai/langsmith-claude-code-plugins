@@ -229,6 +229,9 @@ async function main(): Promise<void> {
   // claimed atomically below so only the Stop that actually completes the turn
   // runs the finalize (guards against a concurrent/re-fired Stop doing it twice).
   let notificationToFinalize: string | undefined;
+  // True when the notification this turn handled reported a killed/interrupted
+  // subagent — finalize without waiting on SubagentStop (which won't fire).
+  let notificationInterrupted = false;
   await atomicUpdateState(config.stateFilePath, (latestState) => {
     const latestSession = getSessionState(latestState, input.session_id);
     const updatedState = updateSessionState(
@@ -245,6 +248,7 @@ async function main(): Promise<void> {
     // Read the notification marker inside the lock so claiming + clearing it is
     // atomic with the completion decision.
     const notifAgentId = latestSession.current_notification_agent_id;
+    const notifInterrupted = latestSession.current_notification_interrupted ?? false;
 
     // Drop the sync subagents we just traced from the queue.
     s.pending_subagent_traces = (latestSession.pending_subagent_traces ?? []).filter(
@@ -274,21 +278,26 @@ async function main(): Promise<void> {
         // All drained already — complete now and drop the entry.
         completeNow = true;
         notificationToFinalize = notifAgentId;
+        notificationInterrupted = notifInterrupted;
         delete openTurns[currentRunId];
       }
     } else {
       // No background subagents for this turn — normal inline completion.
       completeNow = Boolean(currentRunId);
-      if (completeNow) notificationToFinalize = notifAgentId;
+      if (completeNow) {
+        notificationToFinalize = notifAgentId;
+        notificationInterrupted = notifInterrupted;
+      }
     }
     s.open_turns = openTurns;
 
     // The main loop is done with this turn regardless; clear so the next
     // UserPromptSubmit doesn't mistake a deferred turn for an interrupted one.
     s.current_turn_run_id = undefined;
-    // Consume the notification marker; the finalize below (or the deferred
-    // open_turns entry) now owns it.
+    // Consume the notification markers; the finalize below (or the deferred
+    // open_turns entry) now owns them.
     s.current_notification_agent_id = undefined;
+    s.current_notification_interrupted = undefined;
     s.traced_tool_use_ids = [];
     s.tool_start_times = {};
     return pruneOldSessions(updatedState);
@@ -326,7 +335,20 @@ async function main(): Promise<void> {
   // side): if SubagentStop already traced the agent (task_run_map subagent_done is
   // set), we're last → finalize. Otherwise record this side as done and let
   // SubagentStop do it.
-  if (notificationToFinalize) {
+  if (notificationToFinalize && notificationInterrupted) {
+    // The subagent was killed/interrupted: SubagentStop never fires for it, so
+    // there's no join to wait on — finalize now, marking its tool run interrupted,
+    // rather than leaving the launching turn open until SessionEnd.
+    await finalizeNotificationChain({
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      project: config.project,
+      customMetadata: config.customMetadata,
+      runtimeVersion,
+      agentId: notificationToFinalize,
+      interrupted: true,
+    });
+  } else if (notificationToFinalize) {
     let finalizeNow = false;
     await atomicUpdateState(config.stateFilePath, (s) => {
       const ss = getSessionState(s, input.session_id);

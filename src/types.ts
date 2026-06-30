@@ -226,6 +226,11 @@ export interface SessionState {
    *  Set by UserPromptSubmit (it nests the turn under that agent's tool run), read
    *  by Stop to close the agent tool run + drain its launching turn on completion. */
   current_notification_agent_id?: string;
+  /** True when the current turn's task-notification reported a non-"completed"
+   *  status (e.g. "killed") — the subagent was cancelled, so SubagentStop never
+   *  fires. Tells Stop to finalize immediately (don't wait on the join) and mark
+   *  the agent's tool run interrupted. */
+  current_notification_interrupted?: boolean;
   /** agent_ids whose task-notification turn has completed but whose SubagentStop
    *  hasn't traced the subagent yet (the two fire in non-deterministic order when
    *  a background agent finishes while the main agent is idle). Whichever of the

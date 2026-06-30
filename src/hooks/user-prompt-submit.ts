@@ -126,6 +126,9 @@ async function main(): Promise<void> {
           customMetadata: config.customMetadata,
           runtimeVersion,
           agentId: supersededNotificationAgentId,
+          // Carry the killed marker through this path too, in case the killed
+          // subagent's notification turn was itself superseded before its Stop.
+          interrupted: sessionState.current_notification_interrupted,
         });
       }
     } catch (err) {
@@ -162,6 +165,14 @@ async function main(): Promise<void> {
   );
   const agentToolRun = notifAgentId ? sessionState.task_run_map?.[notifAgentId] : undefined;
   const notificationAgentId = agentToolRun ? notifAgentId : undefined;
+  // A cancelled subagent's notification reports a non-"completed" <status> (e.g.
+  // "killed"). There's no structured field for it, so read the one tag from the
+  // body — only to distinguish killed-vs-completed, not to detect/correlate. When
+  // killed, SubagentStop never fires, so Stop must finalize without waiting on it.
+  const notificationStatus = notificationAgentId
+    ? /<status>([^<]+)<\/status>/.exec(input.prompt)?.[1]
+    : undefined;
+  const notificationInterrupted = Boolean(notificationStatus && notificationStatus !== "completed");
 
   if (agentToolRun) {
     traceId = parseDottedOrder(agentToolRun.dotted_order).traceId;
@@ -245,6 +256,7 @@ async function main(): Promise<void> {
         // If this is a task-notification turn, record the agent it's for so Stop
         // closes that agent's tool run + launching turn once this turn completes.
         current_notification_agent_id: notificationAgentId,
+        current_notification_interrupted: notificationInterrupted,
         // Persisted so the closing hooks can stamp them onto their runs.
         approval_policy: approvalPolicy,
         ...(runtimeVersion ? { runtime_version: runtimeVersion } : {}),

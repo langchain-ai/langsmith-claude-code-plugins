@@ -108,6 +108,7 @@ async function main(): Promise<void> {
         project: config.project,
         customMetadata: config.customMetadata,
         runtimeVersion,
+        wasOpen: true, // subagent_done ⇒ SubagentStop posted it open
       });
       debug(`Closed open Agent tool run ${agentId} on session end`);
     } catch (err) {
@@ -178,6 +179,7 @@ async function main(): Promise<void> {
         pending_subagent_traces: [],
         open_turns: {},
         current_notification_agent_id: undefined,
+        current_notification_interrupted: undefined,
         notification_done_agents: [],
       },
     };

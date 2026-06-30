@@ -967,6 +967,13 @@ export async function closeAgentToolRun(options: {
   runtimeVersion?: string;
   turnId?: string;
   turnNumber?: number;
+  /** True when SubagentStop already posted the Agent tool run open (the normal
+   *  case) — we patch it closed. False when it was never posted (the subagent was
+   *  killed/interrupted, so SubagentStop never fired) — we create it already-closed
+   *  so the trace still shows the agent was launched. */
+  wasOpen: boolean;
+  /** Optional error/status to stamp on the run (e.g. "Subagent killed"). */
+  error?: string;
 }): Promise<void> {
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized — call initTracing() first");
@@ -988,6 +995,7 @@ export async function closeAgentToolRun(options: {
     parent_run_id: deferred.parent_run_id as string | undefined,
     trace_id: deferred.trace_id as string | undefined,
     dotted_order: options.taskRunInfo.dotted_order,
+    ...(options.error ? { error: options.error } : {}),
     extra: {
       metadata: codingAgentMetadata({
         sessionId: options.sessionId,
@@ -1004,5 +1012,11 @@ export async function closeAgentToolRun(options: {
       }),
     },
   });
-  await runTree.patchRun({ excludeInputs: true });
+  // Open run → patch it closed. Never posted (killed subagent) → create it
+  // already-closed so the trace still shows the launched-then-killed agent.
+  if (options.wasOpen) {
+    await runTree.patchRun({ excludeInputs: true });
+  } else {
+    await runTree.postRun();
+  }
 }

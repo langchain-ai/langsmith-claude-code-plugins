@@ -13079,6 +13079,7 @@ async function closeAgentToolRun(options) {
     parent_run_id: deferred.parent_run_id,
     trace_id: deferred.trace_id,
     dotted_order: options.taskRunInfo.dotted_order,
+    ...options.error ? { error: options.error } : {},
     extra: {
       metadata: codingAgentMetadata({
         sessionId: options.sessionId,
@@ -13097,7 +13098,11 @@ async function closeAgentToolRun(options) {
       })
     }
   });
-  await runTree.patchRun({ excludeInputs: true });
+  if (options.wasOpen) {
+    await runTree.patchRun({ excludeInputs: true });
+  } else {
+    await runTree.postRun();
+  }
 }
 
 // dist/config.js
@@ -13385,7 +13390,9 @@ async function main() {
         taskRunInfo,
         project: config.project,
         customMetadata: config.customMetadata,
-        runtimeVersion
+        runtimeVersion,
+        wasOpen: true
+        // subagent_done ⇒ SubagentStop posted it open
       });
       debug(`Closed open Agent tool run ${agentId} on session end`);
     } catch (err) {
@@ -13443,6 +13450,7 @@ async function main() {
         pending_subagent_traces: [],
         open_turns: {},
         current_notification_agent_id: void 0,
+        current_notification_interrupted: void 0,
         notification_done_agents: []
       }
     };

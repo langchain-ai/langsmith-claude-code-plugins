@@ -30,10 +30,16 @@ export async function finalizeNotificationChain(opts: {
   runtimeVersion?: string;
   /** The agent whose notification turn just completed. */
   agentId: string;
+  /** Set when the originating agent was killed/interrupted (its task-notification
+   *  reported a non-"completed" status and SubagentStop never fired). Stamps an
+   *  error on that agent's tool run; only applies to the originating agent, not
+   *  ancestors walked via the chain. */
+  interrupted?: boolean;
 }): Promise<void> {
   const { stateFilePath, sessionId, project, customMetadata, runtimeVersion } = opts;
 
   let agentId: string | undefined = opts.agentId;
+  let interrupted = opts.interrupted ?? false;
   while (agentId) {
     const ss = getSessionState(loadState(stateFilePath), sessionId);
     const taskRunInfo = ss.task_run_map?.[agentId];
@@ -46,7 +52,9 @@ export async function finalizeNotificationChain(opts: {
       ?.parent_run_id as string | undefined;
     const agentType = taskRunInfo.agent_type ?? "";
 
-    // 1) Close the (open) Agent tool run for this agent.
+    // 1) Close the Agent tool run for this agent. If SubagentStop posted it open
+    //    (subagent_done) we patch it closed; if it was killed before SubagentStop
+    //    ever fired, we create it already-closed (with an error).
     try {
       await closeAgentToolRun({
         sessionId,
@@ -57,6 +65,8 @@ export async function finalizeNotificationChain(opts: {
         customMetadata,
         runtimeVersion,
         turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : undefined,
+        wasOpen: Boolean(taskRunInfo.subagent_done),
+        error: interrupted ? "Subagent killed" : undefined,
       });
     } catch (err) {
       logger.error(`Failed to close Agent tool run for ${agentId}: ${err}`);
@@ -118,7 +128,10 @@ export async function finalizeNotificationChain(opts: {
     }
 
     // Continue up the chain if the launching turn was itself a notification turn.
+    // Ancestors completed normally, so the interrupted marker applies only to the
+    // originating agent.
     agentId = nextAgentId;
+    interrupted = false;
   }
 
   // Flush our own posted runs before returning — not every caller flushes after
