@@ -46,7 +46,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
+  initTracing(
+    config.apiKey,
+    config.apiBaseUrl,
+    config.replicas,
+    config.redact,
+    config.redactExtraRules,
+  );
 
   const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
   const taskRunMap = sessionState.task_run_map ?? {};

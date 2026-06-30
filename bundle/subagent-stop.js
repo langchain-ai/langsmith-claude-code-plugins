@@ -13303,7 +13303,7 @@ async function main() {
     debug("No agent_transcript_path provided, skipping");
     return;
   }
-  initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
+  initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
   const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
   const taskRunMap = sessionState.task_run_map ?? {};
   const taskRunInfo = taskRunMap[input.agent_id];

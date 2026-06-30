@@ -33,9 +33,7 @@ export function initTracing(
   // RunTree here is created with this client, the anonymizer also covers
   // replica destinations (they reuse the run's client unless given their own).
   const anonymizer = redact
-    ? createSecretAnonymizer(
-        extraRedactionRules ? { extraRules: extraRedactionRules } : undefined,
-      )
+    ? createSecretAnonymizer(extraRedactionRules ? { extraRules: extraRedactionRules } : undefined)
     : undefined;
 
   // Construct a client whenever tracing is active. With redaction on we build

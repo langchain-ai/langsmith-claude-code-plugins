@@ -13368,7 +13368,7 @@ async function main() {
     warn(`Invalid input: session=${input.session_id}, transcript=${transcriptPath}`);
     return;
   }
-  initTracing(config.apiKey, config.apiBaseUrl, config.replicas);
+  initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   debug(`Last line: ${sessionState.last_line}, turn count: ${sessionState.turn_count}`);
