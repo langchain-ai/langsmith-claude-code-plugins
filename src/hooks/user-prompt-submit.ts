@@ -38,6 +38,16 @@ interface UserPromptSubmitHookInput {
   agent_type?: string;
 }
 
+/**
+ * The task-notification <status> that means the subagent was forcibly stopped
+ * (so SubagentStop never fires and we must finalize from the notification turn,
+ * marking the agent interrupted). We match only this known value: an unknown/new
+ * status falls back to being treated as a normal completion — we'd rather show a
+ * killed subagent as completed than mislabel a successful one as interrupted if
+ * Claude Code changes its status vocabulary. Matched case-insensitively.
+ */
+const KILLED_NOTIFICATION_STATUS = "killed";
+
 async function main(): Promise<void> {
   const hookStartTime = Date.now();
   const input: UserPromptSubmitHookInput = await readStdin();
@@ -126,6 +136,9 @@ async function main(): Promise<void> {
           customMetadata: config.customMetadata,
           runtimeVersion,
           agentId: supersededNotificationAgentId,
+          // Carry the killed marker through this path too, in case the killed
+          // subagent's notification turn was itself superseded before its Stop.
+          interrupted: sessionState.current_notification_interrupted,
         });
       }
     } catch (err) {
@@ -162,6 +175,16 @@ async function main(): Promise<void> {
   );
   const agentToolRun = notifAgentId ? sessionState.task_run_map?.[notifAgentId] : undefined;
   const notificationAgentId = agentToolRun ? notifAgentId : undefined;
+  // A cancelled subagent's notification reports a terminal <status> like "killed".
+  // There's no structured field for it, so read the one tag from the body — only
+  // to distinguish a forcibly-stopped subagent from a normal one, not to
+  // detect/correlate. When killed, SubagentStop never fires, so Stop must finalize
+  // without waiting on it. Only known cancellation statuses count (allowlist);
+  // anything else (including a new/unknown status) is treated as a normal turn.
+  const notificationStatus = notificationAgentId
+    ? /<status>([^<]+)<\/status>/.exec(input.prompt)?.[1]
+    : undefined;
+  const notificationInterrupted = notificationStatus?.toLowerCase() === KILLED_NOTIFICATION_STATUS;
 
   if (agentToolRun) {
     traceId = parseDottedOrder(agentToolRun.dotted_order).traceId;
@@ -245,6 +268,7 @@ async function main(): Promise<void> {
         // If this is a task-notification turn, record the agent it's for so Stop
         // closes that agent's tool run + launching turn once this turn completes.
         current_notification_agent_id: notificationAgentId,
+        current_notification_interrupted: notificationInterrupted,
         // Persisted so the closing hooks can stamp them onto their runs.
         approval_policy: approvalPolicy,
         ...(runtimeVersion ? { runtime_version: runtimeVersion } : {}),

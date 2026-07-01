@@ -13023,6 +13023,7 @@ async function closeAgentToolRun(options) {
     parent_run_id: deferred.parent_run_id,
     trace_id: deferred.trace_id,
     dotted_order: options.taskRunInfo.dotted_order,
+    ...options.error ? { error: options.error } : {},
     extra: {
       metadata: codingAgentMetadata({
         sessionId: options.sessionId,
@@ -13041,7 +13042,11 @@ async function closeAgentToolRun(options) {
       })
     }
   });
-  await runTree.patchRun({ excludeInputs: true });
+  if (options.wasOpen) {
+    await runTree.patchRun({ excludeInputs: true });
+  } else {
+    await runTree.postRun();
+  }
 }
 
 // dist/config.js
@@ -13283,6 +13288,7 @@ function readStdin() {
 async function finalizeNotificationChain(opts) {
   const { stateFilePath, sessionId, project, customMetadata, runtimeVersion } = opts;
   let agentId = opts.agentId;
+  let interrupted = opts.interrupted ?? false;
   while (agentId) {
     const ss = getSessionState(loadState(stateFilePath), sessionId);
     const taskRunInfo = ss.task_run_map?.[agentId];
@@ -13301,7 +13307,9 @@ async function finalizeNotificationChain(opts) {
         project,
         customMetadata,
         runtimeVersion,
-        turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0
+        turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0,
+        wasOpen: Boolean(taskRunInfo.subagent_done),
+        error: interrupted ? "Subagent killed" : void 0
       });
     } catch (err) {
       error(`Failed to close Agent tool run for ${agentId}: ${err}`);
@@ -13347,6 +13355,7 @@ async function finalizeNotificationChain(opts) {
       }
     }
     agentId = nextAgentId;
+    interrupted = false;
   }
   await flushPendingTraces();
 }
@@ -13467,6 +13476,19 @@ async function main() {
   const savedLastLine = tracedTurns > 0 ? lastLine : sessionState.last_line;
   let completeNow = false;
   let notificationToFinalize;
+  let notificationInterrupted = false;
+  const notifiedWithinTurn = /* @__PURE__ */ new Set();
+  const knownAgentIds = Object.keys(sessionState.task_run_map ?? {});
+  if (knownAgentIds.length > 0) {
+    for (const t of turns) {
+      const uc = typeof t.userContent === "string" ? t.userContent : "";
+      for (const id of knownAgentIds) {
+        if (uc.includes(id))
+          notifiedWithinTurn.add(id);
+      }
+    }
+  }
+  let doneAgentsToFinalize = [];
   await atomicUpdateState(config.stateFilePath, (latestState) => {
     const latestSession = getSessionState(latestState, input.session_id);
     const updatedState = updateSessionState(
@@ -13480,11 +13502,13 @@ async function main() {
     );
     const s = updatedState[input.session_id];
     const notifAgentId = latestSession.current_notification_agent_id;
+    const notifInterrupted = latestSession.current_notification_interrupted ?? false;
     s.pending_subagent_traces = (latestSession.pending_subagent_traces ?? []).filter((sa) => !processedAgentIds.has(sa.agent_id));
     const openTurns = { ...latestSession.open_turns };
     const entry = currentRunId ? openTurns[currentRunId] : void 0;
     if (currentRunId && entry) {
       const remaining = entry.agent_ids.filter((id) => !processedAgentIds.has(id));
+      doneAgentsToFinalize = remaining.filter((id) => latestSession.task_run_map?.[id]?.subagent_done && notifiedWithinTurn.has(id));
       if (remaining.length > 0) {
         openTurns[currentRunId] = {
           ...entry,
@@ -13500,16 +13524,20 @@ async function main() {
       } else {
         completeNow = true;
         notificationToFinalize = notifAgentId;
+        notificationInterrupted = notifInterrupted;
         delete openTurns[currentRunId];
       }
     } else {
       completeNow = Boolean(currentRunId);
-      if (completeNow)
+      if (completeNow) {
         notificationToFinalize = notifAgentId;
+        notificationInterrupted = notifInterrupted;
+      }
     }
     s.open_turns = openTurns;
     s.current_turn_run_id = void 0;
     s.current_notification_agent_id = void 0;
+    s.current_notification_interrupted = void 0;
     s.traced_tool_use_ids = [];
     s.tool_start_times = {};
     return pruneOldSessions(updatedState);
@@ -13537,7 +13565,28 @@ async function main() {
       error(`Failed to complete turn run: ${err}`);
     }
   }
-  if (notificationToFinalize) {
+  for (const doneAgentId of doneAgentsToFinalize) {
+    debug(`Finalizing subagent ${doneAgentId} that finished within its launching turn`);
+    await finalizeNotificationChain({
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      project: config.project,
+      customMetadata: config.customMetadata,
+      runtimeVersion,
+      agentId: doneAgentId
+    });
+  }
+  if (notificationToFinalize && notificationInterrupted) {
+    await finalizeNotificationChain({
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      project: config.project,
+      customMetadata: config.customMetadata,
+      runtimeVersion,
+      agentId: notificationToFinalize,
+      interrupted: true
+    });
+  } else if (notificationToFinalize) {
     let finalizeNow = false;
     await atomicUpdateState(config.stateFilePath, (s) => {
       const ss = getSessionState(s, input.session_id);

@@ -12963,6 +12963,7 @@ async function closeAgentToolRun(options) {
     parent_run_id: deferred.parent_run_id,
     trace_id: deferred.trace_id,
     dotted_order: options.taskRunInfo.dotted_order,
+    ...options.error ? { error: options.error } : {},
     extra: {
       metadata: codingAgentMetadata({
         sessionId: options.sessionId,
@@ -12981,13 +12982,18 @@ async function closeAgentToolRun(options) {
       })
     }
   });
-  await runTree.patchRun({ excludeInputs: true });
+  if (options.wasOpen) {
+    await runTree.patchRun({ excludeInputs: true });
+  } else {
+    await runTree.postRun();
+  }
 }
 
 // dist/finalize.js
 async function finalizeNotificationChain(opts) {
   const { stateFilePath, sessionId, project, customMetadata, runtimeVersion } = opts;
   let agentId = opts.agentId;
+  let interrupted = opts.interrupted ?? false;
   while (agentId) {
     const ss = getSessionState(loadState(stateFilePath), sessionId);
     const taskRunInfo = ss.task_run_map?.[agentId];
@@ -13006,7 +13012,9 @@ async function finalizeNotificationChain(opts) {
         project,
         customMetadata,
         runtimeVersion,
-        turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0
+        turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0,
+        wasOpen: Boolean(taskRunInfo.subagent_done),
+        error: interrupted ? "Subagent killed" : void 0
       });
     } catch (err) {
       error(`Failed to close Agent tool run for ${agentId}: ${err}`);
@@ -13052,6 +13060,7 @@ async function finalizeNotificationChain(opts) {
       }
     }
     agentId = nextAgentId;
+    interrupted = false;
   }
   await flushPendingTraces();
 }
