@@ -4,8 +4,13 @@
  *
  * Invoked when a Claude Code subagent finishes (including when aborted).
  *
- * Two cases, discriminated by whether PostToolUse has already recorded the
- * Agent tool run in `task_run_map`:
+ * A dynamic-workflow stage (`agent_type: "workflow-subagent"`) is handled up
+ * front by {@link handleWorkflowSubagentStop}: it wasn't launched via the Task
+ * tool, so it nests under its open Workflow run (correlated by the run_id in its
+ * transcript path) rather than a per-agent Agent run.
+ *
+ * Otherwise, two cases, discriminated by whether PostToolUse has already
+ * recorded the Agent tool run in `task_run_map`:
  *
  *  1. SYNCHRONOUS subagent — SubagentStop fires *before* the Task tool returns,
  *     so PostToolUse hasn't recorded the Agent tool run yet. We can't trace it
@@ -28,6 +33,7 @@ import { debug, error } from "../logger.js";
 import { atomicUpdateState, getSessionState, loadState } from "../state.js";
 import { initTracing, tracePendingSubagents, flushPendingTraces } from "../langsmith.js";
 import { finalizeNotificationChain } from "../finalize.js";
+import { WORKFLOW_SUBAGENT_TYPE, handleWorkflowSubagentStop } from "../workflows.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import type { SubagentStopHookInput, OpenTurn } from "../types.js";
@@ -53,6 +59,22 @@ async function main(): Promise<void> {
     config.redact,
     config.redactExtraRules,
   );
+
+  // Dynamic-workflow stage: not launched via the Task tool (so it's absent from
+  // task_run_map), it nests under its open Workflow run instead. Handled
+  // separately; the workflow's own task-notification finalizes the run.
+  if (input.agent_type === WORKFLOW_SUBAGENT_TYPE) {
+    await handleWorkflowSubagentStop({
+      sessionId: input.session_id,
+      agentId: input.agent_id,
+      agentType: input.agent_type,
+      agentTranscriptPath,
+      stateFilePath: config.stateFilePath,
+      project: config.project,
+      customMetadata: config.customMetadata,
+    });
+    return;
+  }
 
   const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
   const taskRunMap = sessionState.task_run_map ?? {};

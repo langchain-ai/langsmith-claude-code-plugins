@@ -199,8 +199,20 @@ export interface SessionState {
       agent_type?: string;
       /** True once SubagentStop has processed this (async) subagent and posted its
        *  Agent tool run. The notification side of the join reads this to know the
-       *  subagent finished (replaces the former separate `open_agent_runs` map). */
+       *  subagent finished (replaces the former separate `open_agent_runs` map).
+       *  For Workflow runs this is set true at launch — the run is posted open by
+       *  PostToolUse, so finalize patches it closed (there's no per-workflow
+       *  SubagentStop; the workflow's task-notification is the completion signal). */
       subagent_done?: boolean;
+      /** For dynamic Workflow tool runs: the workflow run_id (`wf_…`). Its stage
+       *  agents surface as `workflow-subagent` SubagentStops carrying this id in
+       *  their transcript path, so they can be correlated back to this run. This
+       *  entry itself is keyed by the workflow's taskId (what its completion
+       *  task-notification references). */
+      workflow_run_id?: string;
+      /** True when this entry is a Workflow tool run (posted open at launch) rather
+       *  than a deferred Task Agent run — names the run "Workflow" on close. */
+      is_workflow?: boolean;
     }
   >;
   /** tool_use_ids of regular tools already traced by PostToolUse (prevents double-tracing in traceTurn) */

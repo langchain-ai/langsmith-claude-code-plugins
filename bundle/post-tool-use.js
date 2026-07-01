@@ -12535,6 +12535,47 @@ function readStdin() {
   });
 }
 
+// dist/background-runs.js
+function recordBackgroundRun(session, turn, backgroundId, entry) {
+  const existing = session.open_turns?.[turn.run_id];
+  return {
+    task_run_map: {
+      ...session.task_run_map,
+      [backgroundId]: entry
+    },
+    open_turns: {
+      ...session.open_turns,
+      [turn.run_id]: {
+        ...existing,
+        run_id: turn.run_id,
+        trace_id: turn.trace_id,
+        dotted_order: turn.dotted_order,
+        parent_run_id: turn.parent_run_id,
+        start_time: turn.start_time,
+        turn_number: turn.turn_number,
+        runtime_version: turn.runtime_version,
+        approval_policy: turn.approval_policy,
+        stop_seen: existing?.stop_seen ?? false,
+        agent_ids: [
+          ...(existing?.agent_ids ?? []).filter((id) => id !== backgroundId),
+          backgroundId
+        ]
+      }
+    }
+  };
+}
+
+// dist/workflows.js
+var WORKFLOW_TOOL_NAME = "Workflow";
+function detectWorkflowLaunch(toolName, toolResponse) {
+  if (toolName !== WORKFLOW_TOOL_NAME)
+    return void 0;
+  const r = toolResponse;
+  if (!r || r.status !== "async_launched" || !r.taskId || !r.runId)
+    return void 0;
+  return { taskId: r.taskId, runId: r.runId, workflowName: r.workflowName };
+}
+
 // dist/hooks/post-tool-use.js
 async function main() {
   const input = await readStdin();
@@ -12563,8 +12604,36 @@ async function main() {
   const toolDottedOrderSegment = generateDottedOrderSegment(startTime, toolRunId);
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
   const agentId = input.tool_response.agentId;
+  const workflow = !agentId ? detectWorkflowLaunch(input.tool_name, input.tool_response) : void 0;
   if (agentId) {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
+  } else if (workflow) {
+    debug(`Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`);
+    const runTree = new RunTree({
+      client: client2,
+      replicas: config.replicas,
+      id: toolRunId,
+      name: "Workflow",
+      run_type: "tool",
+      inputs: { input: input.tool_input },
+      project_name: config.project,
+      start_time: startTimeIso,
+      // No end_time — left open until finalizeNotificationChain closes it.
+      parent_run_id: parentRunId,
+      trace_id: traceId,
+      dotted_order: toolDottedOrder,
+      extra: {
+        metadata: codingAgentMetadata({
+          sessionId: input.session_id,
+          base: config.customMetadata,
+          turnNumber: sessionState.current_turn_number,
+          runtimeVersion: sessionState.runtime_version,
+          toolName: "Workflow",
+          runName: "Workflow"
+        })
+      }
+    });
+    await runTree.postRun();
   } else {
     const runTree = new RunTree({
       client: client2,
@@ -12597,57 +12666,46 @@ async function main() {
   }
   await atomicUpdateState(config.stateFilePath, (freshState) => {
     const freshSession = getSessionState(freshState, input.session_id);
+    let backgroundUpdate;
+    if (agentId || workflow) {
+      const deferred = {
+        trace_id: traceId,
+        parent_run_id: parentRunId,
+        start_time: startTimeIso,
+        end_time: toolEndTimeIso,
+        inputs: input.tool_input,
+        outputs: input.tool_response,
+        project_name: config.project
+      };
+      const launchingTurn = {
+        run_id: parentRunId,
+        trace_id: traceId,
+        dotted_order: parentDottedOrder,
+        parent_run_id: sessionState.current_parent_run_id,
+        start_time: sessionState.current_turn_start,
+        turn_number: sessionState.current_turn_number,
+        runtime_version: sessionState.runtime_version,
+        approval_policy: sessionState.approval_policy
+      };
+      backgroundUpdate = recordBackgroundRun(freshSession, launchingTurn, agentId ?? workflow.taskId, {
+        run_id: toolRunId,
+        dotted_order: toolDottedOrder,
+        deferred,
+        ...workflow ? { workflow_run_id: workflow.runId, is_workflow: true, subagent_done: true } : {}
+      });
+    }
     return {
       ...freshState,
       [input.session_id]: {
         ...freshSession,
         last_tool_end_time: toolEndTime,
-        ...agentId ? {
-          task_run_map: {
-            ...freshSession.task_run_map,
-            [agentId]: {
-              run_id: toolRunId,
-              dotted_order: toolDottedOrder,
-              deferred: {
-                trace_id: traceId,
-                parent_run_id: parentRunId,
-                start_time: startTimeIso,
-                end_time: toolEndTimeIso,
-                inputs: input.tool_input,
-                outputs: input.tool_response,
-                project_name: config.project
-              }
-            }
-          },
-          // Register this subagent under its launching turn. For background
-          // agents the Task tool returns at launch, so this records the turn
-          // as having work in flight before Stop fires — letting Stop know it
-          // must defer completion until SubagentStop drains it. We also stash
-          // the turn's completion context here so the turn's root run can be
-          // completed later even after a newer turn overwrites `current_*`.
-          open_turns: {
-            ...freshSession.open_turns,
-            [parentRunId]: {
-              ...freshSession.open_turns?.[parentRunId],
-              run_id: parentRunId,
-              trace_id: traceId,
-              dotted_order: parentDottedOrder,
-              parent_run_id: sessionState.current_parent_run_id,
-              start_time: sessionState.current_turn_start,
-              turn_number: sessionState.current_turn_number,
-              runtime_version: sessionState.runtime_version,
-              approval_policy: sessionState.approval_policy,
-              stop_seen: freshSession.open_turns?.[parentRunId]?.stop_seen ?? false,
-              agent_ids: [
-                ...(freshSession.open_turns?.[parentRunId]?.agent_ids ?? []).filter((id) => id !== agentId),
-                agentId
-              ]
-            }
-          }
-        } : {
-          // Record tool_use_id so traceTurn skips it (avoids double-tracing).
-          traced_tool_use_ids: [...freshSession.traced_tool_use_ids ?? [], input.tool_use_id]
-        }
+        ...backgroundUpdate,
+        // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this
+        // tool call from the transcript. A deferred Agent tool is skipped there
+        // via its agentId link instead, so it's the one case we don't record —
+        // but a Workflow tool call has no agentId, so without this it would get a
+        // duplicate "Workflow" tool run next to the open one posted above.
+        ...agentId ? {} : { traced_tool_use_ids: [...freshSession.traced_tool_use_ids ?? [], input.tool_use_id] }
       }
     };
   });

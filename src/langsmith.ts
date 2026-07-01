@@ -748,6 +748,11 @@ export interface TaskRunEntry {
   /** True once SubagentStop has processed this async subagent (the join's
    *  subagent-side "done" marker, replacing the former open_agent_runs map). */
   subagent_done?: boolean;
+  /** For dynamic Workflow runs: the workflow run_id (`wf_…`) used to correlate
+   *  `workflow-subagent` stage SubagentStops (which carry it in their path). */
+  workflow_run_id?: string;
+  /** True when this entry is a Workflow tool run — names the run "Workflow". */
+  is_workflow?: boolean;
 }
 
 /**
@@ -889,58 +894,25 @@ export async function tracePendingSubagents(options: {
       // Nest the subagent's own work under the Agent tool run — skipped when the
       // transcript was empty (the Agent tool run above still represents the run).
       if (subagentTurns.length > 0) {
-        // Create an intermediate chain run as a child of the Agent tool run,
-        // then nest all subagent turns under it.
-        const subagentChainId = uuid7();
-        const subagentChainDottedOrder = `${agentToolDottedOrder}.${generateDottedOrderSegment(subagentStartTime, subagentChainId)}`;
-
-        const runTree = new RunTree({
-          client,
-          replicas,
-          id: subagentChainId,
-          name: `${toolName} Subagent`,
-          run_type: "chain",
-          inputs: deferred?.inputs ?? {},
-          outputs: { output: deferred?.outputs },
-          project_name: project,
-          start_time: subagentStartTime,
-          end_time: subagentEndTime,
-          parent_run_id: parentToolRunId,
-          trace_id: parentTraceId,
-          dotted_order: subagentChainDottedOrder,
-          extra: {
-            metadata: codingAgentMetadata({
-              sessionId,
-              base: customMetadata,
-              runtimeVersion,
-              turnId,
-              turnNumber,
-              legacyRole: "subagent", // DEPRECATED compat alias.
-              subagentId: subagent.agent_id, // → ls_subagent_id (+ agent_id alias).
-              subagentType: toolName, // → ls_subagent_type (+ agent_type alias).
-            }),
-          },
+        await traceSubagentChain({
+          sessionId,
+          project,
+          parentRunId: parentToolRunId,
+          parentDottedOrder: agentToolDottedOrder,
+          parentTraceId,
+          subagentId: subagent.agent_id,
+          subagentType: toolName,
+          chainName: `${toolName} Subagent`,
+          subagentTurns,
+          startTime: subagentStartTime,
+          endTime: subagentEndTime,
+          inputs: deferred?.inputs as Record<string, unknown> | undefined,
+          outputs: deferred?.outputs as Record<string, unknown> | undefined,
+          customMetadata,
+          runtimeVersion,
+          turnId,
+          turnNumber,
         });
-        await runTree.postRun();
-
-        for (let i = 0; i < subagentTurns.length; i++) {
-          await traceTurn({
-            turn: subagentTurns[i],
-            sessionId,
-            turnNum: i + 1,
-            project,
-            parentRunId: subagentChainId,
-            existingTaskRunMap: undefined,
-            traceId: parentTraceId,
-            parentDottedOrder: subagentChainDottedOrder,
-            customMetadata,
-            runtimeVersion,
-          });
-        }
-
-        logger.log(
-          `Traced subagent ${toolName} (${subagent.agent_id}): ${subagentTurns.length} turn(s)`,
-        );
       }
     } catch (err) {
       logger.error(`Failed to trace subagent ${subagent.agent_id}: ${err}`);
@@ -948,6 +920,147 @@ export async function tracePendingSubagents(options: {
   }
 
   return openedAgentRunIds;
+}
+
+/**
+ * Post an intermediate "<name> Subagent" chain run under a parent run (an Agent
+ * tool run, or a dynamic Workflow run) and nest the subagent's own turns beneath
+ * it. Shared by {@link tracePendingSubagents} (Task subagents) and
+ * {@link traceWorkflowStage} (workflow stages) — the only difference is the
+ * parent and the chain name.
+ */
+async function traceSubagentChain(opts: {
+  sessionId: string;
+  project: string;
+  parentRunId: string;
+  parentDottedOrder: string;
+  parentTraceId: string;
+  subagentId: string;
+  subagentType: string;
+  chainName: string;
+  subagentTurns: Turn[];
+  startTime: string;
+  endTime: string;
+  inputs?: Record<string, unknown>;
+  outputs?: Record<string, unknown>;
+  customMetadata?: Record<string, unknown>;
+  runtimeVersion?: string;
+  turnId?: string;
+  turnNumber?: number;
+}): Promise<void> {
+  const subagentChainId = uuid7();
+  const subagentChainDottedOrder = `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, subagentChainId)}`;
+
+  const runTree = new RunTree({
+    client,
+    replicas,
+    id: subagentChainId,
+    name: opts.chainName,
+    run_type: "chain",
+    inputs: opts.inputs ?? {},
+    outputs: { output: opts.outputs },
+    project_name: opts.project,
+    start_time: opts.startTime,
+    end_time: opts.endTime,
+    parent_run_id: opts.parentRunId,
+    trace_id: opts.parentTraceId,
+    dotted_order: subagentChainDottedOrder,
+    extra: {
+      metadata: codingAgentMetadata({
+        sessionId: opts.sessionId,
+        base: opts.customMetadata,
+        runtimeVersion: opts.runtimeVersion,
+        turnId: opts.turnId,
+        turnNumber: opts.turnNumber,
+        legacyRole: "subagent", // DEPRECATED compat alias.
+        subagentId: opts.subagentId, // → ls_subagent_id (+ agent_id alias).
+        subagentType: opts.subagentType, // → ls_subagent_type (+ agent_type alias).
+      }),
+    },
+  });
+  await runTree.postRun();
+
+  for (let i = 0; i < opts.subagentTurns.length; i++) {
+    await traceTurn({
+      turn: opts.subagentTurns[i],
+      sessionId: opts.sessionId,
+      turnNum: i + 1,
+      project: opts.project,
+      parentRunId: subagentChainId,
+      existingTaskRunMap: undefined,
+      traceId: opts.parentTraceId,
+      parentDottedOrder: subagentChainDottedOrder,
+      customMetadata: opts.customMetadata,
+      runtimeVersion: opts.runtimeVersion,
+    });
+  }
+
+  logger.log(
+    `Traced subagent ${opts.subagentType} (${opts.subagentId}): ${opts.subagentTurns.length} turn(s)`,
+  );
+}
+
+/**
+ * Trace one dynamic-workflow stage as a chain under its (already-open) Workflow
+ * tool run. Unlike a Task subagent there is no per-stage Agent tool run — every
+ * stage nests directly under the one Workflow run, correlated by the workflow
+ * run_id embedded in the stage's transcript path. Called by SubagentStop for
+ * each `workflow-subagent`.
+ */
+export async function traceWorkflowStage(opts: {
+  sessionId: string;
+  project: string;
+  /** The open Workflow tool run these stages nest under. */
+  workflowRun: { run_id: string; dotted_order: string };
+  parentTraceId: string | undefined;
+  stageAgentId: string;
+  stageType: string;
+  transcriptPath: string;
+  customMetadata?: Record<string, unknown>;
+  runtimeVersion?: string;
+  turnId?: string;
+  turnNumber?: number;
+}): Promise<void> {
+  if (!client && !replicas) {
+    throw new Error("LangSmith client not initialized — call initTracing() first");
+  }
+  if (!opts.parentTraceId) {
+    logger.warn(`Cannot trace workflow stage ${opts.stageAgentId}: no parent trace ID`);
+    return;
+  }
+
+  const { messages } = readTranscript(opts.transcriptPath, -1);
+  const turns = messages.length > 0 ? groupIntoTurns(messages) : [];
+  if (turns.length === 0) {
+    logger.debug(`Empty/unreadable workflow stage transcript: ${opts.transcriptPath}`);
+    return;
+  }
+
+  const startTime =
+    turns[0].llmCalls[0]?.startTime ?? turns[0].userTimestamp ?? new Date().toISOString();
+  const endTime =
+    turns.reduce(
+      (max, t) => t.llmCalls.reduce((m, c) => (c.endTime > m ? c.endTime : m), max),
+      "",
+    ) || new Date().toISOString();
+
+  await traceSubagentChain({
+    sessionId: opts.sessionId,
+    project: opts.project,
+    parentRunId: opts.workflowRun.run_id,
+    parentDottedOrder: opts.workflowRun.dotted_order,
+    parentTraceId: opts.parentTraceId,
+    subagentId: opts.stageAgentId,
+    subagentType: opts.stageType,
+    chainName: "Workflow step",
+    subagentTurns: turns,
+    startTime,
+    endTime,
+    customMetadata: opts.customMetadata,
+    runtimeVersion: opts.runtimeVersion,
+    turnId: opts.turnId,
+    turnNumber: opts.turnNumber,
+  });
 }
 
 /**
@@ -979,13 +1092,19 @@ export async function closeAgentToolRun(options: {
     throw new Error("LangSmith client not initialized — call initTracing() first");
 
   const deferred = (options.taskRunInfo.deferred ?? {}) as Record<string, unknown>;
-  const toolName = options.agentType || "Agent";
+  // A Workflow run is named "Workflow" (native tool "Workflow"); a Task Agent run
+  // is named "Agent" (native tool "Task") with its resolved subagent type as the
+  // deprecated agent_type alias.
+  const isWorkflow = Boolean(options.taskRunInfo.is_workflow);
+  const runName = isWorkflow ? "Workflow" : "Agent";
+  const nativeToolName = isWorkflow ? "Workflow" : "Task";
+  const agentTypeAlias = isWorkflow ? "Workflow" : options.agentType || "Agent";
 
   const runTree = new RunTree({
     client,
     replicas,
     id: options.taskRunInfo.run_id,
-    name: "Agent",
+    name: runName,
     run_type: "tool",
     inputs: { input: deferred.inputs ?? {} },
     outputs: { output: deferred.outputs ?? {} },
@@ -1003,10 +1122,10 @@ export async function closeAgentToolRun(options: {
         runtimeVersion: options.runtimeVersion,
         turnId: options.turnId,
         turnNumber: options.turnNumber,
-        toolName: "Task",
-        runName: "Agent",
+        toolName: nativeToolName,
+        runName,
         runSpecific: {
-          agent_type: toolName, // DEPRECATED compat alias.
+          agent_type: agentTypeAlias, // DEPRECATED compat alias.
           agent_id: options.agentId, // DEPRECATED compat alias.
         },
       }),
