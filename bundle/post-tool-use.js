@@ -12705,7 +12705,9 @@ async function main() {
         // via its agentId link instead, so it's the one case we don't record —
         // but a Workflow tool call has no agentId, so without this it would get a
         // duplicate "Workflow" tool run next to the open one posted above.
-        ...agentId ? {} : { traced_tool_use_ids: [...freshSession.traced_tool_use_ids ?? [], input.tool_use_id] }
+        ...agentId ? {} : {
+          traced_tool_use_ids: [...freshSession.traced_tool_use_ids ?? [], input.tool_use_id]
+        }
       }
     };
   });
