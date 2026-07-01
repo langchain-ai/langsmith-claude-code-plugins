@@ -13477,6 +13477,18 @@ async function main() {
   let completeNow = false;
   let notificationToFinalize;
   let notificationInterrupted = false;
+  const notifiedWithinTurn = /* @__PURE__ */ new Set();
+  const knownAgentIds = Object.keys(sessionState.task_run_map ?? {});
+  if (knownAgentIds.length > 0) {
+    for (const t of turns) {
+      const uc = typeof t.userContent === "string" ? t.userContent : "";
+      for (const id of knownAgentIds) {
+        if (uc.includes(id))
+          notifiedWithinTurn.add(id);
+      }
+    }
+  }
+  let doneAgentsToFinalize = [];
   await atomicUpdateState(config.stateFilePath, (latestState) => {
     const latestSession = getSessionState(latestState, input.session_id);
     const updatedState = updateSessionState(
@@ -13496,6 +13508,7 @@ async function main() {
     const entry = currentRunId ? openTurns[currentRunId] : void 0;
     if (currentRunId && entry) {
       const remaining = entry.agent_ids.filter((id) => !processedAgentIds.has(id));
+      doneAgentsToFinalize = remaining.filter((id) => latestSession.task_run_map?.[id]?.subagent_done && notifiedWithinTurn.has(id));
       if (remaining.length > 0) {
         openTurns[currentRunId] = {
           ...entry,
@@ -13551,6 +13564,17 @@ async function main() {
     } catch (err) {
       error(`Failed to complete turn run: ${err}`);
     }
+  }
+  for (const doneAgentId of doneAgentsToFinalize) {
+    debug(`Finalizing subagent ${doneAgentId} that finished within its launching turn`);
+    await finalizeNotificationChain({
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      project: config.project,
+      customMetadata: config.customMetadata,
+      runtimeVersion,
+      agentId: doneAgentId
+    });
   }
   if (notificationToFinalize && notificationInterrupted) {
     await finalizeNotificationChain({

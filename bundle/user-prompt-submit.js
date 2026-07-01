@@ -13466,6 +13466,7 @@ function readStdin() {
 }
 
 // dist/hooks/user-prompt-submit.js
+var KILLED_NOTIFICATION_STATUS = "killed";
 async function main() {
   const hookStartTime = Date.now();
   const input = await readStdin();
@@ -13538,7 +13539,7 @@ async function main() {
   const agentToolRun = notifAgentId ? sessionState.task_run_map?.[notifAgentId] : void 0;
   const notificationAgentId = agentToolRun ? notifAgentId : void 0;
   const notificationStatus = notificationAgentId ? /<status>([^<]+)<\/status>/.exec(input.prompt)?.[1] : void 0;
-  const notificationInterrupted = Boolean(notificationStatus && notificationStatus !== "completed");
+  const notificationInterrupted = notificationStatus?.toLowerCase() === KILLED_NOTIFICATION_STATUS;
   if (agentToolRun) {
     traceId = parseDottedOrder(agentToolRun.dotted_order).traceId;
     parentRunId = agentToolRun.run_id;

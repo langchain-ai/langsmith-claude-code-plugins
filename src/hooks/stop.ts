@@ -232,6 +232,25 @@ async function main(): Promise<void> {
   // True when the notification this turn handled reported a killed/interrupted
   // subagent — finalize without waiting on SubagentStop (which won't fire).
   let notificationInterrupted = false;
+  // Background subagents whose task-notification was consumed *within* this turn
+  // (it's already in this turn's transcript) rather than arriving as a separate
+  // turn afterward. Only these should be finalized here: a separate notification
+  // turn still to come must be left alone so it can nest under the Agent run and
+  // finalize itself — finalizing early would delete the task_run_map entry and
+  // break that nesting. We detect "consumed within" by the agent id appearing in a
+  // traced turn's user content (its notification references it); the launch itself
+  // lives in tool_use/tool_result, not user content, so it doesn't false-match.
+  const notifiedWithinTurn = new Set<string>();
+  const knownAgentIds = Object.keys(sessionState.task_run_map ?? {});
+  if (knownAgentIds.length > 0) {
+    for (const t of turns) {
+      const uc = typeof t.userContent === "string" ? t.userContent : "";
+      for (const id of knownAgentIds) {
+        if (uc.includes(id)) notifiedWithinTurn.add(id);
+      }
+    }
+  }
+  let doneAgentsToFinalize: string[] = [];
   await atomicUpdateState(config.stateFilePath, (latestState) => {
     const latestSession = getSessionState(latestState, input.session_id);
     const updatedState = updateSessionState(
@@ -262,6 +281,13 @@ async function main(): Promise<void> {
       // This turn launched background subagents. Drain the ones we just traced and
       // mark the main turn finished, stashing the outputs only this hook carries.
       const remaining = entry.agent_ids.filter((id) => !processedAgentIds.has(id));
+      // Of those, the ones that already finished AND whose notification was
+      // consumed within this turn (no separate notification turn is coming) —
+      // finalize them after the lock so the turn doesn't hang. Agents finished but
+      // awaiting a *separate* notification turn are left for that turn to finalize.
+      doneAgentsToFinalize = remaining.filter(
+        (id) => latestSession.task_run_map?.[id]?.subagent_done && notifiedWithinTurn.has(id),
+      );
       if (remaining.length > 0) {
         openTurns[currentRunId] = {
           ...entry,
@@ -326,6 +352,22 @@ async function main(): Promise<void> {
     } catch (err) {
       error(`Failed to complete turn run: ${err}`);
     }
+  }
+
+  // Finalize any background subagents that already finished within this turn (their
+  // notification was consumed here, so no separate notification turn will finalize
+  // them). finalizeNotificationChain closes each Agent tool run, drains it from the
+  // (just-deferred) launching turn, and completes that turn once fully drained.
+  for (const doneAgentId of doneAgentsToFinalize) {
+    debug(`Finalizing subagent ${doneAgentId} that finished within its launching turn`);
+    await finalizeNotificationChain({
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      project: config.project,
+      customMetadata: config.customMetadata,
+      runtimeVersion,
+      agentId: doneAgentId,
+    });
   }
 
   // If this was a task-notification turn that completed now, finalize the agent's
