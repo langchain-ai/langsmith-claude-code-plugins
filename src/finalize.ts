@@ -66,7 +66,11 @@ export async function finalizeNotificationChain(opts: {
         runtimeVersion,
         turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : undefined,
         wasOpen: Boolean(taskRunInfo.subagent_done),
-        error: interrupted ? "Subagent killed" : undefined,
+        error: interrupted
+          ? taskRunInfo.is_workflow
+            ? "Workflow killed"
+            : "Subagent killed"
+          : undefined,
       });
     } catch (err) {
       logger.error(`Failed to close Agent tool run for ${agentId}: ${err}`);
