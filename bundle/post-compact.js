@@ -11952,6 +11952,9 @@ function debug(message) {
   }
 }
 
+// dist/langsmith.js
+import { createHash } from "node:crypto";
+
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/anonymizer/index.js
 function extractStringNodes(data, options) {
   const parsedOptions = { ...options, maxDepth: options.maxDepth ?? 10 };

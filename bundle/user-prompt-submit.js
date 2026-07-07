@@ -11958,6 +11958,9 @@ function debug(message) {
   }
 }
 
+// dist/langsmith.js
+import { createHash } from "node:crypto";
+
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/anonymizer/index.js
 function extractStringNodes(data, options) {
   const parsedOptions = { ...options, maxDepth: options.maxDepth ?? 10 };
@@ -12340,6 +12343,7 @@ function mergeAssistantChunks(chunks) {
   const allBlocks = chunks.flatMap((c) => c.message.content);
   const merged = mergeAdjacentTextBlocks(allBlocks);
   return {
+    id: first.message.id,
     content: merged,
     model: stripModelDateSuffix(first.message.model),
     usage: last.message.usage,
@@ -12414,6 +12418,7 @@ function groupIntoTurns(messages) {
         };
       });
       llmCalls.push({
+        messageId: merged.id,
         content: merged.content,
         model: merged.model,
         usage: merged.usage,
@@ -12598,6 +12603,13 @@ function generateDottedOrderSegment(time, runId) {
   const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
   return stripped + runId;
 }
+function deterministicUuid(key) {
+  const h = createHash("sha256").update(key).digest("hex").slice(0, 32).split("");
+  h[12] = "8";
+  h[16] = (parseInt(h[16], 16) & 3 | 8).toString(16);
+  const s = h.join("");
+  return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20, 32)}`;
+}
 function runIdFromSegment(segment) {
   const zIdx = segment.indexOf("Z");
   return zIdx >= 0 ? segment.slice(zIdx + 1) : segment;
@@ -12697,7 +12709,7 @@ async function traceTurn(options) {
   let lastEndTime = turn.userTimestamp;
   for (const llmCall of turn.llmCalls) {
     const assistantContent = formatContent(llmCall.content);
-    const assistantRunId = uuid7();
+    const assistantRunId = llmCall.messageId ? deterministicUuid(`assistant:${llmCall.messageId}`) : uuid7();
     const assistantDottedOrderSegment = generateDottedOrderSegment(llmCall.startTime, assistantRunId);
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
     const assistantRunTree = new RunTree({

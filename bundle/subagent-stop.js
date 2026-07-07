@@ -695,6 +695,9 @@ function getSessionState(state, sessionId) {
 }
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
+// dist/langsmith.js
+import { createHash } from "node:crypto";
+
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/regex.js
 var regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
 
@@ -12333,6 +12336,7 @@ function mergeAssistantChunks(chunks) {
   const allBlocks = chunks.flatMap((c) => c.message.content);
   const merged = mergeAdjacentTextBlocks(allBlocks);
   return {
+    id: first.message.id,
     content: merged,
     model: stripModelDateSuffix(first.message.model),
     usage: last.message.usage,
@@ -12407,6 +12411,7 @@ function groupIntoTurns(messages) {
         };
       });
       llmCalls.push({
+        messageId: merged.id,
         content: merged.content,
         model: merged.model,
         usage: merged.usage,
@@ -12529,6 +12534,13 @@ function generateDottedOrderSegment(time, runId) {
   const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
   return stripped + runId;
 }
+function deterministicUuid(key) {
+  const h = createHash("sha256").update(key).digest("hex").slice(0, 32).split("");
+  h[12] = "8";
+  h[16] = (parseInt(h[16], 16) & 3 | 8).toString(16);
+  const s = h.join("");
+  return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20, 32)}`;
+}
 function formatContent(blocks) {
   return blocks.map((block) => {
     switch (block.type) {
@@ -12618,7 +12630,7 @@ async function traceTurn(options) {
   let lastEndTime = turn.userTimestamp;
   for (const llmCall of turn.llmCalls) {
     const assistantContent = formatContent(llmCall.content);
-    const assistantRunId = uuid7();
+    const assistantRunId = llmCall.messageId ? deterministicUuid(`assistant:${llmCall.messageId}`) : uuid7();
     const assistantDottedOrderSegment = generateDottedOrderSegment(llmCall.startTime, assistantRunId);
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
     const assistantRunTree = new RunTree({
