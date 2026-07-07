@@ -6,6 +6,7 @@
  * serialization, retries, and auth automatically.
  */
 
+import { createHash } from "node:crypto";
 import { Client, RunTree, RunTreeConfig, uuid7 } from "langsmith";
 import { createSecretAnonymizer } from "langsmith/anonymizer";
 import type { StringNodeRule } from "langsmith/anonymizer";
@@ -77,6 +78,18 @@ export function generateDottedOrderSegment(time: string | number, runId: string)
   // Strip non-alphanumeric characters
   const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
   return stripped + runId;
+}
+
+/**
+ * Derive a deterministic UUID from a stable key. Re-tracing the same key yields
+ * the same run ID, so LangSmith upserts instead of creating a duplicate run.
+ */
+export function deterministicUuid(key: string): string {
+  const h = createHash("sha256").update(key).digest("hex").slice(0, 32).split("");
+  h[12] = "8"; // version nibble
+  h[16] = ((parseInt(h[16], 16) & 0x3) | 0x8).toString(16); // variant nibble
+  const s = h.join("");
+  return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20, 32)}`;
 }
 
 /**
@@ -278,8 +291,10 @@ export async function traceTurn(
   for (const llmCall of turn.llmCalls) {
     const assistantContent = formatContent(llmCall.content);
 
-    // Generate run ID for this LLM call
-    const assistantRunId = uuid7();
+    // Deterministic ID (keyed on message.id) so a re-trace upserts, not duplicates.
+    const assistantRunId = llmCall.messageId
+      ? deterministicUuid(`assistant:${llmCall.messageId}`)
+      : uuid7();
     const assistantDottedOrderSegment = generateDottedOrderSegment(
       llmCall.startTime,
       assistantRunId,

@@ -236,6 +236,7 @@ export function stripModelDateSuffix(model: string): string {
  * into a single LLM call with concatenated text and final-chunk usage.
  */
 function mergeAssistantChunks(chunks: AssistantMessage[]): {
+  id: string | undefined;
   content: ContentBlock[];
   model: string;
   usage: Usage;
@@ -254,6 +255,7 @@ function mergeAssistantChunks(chunks: AssistantMessage[]): {
   const merged = mergeAdjacentTextBlocks(allBlocks);
 
   return {
+    id: first.message.id,
     content: merged,
     model: stripModelDateSuffix(first.message.model),
     usage: last.message.usage, // SSE usage is cumulative; last chunk has final totals.
@@ -371,6 +373,7 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
       });
 
       llmCalls.push({
+        messageId: merged.id,
         content: merged.content,
         model: merged.model,
         usage: merged.usage,

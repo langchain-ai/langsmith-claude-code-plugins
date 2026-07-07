@@ -131,6 +131,8 @@ export interface ToolCall {
 
 /** A single LLM response, possibly with tool calls. */
 export interface LLMCall {
+  /** Transcript assistant message.id — keys the run's deterministic ID. */
+  messageId?: string;
   /** Merged content from all streaming chunks. */
   content: ContentBlock[];
   /** Model name (date suffix stripped). */
