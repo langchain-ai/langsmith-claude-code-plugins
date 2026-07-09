@@ -9,6 +9,7 @@ import {
   isToolResult,
   isAssistantMessage,
   stripModelDateSuffix,
+  resolveProvider,
   groupIntoTurns,
 } from "./transcript.js";
 import type {
@@ -295,6 +296,23 @@ describe("stripModelDateSuffix", () => {
 
   it("handles model with only numbers that are not a date suffix", () => {
     expect(stripModelDateSuffix("claude-3")).toBe("claude-3");
+  });
+});
+
+// ─── resolveProvider ────────────────────────────────────────────────────────
+
+describe("resolveProvider", () => {
+  it("labels first-party Anthropic ids as anthropic", () => {
+    expect(resolveProvider("claude-sonnet-4-5")).toBe("anthropic");
+  });
+
+  it("labels region-prefixed Bedrock ids as amazon_bedrock", () => {
+    expect(resolveProvider("us.anthropic.claude-sonnet-4-6")).toBe("amazon_bedrock");
+    expect(resolveProvider("us-gov.anthropic.claude-opus-4-8")).toBe("amazon_bedrock");
+  });
+
+  it("labels bare Bedrock ids (no region prefix) as amazon_bedrock", () => {
+    expect(resolveProvider("anthropic.claude-sonnet-5")).toBe("amazon_bedrock");
   });
 });
 

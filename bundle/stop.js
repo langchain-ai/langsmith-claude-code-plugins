@@ -712,6 +712,9 @@ function isAssistantMessage(msg) {
 function stripModelDateSuffix(model) {
   return model.replace(/-\d{8}$/, "");
 }
+function resolveProvider(model) {
+  return /^([a-z-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
+}
 function mergeAssistantChunks(chunks) {
   if (chunks.length === 0) {
     throw new Error("Cannot merge zero chunks");
@@ -12770,7 +12773,7 @@ async function traceTurn(options) {
           turnNumber: turnNum,
           runtimeVersion,
           runSpecific: {
-            ls_provider: "anthropic",
+            ls_provider: resolveProvider(llmCall.model),
             ls_model_name: llmCall.model,
             ls_invocation_params: {
               model: llmCall.model

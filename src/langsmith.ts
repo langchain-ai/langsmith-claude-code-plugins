@@ -10,7 +10,7 @@ import { Client, RunTree, RunTreeConfig, uuid7 } from "langsmith";
 import { createSecretAnonymizer } from "langsmith/anonymizer";
 import type { StringNodeRule } from "langsmith/anonymizer";
 import type { Turn, ContentBlock, Usage, OpenTurn, SessionState } from "./types.js";
-import { readTranscript, groupIntoTurns } from "./transcript.js";
+import { readTranscript, groupIntoTurns, resolveProvider } from "./transcript.js";
 import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
@@ -396,7 +396,7 @@ export async function traceTurn(
           turnNumber: turnNum,
           runtimeVersion,
           runSpecific: {
-            ls_provider: "anthropic",
+            ls_provider: resolveProvider(llmCall.model),
             ls_model_name: llmCall.model,
             ls_invocation_params: {
               model: llmCall.model,

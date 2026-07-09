@@ -229,6 +229,11 @@ export function stripModelDateSuffix(model: string): string {
   return model.replace(/-\d{8}$/, "");
 }
 
+/** Bedrock Claude ids look like "us.anthropic.claude-..."; label them so pricing matches. */
+export function resolveProvider(model: string): string {
+  return /^([a-z-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
+}
+
 // ─── Streaming merge ────────────────────────────────────────────────────────
 
 /**
