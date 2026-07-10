@@ -590,111 +590,6 @@ var require_dist = __commonJS({
   }
 });
 
-// dist/logger.js
-import { appendFileSync, mkdirSync, statSync, renameSync } from "node:fs";
-import { dirname } from "node:path";
-var MAX_LOG_BYTES = 5 * 1024 * 1024;
-var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
-var debugEnabled = false;
-function initLogger(debug2) {
-  debugEnabled = debug2;
-  mkdirSync(dirname(LOG_FILE), { recursive: true });
-}
-function rotateIfNeeded() {
-  try {
-    if (statSync(LOG_FILE).size >= MAX_LOG_BYTES) {
-      renameSync(LOG_FILE, `${LOG_FILE}.1`);
-    }
-  } catch {
-  }
-}
-function write(level, message) {
-  const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").replace("Z", "");
-  const line = `${timestamp} [${level}] ${message}
-`;
-  try {
-    rotateIfNeeded();
-    appendFileSync(LOG_FILE, line);
-  } catch {
-  }
-}
-function log(message) {
-  write("INFO", message);
-}
-function warn(message) {
-  write("WARN", message);
-}
-function error(message) {
-  write("ERROR", message);
-}
-function debug(message) {
-  if (debugEnabled) {
-    write("DEBUG", message);
-  }
-}
-
-// dist/state.js
-import { readFileSync, writeFileSync, mkdirSync as mkdirSync2, openSync, closeSync, unlinkSync } from "node:fs";
-import { dirname as dirname2 } from "node:path";
-var LOCK_TIMEOUT_MS = 5e3;
-var LOCK_RETRY_MS = 20;
-function lockPath(stateFilePath) {
-  return `${stateFilePath}.lock`;
-}
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-async function acquireLock(stateFilePath) {
-  const lock = lockPath(stateFilePath);
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync2(dirname2(stateFilePath), { recursive: true });
-  while (Date.now() < deadline) {
-    try {
-      const fd = openSync(lock, "wx");
-      closeSync(fd);
-      return;
-    } catch {
-      await sleep(LOCK_RETRY_MS);
-    }
-  }
-  try {
-    unlinkSync(lock);
-  } catch {
-  }
-}
-function releaseLock(stateFilePath) {
-  try {
-    unlinkSync(lockPath(stateFilePath));
-  } catch {
-  }
-}
-async function atomicUpdateState(stateFilePath, fn) {
-  await acquireLock(stateFilePath);
-  try {
-    const state = loadState(stateFilePath);
-    writeFileSync(stateFilePath, JSON.stringify(fn(state), null, 2));
-  } finally {
-    releaseLock(stateFilePath);
-  }
-}
-function loadState(stateFilePath) {
-  try {
-    const raw = readFileSync(stateFilePath, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-function getSessionState(state, sessionId) {
-  return state[sessionId] ?? {
-    last_line: -1,
-    turn_count: 0,
-    updated: "",
-    task_run_map: {}
-  };
-}
-var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
-
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/regex.js
 var regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
 
@@ -2159,7 +2054,7 @@ var safeJSON = (text) => {
 };
 
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/sleep.js
-var sleep2 = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/version.js
 var VERSION = "0.0.1";
@@ -2724,14 +2619,14 @@ var levelNumbers = {
   info: 400,
   debug: 500
 };
-var parseLogLevel = (maybeLevel, sourceName, client2) => {
+var parseLogLevel = (maybeLevel, sourceName, client) => {
   if (!maybeLevel) {
     return void 0;
   }
   if (hasOwn(levelNumbers, maybeLevel)) {
     return maybeLevel;
   }
-  loggerFor(client2).warn(`${sourceName} was set to ${JSON.stringify(maybeLevel)}, expected one of ${JSON.stringify(Object.keys(levelNumbers))}`);
+  loggerFor(client).warn(`${sourceName} was set to ${JSON.stringify(maybeLevel)}, expected one of ${JSON.stringify(Object.keys(levelNumbers))}`);
   return void 0;
 };
 function noop() {
@@ -2750,9 +2645,9 @@ var noopLogger = {
   debug: noop
 };
 var cachedLoggers = /* @__PURE__ */ new WeakMap();
-function loggerFor(client2) {
-  const logger = client2.logger;
-  const logLevel = client2.logLevel ?? "off";
+function loggerFor(client) {
+  const logger = client.logger;
+  const logLevel = client.logLevel ?? "off";
   if (!logger) {
     return noopLogger;
   }
@@ -2790,7 +2685,7 @@ var formatRequestDetails = (details) => {
 };
 
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/parse.js
-async function defaultParseResponse(client2, props) {
+async function defaultParseResponse(client, props) {
   const { response, requestLogID, retryOfRequestLogID, startTime } = props;
   const body = await (async () => {
     if (response.status === 204) {
@@ -2813,7 +2708,7 @@ async function defaultParseResponse(client2, props) {
     const text = await response.text();
     return text;
   })();
-  loggerFor(client2).debug(`[${requestLogID}] response parsed`, formatRequestDetails({
+  loggerFor(client).debug(`[${requestLogID}] response parsed`, formatRequestDetails({
     retryOfRequestLogID,
     url: response.url,
     status: response.status,
@@ -2837,7 +2732,7 @@ var __classPrivateFieldGet = function(receiver, state, kind, f2) {
 };
 var _APIPromise_client;
 var APIPromise = class _APIPromise extends Promise {
-  constructor(client2, responsePromise, parseResponse = defaultParseResponse) {
+  constructor(client, responsePromise, parseResponse = defaultParseResponse) {
     super((resolve) => {
       resolve(null);
     });
@@ -2860,10 +2755,10 @@ var APIPromise = class _APIPromise extends Promise {
       value: void 0
     });
     _APIPromise_client.set(this, void 0);
-    __classPrivateFieldSet(this, _APIPromise_client, client2, "f");
+    __classPrivateFieldSet(this, _APIPromise_client, client, "f");
   }
   _thenUnwrap(transform) {
-    return new _APIPromise(__classPrivateFieldGet(this, _APIPromise_client, "f"), this.responsePromise, async (client2, props) => transform(await this.parseResponse(client2, props), props));
+    return new _APIPromise(__classPrivateFieldGet(this, _APIPromise_client, "f"), this.responsePromise, async (client, props) => transform(await this.parseResponse(client, props), props));
   }
   /**
    * Gets the raw `Response` instance instead of parsing the response
@@ -2925,7 +2820,7 @@ var __classPrivateFieldGet2 = function(receiver, state, kind, f2) {
 };
 var _AbstractPage_client;
 var AbstractPage = class {
-  constructor(client2, response, body, options) {
+  constructor(client, response, body, options) {
     _AbstractPage_client.set(this, void 0);
     Object.defineProperty(this, "options", {
       enumerable: true,
@@ -2945,7 +2840,7 @@ var AbstractPage = class {
       writable: true,
       value: void 0
     });
-    __classPrivateFieldSet2(this, _AbstractPage_client, client2, "f");
+    __classPrivateFieldSet2(this, _AbstractPage_client, client, "f");
     this.options = options;
     this.response = response;
     this.body = body;
@@ -2980,8 +2875,8 @@ var AbstractPage = class {
   }
 };
 var PagePromise = class extends APIPromise {
-  constructor(client2, request, Page) {
-    super(client2, request, async (client3, props) => new Page(client3, props.response, await defaultParseResponse(client3, props), props.options));
+  constructor(client, request, Page) {
+    super(client, request, async (client2, props) => new Page(client2, props.response, await defaultParseResponse(client2, props), props.options));
   }
   /**
    * Allow auto-paginating iteration on an unawaited list call, eg:
@@ -2998,8 +2893,8 @@ var PagePromise = class extends APIPromise {
   }
 };
 var OffsetPaginationTopLevelArray = class extends AbstractPage {
-  constructor(client2, response, body, options) {
-    super(client2, response, body, options);
+  constructor(client, response, body, options) {
+    super(client, response, body, options);
     Object.defineProperty(this, "items", {
       enumerable: true,
       configurable: true,
@@ -3025,8 +2920,8 @@ var OffsetPaginationTopLevelArray = class extends AbstractPage {
   }
 };
 var OffsetPaginationOnlineEvaluators = class extends AbstractPage {
-  constructor(client2, response, body, options) {
-    super(client2, response, body, options);
+  constructor(client, response, body, options) {
+    super(client, response, body, options);
     Object.defineProperty(this, "evaluators", {
       enumerable: true,
       configurable: true,
@@ -3059,8 +2954,8 @@ var OffsetPaginationOnlineEvaluators = class extends AbstractPage {
   }
 };
 var OffsetPaginationInsightsClusteringJobs = class extends AbstractPage {
-  constructor(client2, response, body, options) {
-    super(client2, response, body, options);
+  constructor(client, response, body, options) {
+    super(client, response, body, options);
     Object.defineProperty(this, "clustering_jobs", {
       enumerable: true,
       configurable: true,
@@ -3212,14 +3107,14 @@ function propsForError(value) {
 
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/resource.js
 var APIResource = class {
-  constructor(client2) {
+  constructor(client) {
     Object.defineProperty(this, "_client", {
       enumerable: true,
       configurable: true,
       writable: true,
       value: void 0
     });
-    this._client = client2;
+    this._client = client;
   }
 };
 
@@ -3951,7 +3846,7 @@ var Langsmith = class {
    * Create a new client instance re-using the same options given to the current client with optional overriding.
    */
   withOptions(options) {
-    const client2 = new this.constructor({
+    const client = new this.constructor({
       ...this._options,
       baseURL: this.baseURL,
       maxRetries: this.maxRetries,
@@ -3964,7 +3859,7 @@ var Langsmith = class {
       tenantID: this.tenantID,
       ...options
     });
-    return client2;
+    return client;
   }
   defaultQuery() {
     return this._options.defaultQuery;
@@ -4224,7 +4119,7 @@ var Langsmith = class {
       const maxRetries = options.maxRetries ?? this.maxRetries;
       timeoutMillis = this.calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries);
     }
-    await sleep2(timeoutMillis);
+    await sleep(timeoutMillis);
     return this.makeRequest(options, retriesRemaining - 1, requestLogID);
   }
   calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries) {
@@ -4909,19 +4804,19 @@ async function stat2(filePath) {
 function existsSync2(p) {
   return nodeFs.existsSync(p);
 }
-function mkdirSync4(dir) {
+function mkdirSync2(dir) {
   nodeFs.mkdirSync(dir, { recursive: true });
 }
-function writeFileSync3(filePath, content) {
+function writeFileSync2(filePath, content) {
   nodeFs.writeFileSync(filePath, content);
 }
-function renameSync3(oldPath, newPath) {
+function renameSync2(oldPath, newPath) {
   nodeFs.renameSync(oldPath, newPath);
 }
-function unlinkSync3(filePath) {
+function unlinkSync2(filePath) {
   nodeFs.unlinkSync(filePath);
 }
-function readFileSync3(filePath) {
+function readFileSync2(filePath) {
   return nodeFs.readFileSync(filePath, "utf-8");
 }
 async function mkdirExclusive(dir) {
@@ -5103,15 +4998,15 @@ var PromptCache = class {
     }
     const dir = path2.dirname(filePath);
     if (!existsSync2(dir)) {
-      mkdirSync4(dir);
+      mkdirSync2(dir);
     }
     const tempPath = `${filePath}.tmp`;
     try {
-      writeFileSync3(tempPath, JSON.stringify({ entries }, null, 2));
-      renameSync3(tempPath, filePath);
+      writeFileSync2(tempPath, JSON.stringify({ entries }, null, 2));
+      renameSync2(tempPath, filePath);
     } catch (e) {
       if (existsSync2(tempPath)) {
-        unlinkSync3(tempPath);
+        unlinkSync2(tempPath);
       }
       throw e;
     }
@@ -5129,7 +5024,7 @@ var PromptCache = class {
     }
     let entries;
     try {
-      const content = readFileSync3(filePath);
+      const content = readFileSync2(filePath);
       const data = JSON.parse(content);
       entries = data.entries ?? null;
     } catch {
@@ -5241,7 +5136,7 @@ var _getFetchImplementation = (debug2) => {
 var LOCK_POLL_INTERVAL_MS = 10;
 var LOCK_STALE_AFTER_MS = 1e4;
 var LOCK_METADATA_FILE = "created_at";
-function sleep3(ms) {
+function sleep2(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 function isEEXIST(err) {
@@ -5249,7 +5144,7 @@ function isEEXIST(err) {
 }
 function lockMetadataLines(lockDir) {
   try {
-    return readFileSync3(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
+    return readFileSync2(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
   } catch {
     return void 0;
   }
@@ -5297,7 +5192,7 @@ async function acquireOAuthRefreshLock(configPath, deadline) {
         if (Date.now() >= deadline) {
           throw new Error("timed out acquiring OAuth refresh lock");
         }
-        await sleep3(Math.min(LOCK_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())));
+        await sleep2(Math.min(LOCK_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())));
       }
       continue;
     }
@@ -5362,7 +5257,7 @@ function loadProfileState() {
     return void 0;
   }
   try {
-    const config = JSON.parse(readFileSync3(configPath));
+    const config = JSON.parse(readFileSync2(configPath));
     const profileName = resolveProfileName(config);
     const profile = profileName ? config.profiles?.[profileName] : void 0;
     if (!profileName || !profile) {
@@ -5505,7 +5400,7 @@ var ProfileAuth = class {
   }
   reloadProfile() {
     try {
-      const config = JSON.parse(readFileSync3(this.state.configPath));
+      const config = JSON.parse(readFileSync2(this.state.configPath));
       const profile = config.profiles?.[this.state.profileName];
       if (!profile) {
         return void 0;
@@ -11123,7 +11018,7 @@ function filterReplicaForHeaders(replica) {
   return filtered;
 }
 var Baggage = class _Baggage {
-  constructor(metadata, tags, project_name, replicas2) {
+  constructor(metadata, tags, project_name, replicas) {
     Object.defineProperty(this, "metadata", {
       enumerable: true,
       configurable: true,
@@ -11151,14 +11046,14 @@ var Baggage = class _Baggage {
     this.metadata = metadata;
     this.tags = tags;
     this.project_name = project_name;
-    this.replicas = replicas2;
+    this.replicas = replicas;
   }
   static fromHeader(value) {
     const items = value.split(",");
     let metadata = {};
     let tags = [];
     let project_name;
-    let replicas2;
+    let replicas;
     for (const item of items) {
       const [key, uriValue] = item.split("=");
       const value2 = decodeURIComponent(uriValue);
@@ -11170,7 +11065,7 @@ var Baggage = class _Baggage {
         project_name = value2;
       } else if (key === "langsmith-replicas") {
         const parsed = JSON.parse(value2);
-        replicas2 = parsed.map((replica) => {
+        replicas = parsed.map((replica) => {
           if (Array.isArray(replica)) {
             return replica;
           }
@@ -11178,7 +11073,7 @@ var Baggage = class _Baggage {
         });
       }
     }
-    return new _Baggage(metadata, tags, project_name, replicas2);
+    return new _Baggage(metadata, tags, project_name, replicas);
   }
   toHeader() {
     const items = [];
@@ -11370,7 +11265,7 @@ var RunTree = class _RunTree {
     }
     const defaultConfig = _RunTree.getDefaultConfig();
     const { metadata, ...config } = originalConfig;
-    const client2 = config.client ?? _RunTree.getSharedClient();
+    const client = config.client ?? _RunTree.getSharedClient();
     const dedupedMetadata = {
       ...metadata,
       ...config?.extra?.metadata
@@ -11379,7 +11274,7 @@ var RunTree = class _RunTree {
     if ("id" in config && config.id == null) {
       delete config.id;
     }
-    Object.assign(this, { ...defaultConfig, ...config, client: client2 });
+    Object.assign(this, { ...defaultConfig, ...config, client });
     this.execution_order ??= 1;
     this.child_execution_order ??= 1;
     if (!this.dotted_order) {
@@ -11801,20 +11696,20 @@ var RunTree = class _RunTree {
     const callbackManager = parentConfig?.callbacks;
     let parentRun;
     let projectName;
-    let client2;
+    let client;
     let tracingEnabled = isEnvTracingEnabled();
     if (callbackManager) {
       const parentRunId = callbackManager?.getParentRunId?.() ?? "";
       const langChainTracer = callbackManager?.handlers?.find((handler) => handler?.name == "langchain_tracer");
       parentRun = langChainTracer?.getRun?.(parentRunId);
       projectName = langChainTracer?.projectName;
-      client2 = langChainTracer?.client;
+      client = langChainTracer?.client;
       tracingEnabled = tracingEnabled || !!langChainTracer;
     }
     if (!parentRun) {
       return new _RunTree({
         ...props,
-        client: client2,
+        client,
         tracingEnabled,
         project_name: projectName
       });
@@ -11824,7 +11719,7 @@ var RunTree = class _RunTree {
       id: parentRun.id,
       trace_id: parentRun.trace_id,
       dotted_order: parentRun.dotted_order,
-      client: client2,
+      client,
       tracingEnabled,
       project_name: projectName,
       tags: [
@@ -11921,7 +11816,7 @@ function _getWriteReplicasFromEnv() {
   try {
     const parsed = JSON.parse(envVar);
     if (Array.isArray(parsed)) {
-      const replicas2 = [];
+      const replicas = [];
       for (const item of parsed) {
         if (typeof item !== "object" || item === null) {
           console.warn(`Invalid item type in LANGSMITH_RUNS_ENDPOINTS: expected object, got ${typeof item}`);
@@ -11935,19 +11830,19 @@ function _getWriteReplicasFromEnv() {
           console.warn(`Invalid api_key type in LANGSMITH_RUNS_ENDPOINTS: expected string, got ${typeof item.api_key}`);
           continue;
         }
-        replicas2.push({
+        replicas.push({
           apiUrl: item.api_url.replace(/\/$/, ""),
           apiKey: item.api_key
         });
       }
-      return replicas2;
+      return replicas;
     } else if (typeof parsed === "object" && parsed !== null) {
       _checkEndpointEnvUnset(parsed);
-      const replicas2 = [];
+      const replicas = [];
       for (const [url, key] of Object.entries(parsed)) {
         const cleanUrl = url.replace(/\/$/, "");
         if (typeof key === "string") {
-          replicas2.push({
+          replicas.push({
             apiUrl: cleanUrl,
             apiKey: key
           });
@@ -11956,7 +11851,7 @@ function _getWriteReplicasFromEnv() {
           continue;
         }
       }
-      return replicas2;
+      return replicas;
     } else {
       console.warn(`Invalid LANGSMITH_RUNS_ENDPOINTS \u2013 must be valid JSON array of objects with api_url and api_key properties, or object mapping url->apiKey, got ${typeof parsed}`);
       return [];
@@ -11969,9 +11864,9 @@ function _getWriteReplicasFromEnv() {
     return [];
   }
 }
-function _ensureWriteReplicas(replicas2) {
-  if (replicas2) {
-    return replicas2.map((replica) => {
+function _ensureWriteReplicas(replicas) {
+  if (replicas) {
+    return replicas.map((replica) => {
       if (Array.isArray(replica)) {
         return {
           projectName: replica[0],
@@ -11987,11 +11882,6 @@ function _checkEndpointEnvUnset(parsed) {
   if (Object.keys(parsed).length > 0 && getLangSmithEnvironmentVariable("ENDPOINT")) {
     throw new ConflictingEndpointsError();
   }
-}
-
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/uuid.js
-function uuid7() {
-  return v7_default();
 }
 
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/traceable.js
@@ -12020,1171 +11910,45 @@ var AsyncLocalStorageProviderSingleton = new AsyncLocalStorageProvider();
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/index.js
 var __version__ = "0.7.11";
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/anonymizer/index.js
-function extractStringNodes(data, options) {
-  const parsedOptions = { ...options, maxDepth: options.maxDepth ?? 10 };
-  const queue = [[data, 0, "", null, ""]];
-  let nextId = 0;
-  const result = [];
-  while (queue.length > 0) {
-    const task = queue.shift();
-    if (task == null)
-      continue;
-    const [value, depth, path3, parent, key] = task;
-    if (typeof value === "string") {
-      result.push({
-        value,
-        path: path3,
-        parent,
-        key,
-        _id: nextId++
-      });
-    } else if (Array.isArray(value)) {
-      if (depth >= parsedOptions.maxDepth)
-        continue;
-      for (let i = 0; i < value.length; i++) {
-        queue.push([
-          value[i],
-          depth + 1,
-          `${path3}[${i}]`,
-          value,
-          String(i)
-        ]);
-      }
-    } else if (typeof value === "object" && value != null) {
-      if (depth >= parsedOptions.maxDepth)
-        continue;
-      for (const [k, nestedValue] of Object.entries(value)) {
-        queue.push([
-          nestedValue,
-          depth + 1,
-          path3 ? `${path3}.${k}` : k,
-          value,
-          k
-        ]);
-      }
-    }
-  }
-  return result;
-}
-function deepClone(data) {
-  return JSON.parse(JSON.stringify(data));
-}
-function createAnonymizer(replacer, options) {
-  return (data) => {
-    let mutateValue = deepClone(data);
-    const nodes = extractStringNodes(mutateValue, {
-      maxDepth: options?.maxDepth
-    });
-    const processor = Array.isArray(replacer) ? (() => {
-      const replacers = replacer.map(({ pattern, type, replace }) => {
-        if (type != null && type !== "pattern")
-          throw new Error("Invalid anonymizer type");
-        return [
-          typeof pattern === "string" ? new RegExp(pattern, "g") : pattern,
-          replace ?? "[redacted]"
-        ];
-      });
-      if (replacers.length === 0)
-        throw new Error("No replacers provided");
-      return {
-        maskNodes: (nodes2) => {
-          return nodes2.reduce((memo, item) => {
-            const newValue = replacers.reduce((value, [regex, replace]) => {
-              const result = value.replace(regex, replace);
-              regex.lastIndex = 0;
-              return result;
-            }, item.value);
-            if (newValue !== item.value) {
-              memo.push({ ...item, value: newValue });
-            }
-            return memo;
-          }, []);
-        }
-      };
-    })() : typeof replacer === "function" ? {
-      maskNodes: (nodes2) => nodes2.reduce((memo, item) => {
-        const newValue = replacer(item.value, item.path);
-        if (newValue !== item.value) {
-          memo.push({ ...item, value: newValue });
-        }
-        return memo;
-      }, [])
-    } : replacer;
-    const nodesById = /* @__PURE__ */ new Map();
-    for (const node of nodes) {
-      nodesById.set(node._id, node);
-    }
-    const toUpdate = processor.maskNodes(nodes);
-    for (const node of toUpdate) {
-      if (node.path === "") {
-        mutateValue = node.value;
-      } else {
-        const asInternal = node;
-        const internal = asInternal._id !== void 0 ? nodesById.get(asInternal._id) : nodes.find((n2) => n2.path === node.path);
-        if (internal) {
-          internal.parent[internal.key] = node.value;
-        }
-      }
-    }
-    return mutateValue;
-  };
-}
-var SECRET_PLACEHOLDER = "[SECRET_DETECTED]";
-var DEFAULT_SECRET_RULES = [
-  // ── Provider API keys (prefix-anchored) ─────────────────────────────────
-  // Anthropic
-  { pattern: /sk-ant-[A-Za-z0-9_-]{20,}/g, replace: SECRET_PLACEHOLDER },
-  // OpenAI: project / service-account / admin keys, then legacy `sk-...`
-  {
-    pattern: /sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  { pattern: /sk-[A-Za-z0-9]{32,}/g, replace: SECRET_PLACEHOLDER },
-  // LangSmith (keys are multi-segment: lsv2_pt_<key>_<tail> — match the
-  // full underscore-delimited tail so none of it leaks past the placeholder)
-  {
-    pattern: /lsv2_(?:pt|sk)_[A-Za-z0-9]{32,}(?:_[A-Za-z0-9]+)*/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  { pattern: /ls__[A-Za-z0-9]{16,}/g, replace: SECRET_PLACEHOLDER },
-  // GitHub personal access / app tokens
-  { pattern: /gh[pousr]_[A-Za-z0-9]{36,}/g, replace: SECRET_PLACEHOLDER },
-  { pattern: /github_pat_[A-Za-z0-9_]{82}/g, replace: SECRET_PLACEHOLDER },
-  // GitLab personal access token
-  { pattern: /glpat-[A-Za-z0-9_-]{20,}/g, replace: SECRET_PLACEHOLDER },
-  // AWS access key id (covers AKIA/ASIA/ABIA/ACCA/A3T* prefixes)
-  {
-    pattern: /\b(?:AKIA|ASIA|ABIA|ACCA|A3T[A-Z0-9])[0-9A-Z]{16}\b/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // Google API key + OAuth access token
-  { pattern: /AIza[0-9A-Za-z_-]{35}/g, replace: SECRET_PLACEHOLDER },
-  { pattern: /ya29\.[0-9A-Za-z_-]+/g, replace: SECRET_PLACEHOLDER },
-  // Slack tokens (bot/user + app-level) + incoming webhooks
-  { pattern: /xox[baprs]-[A-Za-z0-9-]{10,}/g, replace: SECRET_PLACEHOLDER },
-  { pattern: /xapp-\d-[A-Za-z0-9-]{10,}/g, replace: SECRET_PLACEHOLDER },
-  {
-    pattern: /https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/]+/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // Stripe
-  {
-    pattern: /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{20,}\b/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // npm
-  { pattern: /npm_[A-Za-z0-9]{36}/g, replace: SECRET_PLACEHOLDER },
-  // PyPI upload token
-  {
-    pattern: /pypi-AgEIcHlwaS[A-Za-z0-9_-]{50,}/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // SendGrid
-  {
-    pattern: /SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // ── Structured tokens ────────────────────────────────────────────────────
-  // JWT (header.payload.signature)
-  {
-    pattern: /eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // PEM private key blocks (RSA/EC/OPENSSH/DSA/plain + PGP "...KEY BLOCK")
-  {
-    pattern: /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY(?: BLOCK)?-----[\s\S]+?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY(?: BLOCK)?-----/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // ── Structural / contextual (sensitive NAME + assignment) ─────────────────
-  // KEY=value or "key": "value" where the name looks sensitive. Keep the name
-  // and separator ($1), redact the value. Notes:
-  //  - (?![A-Za-z0-9]) after the keyword requires a component boundary, so
-  //    `token` matches `api_token`/`mytoken` but NOT `tokenizer`/`tokens`.
-  //  - the value may start with an auth scheme word (Bearer/Token/Basic) so a
-  //    `X-Api-Key: Bearer <tok>` shape redacts the credential, not just "Bearer".
-  //  - value excludes & and ; so query-string params past the secret survive.
-  //  - requires a 6+ char value so short non-secret values are not touched.
-  {
-    pattern: /\b([A-Za-z0-9_.-]*(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|AUTH[_-]?TOKEN|CLIENT[_-]?SECRET)(?![A-Za-z0-9])(?:[_.-][A-Za-z0-9]+)*["']?\s*[:=]\s*["']?)(?:(?:bearer|token|basic)\s+)?[^\s"'&;]{6,}/gi,
-    replace: `$1${SECRET_PLACEHOLDER}`
-  },
-  // Authorization / API-key headers. Keep the header name + separator ($1$2)
-  // and an optional scheme ($3); redact the credential.
-  {
-    pattern: /\b(authorization|x-api-key|x-auth-token)(["']?\s*[:=]\s*["']?)(bearer\s+|token\s+|basic\s+)?[A-Za-z0-9._~+/-]{8,}=*/gi,
-    replace: `$1$2$3${SECRET_PLACEHOLDER}`
-  },
-  // Bare "Bearer <token>" (any case; the scheme word is preserved via $1).
-  {
-    pattern: /\b(Bearer\s+)[A-Za-z0-9._~+/-]{10,}=*/gi,
-    replace: `$1${SECRET_PLACEHOLDER}`
-  },
-  // Credentials embedded in URLs: proto://user:PASS@host -> redact PASS only.
-  // Username is optional so proto://:PASS@host (empty user) is still covered.
-  {
-    pattern: /\b([a-z][a-z0-9+.-]*:\/\/[^:@/\s]*:)[^@/\s]+(@)/gi,
-    replace: `$1${SECRET_PLACEHOLDER}$2`
-  }
-];
-function createSecretAnonymizer(options) {
-  const rules = [...DEFAULT_SECRET_RULES, ...options?.extraRules ?? []];
-  return createAnonymizer(rules, { maxDepth: options?.maxDepth ?? 24 });
-}
+// dist/config.js
+import { readFileSync as readFileSync3 } from "node:fs";
+import { userInfo } from "node:os";
+import { join } from "node:path";
 
-// dist/transcript.js
-import { readFileSync as readFileSync4, statSync as statSync3, fstatSync, openSync as openSync2, readSync, closeSync as closeSync2 } from "node:fs";
-var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
-function readTranscript(filePath, afterLine = -1) {
-  let size;
+// dist/logger.js
+import { appendFileSync, mkdirSync as mkdirSync3, statSync as statSync2, renameSync as renameSync3 } from "node:fs";
+import { dirname } from "node:path";
+var MAX_LOG_BYTES = 5 * 1024 * 1024;
+var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
+var debugEnabled = false;
+function rotateIfNeeded() {
   try {
-    size = statSync3(filePath).size;
+    if (statSync2(LOG_FILE).size >= MAX_LOG_BYTES) {
+      renameSync3(LOG_FILE, `${LOG_FILE}.1`);
+    }
   } catch {
-    return { messages: [], lastLine: afterLine };
   }
-  if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync4(filePath, "utf-8");
-    const lines = raw.split("\n").filter((l) => l.trim() !== "");
-    const messages = [];
-    let lastLine = afterLine;
-    for (let i = 0; i < lines.length; i++) {
-      lastLine = i;
-      if (i <= afterLine)
-        continue;
-      try {
-        messages.push(JSON.parse(lines[i]));
-      } catch {
-      }
-    }
-    return { messages, lastLine };
-  }
-  const fd = openSync2(filePath, "r");
+}
+function write(level, message) {
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").replace("Z", "");
+  const line = `${timestamp} [${level}] ${message}
+`;
   try {
-    const chunkSize = 2 * 1024 * 1024;
-    const buf = Buffer.alloc(chunkSize);
-    const messages = [];
-    let lastLine = afterLine;
-    let lineIndex = -1;
-    let partial = "";
-    let bytesRead;
-    let pos = 0;
-    while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
-      const chunk = partial + buf.toString("utf-8", 0, bytesRead);
-      partial = "";
-      const lines = chunk.split("\n");
-      partial = lines.pop() ?? "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed === "")
-          continue;
-        lineIndex++;
-        lastLine = lineIndex;
-        if (lineIndex <= afterLine)
-          continue;
-        try {
-          messages.push(JSON.parse(trimmed));
-        } catch {
-        }
-      }
-      pos += bytesRead;
-    }
-    if (partial.trim() !== "") {
-      lineIndex++;
-      lastLine = lineIndex;
-      if (lineIndex > afterLine) {
-        try {
-          messages.push(JSON.parse(partial.trim()));
-        } catch {
-        }
-      }
-    }
-    return { messages, lastLine };
-  } finally {
-    closeSync2(fd);
+    rotateIfNeeded();
+    appendFileSync(LOG_FILE, line);
+  } catch {
   }
 }
-function isHumanMessage(msg) {
-  if (msg.type !== "user")
-    return false;
-  if (typeof msg.message.content === "string")
-    return true;
-  if (Array.isArray(msg.message.content)) {
-    return !msg.message.content.some((b) => b.type === "tool_result");
-  }
-  return false;
+function error(message) {
+  write("ERROR", message);
 }
-function isToolResult(msg) {
-  if (msg.type !== "user" || !Array.isArray(msg.message.content))
-    return false;
-  return msg.message.content.some((b) => b.type === "tool_result");
-}
-function isAssistantMessage(msg) {
-  return msg.type === "assistant";
-}
-function stripModelDateSuffix(model) {
-  return model.replace(/-\d{8}$/, "");
-}
-function resolveProvider(model) {
-  const flag = (name) => ["1", "true"].includes((process.env[name] ?? "").toLowerCase());
-  if (flag("CLAUDE_CODE_USE_BEDROCK"))
-    return "amazon_bedrock";
-  if (flag("CLAUDE_CODE_USE_VERTEX"))
-    return "google_vertex_ai";
-  return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
-}
-function mergeAssistantChunks(chunks) {
-  if (chunks.length === 0) {
-    throw new Error("Cannot merge zero chunks");
+function debug(message) {
+  if (debugEnabled) {
+    write("DEBUG", message);
   }
-  const first = chunks[0];
-  const last = chunks[chunks.length - 1];
-  const allBlocks = chunks.flatMap((c) => c.message.content);
-  const merged = mergeAdjacentTextBlocks(allBlocks);
-  return {
-    content: merged,
-    model: stripModelDateSuffix(first.message.model),
-    usage: last.message.usage,
-    // SSE usage is cumulative; last chunk has final totals.
-    startTime: first.timestamp,
-    endTime: last.timestamp
-  };
-}
-function mergeAdjacentTextBlocks(blocks) {
-  const result = [];
-  let textBuffer = null;
-  for (const block of blocks) {
-    if (block.type === "text") {
-      textBuffer = (textBuffer ?? "") + block.text;
-    } else {
-      if (textBuffer !== null) {
-        result.push({ type: "text", text: textBuffer });
-        textBuffer = null;
-      }
-      result.push(block);
-    }
-  }
-  if (textBuffer !== null) {
-    result.push({ type: "text", text: textBuffer });
-  }
-  return result;
-}
-function findToolResult(toolUseId, toolResults) {
-  for (const msg of toolResults) {
-    for (const block of msg.message.content) {
-      if (block.type === "tool_result" && block.tool_use_id === toolUseId) {
-        const content = typeof block.content === "string" ? block.content : block.content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
-        return {
-          content,
-          timestamp: msg.timestamp,
-          agentId: msg.toolUseResult?.agentId
-        };
-      }
-    }
-  }
-  return void 0;
-}
-function groupIntoTurns(messages) {
-  const turns = [];
-  let currentPromptId = null;
-  let currentUser = null;
-  let assistantChunks = /* @__PURE__ */ new Map();
-  let assistantOrder = [];
-  let toolResults = [];
-  let hasStopReasonEndTurn = false;
-  function finalizeTurn(forceIncomplete = false) {
-    if (!currentUser)
-      return;
-    if (assistantChunks.size === 0)
-      return;
-    const assistantMessages = Array.from(assistantChunks.values()).flat();
-    const hasStopReasonField = assistantMessages.some((m) => m.message.stop_reason !== void 0);
-    const isComplete = hasStopReasonEndTurn || !forceIncomplete && !hasStopReasonField;
-    const llmCalls = [];
-    for (const msgId of assistantOrder) {
-      const chunks = assistantChunks.get(msgId);
-      if (!chunks || chunks.length === 0)
-        continue;
-      const merged = mergeAssistantChunks(chunks);
-      const toolUses = merged.content.filter((b) => b.type === "tool_use");
-      const toolCalls = toolUses.map((tu) => {
-        const result = findToolResult(tu.id, toolResults);
-        return {
-          tool_use: tu,
-          result: result ? { content: result.content, timestamp: result.timestamp } : void 0,
-          agentId: result?.agentId
-        };
-      });
-      llmCalls.push({
-        content: merged.content,
-        model: merged.model,
-        usage: merged.usage,
-        startTime: merged.startTime,
-        endTime: merged.endTime,
-        toolCalls
-      });
-    }
-    turns.push({
-      userContent: currentUser.message.content,
-      userTimestamp: currentUser.timestamp,
-      llmCalls,
-      isComplete,
-      promptId: currentUser.promptId
-    });
-  }
-  for (const msg of messages) {
-    if (isHumanMessage(msg)) {
-      const isNewTurn = currentUser === null || msg.promptId !== void 0 && msg.promptId !== currentPromptId || msg.promptId === void 0;
-      if (isNewTurn) {
-        finalizeTurn();
-        currentPromptId = msg.promptId;
-        currentUser = msg;
-        assistantChunks = /* @__PURE__ */ new Map();
-        assistantOrder = [];
-        toolResults = [];
-        hasStopReasonEndTurn = false;
-      }
-    } else if (isToolResult(msg)) {
-      toolResults.push(msg);
-    } else if (isAssistantMessage(msg)) {
-      const id = msg.message.id ?? "__no_id__";
-      if (!assistantChunks.has(id)) {
-        assistantChunks.set(id, []);
-        assistantOrder.push(id);
-      }
-      assistantChunks.get(id).push(msg);
-      if (msg.message.stop_reason === "end_turn") {
-        hasStopReasonEndTurn = true;
-      }
-    }
-  }
-  finalizeTurn(true);
-  return turns;
-}
-
-// dist/constants.js
-var USER_PROMPT_TURN_NAME = "Claude Code Turn";
-var ASSISTANT_RUN_NAME = "Claude";
-
-// dist/metadata.js
-var LS_AGENT_KIND = "coding_agent";
-var LS_INTEGRATION = "claude-code";
-var LS_AGENT_RUNTIME = "Claude Code";
-var LS_TRACE_SCHEMA_VERSION = "coding-agent-v1";
-function codingAgentMetadata(opts) {
-  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, legacyRole, subagentId, subagentType, toolName, runName, runSpecific } = opts;
-  const meta = {
-    // Identity & grouping — always present.
-    ls_agent_kind: LS_AGENT_KIND,
-    ls_integration: LS_INTEGRATION,
-    ls_agent_runtime: LS_AGENT_RUNTIME,
-    ls_trace_schema_version: LS_TRACE_SCHEMA_VERSION,
-    thread_id: sessionId
-  };
-  if (turnId)
-    meta.turn_id = turnId;
-  if (typeof turnNumber === "number")
-    meta.turn_number = turnNumber;
-  if (runtimeVersion)
-    meta.ls_agent_runtime_version = runtimeVersion;
-  if (approvalPolicy)
-    meta.approval_policy = approvalPolicy;
-  if (legacyRole)
-    meta.ls_agent_type = legacyRole;
-  if (subagentId) {
-    meta.ls_subagent_id = subagentId;
-    meta.agent_id = subagentId;
-  }
-  if (subagentType) {
-    meta.ls_subagent_type = subagentType;
-    meta.agent_type = subagentType;
-  }
-  if (toolName) {
-    meta.tool_name = toolName;
-    if (runName && toolName !== runName)
-      meta.ls_tool_name = toolName;
-  }
-  return {
-    ...meta,
-    ...runSpecific,
-    ...base
-  };
-}
-
-// dist/langsmith.js
-var client = void 0;
-var replicas = void 0;
-function initTracing(apiKey, apiUrl, providedReplicas, redact = true, extraRedactionRules) {
-  const anonymizer = redact ? createSecretAnonymizer(extraRedactionRules ? { extraRules: extraRedactionRules } : void 0) : void 0;
-  if (apiKey || anonymizer && providedReplicas) {
-    client = new Client({ apiKey: apiKey || void 0, apiUrl, anonymizer });
-  } else {
-    client = void 0;
-  }
-  replicas = providedReplicas;
-  return client;
-}
-async function flushPendingTraces() {
-  debug("Awaiting pending trace batches...");
-  await Promise.all([
-    client?.awaitPendingTraceBatches(),
-    RunTree.getSharedClient().awaitPendingTraceBatches()
-  ]);
-  debug("Trace batches flushed successfully");
-}
-function generateDottedOrderSegment(time, runId) {
-  const iso = typeof time === "string" ? time : new Date(time).toISOString();
-  const isoWithMicroseconds = `${iso.slice(0, -1)}000Z`;
-  const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
-  return stripped + runId;
-}
-function formatContent(blocks) {
-  return blocks.map((block) => {
-    switch (block.type) {
-      case "text":
-        return { type: "text", text: block.text };
-      case "thinking":
-        return { type: "thinking", thinking: block.thinking };
-      case "tool_use":
-        return { type: "tool_call", name: block.name, args: block.input, id: block.id };
-      default:
-        return block;
-    }
-  });
-}
-function buildUsageMetadata(usage) {
-  const input_tokens = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
-  const output_tokens = usage.output_tokens ?? 0;
-  const total_tokens = input_tokens + output_tokens;
-  if (total_tokens === 0) {
-    return void 0;
-  }
-  return {
-    input_tokens,
-    output_tokens,
-    total_tokens,
-    input_token_details: {
-      cache_read: usage.cache_read_input_tokens ?? 0,
-      cache_creation: usage.cache_creation_input_tokens ?? 0
-    }
-  };
-}
-async function traceTurn(options) {
-  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy } = options;
-  const turnId = turn.promptId;
-  let traceId = providedTraceId;
-  let parentDottedOrder = providedParentDottedOrder;
-  if (!client && !replicas) {
-    throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
-  }
-  const userContent = typeof turn.userContent === "string" ? [{ type: "text", text: turn.userContent }] : turn.userContent;
-  let turnRunId;
-  let shouldCreateTurn = false;
-  if (parentRunId) {
-    debug(`Using existing run ${parentRunId} as parent for LLM/tool runs`);
-    turnRunId = parentRunId;
-    if (!traceId || !parentDottedOrder) {
-      throw new Error(`Missing trace context when using parentRunId. traceId=${traceId}, parentDottedOrder=${parentDottedOrder}`);
-    }
-  } else {
-    shouldCreateTurn = true;
-    turnRunId = uuid7();
-    traceId = turnRunId;
-    parentDottedOrder = generateDottedOrderSegment(turn.userTimestamp, turnRunId);
-    debug(`Creating new standalone turn run ${turnRunId}`);
-    const runTree = new RunTree({
-      client,
-      replicas,
-      id: turnRunId,
-      name: USER_PROMPT_TURN_NAME,
-      run_type: "chain",
-      inputs: { messages: [{ role: "user", content: userContent }] },
-      project_name: project,
-      start_time: turn.userTimestamp,
-      trace_id: traceId,
-      dotted_order: parentDottedOrder,
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId,
-          base: customMetadata,
-          turnId,
-          turnNumber: turnNum,
-          runtimeVersion,
-          approvalPolicy,
-          legacyRole: "root"
-          // DEPRECATED compat alias ls_agent_type="root".
-        })
-      }
-    });
-    await runTree.postRun();
-  }
-  const accumulatedMessages = [
-    { role: "user", content: userContent }
-  ];
-  const taskRunMap = {
-    ...existingTaskRunMap
-  };
-  let lastEndTime = turn.userTimestamp;
-  for (const llmCall of turn.llmCalls) {
-    const assistantContent = formatContent(llmCall.content);
-    const assistantRunId = uuid7();
-    const assistantDottedOrderSegment = generateDottedOrderSegment(llmCall.startTime, assistantRunId);
-    const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
-    const assistantRunTree = new RunTree({
-      client,
-      replicas,
-      id: assistantRunId,
-      name: ASSISTANT_RUN_NAME,
-      run_type: "llm",
-      inputs: { messages: [...accumulatedMessages] },
-      project_name: project,
-      start_time: llmCall.startTime,
-      parent_run_id: turnRunId,
-      trace_id: traceId,
-      dotted_order: assistantDottedOrder
-    });
-    await assistantRunTree.postRun();
-    for (const toolCall of llmCall.toolCalls) {
-      if (toolCall.agentId && existingTaskRunMap?.[toolCall.agentId]) {
-        debug(`Skipping Task tool for agent ${toolCall.agentId} - already traced by PostToolUse`);
-        lastEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
-        continue;
-      }
-      if (!toolCall.agentId && tracedToolUseIds?.has(toolCall.tool_use.id)) {
-        lastEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
-        continue;
-      }
-      const toolEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
-      const toolStartTime = llmCall.endTime <= toolEndTime ? llmCall.endTime : toolEndTime;
-      const toolRunId = uuid7();
-      const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTime, toolRunId);
-      const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
-      const runTree2 = new RunTree({
-        client,
-        replicas,
-        id: toolRunId,
-        name: toolCall.tool_use.name,
-        run_type: "tool",
-        inputs: { input: toolCall.tool_use.input },
-        outputs: { output: toolCall.result?.content ?? "No result" },
-        project_name: project,
-        start_time: toolStartTime,
-        end_time: toolEndTime,
-        parent_run_id: turnRunId,
-        trace_id: traceId,
-        dotted_order: toolDottedOrder,
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId,
-            base: customMetadata,
-            turnId,
-            turnNumber: turnNum,
-            runtimeVersion,
-            toolName: toolCall.tool_use.name,
-            runName: toolCall.tool_use.name
-          })
-        }
-      });
-      await runTree2.postRun();
-      if (toolCall.agentId) {
-        taskRunMap[toolCall.agentId] = {
-          run_id: toolRunId,
-          dotted_order: toolDottedOrder
-        };
-        debug(`Task tool ${toolCall.tool_use.id} \u2192 agentId=${toolCall.agentId}, runId=${toolRunId}`);
-      }
-      lastEndTime = toolEndTime;
-    }
-    const assistantEndTime = llmCall.toolCalls.length > 0 ? lastEndTime : llmCall.endTime;
-    const runTree = new RunTree({
-      client,
-      replicas,
-      id: assistantRunId,
-      run_type: "llm",
-      trace_id: traceId,
-      dotted_order: assistantDottedOrder,
-      parent_run_id: turnRunId,
-      name: ASSISTANT_RUN_NAME,
-      project_name: project,
-      start_time: llmCall.startTime,
-      end_time: assistantEndTime,
-      outputs: {
-        messages: [{ role: "assistant", content: assistantContent }]
-      },
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId,
-          base: customMetadata,
-          turnId,
-          turnNumber: turnNum,
-          runtimeVersion,
-          runSpecific: {
-            ls_provider: resolveProvider(llmCall.model),
-            ls_model_name: llmCall.model,
-            ls_invocation_params: {
-              model: llmCall.model
-            },
-            usage_metadata: buildUsageMetadata(llmCall.usage),
-            ...llmCall.synthetic ? { synthetic: true } : {}
-          }
-        })
-      }
-    });
-    await runTree.patchRun({ excludeInputs: true });
-    accumulatedMessages.push({ role: "assistant", content: assistantContent });
-    for (const tc of llmCall.toolCalls) {
-      accumulatedMessages.push({
-        role: "tool",
-        tool_call_id: tc.tool_use.id,
-        content: [{ type: "text", text: tc.result?.content ?? "" }]
-      });
-    }
-    lastEndTime = assistantEndTime;
-  }
-  if (shouldCreateTurn) {
-    const turnOutputs = accumulatedMessages.filter((m) => m.role !== "user");
-    const error2 = turn.isComplete ? void 0 : "Interrupted";
-    const runTree = new RunTree({
-      client,
-      replicas,
-      id: turnRunId,
-      run_type: "chain",
-      trace_id: traceId,
-      dotted_order: parentDottedOrder,
-      name: USER_PROMPT_TURN_NAME,
-      project_name: project,
-      start_time: turn.userTimestamp,
-      end_time: lastEndTime,
-      outputs: { messages: turnOutputs },
-      error: error2,
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId,
-          base: customMetadata,
-          turnId,
-          turnNumber: turnNum,
-          runtimeVersion,
-          approvalPolicy,
-          legacyRole: "root"
-          // DEPRECATED compat alias ls_agent_type="root".
-        })
-      }
-    });
-    await runTree.patchRun({ excludeInputs: true });
-  }
-  const status = turn.isComplete ? "complete" : "interrupted";
-  log(`Traced turn ${turnNum}: ${turnRunId} with ${turn.llmCalls.length} LLM call(s) [${status}]`);
-  return taskRunMap;
-}
-async function patchTurnRun(id, result) {
-  if (!client && !replicas)
-    throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
-  const runTree = new RunTree({
-    client,
-    replicas,
-    name: USER_PROMPT_TURN_NAME,
-    run_type: "chain",
-    project_name: id.project,
-    id: id.runId,
-    trace_id: id.traceId,
-    dotted_order: id.dottedOrder,
-    parent_run_id: id.parentRunId,
-    start_time: id.startTime,
-    end_time: (/* @__PURE__ */ new Date()).toISOString(),
-    ..."error" in result ? { error: result.error } : { outputs: { messages: [{ role: "assistant", content: result.lastAssistantMessage }] } },
-    extra: {
-      metadata: codingAgentMetadata({
-        sessionId: id.sessionId,
-        base: id.customMetadata,
-        turnId: id.turnId,
-        turnNumber: id.turnNumber,
-        runtimeVersion: id.runtimeVersion,
-        approvalPolicy: id.approvalPolicy,
-        legacyRole: "root"
-        // DEPRECATED compat alias ls_agent_type="root".
-      })
-    }
-  });
-  await runTree.patchRun({ excludeInputs: true });
-}
-function turnIdentityFromOpenTurn(turn, ctx) {
-  return {
-    sessionId: ctx.sessionId,
-    project: ctx.project,
-    customMetadata: ctx.customMetadata,
-    runId: turn.run_id,
-    traceId: turn.trace_id,
-    dottedOrder: turn.dotted_order,
-    parentRunId: turn.parent_run_id,
-    startTime: turn.start_time,
-    turnId: turn.turn_id,
-    turnNumber: turn.turn_number,
-    runtimeVersion: turn.runtime_version,
-    approvalPolicy: turn.approval_policy
-  };
-}
-async function completeTurnRun(options) {
-  await patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
-}
-async function tracePendingSubagents(options) {
-  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen } = options;
-  const openedAgentRunIds = [];
-  if (!client && !replicas) {
-    throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
-  }
-  if (!parentTraceId) {
-    warn("Cannot trace subagents: no parent trace ID");
-    return openedAgentRunIds;
-  }
-  for (const subagent of pendingSubagents) {
-    try {
-      const taskRunInfo = taskRunMap[subagent.agent_id];
-      if (!taskRunInfo) {
-        error(`No Agent tool run found for ${subagent.agent_id} - cannot trace subagent`);
-        continue;
-      }
-      const parentToolRunId = taskRunInfo.run_id;
-      const agentToolDottedOrder = taskRunInfo.dotted_order;
-      const toolName = subagent.agent_type || "Agent";
-      const deferred = taskRunInfo.deferred;
-      debug(`Processing subagent ${toolName} (${subagent.agent_id}) under run ${parentToolRunId}`);
-      const { messages: subagentMessages } = readTranscript(subagent.agent_transcript_path, -1);
-      const subagentTurns = subagentMessages.length > 0 ? groupIntoTurns(subagentMessages) : [];
-      if (subagentTurns.length === 0) {
-        debug(`Empty/unreadable subagent transcript: ${subagent.agent_transcript_path}`);
-      }
-      const subagentStartTime = deferred?.start_time ?? (/* @__PURE__ */ new Date()).toISOString();
-      const lastSubagentActivity = subagentTurns.reduce((max, t) => t.llmCalls.reduce((m, c) => c.endTime > m ? c.endTime : m, max), "");
-      const deferredEnd = deferred?.end_time ?? "";
-      const subagentEndTime = (lastSubagentActivity > deferredEnd ? lastSubagentActivity : deferredEnd) || (/* @__PURE__ */ new Date()).toISOString();
-      if (deferred) {
-        const runTree = new RunTree({
-          client,
-          replicas,
-          id: parentToolRunId,
-          name: "Agent",
-          run_type: "tool",
-          inputs: { input: deferred.inputs ?? {} },
-          outputs: { output: deferred.outputs ?? {} },
-          project_name: deferred.project_name,
-          start_time: subagentStartTime,
-          // Leave open for async agents — the task-notification turn nests under
-          // this run, so it can't be closed until that turn completes.
-          end_time: keepAgentToolRunOpen ? void 0 : subagentEndTime,
-          parent_run_id: deferred.parent_run_id,
-          trace_id: deferred.trace_id,
-          dotted_order: agentToolDottedOrder,
-          extra: {
-            metadata: codingAgentMetadata({
-              sessionId,
-              base: customMetadata,
-              runtimeVersion,
-              turnId,
-              turnNumber,
-              // run_type "tool" (run name "Agent", native tool "Task").
-              toolName: "Task",
-              runName: "Agent",
-              runSpecific: {
-                agent_type: toolName,
-                // DEPRECATED compat alias.
-                agent_id: subagent.agent_id
-                // DEPRECATED compat alias.
-              }
-            })
-          }
-        });
-        await runTree.postRun();
-        if (keepAgentToolRunOpen)
-          openedAgentRunIds.push(subagent.agent_id);
-      }
-      if (subagentTurns.length > 0) {
-        await traceSubagentChain({
-          sessionId,
-          project,
-          parentRunId: parentToolRunId,
-          parentDottedOrder: agentToolDottedOrder,
-          parentTraceId,
-          subagentId: subagent.agent_id,
-          subagentType: toolName,
-          chainName: `${toolName} Subagent`,
-          subagentTurns,
-          startTime: subagentStartTime,
-          endTime: subagentEndTime,
-          inputs: deferred?.inputs,
-          outputs: deferred?.outputs,
-          customMetadata,
-          runtimeVersion,
-          turnId,
-          turnNumber
-        });
-      }
-    } catch (err) {
-      error(`Failed to trace subagent ${subagent.agent_id}: ${err}`);
-    }
-  }
-  return openedAgentRunIds;
-}
-async function traceSubagentChain(opts) {
-  const subagentChainId = uuid7();
-  const subagentChainDottedOrder = `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, subagentChainId)}`;
-  const runTree = new RunTree({
-    client,
-    replicas,
-    id: subagentChainId,
-    name: opts.chainName,
-    run_type: "chain",
-    inputs: opts.inputs ?? {},
-    outputs: { output: opts.outputs },
-    project_name: opts.project,
-    start_time: opts.startTime,
-    end_time: opts.endTime,
-    parent_run_id: opts.parentRunId,
-    trace_id: opts.parentTraceId,
-    dotted_order: subagentChainDottedOrder,
-    extra: {
-      metadata: codingAgentMetadata({
-        sessionId: opts.sessionId,
-        base: opts.customMetadata,
-        runtimeVersion: opts.runtimeVersion,
-        turnId: opts.turnId,
-        turnNumber: opts.turnNumber,
-        legacyRole: "subagent",
-        // DEPRECATED compat alias.
-        subagentId: opts.subagentId,
-        // → ls_subagent_id (+ agent_id alias).
-        subagentType: opts.subagentType
-        // → ls_subagent_type (+ agent_type alias).
-      })
-    }
-  });
-  await runTree.postRun();
-  for (let i = 0; i < opts.subagentTurns.length; i++) {
-    await traceTurn({
-      turn: opts.subagentTurns[i],
-      sessionId: opts.sessionId,
-      turnNum: i + 1,
-      project: opts.project,
-      parentRunId: subagentChainId,
-      existingTaskRunMap: void 0,
-      traceId: opts.parentTraceId,
-      parentDottedOrder: subagentChainDottedOrder,
-      customMetadata: opts.customMetadata,
-      runtimeVersion: opts.runtimeVersion
-    });
-  }
-  log(`Traced subagent ${opts.subagentType} (${opts.subagentId}): ${opts.subagentTurns.length} turn(s)`);
-}
-async function traceWorkflowStage(opts) {
-  if (!client && !replicas) {
-    throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
-  }
-  if (!opts.parentTraceId) {
-    warn(`Cannot trace workflow stage ${opts.stageAgentId}: no parent trace ID`);
-    return;
-  }
-  const { messages } = readTranscript(opts.transcriptPath, -1);
-  const turns = messages.length > 0 ? groupIntoTurns(messages) : [];
-  if (turns.length === 0) {
-    debug(`Empty/unreadable workflow stage transcript: ${opts.transcriptPath}`);
-    return;
-  }
-  const startTime = turns[0].llmCalls[0]?.startTime ?? turns[0].userTimestamp ?? (/* @__PURE__ */ new Date()).toISOString();
-  const endTime = turns.reduce((max, t) => t.llmCalls.reduce((m, c) => c.endTime > m ? c.endTime : m, max), "") || (/* @__PURE__ */ new Date()).toISOString();
-  await traceSubagentChain({
-    sessionId: opts.sessionId,
-    project: opts.project,
-    parentRunId: opts.workflowRun.run_id,
-    parentDottedOrder: opts.workflowRun.dotted_order,
-    parentTraceId: opts.parentTraceId,
-    subagentId: opts.stageAgentId,
-    subagentType: opts.stageType,
-    chainName: "Workflow step",
-    subagentTurns: turns,
-    startTime,
-    endTime,
-    customMetadata: opts.customMetadata,
-    runtimeVersion: opts.runtimeVersion,
-    turnId: opts.turnId,
-    turnNumber: opts.turnNumber
-  });
-}
-async function closeAgentToolRun(options) {
-  if (!client && !replicas)
-    throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
-  const deferred = options.taskRunInfo.deferred ?? {};
-  const isWorkflow = Boolean(options.taskRunInfo.is_workflow);
-  const runName = isWorkflow ? "Workflow" : "Agent";
-  const nativeToolName = isWorkflow ? "Workflow" : "Task";
-  const agentTypeAlias = isWorkflow ? "Workflow" : options.agentType || "Agent";
-  const runTree = new RunTree({
-    client,
-    replicas,
-    id: options.taskRunInfo.run_id,
-    name: runName,
-    run_type: "tool",
-    inputs: { input: deferred.inputs ?? {} },
-    outputs: { output: deferred.outputs ?? {} },
-    project_name: deferred.project_name ?? options.project,
-    start_time: deferred.start_time,
-    end_time: (/* @__PURE__ */ new Date()).toISOString(),
-    parent_run_id: deferred.parent_run_id,
-    trace_id: deferred.trace_id,
-    dotted_order: options.taskRunInfo.dotted_order,
-    ...options.error ? { error: options.error } : {},
-    extra: {
-      metadata: codingAgentMetadata({
-        sessionId: options.sessionId,
-        base: options.customMetadata,
-        runtimeVersion: options.runtimeVersion,
-        turnId: options.turnId,
-        turnNumber: options.turnNumber,
-        toolName: nativeToolName,
-        runName,
-        runSpecific: {
-          agent_type: agentTypeAlias,
-          // DEPRECATED compat alias.
-          agent_id: options.agentId
-          // DEPRECATED compat alias.
-        }
-      })
-    }
-  });
-  if (options.wasOpen) {
-    await runTree.patchRun({ excludeInputs: true });
-  } else {
-    await runTree.postRun();
-  }
-}
-
-// dist/finalize.js
-async function finalizeNotificationChain(opts) {
-  const { stateFilePath, sessionId, project, customMetadata, runtimeVersion } = opts;
-  let agentId = opts.agentId;
-  let interrupted = opts.interrupted ?? false;
-  while (agentId) {
-    const ss = getSessionState(loadState(stateFilePath), sessionId);
-    const taskRunInfo = ss.task_run_map?.[agentId];
-    if (!taskRunInfo) {
-      debug(`finalizeNotificationChain: no task run for ${agentId}, stopping`);
-      break;
-    }
-    const launchingTurnId = taskRunInfo.deferred?.parent_run_id;
-    const agentType = taskRunInfo.agent_type ?? "";
-    try {
-      await closeAgentToolRun({
-        sessionId,
-        agentId,
-        agentType,
-        taskRunInfo,
-        project,
-        customMetadata,
-        runtimeVersion,
-        turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0,
-        wasOpen: Boolean(taskRunInfo.subagent_done),
-        error: interrupted ? taskRunInfo.is_workflow ? "Workflow killed" : "Subagent killed" : void 0
-      });
-    } catch (err) {
-      error(`Failed to close Agent tool run for ${agentId}: ${err}`);
-    }
-    let toComplete;
-    let nextAgentId;
-    const drainedAgentId = agentId;
-    await atomicUpdateState(stateFilePath, (s) => {
-      const sess = getSessionState(s, sessionId);
-      const openTurns = { ...sess.open_turns };
-      const taskRunMap = { ...sess.task_run_map };
-      delete taskRunMap[drainedAgentId];
-      const entry = launchingTurnId ? openTurns[launchingTurnId] : void 0;
-      if (entry) {
-        const remaining = entry.agent_ids.filter((id) => id !== drainedAgentId);
-        if (remaining.length === 0 && entry.stop_seen) {
-          toComplete = entry;
-          nextAgentId = entry.notification_for_agent_id;
-          if (launchingTurnId)
-            delete openTurns[launchingTurnId];
-        } else {
-          openTurns[launchingTurnId] = { ...entry, agent_ids: remaining };
-        }
-      }
-      return {
-        ...s,
-        [sessionId]: {
-          ...sess,
-          open_turns: openTurns,
-          task_run_map: taskRunMap
-        }
-      };
-    });
-    if (toComplete) {
-      try {
-        await completeTurnRun({
-          ...turnIdentityFromOpenTurn(toComplete, { sessionId, project, customMetadata }),
-          lastAssistantMessage: toComplete.last_assistant_message
-        });
-        debug(`Completed launching turn ${toComplete.run_id} after notification chain`);
-      } catch (err) {
-        error(`Failed to complete launching turn ${toComplete.run_id}: ${err}`);
-      }
-    }
-    agentId = nextAgentId;
-    interrupted = false;
-  }
-  await flushPendingTraces();
-}
-
-// dist/workflows.js
-var WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
-function workflowRunIdFromPath(path3) {
-  return /\/workflows\/(wf_[A-Za-z0-9_-]+)\//.exec(path3)?.[1];
-}
-function findWorkflowEntry(taskRunMap, runId) {
-  for (const [taskId, entry] of Object.entries(taskRunMap ?? {})) {
-    if (entry.workflow_run_id === runId)
-      return [taskId, entry];
-  }
-  return void 0;
-}
-async function handleWorkflowSubagentStop(opts) {
-  const runId = workflowRunIdFromPath(opts.agentTranscriptPath);
-  if (!runId) {
-    error(`workflow-subagent ${opts.agentId}: no workflow run_id in ${opts.agentTranscriptPath}`);
-    return;
-  }
-  const ss = getSessionState(loadState(opts.stateFilePath), opts.sessionId);
-  const found = findWorkflowEntry(ss.task_run_map, runId);
-  if (!found) {
-    debug(`No Workflow run recorded for ${runId}; skipping stage ${opts.agentId}`);
-    return;
-  }
-  const [, entry] = found;
-  const deferred = entry.deferred;
-  const launchingTurnId = deferred?.parent_run_id;
-  const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : void 0;
-  const parentTraceId = deferred?.trace_id ?? ss.current_trace_id;
-  try {
-    await traceWorkflowStage({
-      sessionId: opts.sessionId,
-      project: opts.project,
-      customMetadata: opts.customMetadata,
-      workflowRun: { run_id: entry.run_id, dotted_order: entry.dotted_order },
-      parentTraceId,
-      stageAgentId: opts.agentId,
-      stageType: opts.agentType,
-      transcriptPath: opts.agentTranscriptPath,
-      runtimeVersion: launchingTurn?.runtime_version ?? ss.runtime_version,
-      turnId: launchingTurn?.turn_id,
-      turnNumber: launchingTurn?.turn_number ?? ss.current_turn_number
-    });
-    debug(`Traced workflow stage ${opts.agentId} under Workflow run ${entry.run_id}`);
-  } catch (err) {
-    error(`Failed to trace workflow stage ${opts.agentId}: ${err}`);
-  }
-  await flushPendingTraces();
 }
 
 // dist/config.js
-import { readFileSync as readFileSync5 } from "node:fs";
-import { userInfo } from "node:os";
-import { join } from "node:path";
 import { execSync } from "node:child_process";
 var LS_INTEGRATION_VERSION = true ? "0.2.1" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var PROVIDER_HOSTS = {
@@ -13194,12 +11958,12 @@ var PROVIDER_HOSTS = {
   devAzure: "dev.azure.com"
 };
 function readAnthropicUserId() {
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
-  if (!homeDir)
+  const homeDir2 = process.env.HOME ?? process.env.USERPROFILE;
+  if (!homeDir2)
     return void 0;
-  const configPath = join(homeDir, ".claude.json");
+  const configPath = join(homeDir2, ".claude.json");
   try {
-    const raw = readFileSync5(configPath, "utf-8");
+    const raw = readFileSync3(configPath, "utf-8");
     const parsed = JSON.parse(raw);
     const userId = parsed?.userID;
     if (typeof userId === "string" && userId.length > 0) {
@@ -13289,14 +12053,14 @@ function loadConfig(options) {
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
   const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
   const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
-  const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
+  const homeDir2 = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const stateFilePath = process.env.STATE_FILE ?? `${homeDir2}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
-  let replicas2;
+  let replicas;
   const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
   if (providedReplicas !== void 0) {
     try {
-      replicas2 = JSON.parse(providedReplicas);
+      replicas = JSON.parse(providedReplicas);
     } catch {
       error("Failed to parse provided CC_LANGSMITH_RUNS_ENDPOINTS. Please make sure they are valid JSON.");
     }
@@ -13386,172 +12150,111 @@ function loadConfig(options) {
     stateFilePath,
     debug: debug2,
     parentDottedOrder,
-    replicas: replicas2,
+    replicas,
     customMetadata,
     redact,
     redactExtraRules
   };
 }
 
-// dist/utils/hook-init.js
-function initHook(cwd) {
-  const config = loadConfig({ cwd });
-  initLogger(config.debug);
-  if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
-    return null;
-  }
-  if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
-    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");
-    return null;
-  }
-  return config;
+// dist/thread-link.js
+import { readFileSync as readFileSync4, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4 } from "node:fs";
+import { dirname as dirname2 } from "node:path";
+function firstLabel(url) {
+  return url.split(".", 1)[0];
 }
-function expandHome(path3) {
-  return path3?.replace(/^~/, process.env.HOME ?? "");
+function isLocalhost2(url) {
+  const stripped = url.replace("http://", "").replace("https://", "");
+  const host = stripped.split("/")[0].split(":")[0];
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
 }
-
-// dist/utils/stdin.js
-function readStdin() {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => data += chunk);
-    process.stdin.on("end", () => {
-      try {
-        resolve(JSON.parse(data));
-      } catch (err) {
-        reject(new Error(`Failed to parse hook input: ${err}`));
-      }
-    });
-    process.stdin.on("error", reject);
+function deriveWebHost(apiBaseUrl) {
+  const url = apiBaseUrl.replace(/\/$/, "");
+  if (isLocalhost2(url))
+    return "http://localhost:3000";
+  if (url.endsWith("/api/v1"))
+    return url.replace("/api/v1", "");
+  if (url.includes("/api") && !firstLabel(url).endsWith("api"))
+    return url.replace("/api", "");
+  const label = firstLabel(url);
+  if (label.includes("dev"))
+    return "https://dev.smith.langchain.com";
+  if (label.includes("eu"))
+    return "https://eu.smith.langchain.com";
+  if (label.includes("aws"))
+    return "https://aws.smith.langchain.com";
+  if (label.includes("apac"))
+    return "https://apac.smith.langchain.com";
+  if (label.includes("beta"))
+    return "https://beta.smith.langchain.com";
+  return "https://smith.langchain.com";
+}
+function buildThreadUrl(opts) {
+  return `${opts.webHost}/o/${opts.tenantId}/projects/p/${opts.projectId}/t/${opts.threadId}`;
+}
+function homeDir() {
+  return process.env.HOME ?? process.env.USERPROFILE ?? "";
+}
+function threadFilePath(cwd, home = homeDir()) {
+  const slug = cwd.replace(/[^a-zA-Z0-9]/g, "-");
+  return `${home}/.claude/state/langsmith-thread-${slug}.json`;
+}
+function readThreadLink(cwd, home = homeDir()) {
+  try {
+    return JSON.parse(readFileSync4(threadFilePath(cwd, home), "utf-8"));
+  } catch {
+    return void 0;
+  }
+}
+function writeThreadLink(cwd, record, home = homeDir()) {
+  const path3 = threadFilePath(cwd, home);
+  mkdirSync4(dirname2(path3), { recursive: true });
+  writeFileSync3(path3, JSON.stringify(record, null, 2));
+}
+async function resolveThreadUrl(client, projectName, apiBaseUrl, sessionId) {
+  const project = await client.readProject({ projectName });
+  return buildThreadUrl({
+    webHost: deriveWebHost(apiBaseUrl),
+    tenantId: project.tenant_id,
+    projectId: project.id,
+    threadId: sessionId
   });
 }
 
-// dist/hooks/subagent-stop.js
+// dist/commands/trace-link.js
+function printLink(url) {
+  console.log(`\u{1F517} Open this thread in LangSmith: ${url}`);
+}
 async function main() {
-  const input = await readStdin();
-  const config = initHook(input.cwd);
-  if (!config)
-    return;
-  debug(`SubagentStop hook: agent_id=${input.agent_id}, type=${input.agent_type}`);
-  const agentTranscriptPath = expandHome(input.agent_transcript_path);
-  if (!agentTranscriptPath) {
-    debug("No agent_transcript_path provided, skipping");
+  const cwd = process.cwd();
+  if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
+    console.log("LangSmith tracing is disabled. Set TRACE_TO_LANGSMITH=true (plus a LangSmith API key) to trace this session.");
     return;
   }
-  initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
-  if (input.agent_type === WORKFLOW_SUBAGENT_TYPE) {
-    await handleWorkflowSubagentStop({
-      sessionId: input.session_id,
-      agentId: input.agent_id,
-      agentType: input.agent_type,
-      agentTranscriptPath,
-      stateFilePath: config.stateFilePath,
-      project: config.project,
-      customMetadata: config.customMetadata
-    });
+  const config = loadConfig({ cwd });
+  if (!config.apiKey) {
+    console.log("No LangSmith API key found. Set CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY to enable trace links.");
     return;
   }
-  const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
-  const taskRunMap = sessionState.task_run_map ?? {};
-  const taskRunInfo = taskRunMap[input.agent_id];
-  if (!taskRunInfo) {
-    await atomicUpdateState(config.stateFilePath, (s) => {
-      const ss = getSessionState(s, input.session_id);
-      return {
-        ...s,
-        [input.session_id]: {
-          ...ss,
-          pending_subagent_traces: [
-            ...ss.pending_subagent_traces || [],
-            {
-              agent_id: input.agent_id,
-              agent_type: input.agent_type,
-              agent_transcript_path: agentTranscriptPath,
-              session_id: input.session_id
-            }
-          ]
-        }
-      };
-    });
-    debug(`Queued subagent ${input.agent_id} for Stop hook (Agent tool run not recorded yet)`);
+  const record = readThreadLink(cwd);
+  if (!record) {
+    console.log("No LangSmith thread recorded for this project yet. Send a prompt to start tracing, then run /langsmith-tracing:trace again.");
     return;
   }
-  const deferred = taskRunInfo.deferred;
-  const turnRunId = deferred?.parent_run_id ?? sessionState.current_turn_run_id;
-  const turnTraceId = deferred?.trace_id ?? sessionState.current_trace_id;
-  const launchingTurn = turnRunId ? sessionState.open_turns?.[turnRunId] : void 0;
-  if (!turnTraceId) {
-    debug(`No trace context for subagent ${input.agent_id}, cannot trace`);
+  if (record.url) {
+    printLink(record.url);
     return;
   }
   try {
-    await tracePendingSubagents({
-      sessionId: input.session_id,
-      pendingSubagents: [
-        {
-          agent_id: input.agent_id,
-          agent_type: input.agent_type,
-          agent_transcript_path: agentTranscriptPath,
-          session_id: input.session_id
-        }
-      ],
-      taskRunMap,
-      parentTraceId: turnTraceId,
-      project: config.project,
-      customMetadata: config.customMetadata,
-      runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
-      turnId: launchingTurn?.turn_id,
-      turnNumber: launchingTurn?.turn_number ?? sessionState.current_turn_number,
-      // Leave the Agent tool run open — the task-notification turn nests under it.
-      keepAgentToolRunOpen: true
-    });
-    debug(`Traced background subagent ${input.agent_type} (${input.agent_id})`);
-  } catch (err) {
-    error(`Failed to trace background subagent: ${err}`);
+    const client = new Client({ apiKey: config.apiKey, apiUrl: config.apiBaseUrl });
+    const url = await resolveThreadUrl(client, config.project, config.apiBaseUrl, record.session_id);
+    writeThreadLink(cwd, { ...record, url, updated: (/* @__PURE__ */ new Date()).toISOString() });
+    printLink(url);
+  } catch {
+    console.log(`Couldn't resolve the LangSmith project URL for "${config.project}". Thread id (session): ${record.session_id}`);
   }
-  let finalizeNow = false;
-  await atomicUpdateState(config.stateFilePath, (s) => {
-    const ss = getSessionState(s, input.session_id);
-    const entry = ss.task_run_map?.[input.agent_id];
-    const notifDone = (ss.notification_done_agents ?? []).includes(input.agent_id);
-    if (notifDone)
-      finalizeNow = true;
-    return {
-      ...s,
-      [input.session_id]: {
-        ...ss,
-        task_run_map: entry ? {
-          ...ss.task_run_map,
-          [input.agent_id]: {
-            ...entry,
-            agent_type: input.agent_type || entry.agent_type,
-            subagent_done: true
-          }
-        } : ss.task_run_map,
-        notification_done_agents: notifDone ? (ss.notification_done_agents ?? []).filter((id) => id !== input.agent_id) : ss.notification_done_agents
-      }
-    };
-  });
-  if (finalizeNow) {
-    debug(`Notification already done for ${input.agent_id}; finalizing from SubagentStop`);
-    await finalizeNotificationChain({
-      stateFilePath: config.stateFilePath,
-      sessionId: input.session_id,
-      project: config.project,
-      customMetadata: config.customMetadata,
-      runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
-      agentId: input.agent_id
-    });
-  } else {
-    debug(`Subagent ${input.agent_id} traced; awaiting task-notification to finalize`);
-  }
-  await flushPendingTraces();
 }
 main().catch((err) => {
-  try {
-    error(`SubagentStop hook fatal error: ${err}`);
-  } catch {
-  }
+  console.log(`Could not build a LangSmith link: ${err}`);
   process.exit(0);
 });
