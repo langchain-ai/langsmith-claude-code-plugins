@@ -229,6 +229,14 @@ export function stripModelDateSuffix(model: string): string {
   return model.replace(/-\d{8}$/, "");
 }
 
+/** Resolve model provider from Claude Code's routing env, falling back to the model id. */
+export function resolveProvider(model: string): string {
+  const flag = (name: string) => ["1", "true"].includes((process.env[name] ?? "").toLowerCase());
+  if (flag("CLAUDE_CODE_USE_BEDROCK")) return "amazon_bedrock";
+  if (flag("CLAUDE_CODE_USE_VERTEX")) return "google_vertex_ai";
+  return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
+}
+
 // ─── Streaming merge ────────────────────────────────────────────────────────
 
 /**
