@@ -302,6 +302,11 @@ describe("stripModelDateSuffix", () => {
 // ─── resolveProvider ────────────────────────────────────────────────────────
 
 describe("resolveProvider", () => {
+  afterEach(() => {
+    delete process.env.CLAUDE_CODE_USE_BEDROCK;
+    delete process.env.CLAUDE_CODE_USE_VERTEX;
+  });
+
   it("labels first-party Anthropic ids as anthropic", () => {
     expect(resolveProvider("claude-sonnet-4-5")).toBe("anthropic");
   });
@@ -313,6 +318,17 @@ describe("resolveProvider", () => {
 
   it("labels bare Bedrock ids (no region prefix) as amazon_bedrock", () => {
     expect(resolveProvider("anthropic.claude-sonnet-5")).toBe("amazon_bedrock");
+  });
+
+  it("labels any model as amazon_bedrock when the Bedrock env flag is set", () => {
+    process.env.CLAUDE_CODE_USE_BEDROCK = "1";
+    expect(resolveProvider("openai.gpt-oss-120b")).toBe("amazon_bedrock");
+    expect(resolveProvider("amazon.nova-pro-v1:0")).toBe("amazon_bedrock");
+  });
+
+  it("labels any model as google_vertex_ai when the Vertex env flag is set", () => {
+    process.env.CLAUDE_CODE_USE_VERTEX = "true";
+    expect(resolveProvider("claude-sonnet-5")).toBe("google_vertex_ai");
   });
 });
 
