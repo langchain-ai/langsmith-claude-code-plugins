@@ -13509,7 +13509,7 @@ function readStdin() {
 }
 
 // dist/thread-link.js
-import { readFileSync as readFileSync6, writeFileSync as writeFileSync4, mkdirSync as mkdirSync5 } from "node:fs";
+import { readFileSync as readFileSync6, writeFileSync as writeFileSync4, mkdirSync as mkdirSync5, renameSync as renameSync4, unlinkSync as unlinkSync4 } from "node:fs";
 import { dirname as dirname3 } from "node:path";
 function firstLabel(url) {
   return url.split(".", 1)[0];
@@ -13559,8 +13559,19 @@ function readThreadLink(cwd, home = homeDir()) {
 }
 function writeThreadLink(cwd, record, home = homeDir()) {
   const path3 = threadFilePath(cwd, home);
-  mkdirSync5(dirname3(path3), { recursive: true });
-  writeFileSync4(path3, JSON.stringify(record, null, 2));
+  const dir = dirname3(path3);
+  mkdirSync5(dir, { recursive: true });
+  const tmpPath = `${path3}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try {
+    writeFileSync4(tmpPath, JSON.stringify(record, null, 2), { mode: 384, flag: "wx" });
+    renameSync4(tmpPath, path3);
+  } catch (err) {
+    try {
+      unlinkSync4(tmpPath);
+    } catch {
+    }
+    throw err;
+  }
 }
 async function resolveThreadUrl(client2, projectName, apiBaseUrl, sessionId) {
   const project = await client2.readProject({ projectName });

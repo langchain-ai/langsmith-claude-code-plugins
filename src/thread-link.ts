@@ -3,7 +3,7 @@
  * so the /langsmith-tracing:trace command can print a shareable deep link.
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Client } from "langsmith";
 
@@ -90,8 +90,21 @@ export function writeThreadLink(
   home: string = homeDir(),
 ): void {
   const path = threadFilePath(cwd, home);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(record, null, 2));
+  const dir = dirname(path);
+  mkdirSync(dir, { recursive: true });
+  // Atomic write (two sessions can share this per-cwd path)
+  const tmpPath = `${path}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try {
+    writeFileSync(tmpPath, JSON.stringify(record, null, 2), { mode: 0o600, flag: "wx" });
+    renameSync(tmpPath, path);
+  } catch (err) {
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      // Ignore cleanup failures.
+    }
+    throw err;
+  }
 }
 
 /** Resolve the thread URL, looking up project id + tenant id via the SDK. */
