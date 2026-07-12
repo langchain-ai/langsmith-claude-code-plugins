@@ -12569,7 +12569,7 @@ function buildUsageMetadata(usage) {
   };
 }
 async function traceTurn(options) {
-  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy } = options;
+  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, subagentId, subagentType } = options;
   const turnId = turn.promptId;
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
@@ -12610,8 +12610,10 @@ async function traceTurn(options) {
           turnNumber: turnNum,
           runtimeVersion,
           approvalPolicy,
-          legacyRole: "root"
+          legacyRole: "root",
           // DEPRECATED compat alias ls_agent_type="root".
+          subagentId,
+          subagentType
         })
       }
     });
@@ -12680,7 +12682,9 @@ async function traceTurn(options) {
             turnNumber: turnNum,
             runtimeVersion,
             toolName: toolCall.tool_use.name,
-            runName: toolCall.tool_use.name
+            runName: toolCall.tool_use.name,
+            subagentId,
+            subagentType
           })
         }
       });
@@ -12717,6 +12721,8 @@ async function traceTurn(options) {
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
+          subagentId,
+          subagentType,
           runSpecific: {
             ls_provider: resolveProvider(llmCall.model),
             ls_model_name: llmCall.model,
@@ -12764,8 +12770,10 @@ async function traceTurn(options) {
           turnNumber: turnNum,
           runtimeVersion,
           approvalPolicy,
-          legacyRole: "root"
+          legacyRole: "root",
           // DEPRECATED compat alias ls_agent_type="root".
+          subagentId,
+          subagentType
         })
       }
     });
@@ -12968,7 +12976,11 @@ async function traceSubagentChain(opts) {
       traceId: opts.parentTraceId,
       parentDottedOrder: subagentChainDottedOrder,
       customMetadata: opts.customMetadata,
-      runtimeVersion: opts.runtimeVersion
+      runtimeVersion: opts.runtimeVersion,
+      // Stamp the subagent identity onto every child run (llm/tool) of this
+      // subagent — children don't inherit parent metadata in LangSmith.
+      subagentId: opts.subagentId,
+      subagentType: opts.subagentType
     });
   }
   log(`Traced subagent ${opts.subagentType} (${opts.subagentId}): ${opts.subagentTurns.length} turn(s)`);

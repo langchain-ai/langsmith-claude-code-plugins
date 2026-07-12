@@ -1409,4 +1409,122 @@ describe("traceTurn", () => {
     });
     expect(turnMeta.ls_subagent_type).toBeUndefined(); // never on root
   });
+
+  it("stamps ls_subagent_id/ls_subagent_type on child runs when subagentId is passed", async () => {
+    // Mirrors traceSubagentChain: a subagent's own turns are traced via traceTurn
+    // with subagentId/subagentType, so every child run (llm, tool) carries the
+    // subagent identity (children don't inherit parent metadata in LangSmith).
+    const turn: Turn = {
+      userContent: "Do the thing",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      promptId: "prompt_sub",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Working." }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [
+            {
+              tool_use: { type: "tool_use", id: "tu_1", name: "Bash", input: { command: "ls" } },
+              result: { content: "ok", timestamp: "2025-01-01T00:00:03Z" },
+            },
+          ],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+      parentRunId: "subagent-chain-run",
+      traceId: "trace-id",
+      parentDottedOrder: "20250101T000000000Z001subagent-chain-run",
+      subagentId: "sub_4d8e1f",
+      subagentType: "Explore",
+    });
+
+    // Tool run carries the subagent identity.
+    const toolPost = allRunTreeInstances.find(
+      (i) => i.params.run_type === "tool" && i.ops.includes("postRun"),
+    )!;
+    const toolMeta = (toolPost.params.extra as Record<string, unknown>).metadata as Record<
+      string,
+      unknown
+    >;
+    expect(toolMeta.ls_subagent_id).toBe("sub_4d8e1f");
+    expect(toolMeta.ls_subagent_type).toBe("Explore");
+    expect(toolMeta.agent_id).toBe("sub_4d8e1f"); // DEPRECATED compat alias
+    expect(toolMeta.agent_type).toBe("Explore"); // DEPRECATED compat alias
+
+    // LLM run carries the subagent identity too.
+    const llmPatch = allRunTreeInstances.find(
+      (i) => i.params.run_type === "llm" && i.ops.includes("patchRun"),
+    )!;
+    const llmMeta = (llmPatch.params.extra as Record<string, unknown>).metadata as Record<
+      string,
+      unknown
+    >;
+    expect(llmMeta.ls_subagent_id).toBe("sub_4d8e1f");
+    expect(llmMeta.ls_subagent_type).toBe("Explore");
+  });
+
+  it("omits ls_subagent_id/ls_subagent_type on child runs when no subagentId is passed", async () => {
+    // Root-level turns: child runs must NOT carry subagent identity.
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      promptId: "prompt_root",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [
+            {
+              tool_use: { type: "tool_use", id: "tu_1", name: "Bash", input: { command: "ls" } },
+              result: { content: "ok", timestamp: "2025-01-01T00:00:03Z" },
+            },
+          ],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+      parentRunId: "root-turn-run",
+      traceId: "trace-id",
+      parentDottedOrder: "20250101T000000000Z001root-turn-run",
+    });
+
+    const toolPost = allRunTreeInstances.find(
+      (i) => i.params.run_type === "tool" && i.ops.includes("postRun"),
+    )!;
+    const toolMeta = (toolPost.params.extra as Record<string, unknown>).metadata as Record<
+      string,
+      unknown
+    >;
+    expect(toolMeta.ls_subagent_id).toBeUndefined();
+    expect(toolMeta.ls_subagent_type).toBeUndefined();
+
+    const llmPatch = allRunTreeInstances.find(
+      (i) => i.params.run_type === "llm" && i.ops.includes("patchRun"),
+    )!;
+    const llmMeta = (llmPatch.params.extra as Record<string, unknown>).metadata as Record<
+      string,
+      unknown
+    >;
+    expect(llmMeta.ls_subagent_id).toBeUndefined();
+    expect(llmMeta.ls_subagent_type).toBeUndefined();
+  });
 });

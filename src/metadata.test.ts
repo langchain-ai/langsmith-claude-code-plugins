@@ -134,13 +134,42 @@ describe("coding-agent-v1 contract", () => {
 
   // ─── ls_subagent_type is subagent-only and never "root" ──────────────────────
 
-  it("emits ls_subagent_type / ls_subagent_id only on subagent runs", () => {
+  it("emits ls_subagent_type / ls_subagent_id only when subagentId is provided", () => {
     expect(RUNS.subagent.ls_subagent_type).toBe("Explore");
     expect(RUNS.subagent.ls_subagent_id).toBe("sub_4d8e1f");
+    // Root-level llm/tool/interrupted runs don't carry a subagent id (none was
+    // passed), so the keys must be absent.
     for (const rt of ["root", "llm", "tool", "interrupted"] as RunType[]) {
       expect(RUNS[rt].ls_subagent_type, `ls_subagent_type leaked onto ${rt}`).toBeUndefined();
       expect(RUNS[rt].ls_subagent_id, `ls_subagent_id leaked onto ${rt}`).toBeUndefined();
     }
+  });
+
+  it("propagates ls_subagent_id / ls_subagent_type onto subagent child runs (llm, tool)", () => {
+    // An LLM run nested under a subagent — the helper stamps the parent subagent
+    // id/type onto it (children don't inherit parent metadata in LangSmith).
+    const subagentLlm = codingAgentMetadata({
+      ...COMMON,
+      subagentId: "sub_4d8e1f",
+      subagentType: "Explore",
+      runSpecific: { ls_provider: "anthropic", ls_model_name: "claude-opus-4-8" },
+    });
+    expect(subagentLlm.ls_subagent_id).toBe("sub_4d8e1f");
+    expect(subagentLlm.ls_subagent_type).toBe("Explore");
+    expect(subagentLlm.agent_id).toBe("sub_4d8e1f"); // DEPRECATED compat alias
+    expect(subagentLlm.agent_type).toBe("Explore"); // DEPRECATED compat alias
+
+    // A tool run nested under a subagent.
+    const subagentTool = codingAgentMetadata({
+      ...COMMON,
+      subagentId: "sub_4d8e1f",
+      subagentType: "Explore",
+      toolName: "Bash",
+      runName: "Bash",
+    });
+    expect(subagentTool.ls_subagent_id).toBe("sub_4d8e1f");
+    expect(subagentTool.ls_subagent_type).toBe("Explore");
+    expect(subagentTool.ls_tool_name).toBeUndefined(); // equals run name → omitted
   });
 
   it("never emits ls_subagent_type='root' (uses ls_agent_type compat alias instead)", () => {

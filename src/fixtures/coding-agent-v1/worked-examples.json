@@ -112,6 +112,71 @@
     "ls_subagent_type": "Explore"
   },
 
+  "subagent_child_llm": {
+    "_comment": "An LLM run nested under a subagent. Same base as the llm example, plus the parent subagent's ls_subagent_id / ls_subagent_type (children don't inherit parent metadata in LangSmith — the helper stamps each child run).",
+    "ls_agent_kind": "coding_agent",
+    "ls_integration": "claude-code",
+    "ls_agent_runtime": "Claude Code",
+    "thread_id": "sess_7f3c2a9e1b",
+    "ls_trace_schema_version": "coding-agent-v1",
+
+    "ls_integration_version": "0.4.2",
+    "ls_agent_runtime_version": "1.0.38",
+    "turn_id": "prompt_abc123",
+    "turn_number": 3,
+
+    "repository_url": "https://github.com/langchain-ai/langsmith-claude-code-plugins",
+    "repository_provider": "github",
+    "repository_name": "langsmith-claude-code-plugins",
+    "git_branch": "main",
+    "git_commit_sha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+    "cwd": "/Users/dev/langsmith-claude-code-plugins",
+
+    "user_id": "u_9f3ab21c",
+    "local_username": "dev",
+    "user_email": "dev@example.com",
+    "sandbox_type": "none",
+
+    "ls_subagent_id": "sub_4d8e1f",
+    "ls_subagent_type": "Explore",
+
+    "ls_provider": "anthropic",
+    "ls_model_name": "claude-opus-4-8",
+    "ls_invocation_params": { "max_tokens": 8192, "temperature": 1 },
+    "usage_metadata": { "input_tokens": 12873, "output_tokens": 412, "total_tokens": 13285 }
+  },
+
+  "subagent_child_tool": {
+    "_comment": "A tool run nested under a subagent. Same base as the tool example, plus the parent subagent's ls_subagent_id / ls_subagent_type.",
+    "ls_agent_kind": "coding_agent",
+    "ls_integration": "claude-code",
+    "ls_agent_runtime": "Claude Code",
+    "thread_id": "sess_7f3c2a9e1b",
+    "ls_trace_schema_version": "coding-agent-v1",
+
+    "ls_integration_version": "0.4.2",
+    "ls_agent_runtime_version": "1.0.38",
+    "turn_id": "prompt_abc123",
+    "turn_number": 3,
+
+    "repository_url": "https://github.com/langchain-ai/langsmith-claude-code-plugins",
+    "repository_provider": "github",
+    "repository_name": "langsmith-claude-code-plugins",
+    "git_branch": "main",
+    "git_commit_sha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+    "cwd": "/Users/dev/langsmith-claude-code-plugins",
+
+    "user_id": "u_9f3ab21c",
+    "local_username": "dev",
+    "user_email": "dev@example.com",
+    "sandbox_type": "none",
+
+    "ls_subagent_id": "sub_4d8e1f",
+    "ls_subagent_type": "Explore",
+
+    "ls_tool_name": "Bash"
+  },
+
   "interrupted": {
     "_comment": "Interrupted/cancelled turn. Same base as root, including approval_policy. turn_id/turn_number still emitted.",
     "ls_agent_kind": "coding_agent",
