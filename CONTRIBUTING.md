@@ -102,7 +102,7 @@ Users install and update it straight from this repo:
 ```
 
 The marketplace entry (`.claude-plugin/marketplace.json`) has `source: "./"`, so
-the plugin *is* this repository — a `marketplace update` pulls the latest commit
+the plugin _is_ this repository — a `marketplace update` pulls the latest commit
 on `main`. **There is no separate publish/npm step: merging to `main` is what
 ships.** Two things are therefore load-bearing on every release:
 

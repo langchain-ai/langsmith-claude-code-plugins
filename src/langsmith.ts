@@ -172,6 +172,12 @@ export interface TraceTurnOptions {
   runtimeVersion?: string;
   /** Permission mode → `approval_policy` (stamped on root/standalone turn runs only). */
   approvalPolicy?: string;
+  /** Subagent identity (set when tracing a subagent's own turns) → propagated as
+   *  `ls_subagent_id` / `ls_subagent_type` onto every child run (llm, tool, and the
+   *  standalone turn chain when created). Children don't inherit parent metadata
+   *  in LangSmith, so the subagent id must be stamped on each run explicitly. */
+  subagentId?: string;
+  subagentType?: string;
 }
 
 /**
@@ -194,6 +200,8 @@ export async function traceTurn(
     customMetadata,
     runtimeVersion,
     approvalPolicy,
+    subagentId,
+    subagentType,
   } = options;
 
   // turn_id for every run created for this turn (transcript promptId).
@@ -256,6 +264,8 @@ export async function traceTurn(
           runtimeVersion,
           approvalPolicy,
           legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+          subagentId,
+          subagentType,
         }),
       },
     });
@@ -352,6 +362,8 @@ export async function traceTurn(
             runtimeVersion,
             toolName: toolCall.tool_use.name,
             runName: toolCall.tool_use.name,
+            subagentId,
+            subagentType,
           }),
         },
       });
@@ -395,6 +407,8 @@ export async function traceTurn(
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
+          subagentId,
+          subagentType,
           runSpecific: {
             ls_provider: resolveProvider(llmCall.model),
             ls_model_name: llmCall.model,
@@ -451,6 +465,8 @@ export async function traceTurn(
           runtimeVersion,
           approvalPolicy,
           legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+          subagentId,
+          subagentType,
         }),
       },
     });
@@ -992,6 +1008,10 @@ async function traceSubagentChain(opts: {
       parentDottedOrder: subagentChainDottedOrder,
       customMetadata: opts.customMetadata,
       runtimeVersion: opts.runtimeVersion,
+      // Stamp the subagent identity onto every child run (llm/tool) of this
+      // subagent — children don't inherit parent metadata in LangSmith.
+      subagentId: opts.subagentId,
+      subagentType: opts.subagentType,
     });
   }
 

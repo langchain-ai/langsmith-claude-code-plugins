@@ -180,20 +180,21 @@
     },
     {
       "key": "ls_subagent_id",
-      "appliesTo": ["subagent"],
-      "type": "string",
-      "allowedValues": null,
-      "requirement": "contextual",
-      "requiredWhereKnown": false
-    },
-    {
-      "key": "ls_subagent_type",
-      "appliesTo": ["subagent"],
+      "appliesTo": ["subagent", "llm", "tool"],
       "type": "string",
       "allowedValues": null,
       "requirement": "contextual",
       "requiredWhereKnown": false,
-      "note": "Subagent runs only. Do NOT emit on root runs (e.g. do not copy claude-code's old ls_agent_type='root' here)."
+      "note": "Subagent runs and their child runs (llm, tool). Children don't inherit parent metadata in LangSmith, so the subagent id is stamped on each child run explicitly. Omit on root runs."
+    },
+    {
+      "key": "ls_subagent_type",
+      "appliesTo": ["subagent", "llm", "tool"],
+      "type": "string",
+      "allowedValues": null,
+      "requirement": "contextual",
+      "requiredWhereKnown": false,
+      "note": "Subagent runs and their child runs (llm, tool). Do NOT emit on root runs (e.g. do not copy claude-code's old ls_agent_type='root' here)."
     },
     {
       "key": "ls_tool_name",
