@@ -1409,4 +1409,55 @@ describe("traceTurn", () => {
     });
     expect(turnMeta.ls_subagent_type).toBeUndefined(); // never on root
   });
+
+  it("stamps subagent identity on every child run (LLM + tool) of a subagent", async () => {
+    const turn: Turn = {
+      userContent: "do stuff",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      promptId: "prompt_sub",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "working" }],
+          model: "claude-sonnet-4-5",
+          usage: { input_tokens: 10, output_tokens: 5 },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [
+            {
+              tool_use: { type: "tool_use", id: "tu_1", name: "Bash", input: { command: "ls" } },
+              result: { content: "ok", timestamp: "2025-01-01T00:00:03Z" },
+            },
+          ],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+      parentRunId: "chain-run-id",
+      traceId: "trace-id",
+      parentDottedOrder: "20250101T000000000Z001chain-run-id",
+      subagentId: "sub_4d8e1f",
+      subagentType: "Explore",
+    });
+
+    for (const runType of ["llm", "tool"]) {
+      const inst = allRunTreeInstances.find(
+        (i) => i.params.run_type === runType && i.params.extra,
+      )!;
+      const meta = (inst.params.extra as Record<string, unknown>).metadata as Record<
+        string,
+        unknown
+      >;
+      expect(meta.ls_agent_type).toBe("subagent"); // DEPRECATED compat alias
+      expect(meta.ls_subagent_type).toBe("Explore");
+      expect(meta.ls_subagent_id).toBe("sub_4d8e1f");
+      expect(meta.agent_type).toBe("Explore"); // DEPRECATED compat alias
+      expect(meta.agent_id).toBe("sub_4d8e1f"); // DEPRECATED compat alias
+    }
+  });
 });

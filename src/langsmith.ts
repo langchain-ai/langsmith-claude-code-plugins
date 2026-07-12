@@ -172,6 +172,9 @@ export interface TraceTurnOptions {
   runtimeVersion?: string;
   /** Permission mode → `approval_policy` (stamped on root/standalone turn runs only). */
   approvalPolicy?: string;
+  /** Subagent identity — when set, this turn's runs belong to a subagent. */
+  subagentId?: string;
+  subagentType?: string;
 }
 
 /**
@@ -194,10 +197,15 @@ export async function traceTurn(
     customMetadata,
     runtimeVersion,
     approvalPolicy,
+    subagentId,
+    subagentType,
   } = options;
 
   // turn_id for every run created for this turn (transcript promptId).
   const turnId = turn.promptId;
+
+  // Subagent turns stamp their identity on every child run (parity with the chain).
+  const subagentRole = subagentType ? "subagent" : undefined;
 
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
@@ -350,6 +358,9 @@ export async function traceTurn(
             turnId,
             turnNumber: turnNum,
             runtimeVersion,
+            legacyRole: subagentRole,
+            subagentId,
+            subagentType,
             toolName: toolCall.tool_use.name,
             runName: toolCall.tool_use.name,
           }),
@@ -395,6 +406,9 @@ export async function traceTurn(
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
+          legacyRole: subagentRole,
+          subagentId,
+          subagentType,
           runSpecific: {
             ls_provider: resolveProvider(llmCall.model),
             ls_model_name: llmCall.model,
@@ -992,6 +1006,8 @@ async function traceSubagentChain(opts: {
       parentDottedOrder: subagentChainDottedOrder,
       customMetadata: opts.customMetadata,
       runtimeVersion: opts.runtimeVersion,
+      subagentId: opts.subagentId,
+      subagentType: opts.subagentType,
     });
   }
 

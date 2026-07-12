@@ -12569,8 +12569,9 @@ function buildUsageMetadata(usage) {
   };
 }
 async function traceTurn(options) {
-  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy } = options;
+  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, subagentId, subagentType } = options;
   const turnId = turn.promptId;
+  const subagentRole = subagentType ? "subagent" : void 0;
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
   if (!client && !replicas) {
@@ -12679,6 +12680,9 @@ async function traceTurn(options) {
             turnId,
             turnNumber: turnNum,
             runtimeVersion,
+            legacyRole: subagentRole,
+            subagentId,
+            subagentType,
             toolName: toolCall.tool_use.name,
             runName: toolCall.tool_use.name
           })
@@ -12717,6 +12721,9 @@ async function traceTurn(options) {
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
+          legacyRole: subagentRole,
+          subagentId,
+          subagentType,
           runSpecific: {
             ls_provider: resolveProvider(llmCall.model),
             ls_model_name: llmCall.model,
@@ -12968,7 +12975,9 @@ async function traceSubagentChain(opts) {
       traceId: opts.parentTraceId,
       parentDottedOrder: subagentChainDottedOrder,
       customMetadata: opts.customMetadata,
-      runtimeVersion: opts.runtimeVersion
+      runtimeVersion: opts.runtimeVersion,
+      subagentId: opts.subagentId,
+      subagentType: opts.subagentType
     });
   }
   log(`Traced subagent ${opts.subagentType} (${opts.subagentId}): ${opts.subagentTurns.length} turn(s)`);
