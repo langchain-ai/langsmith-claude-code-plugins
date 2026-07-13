@@ -125,7 +125,8 @@ describe("coding-agent-v1 contract", () => {
 
   it.each(Object.keys(RUNS) as RunType[])("%s run carries the frozen identity block", (rt) => {
     const meta = RUNS[rt];
-    expect(meta.ls_agent_kind).toBe("coding_agent");
+    expect(meta.ls_agent_purpose).toBe("coding");
+    expect(meta.ls_agent_kind).toBeUndefined();
     expect(meta.ls_integration).toBe("claude-code");
     expect(meta.ls_agent_runtime).toBe("Claude Code");
     expect(meta.ls_trace_schema_version).toBe("coding-agent-v1");
@@ -230,7 +231,7 @@ describe("coding-agent-v1 contract", () => {
       expect(v === null || v === "").toBe(false);
     }
     // Identity literals are still present even with no context.
-    expect(sparse.ls_agent_kind).toBe("coding_agent");
+    expect(sparse.ls_agent_purpose).toBe("coding");
     expect(sparse.thread_id).toBe("s1");
   });
 

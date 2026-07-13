@@ -12229,7 +12229,7 @@ var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 var USER_PROMPT_TURN_NAME = "Claude Code Turn";
 
 // dist/metadata.js
-var LS_AGENT_KIND = "coding_agent";
+var LS_AGENT_PURPOSE = "coding";
 var LS_INTEGRATION = "claude-code";
 var LS_AGENT_RUNTIME = "Claude Code";
 var LS_TRACE_SCHEMA_VERSION = "coding-agent-v1";
@@ -12237,7 +12237,7 @@ function codingAgentMetadata(opts) {
   const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, agentType, subagentId, subagentType, toolName, runName, runSpecific } = opts;
   const meta = {
     // Identity & grouping — always present.
-    ls_agent_kind: LS_AGENT_KIND,
+    ls_agent_purpose: LS_AGENT_PURPOSE,
     ls_integration: LS_INTEGRATION,
     ls_agent_runtime: LS_AGENT_RUNTIME,
     ls_trace_schema_version: LS_TRACE_SCHEMA_VERSION,
@@ -12457,7 +12457,7 @@ function loadConfig(options) {
     identityMetadata.anthropic_user_id = anthropicUserId;
   }
   const contractMetadata = {
-    ls_agent_kind: "coding_agent",
+    ls_agent_purpose: "coding",
     ls_integration: "claude-code",
     ls_agent_runtime: "Claude Code",
     ls_trace_schema_version: "coding-agent-v1",

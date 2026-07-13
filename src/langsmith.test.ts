@@ -1363,7 +1363,7 @@ describe("traceTurn", () => {
       unknown
     >;
     expect(toolMeta).toMatchObject({
-      ls_agent_kind: "coding_agent",
+      ls_agent_purpose: "coding",
       ls_integration: "claude-code",
       ls_agent_runtime: "Claude Code",
       ls_trace_schema_version: "coding-agent-v1",

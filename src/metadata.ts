@@ -5,7 +5,7 @@
 
 // ─── Frozen literals (identity block) ────────────────────────────────────────
 
-export const LS_AGENT_KIND = "coding_agent";
+export const LS_AGENT_PURPOSE = "coding";
 export const LS_INTEGRATION = "claude-code";
 export const LS_AGENT_RUNTIME = "Claude Code";
 export const LS_TRACE_SCHEMA_VERSION = "coding-agent-v1";
@@ -72,7 +72,7 @@ export function codingAgentMetadata(opts: CodingAgentMetadataOptions): Record<st
 
   const meta: Record<string, unknown> = {
     // Identity & grouping — always present.
-    ls_agent_kind: LS_AGENT_KIND,
+    ls_agent_purpose: LS_AGENT_PURPOSE,
     ls_integration: LS_INTEGRATION,
     ls_agent_runtime: LS_AGENT_RUNTIME,
     ls_trace_schema_version: LS_TRACE_SCHEMA_VERSION,
