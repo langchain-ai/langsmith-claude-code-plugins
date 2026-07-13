@@ -5,10 +5,13 @@
 
 // ─── Frozen literals (identity block) ────────────────────────────────────────
 
-export const LS_AGENT_KIND = "coding_agent";
+export const LS_AGENT_PURPOSE = "coding";
 export const LS_INTEGRATION = "claude-code";
 export const LS_AGENT_RUNTIME = "Claude Code";
 export const LS_TRACE_SCHEMA_VERSION = "coding-agent-v1";
+
+/** The role a run plays within a coding-agent trace. */
+export type LSAgentType = "root" | "subagent" | "middleware" | "compaction";
 
 // ─── Helper input ─────────────────────────────────────────────────────────────
 
@@ -29,8 +32,8 @@ export interface CodingAgentMetadataOptions {
   /** Permission mode for the turn (`approval_policy`). Root + interrupted only. */
   approvalPolicy?: string;
 
-  /** DEPRECATED `ls_agent_type` compat alias. Distinct from `ls_subagent_type`. */
-  legacyRole?: "root" | "subagent";
+  /** Role of this run within the coding agent trace → `ls_agent_type`. */
+  agentType: LSAgentType;
 
   /** Subagent identity (subagent runs only) → `ls_subagent_id` / `ls_subagent_type`. */
   subagentId?: string;
@@ -59,7 +62,7 @@ export function codingAgentMetadata(opts: CodingAgentMetadataOptions): Record<st
     turnNumber,
     runtimeVersion,
     approvalPolicy,
-    legacyRole,
+    agentType,
     subagentId,
     subagentType,
     toolName,
@@ -69,7 +72,7 @@ export function codingAgentMetadata(opts: CodingAgentMetadataOptions): Record<st
 
   const meta: Record<string, unknown> = {
     // Identity & grouping — always present.
-    ls_agent_kind: LS_AGENT_KIND,
+    ls_agent_purpose: LS_AGENT_PURPOSE,
     ls_integration: LS_INTEGRATION,
     ls_agent_runtime: LS_AGENT_RUNTIME,
     ls_trace_schema_version: LS_TRACE_SCHEMA_VERSION,
@@ -86,8 +89,8 @@ export function codingAgentMetadata(opts: CodingAgentMetadataOptions): Record<st
   // Approval policy — root + interrupted turns only.
   if (approvalPolicy) meta.approval_policy = approvalPolicy;
 
-  // DEPRECATED compat alias for the old root/subagent role marker.
-  if (legacyRole) meta.ls_agent_type = legacyRole;
+  // Agent role — required on every coding-agent run.
+  meta.ls_agent_type = agentType;
 
   // Subagent identity (subagent runs only).
   if (subagentId) {

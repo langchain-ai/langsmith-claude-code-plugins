@@ -12466,15 +12466,15 @@ var USER_PROMPT_TURN_NAME = "Claude Code Turn";
 var ASSISTANT_RUN_NAME = "Claude";
 
 // dist/metadata.js
-var LS_AGENT_KIND = "coding_agent";
+var LS_AGENT_PURPOSE = "coding";
 var LS_INTEGRATION = "claude-code";
 var LS_AGENT_RUNTIME = "Claude Code";
 var LS_TRACE_SCHEMA_VERSION = "coding-agent-v1";
 function codingAgentMetadata(opts) {
-  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, legacyRole, subagentId, subagentType, toolName, runName, runSpecific } = opts;
+  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, agentType, subagentId, subagentType, toolName, runName, runSpecific } = opts;
   const meta = {
     // Identity & grouping — always present.
-    ls_agent_kind: LS_AGENT_KIND,
+    ls_agent_purpose: LS_AGENT_PURPOSE,
     ls_integration: LS_INTEGRATION,
     ls_agent_runtime: LS_AGENT_RUNTIME,
     ls_trace_schema_version: LS_TRACE_SCHEMA_VERSION,
@@ -12488,8 +12488,7 @@ function codingAgentMetadata(opts) {
     meta.ls_agent_runtime_version = runtimeVersion;
   if (approvalPolicy)
     meta.approval_policy = approvalPolicy;
-  if (legacyRole)
-    meta.ls_agent_type = legacyRole;
+  meta.ls_agent_type = agentType;
   if (subagentId) {
     meta.ls_subagent_id = subagentId;
     meta.agent_id = subagentId;
@@ -12569,7 +12568,7 @@ function buildUsageMetadata(usage) {
   };
 }
 async function traceTurn(options) {
-  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy } = options;
+  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, agentType = "root" } = options;
   const turnId = turn.promptId;
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
@@ -12610,8 +12609,7 @@ async function traceTurn(options) {
           turnNumber: turnNum,
           runtimeVersion,
           approvalPolicy,
-          legacyRole: "root"
-          // DEPRECATED compat alias ls_agent_type="root".
+          agentType
         })
       }
     });
@@ -12679,6 +12677,7 @@ async function traceTurn(options) {
             turnId,
             turnNumber: turnNum,
             runtimeVersion,
+            agentType,
             toolName: toolCall.tool_use.name,
             runName: toolCall.tool_use.name
           })
@@ -12717,6 +12716,7 @@ async function traceTurn(options) {
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
+          agentType,
           runSpecific: {
             ls_provider: resolveProvider(llmCall.model),
             ls_model_name: llmCall.model,
@@ -12764,8 +12764,7 @@ async function traceTurn(options) {
           turnNumber: turnNum,
           runtimeVersion,
           approvalPolicy,
-          legacyRole: "root"
-          // DEPRECATED compat alias ls_agent_type="root".
+          agentType
         })
       }
     });
@@ -12799,8 +12798,7 @@ async function patchTurnRun(id, result) {
         turnNumber: id.turnNumber,
         runtimeVersion: id.runtimeVersion,
         approvalPolicy: id.approvalPolicy,
-        legacyRole: "root"
-        // DEPRECATED compat alias ls_agent_type="root".
+        agentType: "root"
       })
     }
   });
@@ -12880,6 +12878,7 @@ async function tracePendingSubagents(options) {
               runtimeVersion,
               turnId,
               turnNumber,
+              agentType: "root",
               // run_type "tool" (run name "Agent", native tool "Task").
               toolName: "Task",
               runName: "Agent",
@@ -12947,8 +12946,7 @@ async function traceSubagentChain(opts) {
         runtimeVersion: opts.runtimeVersion,
         turnId: opts.turnId,
         turnNumber: opts.turnNumber,
-        legacyRole: "subagent",
-        // DEPRECATED compat alias.
+        agentType: "subagent",
         subagentId: opts.subagentId,
         // → ls_subagent_id (+ agent_id alias).
         subagentType: opts.subagentType
@@ -12968,7 +12966,8 @@ async function traceSubagentChain(opts) {
       traceId: opts.parentTraceId,
       parentDottedOrder: subagentChainDottedOrder,
       customMetadata: opts.customMetadata,
-      runtimeVersion: opts.runtimeVersion
+      runtimeVersion: opts.runtimeVersion,
+      agentType: "subagent"
     });
   }
   log(`Traced subagent ${opts.subagentType} (${opts.subagentId}): ${opts.subagentTurns.length} turn(s)`);
@@ -13037,6 +13036,7 @@ async function closeAgentToolRun(options) {
         runtimeVersion: options.runtimeVersion,
         turnId: options.turnId,
         turnNumber: options.turnNumber,
+        agentType: "root",
         toolName: nativeToolName,
         runName,
         runSpecific: {
@@ -13344,7 +13344,7 @@ function loadConfig(options) {
     identityMetadata.anthropic_user_id = anthropicUserId;
   }
   const contractMetadata = {
-    ls_agent_kind: "coding_agent",
+    ls_agent_purpose: "coding",
     ls_integration: "claude-code",
     ls_agent_runtime: "Claude Code",
     ls_trace_schema_version: "coding-agent-v1",

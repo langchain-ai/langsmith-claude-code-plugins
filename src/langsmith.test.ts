@@ -116,7 +116,7 @@ describe("completeTurnRun", () => {
       turn_id: "prompt_abc",
       turn_number: 3,
       approval_policy: "default",
-      ls_agent_type: "root", // DEPRECATED compat alias
+      ls_agent_type: "root",
     });
   });
 });
@@ -1363,7 +1363,7 @@ describe("traceTurn", () => {
       unknown
     >;
     expect(toolMeta).toMatchObject({
-      ls_agent_kind: "coding_agent",
+      ls_agent_purpose: "coding",
       ls_integration: "claude-code",
       ls_agent_runtime: "Claude Code",
       ls_trace_schema_version: "coding-agent-v1",
@@ -1391,9 +1391,9 @@ describe("traceTurn", () => {
       ls_agent_runtime_version: "2.1.181",
       ls_provider: "anthropic",
     });
-    expect(llmMeta.ls_agent_type).toBeUndefined(); // not a root/subagent run
+    expect(llmMeta.ls_agent_type).toBe("root");
 
-    // Standalone (root) turn completion (patchRun) — approval_policy + ls_agent_type compat.
+    // Standalone (root) turn completion (patchRun) — approval_policy + ls_agent_type.
     const turnPatch = allRunTreeInstances.find(
       (i) => i.params.name === USER_PROMPT_TURN_NAME && i.ops.includes("patchRun"),
     )!;
@@ -1405,7 +1405,7 @@ describe("traceTurn", () => {
       turn_id: "prompt_xyz",
       turn_number: 7,
       approval_policy: "acceptEdits",
-      ls_agent_type: "root", // DEPRECATED compat alias
+      ls_agent_type: "root",
     });
     expect(turnMeta.ls_subagent_type).toBeUndefined(); // never on root
   });

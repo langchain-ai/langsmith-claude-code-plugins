@@ -78,6 +78,7 @@ async function main(): Promise<void> {
           base: config.customMetadata,
           turnNumber: sessionState.current_turn_number,
           runtimeVersion: sessionState.runtime_version,
+          agentType: "compaction",
           runSpecific: { trigger: input.trigger },
         }),
       },
