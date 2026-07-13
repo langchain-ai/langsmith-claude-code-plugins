@@ -116,6 +116,7 @@ async function main(): Promise<void> {
           base: config.customMetadata,
           turnNumber: sessionState.current_turn_number,
           runtimeVersion: sessionState.runtime_version,
+          agentType: "root",
           toolName: "Workflow",
           runName: "Workflow",
         }),
@@ -146,6 +147,7 @@ async function main(): Promise<void> {
           // sufficient (the contract needs at least one of the two).
           turnNumber: sessionState.current_turn_number,
           runtimeVersion: sessionState.runtime_version,
+          agentType: "root",
           toolName: input.tool_name,
           runName: input.tool_name,
         }),

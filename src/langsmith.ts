@@ -15,6 +15,7 @@ import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 import { codingAgentMetadata } from "./metadata.js";
+import type { LSAgentType } from "./metadata.js";
 
 // ─── Client setup ───────────────────────────────────────────────────────────
 
@@ -172,6 +173,8 @@ export interface TraceTurnOptions {
   runtimeVersion?: string;
   /** Permission mode → `approval_policy` (stamped on root/standalone turn runs only). */
   approvalPolicy?: string;
+  /** Role stamped on this turn and each of its child runs. */
+  agentType?: LSAgentType;
 }
 
 /**
@@ -194,6 +197,7 @@ export async function traceTurn(
     customMetadata,
     runtimeVersion,
     approvalPolicy,
+    agentType = "root",
   } = options;
 
   // turn_id for every run created for this turn (transcript promptId).
@@ -255,7 +259,7 @@ export async function traceTurn(
           turnNumber: turnNum,
           runtimeVersion,
           approvalPolicy,
-          legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+          agentType,
         }),
       },
     });
@@ -350,6 +354,7 @@ export async function traceTurn(
             turnId,
             turnNumber: turnNum,
             runtimeVersion,
+            agentType,
             toolName: toolCall.tool_use.name,
             runName: toolCall.tool_use.name,
           }),
@@ -395,6 +400,7 @@ export async function traceTurn(
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
+          agentType,
           runSpecific: {
             ls_provider: resolveProvider(llmCall.model),
             ls_model_name: llmCall.model,
@@ -450,7 +456,7 @@ export async function traceTurn(
           turnNumber: turnNum,
           runtimeVersion,
           approvalPolicy,
-          legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+          agentType,
         }),
       },
     });
@@ -521,7 +527,7 @@ async function patchTurnRun(
         turnNumber: id.turnNumber,
         runtimeVersion: id.runtimeVersion,
         approvalPolicy: id.approvalPolicy,
-        legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+        agentType: "root",
       }),
     },
   });
@@ -877,6 +883,7 @@ export async function tracePendingSubagents(options: {
               runtimeVersion,
               turnId,
               turnNumber,
+              agentType: "root",
               // run_type "tool" (run name "Agent", native tool "Task").
               toolName: "Task",
               runName: "Agent",
@@ -972,7 +979,7 @@ async function traceSubagentChain(opts: {
         runtimeVersion: opts.runtimeVersion,
         turnId: opts.turnId,
         turnNumber: opts.turnNumber,
-        legacyRole: "subagent", // DEPRECATED compat alias.
+        agentType: "subagent",
         subagentId: opts.subagentId, // → ls_subagent_id (+ agent_id alias).
         subagentType: opts.subagentType, // → ls_subagent_type (+ agent_type alias).
       }),
@@ -992,6 +999,7 @@ async function traceSubagentChain(opts: {
       parentDottedOrder: subagentChainDottedOrder,
       customMetadata: opts.customMetadata,
       runtimeVersion: opts.runtimeVersion,
+      agentType: "subagent",
     });
   }
 
@@ -1122,6 +1130,7 @@ export async function closeAgentToolRun(options: {
         runtimeVersion: options.runtimeVersion,
         turnId: options.turnId,
         turnNumber: options.turnNumber,
+        agentType: "root",
         toolName: nativeToolName,
         runName,
         runSpecific: {

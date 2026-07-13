@@ -7,6 +7,7 @@
     "ls_agent_runtime": "Claude Code",
     "thread_id": "sess_7f3c2a9e1b",
     "ls_trace_schema_version": "coding-agent-v1",
+    "ls_agent_type": "root",
 
     "ls_integration_version": "0.4.2",
     "ls_agent_runtime_version": "1.0.38",
@@ -33,6 +34,7 @@
     "ls_agent_runtime": "Claude Code",
     "thread_id": "sess_7f3c2a9e1b",
     "ls_trace_schema_version": "coding-agent-v1",
+    "ls_agent_type": "root",
 
     "ls_integration_version": "0.4.2",
     "ls_agent_runtime_version": "1.0.38",
@@ -63,6 +65,7 @@
     "ls_agent_runtime": "Claude Code",
     "thread_id": "sess_7f3c2a9e1b",
     "ls_trace_schema_version": "coding-agent-v1",
+    "ls_agent_type": "root",
 
     "ls_integration_version": "0.4.2",
     "ls_agent_runtime_version": "1.0.38",
@@ -90,6 +93,7 @@
     "ls_agent_runtime": "Claude Code",
     "thread_id": "sess_7f3c2a9e1b",
     "ls_trace_schema_version": "coding-agent-v1",
+    "ls_agent_type": "subagent",
 
     "ls_integration_version": "0.4.2",
     "ls_agent_runtime_version": "1.0.38",
@@ -119,6 +123,7 @@
     "ls_agent_runtime": "Claude Code",
     "thread_id": "sess_7f3c2a9e1b",
     "ls_trace_schema_version": "coding-agent-v1",
+    "ls_agent_type": "root",
     "ls_integration_version": "0.4.2",
     "ls_agent_runtime_version": "1.0.38",
     "turn_id": "prompt_abc124",

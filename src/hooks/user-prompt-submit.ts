@@ -226,7 +226,7 @@ async function main(): Promise<void> {
         turnNumber: turnNum,
         runtimeVersion,
         approvalPolicy,
-        legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+        agentType: "root",
       }),
     },
   });

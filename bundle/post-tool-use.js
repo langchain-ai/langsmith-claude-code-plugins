@@ -12236,7 +12236,7 @@ var LS_INTEGRATION = "claude-code";
 var LS_AGENT_RUNTIME = "Claude Code";
 var LS_TRACE_SCHEMA_VERSION = "coding-agent-v1";
 function codingAgentMetadata(opts) {
-  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, legacyRole, subagentId, subagentType, toolName, runName, runSpecific } = opts;
+  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, agentType, subagentId, subagentType, toolName, runName, runSpecific } = opts;
   const meta = {
     // Identity & grouping — always present.
     ls_agent_kind: LS_AGENT_KIND,
@@ -12253,8 +12253,7 @@ function codingAgentMetadata(opts) {
     meta.ls_agent_runtime_version = runtimeVersion;
   if (approvalPolicy)
     meta.approval_policy = approvalPolicy;
-  if (legacyRole)
-    meta.ls_agent_type = legacyRole;
+  meta.ls_agent_type = agentType;
   if (subagentId) {
     meta.ls_subagent_id = subagentId;
     meta.agent_id = subagentId;
@@ -12628,6 +12627,7 @@ async function main() {
           base: config.customMetadata,
           turnNumber: sessionState.current_turn_number,
           runtimeVersion: sessionState.runtime_version,
+          agentType: "root",
           toolName: "Workflow",
           runName: "Workflow"
         })
@@ -12657,6 +12657,7 @@ async function main() {
           // sufficient (the contract needs at least one of the two).
           turnNumber: sessionState.current_turn_number,
           runtimeVersion: sessionState.runtime_version,
+          agentType: "root",
           toolName: input.tool_name,
           runName: input.tool_name
         })
