@@ -11,10 +11,10 @@
   },
   "keys": [
     {
-      "key": "ls_agent_kind",
+      "key": "ls_agent_purpose",
       "appliesTo": ["root", "llm", "tool", "subagent", "interrupted"],
       "type": "string",
-      "allowedValues": ["coding_agent"],
+      "allowedValues": ["coding"],
       "requirement": "always",
       "requiredWhereKnown": false
     },
@@ -49,6 +49,15 @@
       "allowedValues": ["coding-agent-v1"],
       "requirement": "always",
       "requiredWhereKnown": false
+    },
+    {
+      "key": "ls_agent_type",
+      "appliesTo": ["root", "llm", "tool", "subagent", "interrupted"],
+      "type": "string",
+      "allowedValues": ["root", "subagent", "middleware", "compaction"],
+      "requirement": "always",
+      "requiredWhereKnown": false,
+      "note": "Role of the run within the coding-agent trace. This is a current contract field, not a legacy alias."
     },
     {
       "key": "ls_integration_version",
@@ -193,7 +202,7 @@
       "allowedValues": null,
       "requirement": "contextual",
       "requiredWhereKnown": false,
-      "note": "Subagent runs only. Do NOT emit on root runs (e.g. do not copy claude-code's old ls_agent_type='root' here)."
+      "note": "Subagent runs only. Distinct from ls_agent_type, which classifies every coding-agent run."
     },
     {
       "key": "ls_tool_name",

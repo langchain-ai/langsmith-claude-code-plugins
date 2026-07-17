@@ -293,12 +293,17 @@ the subagent runs will not be traced.
 
 ```bash
 pnpm install
-pnpm dev         # Watch mode — recompiles on changes
 pnpm test        # Run tests
 pnpm build       # Production build
 ```
 
-After making changes, run `pnpm build` and send a new message in Claude Code to pick up the updated hooks.
+After making changes, run `pnpm build`, then run:
+
+```bash
+claude --plugin-dir /path/to/langsmith-claude-code-plugins
+```
+
+and send a new message in Claude Code to pick up the updated hooks.
 
 ## License
 

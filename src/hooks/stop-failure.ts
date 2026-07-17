@@ -75,7 +75,7 @@ async function main(): Promise<void> {
           turnNumber: sessionState.current_turn_number,
           runtimeVersion: sessionState.runtime_version,
           approvalPolicy: sessionState.approval_policy,
-          legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+          agentType: "root",
         }),
       },
     });

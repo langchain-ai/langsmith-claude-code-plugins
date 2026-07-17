@@ -14,6 +14,8 @@ import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
+import { recordBackgroundRun } from "../background-runs.js";
+import { detectWorkflowLaunch } from "../workflows.js";
 
 interface PostToolUseHookInput {
   session_id: string;
@@ -78,11 +80,49 @@ async function main(): Promise<void> {
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
 
   const agentId = (input.tool_response as { agentId?: string }).agentId;
+  // A dynamic Workflow launch also spawns background work, but via the Workflow
+  // tool (not Task) — detected structurally from tool_response, not an agentId.
+  const workflow = !agentId
+    ? detectWorkflowLaunch(input.tool_name, input.tool_response)
+    : undefined;
 
   if (agentId) {
     // Agent tool: defer LangSmith run creation to the Stop hook, which will
     // have the actual subagent type from SubagentStop's pending_subagent_traces.
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
+  } else if (workflow) {
+    // Workflow tool: its run name is known now ("Workflow"), so post it OPEN
+    // immediately. Stage agents nest under it as they finish; the workflow's
+    // task-notification closes it (there is no whole-workflow SubagentStop).
+    debug(
+      `Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`,
+    );
+    const runTree = new RunTree({
+      client,
+      replicas: config.replicas,
+      id: toolRunId,
+      name: "Workflow",
+      run_type: "tool",
+      inputs: { input: input.tool_input },
+      project_name: config.project,
+      start_time: startTimeIso,
+      // No end_time — left open until finalizeNotificationChain closes it.
+      parent_run_id: parentRunId,
+      trace_id: traceId,
+      dotted_order: toolDottedOrder,
+      extra: {
+        metadata: codingAgentMetadata({
+          sessionId: input.session_id,
+          base: config.customMetadata,
+          turnNumber: sessionState.current_turn_number,
+          runtimeVersion: sessionState.runtime_version,
+          agentType: "root",
+          toolName: "Workflow",
+          runName: "Workflow",
+        }),
+      },
+    });
+    await runTree.postRun();
   } else {
     // Regular tool: create and complete the run immediately.
     const runTree = new RunTree({
@@ -107,6 +147,7 @@ async function main(): Promise<void> {
           // sufficient (the contract needs at least one of the two).
           turnNumber: sessionState.current_turn_number,
           runtimeVersion: sessionState.runtime_version,
+          agentType: "root",
           toolName: input.tool_name,
           runName: input.tool_name,
           skillName: skillNameFromTool(input.tool_name, input.tool_input),
@@ -119,39 +160,72 @@ async function main(): Promise<void> {
   // Save state atomically so concurrent PostToolUse hooks don't clobber each other.
   await atomicUpdateState(config.stateFilePath, (freshState) => {
     const freshSession = getSessionState(freshState, input.session_id);
+
+    // Both the Agent and Workflow tools launch work that outlives this turn's
+    // Stop. Register either the same way — under its launching turn in open_turns
+    // (so Stop defers) with a task_run_map entry to nest/close later. The Task
+    // Agent run is deferred (created by Stop with its real subagent type); the
+    // Workflow run was posted open above (its name is known now), so we mark it
+    // subagent_done + is_workflow so finalize patches it closed as "Workflow".
+    let backgroundUpdate: Pick<typeof freshSession, "task_run_map" | "open_turns"> | undefined;
+    if (agentId || workflow) {
+      const deferred = {
+        trace_id: traceId!,
+        parent_run_id: parentRunId!,
+        start_time: startTimeIso,
+        end_time: toolEndTimeIso,
+        inputs: input.tool_input,
+        outputs: input.tool_response,
+        project_name: config.project,
+      } as Record<string, unknown>;
+      const launchingTurn = {
+        run_id: parentRunId!,
+        trace_id: traceId,
+        dotted_order: parentDottedOrder,
+        parent_run_id: sessionState.current_parent_run_id,
+        start_time: sessionState.current_turn_start,
+        turn_number: sessionState.current_turn_number,
+        runtime_version: sessionState.runtime_version,
+        approval_policy: sessionState.approval_policy,
+      };
+      backgroundUpdate = recordBackgroundRun(
+        freshSession,
+        launchingTurn,
+        agentId ?? workflow!.taskId,
+        {
+          run_id: toolRunId,
+          dotted_order: toolDottedOrder,
+          deferred,
+          ...(workflow
+            ? { workflow_run_id: workflow.runId, is_workflow: true, subagent_done: true }
+            : {}),
+        },
+      );
+    }
+
     return {
       ...freshState,
       [input.session_id]: {
         ...freshSession,
         last_tool_end_time: toolEndTime,
+        ...backgroundUpdate,
+        // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this
+        // tool call from the transcript. A deferred Agent tool is skipped there
+        // via its agentId link instead, so it's the one case we don't record —
+        // but a Workflow tool call has no agentId, so without this it would get a
+        // duplicate "Workflow" tool run next to the open one posted above.
         ...(agentId
-          ? {
-              task_run_map: {
-                ...freshSession.task_run_map,
-                [agentId]: {
-                  run_id: toolRunId,
-                  dotted_order: toolDottedOrder,
-                  deferred: {
-                    trace_id: traceId!,
-                    parent_run_id: parentRunId!,
-                    start_time: startTimeIso,
-                    end_time: toolEndTimeIso,
-                    inputs: input.tool_input,
-                    outputs: input.tool_response,
-                    project_name: config.project,
-                  } as Record<string, unknown>,
-                },
-              },
-            }
+          ? {}
           : {
-              // Record tool_use_id so traceTurn skips it (avoids double-tracing).
               traced_tool_use_ids: [...(freshSession.traced_tool_use_ids ?? []), input.tool_use_id],
             }),
       },
     };
   });
 
-  // Flush pending batches so traces are sent before this async hook exits.
+  // Flush pending batches so traces are sent before this async hook exits. The
+  // deferred Agent tool run is the one case that posts nothing here (Stop creates
+  // it), so it has nothing to flush; regular tools and the open Workflow run do.
   if (!agentId) {
     await flushPendingTraces();
   }

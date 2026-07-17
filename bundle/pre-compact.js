@@ -104,7 +104,7 @@ import { readFileSync as readFileSync2 } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-var LS_INTEGRATION_VERSION = true ? "0.1.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var LS_INTEGRATION_VERSION = true ? "0.2.2" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var PROVIDER_HOSTS = {
   github: "github.com",
   gitlab: "gitlab.com",
@@ -262,7 +262,7 @@ function loadConfig(options) {
     identityMetadata.anthropic_user_id = anthropicUserId;
   }
   const contractMetadata = {
-    ls_agent_kind: "coding_agent",
+    ls_agent_purpose: "coding",
     ls_integration: "claude-code",
     ls_agent_runtime: "Claude Code",
     ls_trace_schema_version: "coding-agent-v1",

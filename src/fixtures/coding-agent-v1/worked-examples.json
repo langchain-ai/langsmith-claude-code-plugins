@@ -1,12 +1,13 @@
 {
-  "_comment": "Copy-pasteable worked examples of run.extra.metadata for coding-agent-v1. Uses claude-code as the reference integration. Identity block (ls_agent_kind, ls_integration, ls_agent_runtime, thread_id, ls_trace_schema_version) + versions + turn + repo/git/cwd are emitted by ONE shared helper and merged onto EVERY run. Child runs do NOT inherit parent metadata in LangSmith — the helper must stamp each createChild/run.",
+  "_comment": "Copy-pasteable worked examples of run.extra.metadata for coding-agent-v1. Uses claude-code as the reference integration. Identity block (ls_agent_purpose, ls_integration, ls_agent_runtime, thread_id, ls_trace_schema_version) + versions + turn + repo/git/cwd are emitted by ONE shared helper and merged onto EVERY run. Child runs do NOT inherit parent metadata in LangSmith — the helper must stamp each createChild/run.",
 
   "root": {
-    "ls_agent_kind": "coding_agent",
+    "ls_agent_purpose": "coding",
     "ls_integration": "claude-code",
     "ls_agent_runtime": "Claude Code",
     "thread_id": "sess_7f3c2a9e1b",
     "ls_trace_schema_version": "coding-agent-v1",
+    "ls_agent_type": "root",
 
     "ls_integration_version": "0.4.2",
     "ls_agent_runtime_version": "1.0.38",
@@ -28,11 +29,12 @@
   },
 
   "llm": {
-    "ls_agent_kind": "coding_agent",
+    "ls_agent_purpose": "coding",
     "ls_integration": "claude-code",
     "ls_agent_runtime": "Claude Code",
     "thread_id": "sess_7f3c2a9e1b",
     "ls_trace_schema_version": "coding-agent-v1",
+    "ls_agent_type": "root",
 
     "ls_integration_version": "0.4.2",
     "ls_agent_runtime_version": "1.0.38",
@@ -58,11 +60,12 @@
   },
 
   "tool": {
-    "ls_agent_kind": "coding_agent",
+    "ls_agent_purpose": "coding",
     "ls_integration": "claude-code",
     "ls_agent_runtime": "Claude Code",
     "thread_id": "sess_7f3c2a9e1b",
     "ls_trace_schema_version": "coding-agent-v1",
+    "ls_agent_type": "root",
 
     "ls_integration_version": "0.4.2",
     "ls_agent_runtime_version": "1.0.38",
@@ -85,11 +88,12 @@
   },
 
   "subagent": {
-    "ls_agent_kind": "coding_agent",
+    "ls_agent_purpose": "coding",
     "ls_integration": "claude-code",
     "ls_agent_runtime": "Claude Code",
     "thread_id": "sess_7f3c2a9e1b",
     "ls_trace_schema_version": "coding-agent-v1",
+    "ls_agent_type": "subagent",
 
     "ls_integration_version": "0.4.2",
     "ls_agent_runtime_version": "1.0.38",
@@ -114,11 +118,12 @@
 
   "interrupted": {
     "_comment": "Interrupted/cancelled turn. Same base as root, including approval_policy. turn_id/turn_number still emitted.",
-    "ls_agent_kind": "coding_agent",
+    "ls_agent_purpose": "coding",
     "ls_integration": "claude-code",
     "ls_agent_runtime": "Claude Code",
     "thread_id": "sess_7f3c2a9e1b",
     "ls_trace_schema_version": "coding-agent-v1",
+    "ls_agent_type": "root",
     "ls_integration_version": "0.4.2",
     "ls_agent_runtime_version": "1.0.38",
     "turn_id": "prompt_abc124",

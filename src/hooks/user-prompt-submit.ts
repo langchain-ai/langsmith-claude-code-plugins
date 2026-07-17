@@ -19,6 +19,7 @@ import {
   generateDottedOrderSegment,
   parseDottedOrder,
 } from "../langsmith.js";
+import { finalizeNotificationChain } from "../finalize.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
@@ -36,6 +37,16 @@ interface UserPromptSubmitHookInput {
   agent_id?: string;
   agent_type?: string;
 }
+
+/**
+ * The task-notification <status> that means the subagent was forcibly stopped
+ * (so SubagentStop never fires and we must finalize from the notification turn,
+ * marking the agent interrupted). We match only this known value: an unknown/new
+ * status falls back to being treated as a normal completion — we'd rather show a
+ * killed subagent as completed than mislabel a successful one as interrupted if
+ * Claude Code changes its status vocabulary. Matched case-insensitively.
+ */
+const KILLED_NOTIFICATION_STATUS = "killed";
 
 async function main(): Promise<void> {
   const hookStartTime = Date.now();
@@ -90,7 +101,17 @@ async function main(): Promise<void> {
   let interruptedTurnsTraced = 0;
 
   if (sessionState.current_turn_run_id) {
-    debug(`Tracing interrupted turn ${sessionState.current_turn_run_id}`);
+    // A stale current_turn_run_id means the previous turn's Stop never fired. The
+    // usual cause is a user interrupt — but it also happens when several background
+    // agents finish at once: their task-notifications arrive faster than the agent
+    // responds, so a notification turn is superseded by the next before its Stop.
+    // That's not a user interrupt: close it with an accurate status and, since its
+    // launching turn is still deferred, finalize that chain so it doesn't hang.
+    const supersededNotificationAgentId = sessionState.current_notification_agent_id;
+    debug(
+      `Closing stale turn ${sessionState.current_turn_run_id}` +
+        (supersededNotificationAgentId ? " (superseded task-notification)" : " (interrupted)"),
+    );
     try {
       const { lastLine, turnsTraced } = await closeInterruptedTurn({
         sessionId: input.session_id,
@@ -101,9 +122,25 @@ async function main(): Promise<void> {
         customMetadata: config.customMetadata,
         runtimeVersion,
         approvalPolicy,
+        error: supersededNotificationAgentId
+          ? "Superseded by a newer task-notification"
+          : "User interrupt",
       });
       interruptedLastLine = lastLine;
       interruptedTurnsTraced = turnsTraced;
+      if (supersededNotificationAgentId) {
+        await finalizeNotificationChain({
+          stateFilePath: config.stateFilePath,
+          sessionId: input.session_id,
+          project: config.project,
+          customMetadata: config.customMetadata,
+          runtimeVersion,
+          agentId: supersededNotificationAgentId,
+          // Carry the killed marker through this path too, in case the killed
+          // subagent's notification turn was itself superseded before its Stop.
+          interrupted: sessionState.current_notification_interrupted,
+        });
+      }
     } catch (err) {
       error(`Failed to close interrupted turn: ${err}`);
     }
@@ -115,11 +152,49 @@ async function main(): Promise<void> {
   const startTime = new Date().toISOString();
   const segment = generateDottedOrderSegment(startTime, runId);
 
-  // If a parent dotted_order is provided, nest this turn under the existing run.
+  // Decide where this turn nests.
   let traceId: string;
   let parentRunId: string | undefined;
   let dottedOrder: string;
-  if (config.parentDottedOrder) {
+
+  // A task-notification turn is the main agent reacting to a finished background
+  // subagent. Detect + correlate in one step by matching the prompt against the
+  // agent_ids in task_run_map. We match by the launch-time task_run_map entry
+  // (recorded by PostToolUse), not by whether SubagentStop has finished: a
+  // background agent finishing while the main agent is idle can fire this
+  // notification's UserPromptSubmit *before* SubagentStop, so a finished marker may
+  // not be set yet — but the launch-time entry always is. A notification
+  // necessarily references its agent by id, so an id substring match is robust to
+  // message-format changes; a 17-char hex id colliding with human text is
+  // astronomically unlikely. (Reading origin.kind from the transcript doesn't work
+  // here either — the prompt's line often isn't flushed to disk when this fires.)
+  // A match nests the turn under that subagent's Agent tool run instead of
+  // cluttering the top-level turn sequence.
+  const notifAgentId = Object.keys(sessionState.task_run_map ?? {}).find((id) =>
+    input.prompt.includes(id),
+  );
+  const agentToolRun = notifAgentId ? sessionState.task_run_map?.[notifAgentId] : undefined;
+  const notificationAgentId = agentToolRun ? notifAgentId : undefined;
+  // A cancelled subagent's notification reports a terminal <status> like "killed".
+  // There's no structured field for it, so read the one tag from the body — only
+  // to distinguish a forcibly-stopped subagent from a normal one, not to
+  // detect/correlate. When killed, SubagentStop never fires, so Stop must finalize
+  // without waiting on it. Only known cancellation statuses count (allowlist);
+  // anything else (including a new/unknown status) is treated as a normal turn.
+  const notificationStatus = notificationAgentId
+    ? /<status>([^<]+)<\/status>/.exec(input.prompt)?.[1]
+    : undefined;
+  const notificationInterrupted = notificationStatus?.toLowerCase() === KILLED_NOTIFICATION_STATUS;
+
+  if (agentToolRun) {
+    traceId = parseDottedOrder(agentToolRun.dotted_order).traceId;
+    parentRunId = agentToolRun.run_id;
+    dottedOrder = `${agentToolRun.dotted_order}.${segment}`;
+    debug(
+      `Task-notification for agent ${notifAgentId}, nesting turn under Agent run ${parentRunId}`,
+    );
+  } else if (config.parentDottedOrder) {
+    // If a parent dotted_order is provided, nest this turn under the existing run.
     const parsed = parseDottedOrder(config.parentDottedOrder);
     traceId = parsed.traceId;
     parentRunId = parsed.runId;
@@ -151,7 +226,7 @@ async function main(): Promise<void> {
         turnNumber: turnNum,
         runtimeVersion,
         approvalPolicy,
-        legacyRole: "root", // DEPRECATED compat alias ls_agent_type="root".
+        agentType: "root",
       }),
     },
   });
@@ -162,6 +237,24 @@ async function main(): Promise<void> {
 
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);
+
+    // Preserve state for background subagents from prior turns that are still
+    // running (they outlive their turn's Stop hook). We keep their Agent tool run
+    // info in task_run_map so their traces still nest correctly, and keep their
+    // turns in open_turns so the last SubagentStop can complete them. But we drop
+    // the turn we just closed as interrupted above — it's already finalized, so a
+    // late SubagentStop should still trace the subagent but not re-complete it.
+    const inflightAgentIds = new Set(
+      Object.values(ss.open_turns ?? {}).flatMap((t) => t.agent_ids),
+    );
+    const preservedTaskRunMap = Object.fromEntries(
+      Object.entries(ss.task_run_map ?? {}).filter(([id]) => inflightAgentIds.has(id)),
+    );
+    const preservedOpenTurns = { ...ss.open_turns };
+    if (sessionState.current_turn_run_id) {
+      delete preservedOpenTurns[sessionState.current_turn_run_id];
+    }
+
     return {
       ...s,
       [input.session_id]: {
@@ -172,17 +265,24 @@ async function main(): Promise<void> {
         current_parent_run_id: parentRunId,
         current_turn_number: turnNum,
         current_turn_start: startTime,
+        // If this is a task-notification turn, record the agent it's for so Stop
+        // closes that agent's tool run + launching turn once this turn completes.
+        current_notification_agent_id: notificationAgentId,
+        current_notification_interrupted: notificationInterrupted,
         // Persisted so the closing hooks can stamp them onto their runs.
         approval_policy: approvalPolicy,
         ...(runtimeVersion ? { runtime_version: runtimeVersion } : {}),
         // Advance past the interrupted turn's messages so Stop doesn't re-trace them
         last_line: interruptedLastLine,
         turn_count: ss.turn_count + interruptedTurnsTraced,
-        // Clear interrupted turn's stale data
-        task_run_map: {},
+        // Clear this turn's stale data, but keep still-running background subagents
+        // and any Agent tool runs left open awaiting their task-notification.
+        task_run_map: preservedTaskRunMap,
         traced_tool_use_ids: [],
         tool_start_times: {},
         pending_subagent_traces: [],
+        open_turns: preservedOpenTurns,
+        notification_done_agents: ss.notification_done_agents,
       },
     };
   });

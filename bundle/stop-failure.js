@@ -6,7 +6,11 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -25,9 +29,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/eventemitter3@4.0.7/node_modules/eventemitter3/index.js
+// node_modules/.pnpm/eventemitter3@4.0.7/node_modules/eventemitter3/index.js
 var require_eventemitter3 = __commonJS({
-  "../langsmith-claude-code-plugins/node_modules/.pnpm/eventemitter3@4.0.7/node_modules/eventemitter3/index.js"(exports, module) {
+  "node_modules/.pnpm/eventemitter3@4.0.7/node_modules/eventemitter3/index.js"(exports, module) {
     "use strict";
     var has2 = Object.prototype.hasOwnProperty;
     var prefix = "~";
@@ -187,9 +191,9 @@ var require_eventemitter3 = __commonJS({
   }
 });
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/p-finally@1.0.0/node_modules/p-finally/index.js
+// node_modules/.pnpm/p-finally@1.0.0/node_modules/p-finally/index.js
 var require_p_finally = __commonJS({
-  "../langsmith-claude-code-plugins/node_modules/.pnpm/p-finally@1.0.0/node_modules/p-finally/index.js"(exports, module) {
+  "node_modules/.pnpm/p-finally@1.0.0/node_modules/p-finally/index.js"(exports, module) {
     "use strict";
     module.exports = (promise, onFinally) => {
       onFinally = onFinally || (() => {
@@ -208,9 +212,9 @@ var require_p_finally = __commonJS({
   }
 });
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/p-timeout@3.2.0/node_modules/p-timeout/index.js
+// node_modules/.pnpm/p-timeout@3.2.0/node_modules/p-timeout/index.js
 var require_p_timeout = __commonJS({
-  "../langsmith-claude-code-plugins/node_modules/.pnpm/p-timeout@3.2.0/node_modules/p-timeout/index.js"(exports, module) {
+  "node_modules/.pnpm/p-timeout@3.2.0/node_modules/p-timeout/index.js"(exports, module) {
     "use strict";
     var pFinally = require_p_finally();
     var TimeoutError = class extends Error {
@@ -257,9 +261,9 @@ var require_p_timeout = __commonJS({
   }
 });
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/lower-bound.js
+// node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/lower-bound.js
 var require_lower_bound = __commonJS({
-  "../langsmith-claude-code-plugins/node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/lower-bound.js"(exports) {
+  "node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/lower-bound.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     function lowerBound(array, value, comparator) {
@@ -281,9 +285,9 @@ var require_lower_bound = __commonJS({
   }
 });
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/priority-queue.js
+// node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/priority-queue.js
 var require_priority_queue = __commonJS({
-  "../langsmith-claude-code-plugins/node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/priority-queue.js"(exports) {
+  "node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/priority-queue.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var lower_bound_1 = require_lower_bound();
@@ -319,9 +323,9 @@ var require_priority_queue = __commonJS({
   }
 });
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/index.js
+// node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/index.js
 var require_dist = __commonJS({
-  "../langsmith-claude-code-plugins/node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/index.js"(exports) {
+  "node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var EventEmitter = require_eventemitter3();
@@ -627,16 +631,16 @@ function debug(message) {
   }
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/regex.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/regex.js
 var regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/validate.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/validate.js
 function validate(uuid) {
   return typeof uuid === "string" && regex_default.test(uuid);
 }
 var validate_default = validate;
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/parse.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/parse.js
 function parse(uuid) {
   if (!validate_default(uuid)) {
     throw TypeError("Invalid UUID");
@@ -668,7 +672,7 @@ function parse(uuid) {
 }
 var parse_default = parse;
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/stringify.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/stringify.js
 var byteToHex = [];
 for (let i = 0; i < 256; ++i) {
   byteToHex.push((i + 256).toString(16).slice(1));
@@ -677,13 +681,13 @@ function unsafeStringify(arr2, offset = 0) {
   return (byteToHex[arr2[offset + 0]] + byteToHex[arr2[offset + 1]] + byteToHex[arr2[offset + 2]] + byteToHex[arr2[offset + 3]] + "-" + byteToHex[arr2[offset + 4]] + byteToHex[arr2[offset + 5]] + "-" + byteToHex[arr2[offset + 6]] + byteToHex[arr2[offset + 7]] + "-" + byteToHex[arr2[offset + 8]] + byteToHex[arr2[offset + 9]] + "-" + byteToHex[arr2[offset + 10]] + byteToHex[arr2[offset + 11]] + byteToHex[arr2[offset + 12]] + byteToHex[arr2[offset + 13]] + byteToHex[arr2[offset + 14]] + byteToHex[arr2[offset + 15]]).toLowerCase();
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/rng.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/rng.js
 var rnds8 = new Uint8Array(16);
 function rng() {
   return crypto.getRandomValues(rnds8);
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v4.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v4.js
 function v4(options, buf, offset) {
   if (!buf && !options && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -712,7 +716,7 @@ function _v4(options, buf, offset) {
 }
 var v4_default = v4;
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/sha1.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/sha1.js
 function f(s, x, y, z) {
   switch (s) {
     case 0:
@@ -780,7 +784,7 @@ function sha1(bytes) {
 }
 var sha1_default = sha1;
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v35.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v35.js
 function stringToBytes(str) {
   str = unescape(encodeURIComponent(str));
   const bytes = new Uint8Array(str.length);
@@ -819,7 +823,7 @@ function v35(version, hash, value, namespace, buf, offset) {
   return unsafeStringify(bytes);
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v5.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v5.js
 function v5(value, namespace, buf, offset) {
   return v35(80, sha1_default, value, namespace, buf, offset);
 }
@@ -827,7 +831,7 @@ v5.DNS = DNS;
 v5.URL = URL2;
 var v5_default = v5;
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v7.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v7.js
 var _state = {};
 function v7(options, buf, offset) {
   let bytes;
@@ -889,7 +893,7 @@ function v7Bytes(rnds, msecs, seq, buf, offset = 0) {
 }
 var v7_default = v7;
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/experimental/otel/constants.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/experimental/otel/constants.js
 var GEN_AI_OPERATION_NAME = "gen_ai.operation.name";
 var GEN_AI_SYSTEM = "gen_ai.system";
 var GEN_AI_REQUEST_MODEL = "gen_ai.request.model";
@@ -925,7 +929,7 @@ var LANGSMITH_REQUEST_STREAMING = "langsmith.request.streaming";
 var LANGSMITH_REQUEST_HEADERS = "langsmith.request.headers";
 var LANGSMITH_USAGE_METADATA = "langsmith.usage_metadata";
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/env.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/env.js
 var globalEnv;
 var isBrowser = () => typeof window !== "undefined" && typeof window.document !== "undefined";
 var isWebWorker = () => typeof globalThis === "object" && globalThis.constructor && globalThis.constructor.name === "DedicatedWorkerGlobalScope";
@@ -1087,7 +1091,7 @@ function resolveTracingMode(configValue) {
   return "langsmith";
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/otel.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/otel.js
 var MockTracer = class {
   constructor() {
     Object.defineProperty(this, "hasWarned", {
@@ -1193,7 +1197,7 @@ function getDefaultOTLPTracerComponents() {
   return OTELProviderSingleton.getDefaultOTLPTracerComponents();
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/experimental/otel/translator.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/experimental/otel/translator.js
 var WELL_KNOWN_OPERATION_NAMES = {
   llm: "chat",
   tool: "execute_tool",
@@ -1541,7 +1545,7 @@ var LangSmithToOTELTranslator = class {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/is-network-error/index.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/is-network-error/index.js
 var objectToString = Object.prototype.toString;
 var isError = (value) => objectToString.call(value) === "[object Error]";
 var errorMessages = /* @__PURE__ */ new Set([
@@ -1580,7 +1584,7 @@ function isNetworkError(error2) {
   return errorMessages.has(message);
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/p-retry/index.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/p-retry/index.js
 function validateRetries(retries) {
   if (typeof retries === "number") {
     if (retries < 0) {
@@ -1753,11 +1757,11 @@ async function pRetry(input, options = {}) {
   throw new Error("Retry attempts exhausted without throwing an error.");
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/p-queue.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/p-queue.js
 var import_p_queue = __toESM(require_dist(), 1);
 var PQueue = "default" in import_p_queue.default ? import_p_queue.default.default : import_p_queue.default;
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/async_caller.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/async_caller.js
 var STATUS_RETRYABLE = [
   408,
   // Request Timeout
@@ -1885,7 +1889,7 @@ var AsyncCaller = class {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/messages.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/messages.js
 function isLangChainMessage(message) {
   return typeof message?._getType === "function";
 }
@@ -1900,7 +1904,7 @@ function convertLangChainMessageToExample(message) {
   return converted;
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/uuid.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/uuid.js
 var uuid4 = function() {
   const { crypto: crypto2 } = globalThis;
   if (crypto2?.randomUUID) {
@@ -1912,7 +1916,7 @@ var uuid4 = function() {
   return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (+c ^ randomByte() & 15 >> +c / 4).toString(16));
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/errors.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/errors.js
 function isAbortError(err) {
   return typeof err === "object" && err !== null && // Spec-compliant fetch implementations
   ("name" in err && err.name === "AbortError" || // Expo fetch
@@ -1943,7 +1947,7 @@ var castToError = (err) => {
   return new Error(err);
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/error.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/error.js
 var LangsmithError = class extends Error {
 };
 var APIError = class _APIError extends LangsmithError {
@@ -2050,7 +2054,7 @@ var RateLimitError = class extends APIError {
 var InternalServerError = class extends APIError {
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/values.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/values.js
 var startsWithSchemeRegexp = /^[a-z][a-z0-9+.-]*:/i;
 var isAbsoluteURL = (url) => {
   return startsWithSchemeRegexp.test(url);
@@ -2090,13 +2094,13 @@ var safeJSON = (text) => {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/sleep.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/sleep.js
 var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/version.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/version.js
 var VERSION = "0.0.1";
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/detect-platform.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/detect-platform.js
 function getDetectedPlatform() {
   if (typeof Deno !== "undefined" && Deno.build != null) {
     return "deno";
@@ -2222,7 +2226,7 @@ var getPlatformHeaders = () => {
   return _platformHeaders ??= getPlatformProperties();
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/shims.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/shims.js
 function getDefaultFetch() {
   if (typeof fetch !== "undefined") {
     return fetch;
@@ -2267,7 +2271,7 @@ async function CancelReadableStream(stream) {
   await cancelPromise;
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/request-options.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/request-options.js
 var FallbackEncoder = ({ headers, body }) => {
   return {
     bodyHeaders: {
@@ -2277,7 +2281,7 @@ var FallbackEncoder = ({ headers, body }) => {
   };
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/qs/formats.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/qs/formats.js
 var default_format = "RFC3986";
 var default_formatter = (v) => String(v);
 var formatters = {
@@ -2286,7 +2290,7 @@ var formatters = {
 };
 var RFC1738 = "RFC1738";
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/qs/utils.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/qs/utils.js
 var has = (obj, key) => (has = Object.hasOwn ?? Function.prototype.call.bind(Object.prototype.hasOwnProperty), has(obj, key));
 var hex_table = /* @__PURE__ */ (() => {
   const array = [];
@@ -2365,7 +2369,7 @@ function maybe_map(val, fn) {
   return fn(val);
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/qs/stringify.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/qs/stringify.js
 var array_prefix_generators = {
   brackets(prefix) {
     return String(prefix) + "[]";
@@ -2643,12 +2647,12 @@ function stringify(object, opts = {}) {
   return joined.length > 0 ? prefix + joined : "";
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/query.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/query.js
 function stringifyQuery(query) {
   return stringify(query, { arrayFormat: "comma" });
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/log.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/log.js
 var levelNumbers = {
   off: 0,
   error: 200,
@@ -2721,7 +2725,7 @@ var formatRequestDetails = (details) => {
   return details;
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/parse.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/parse.js
 async function defaultParseResponse(client2, props) {
   const { response, requestLogID, retryOfRequestLogID, startTime } = props;
   const body = await (async () => {
@@ -2755,7 +2759,7 @@ async function defaultParseResponse(client2, props) {
   return body;
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/api-promise.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/api-promise.js
 var __classPrivateFieldSet = function(receiver, state, value, kind, f2) {
   if (kind === "m") throw new TypeError("Private method is not writable");
   if (kind === "a" && !f2) throw new TypeError("Private accessor was defined without a setter");
@@ -2843,7 +2847,7 @@ var APIPromise = class _APIPromise extends Promise {
 };
 _APIPromise_client = /* @__PURE__ */ new WeakMap();
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/pagination.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/pagination.js
 var __classPrivateFieldSet2 = function(receiver, state, value, kind, f2) {
   if (kind === "m") throw new TypeError("Private method is not writable");
   if (kind === "a" && !f2) throw new TypeError("Private accessor was defined without a setter");
@@ -3018,7 +3022,7 @@ var OffsetPaginationInsightsClusteringJobs = class extends AbstractPage {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/uploads.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/uploads.js
 var checkFileSupport = () => {
   if (typeof File === "undefined") {
     const { process: process2 } = globalThis;
@@ -3090,7 +3094,7 @@ var addFormValue = async (form, key, value) => {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/to-file.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/to-file.js
 var isBlobLike = (value) => value != null && typeof value === "object" && typeof value.size === "number" && typeof value.type === "string" && typeof value.text === "function" && typeof value.slice === "function" && typeof value.arrayBuffer === "function";
 var isFileLike = (value) => value != null && typeof value === "object" && typeof value.name === "string" && typeof value.lastModified === "number" && isBlobLike(value);
 var isResponseLike = (value) => value != null && typeof value === "object" && typeof value.url === "string" && typeof value.blob === "function";
@@ -3142,7 +3146,7 @@ function propsForError(value) {
   return `; props: [${props.map((p) => `"${p}"`).join(", ")}]`;
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/resource.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/resource.js
 var APIResource = class {
   constructor(client2) {
     Object.defineProperty(this, "_client", {
@@ -3155,7 +3159,7 @@ var APIResource = class {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/path.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/path.js
 function encodeURIPath(str) {
   return str.replace(/[^A-Za-z0-9\-._~!$&'()*+,;=:@]+/g, encodeURIComponent);
 }
@@ -3210,7 +3214,7 @@ ${underline}`);
 };
 var path = /* @__PURE__ */ createPathTagFunction(encodeURIPath);
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/comparative.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/comparative.js
 var Comparative = class extends APIResource {
   /**
    * Create a comparative experiment.
@@ -3226,7 +3230,7 @@ var Comparative = class extends APIResource {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/experiments.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/experiments.js
 var Experiments = class extends APIResource {
   /**
    * Stream grouped and aggregated experiments.
@@ -3236,7 +3240,7 @@ var Experiments = class extends APIResource {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/group.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/group.js
 var Group = class extends APIResource {
   /**
    * Fetch examples for a dataset, and fetch the runs for each example if they are
@@ -3247,7 +3251,7 @@ var Group = class extends APIResource {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/runs.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/runs.js
 var Runs = class extends APIResource {
   /**
    * Fetch examples for a dataset, and fetch the runs for each example if they are
@@ -3270,7 +3274,7 @@ var Runs = class extends APIResource {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/share.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/share.js
 var Share = class extends APIResource {
   /**
    * Share a dataset.
@@ -3296,7 +3300,7 @@ var Share = class extends APIResource {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/splits.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/splits.js
 var Splits = class extends APIResource {
   /**
    * Update Dataset Splits
@@ -3312,7 +3316,7 @@ var Splits = class extends APIResource {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/versions.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/versions.js
 var Versions = class extends APIResource {
   /**
    * Get dataset versions.
@@ -3328,7 +3332,7 @@ var Versions = class extends APIResource {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/datasets.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/datasets.js
 var Datasets = class extends APIResource {
   constructor() {
     super(...arguments);
@@ -3466,7 +3470,7 @@ Datasets.Share = Share;
 Datasets.Comparative = Comparative;
 Datasets.Splits = Splits;
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/info.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/info.js
 var Info = class extends APIResource {
   /**
    * Get information about the current deployment of LangSmith.
@@ -3476,7 +3480,7 @@ var Info = class extends APIResource {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/headers.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/headers.js
 var brand_privateNullableHeaders = /* @__PURE__ */ Symbol("brand.privateNullableHeaders");
 function* iterateHeaders(headers) {
   if (!headers)
@@ -3539,7 +3543,7 @@ var buildHeaders = (newHeaders) => {
   return { [brand_privateNullableHeaders]: true, values: targetHeaders, nulls: nullHeaders };
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/online-evaluators.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/online-evaluators.js
 var OnlineEvaluators = class extends APIResource {
   /**
    * Create a new LLM or code evaluator for the current workspace.
@@ -3601,7 +3605,7 @@ var OnlineEvaluators = class extends APIResource {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/sessions/insights.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/sessions/insights.js
 var Insights = class extends APIResource {
   /**
    * Create an insights job.
@@ -3648,7 +3652,7 @@ var Insights = class extends APIResource {
   }
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/sessions/sessions.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/sessions/sessions.js
 var Sessions = class extends APIResource {
   constructor() {
     super(...arguments);
@@ -3714,7 +3718,7 @@ var Sessions = class extends APIResource {
 };
 Sessions.Insights = Insights;
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/env.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/env.js
 var readEnv = (env) => {
   if (typeof globalThis.process !== "undefined") {
     return globalThis.process.env?.[env]?.trim() || void 0;
@@ -3725,7 +3729,7 @@ var readEnv = (env) => {
   return void 0;
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/client.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/client.js
 var __classPrivateFieldSet3 = function(receiver, state, value, kind, f2) {
   if (kind === "m") throw new TypeError("Private method is not writable");
   if (kind === "a" && !f2) throw new TypeError("Private accessor was defined without a setter");
@@ -4345,7 +4349,7 @@ Langsmith.Datasets = Datasets;
 Langsmith.OnlineEvaluators = OnlineEvaluators;
 Langsmith.Info = Info;
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/warn.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/warn.js
 var warnedMessages = {};
 function warnOnce(message) {
   if (!warnedMessages[message]) {
@@ -4354,7 +4358,7 @@ function warnOnce(message) {
   }
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/xxhash/xxhash.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/xxhash/xxhash.js
 var n = (n2) => BigInt(n2);
 var PRIME32_1 = n("0x9E3779B1");
 var PRIME32_2 = n("0x85EBCA77");
@@ -4634,7 +4638,7 @@ function xxh128ToBytes(hash128) {
   return result;
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/_uuid.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/_uuid.js
 var UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function assertUuid(str, which) {
   if (!UUID_REGEX.test(str)) {
@@ -4696,10 +4700,10 @@ function nonCryptographicUuid7Deterministic(originalId, key) {
   return bytesToUuid(b);
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/constants.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/constants.js
 var _MIN_BACKEND_VERSION = "0.16.5rc1";
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/error.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/error.js
 function getInvalidPromptIdentifierMsg(identifier) {
   return `Invalid prompt identifier format: "${identifier}". Expected one of:
   - "prompt-name" (for private prompts)
@@ -4795,7 +4799,7 @@ function isConflictingEndpointsError(err) {
   return typeof err === "object" && err !== null && err.code === ERR_CONFLICTING_ENDPOINTS;
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/prompts.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/prompts.js
 function parseHubIdentifier(identifier) {
   if (!identifier || identifier.split("/").length > 2 || identifier.startsWith("/") || identifier.endsWith("/") || identifier.split(":").length > 2) {
     throw new Error(getInvalidPromptIdentifierMsg(identifier));
@@ -4816,7 +4820,7 @@ function parseHubIdentifier(identifier) {
   }
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/fs.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/fs.js
 import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -4870,7 +4874,7 @@ async function rmRecursive(filePath) {
   await nodeFsPromises.rm(filePath, { recursive: true, force: true });
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/prompt_cache/index.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/prompt_cache/index.js
 function isStale(entry, ttlSeconds) {
   if (ttlSeconds === null) {
     return false;
@@ -5144,7 +5148,7 @@ var PromptCache = class {
 };
 var promptCacheSingleton = new PromptCache();
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/fetch.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/fetch.js
 var DEFAULT_FETCH_IMPLEMENTATION = (...args) => fetch(...args);
 var globalFetchSupportsWebStreaming = void 0;
 var LANGSMITH_FETCH_IMPLEMENTATION_KEY = /* @__PURE__ */ Symbol.for("ls:fetch_implementation");
@@ -5169,7 +5173,7 @@ var _getFetchImplementation = (debug2) => {
   };
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/profile-lock.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/profile-lock.js
 var LOCK_POLL_INTERVAL_MS = 10;
 var LOCK_STALE_AFTER_MS = 1e4;
 var LOCK_METADATA_FILE = "created_at";
@@ -5252,7 +5256,7 @@ ${owner}
   };
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/profiles.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/profiles.js
 var DEFAULT_API_URL = "https://api.smith.langchain.com";
 var OAUTH_CLIENT_ID = "langsmith-cli";
 var TOKEN_REFRESH_LEEWAY_MS = 6e4;
@@ -5520,7 +5524,7 @@ function authHeaderFromProfile(profile) {
   return void 0;
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/fast-safe-stringify/index.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/fast-safe-stringify/index.js
 var LIMIT_REPLACE_NODE = "[...]";
 var CIRCULAR_REPLACE_NODE = { result: "[Circular]" };
 var arr = [];
@@ -5810,12 +5814,12 @@ function replaceGetterValues(replacer) {
   };
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/worker_threads.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/worker_threads.js
 import { Worker as NodeWorker } from "node:worker_threads";
 var Worker = NodeWorker;
 var WORKER_THREADS_AVAILABLE = true;
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/serialize_worker.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/serialize_worker.js
 var WORKER_SOURCE = (
   /* js */
   `
@@ -6100,7 +6104,7 @@ function hasLargeString(value, threshold = LARGE_STRING_THRESHOLD, nodeBudget = 
   return false;
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/client.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/client.js
 function assertPullPublicPromptAllowed(promptIdentifier, dangerouslyPullPublicPrompt) {
   const [owner] = parseHubIdentifier(promptIdentifier);
   if (owner !== "-" && !dangerouslyPullPublicPrompt) {
@@ -10982,7 +10986,7 @@ function isExampleCreate(input) {
   return "dataset_id" in input || "dataset_name" in input;
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/env.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/env.js
 var isEnvTracingEnabled = (tracingEnabled) => {
   if (tracingEnabled !== void 0) {
     return tracingEnabled;
@@ -10991,11 +10995,11 @@ var isEnvTracingEnabled = (tracingEnabled) => {
   return !!envVars.find((envVar) => getLangSmithEnvironmentVariable(envVar) === "true");
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/constants.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/constants.js
 var _LC_CONTEXT_VARIABLES_KEY = /* @__PURE__ */ Symbol.for("lc:context_variables");
 var _REPLICA_TRACE_ROOTS_KEY = /* @__PURE__ */ Symbol.for("langsmith:replica_trace_roots");
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/context_vars.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/context_vars.js
 function getContextVar(runTree, key) {
   if (_LC_CONTEXT_VARIABLES_KEY in runTree) {
     const contextVars = runTree[_LC_CONTEXT_VARIABLES_KEY];
@@ -11012,13 +11016,13 @@ function setContextVar(runTree, key, value) {
   runTree[_LC_CONTEXT_VARIABLES_KEY] = contextVars;
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/project.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/project.js
 var getDefaultProjectName = () => {
   return getLangSmithEnvironmentVariable("PROJECT") ?? getEnvironmentVariable("LANGCHAIN_SESSION") ?? // TODO: Deprecate
   "default";
 };
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/run_trees.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/run_trees.js
 var TIMESTAMP_LENGTH = 36;
 var UUID_NAMESPACE_DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 function getReplicaKey(replica) {
@@ -11921,7 +11925,7 @@ function _checkEndpointEnvUnset(parsed) {
   }
 }
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/traceable.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/traceable.js
 var MockAsyncLocalStorage = class {
   getStore() {
     return void 0;
@@ -11944,10 +11948,10 @@ var AsyncLocalStorageProvider = class {
 };
 var AsyncLocalStorageProviderSingleton = new AsyncLocalStorageProvider();
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/index.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/index.js
 var __version__ = "0.7.11";
 
-// ../langsmith-claude-code-plugins/node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/anonymizer/index.js
+// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/anonymizer/index.js
 function extractStringNodes(data, options) {
   const parsedOptions = { ...options, maxDepth: options.maxDepth ?? 10 };
   const queue = [[data, 0, "", null, ""]];
@@ -12229,15 +12233,15 @@ var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 var USER_PROMPT_TURN_NAME = "Claude Code Turn";
 
 // dist/metadata.js
-var LS_AGENT_KIND = "coding_agent";
+var LS_AGENT_PURPOSE = "coding";
 var LS_INTEGRATION = "claude-code";
 var LS_AGENT_RUNTIME = "Claude Code";
 var LS_TRACE_SCHEMA_VERSION = "coding-agent-v1";
 function codingAgentMetadata(opts) {
-  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, legacyRole, subagentId, subagentType, toolName, runName, skillName, runSpecific } = opts;
+  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, agentType, subagentId, subagentType, toolName, runName, skillName, runSpecific } = opts;
   const meta = {
     // Identity & grouping — always present.
-    ls_agent_kind: LS_AGENT_KIND,
+    ls_agent_purpose: LS_AGENT_PURPOSE,
     ls_integration: LS_INTEGRATION,
     ls_agent_runtime: LS_AGENT_RUNTIME,
     ls_trace_schema_version: LS_TRACE_SCHEMA_VERSION,
@@ -12251,8 +12255,7 @@ function codingAgentMetadata(opts) {
     meta.ls_agent_runtime_version = runtimeVersion;
   if (approvalPolicy)
     meta.approval_policy = approvalPolicy;
-  if (legacyRole)
-    meta.ls_agent_type = legacyRole;
+  meta.ls_agent_type = agentType;
   if (subagentId) {
     meta.ls_subagent_id = subagentId;
     meta.agent_id = subagentId;
@@ -12302,7 +12305,7 @@ import { readFileSync as readFileSync5 } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-var LS_INTEGRATION_VERSION = true ? "0.1.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var LS_INTEGRATION_VERSION = true ? "0.2.2" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var PROVIDER_HOSTS = {
   github: "github.com",
   gitlab: "gitlab.com",
@@ -12460,7 +12463,7 @@ function loadConfig(options) {
     identityMetadata.anthropic_user_id = anthropicUserId;
   }
   const contractMetadata = {
-    ls_agent_kind: "coding_agent",
+    ls_agent_purpose: "coding",
     ls_integration: "claude-code",
     ls_agent_runtime: "Claude Code",
     ls_trace_schema_version: "coding-agent-v1",
@@ -12565,8 +12568,7 @@ async function main() {
           turnNumber: sessionState.current_turn_number,
           runtimeVersion: sessionState.runtime_version,
           approvalPolicy: sessionState.approval_policy,
-          legacyRole: "root"
-          // DEPRECATED compat alias ls_agent_type="root".
+          agentType: "root"
         })
       }
     });

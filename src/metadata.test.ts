@@ -41,11 +41,12 @@ const COMMON = {
   turnId: "prompt_abc123",
   turnNumber: 3,
   runtimeVersion: "2.1.181",
+  agentType: "root",
 } as const;
 
 // One representative metadata object per run type, built via the shared helper.
 const RUNS: Record<RunType, Record<string, unknown>> = {
-  root: codingAgentMetadata({ ...COMMON, approvalPolicy: "acceptEdits", legacyRole: "root" }),
+  root: codingAgentMetadata({ ...COMMON, approvalPolicy: "acceptEdits" }),
   llm: codingAgentMetadata({
     ...COMMON,
     runSpecific: {
@@ -58,14 +59,13 @@ const RUNS: Record<RunType, Record<string, unknown>> = {
   tool: codingAgentMetadata({ ...COMMON, toolName: "Bash", runName: "Bash" }),
   subagent: codingAgentMetadata({
     ...COMMON,
-    legacyRole: "subagent",
+    agentType: "subagent",
     subagentId: "sub_4d8e1f",
     subagentType: "Explore",
   }),
   interrupted: codingAgentMetadata({
     ...COMMON,
     approvalPolicy: "acceptEdits",
-    legacyRole: "root",
   }),
 };
 
@@ -125,7 +125,8 @@ describe("coding-agent-v1 contract", () => {
 
   it.each(Object.keys(RUNS) as RunType[])("%s run carries the frozen identity block", (rt) => {
     const meta = RUNS[rt];
-    expect(meta.ls_agent_kind).toBe("coding_agent");
+    expect(meta.ls_agent_purpose).toBe("coding");
+    expect(meta.ls_agent_kind).toBeUndefined();
     expect(meta.ls_integration).toBe("claude-code");
     expect(meta.ls_agent_runtime).toBe("Claude Code");
     expect(meta.ls_trace_schema_version).toBe("coding-agent-v1");
@@ -143,11 +144,21 @@ describe("coding-agent-v1 contract", () => {
     }
   });
 
-  it("never emits ls_subagent_type='root' (uses ls_agent_type compat alias instead)", () => {
+  it("emits ls_agent_type on every run and keeps it distinct from ls_subagent_type", () => {
     expect(RUNS.root.ls_subagent_type).toBeUndefined();
-    expect(RUNS.root.ls_agent_type).toBe("root"); // DEPRECATED compat alias
-    expect(RUNS.subagent.ls_agent_type).toBe("subagent"); // DEPRECATED compat alias
+    expect(RUNS.root.ls_agent_type).toBe("root");
+    expect(RUNS.llm.ls_agent_type).toBe("root");
+    expect(RUNS.tool.ls_agent_type).toBe("root");
+    expect(RUNS.subagent.ls_agent_type).toBe("subagent");
+    expect(RUNS.interrupted.ls_agent_type).toBe("root");
   });
+
+  it.each(["root", "subagent", "middleware", "compaction"] as const)(
+    "supports ls_agent_type='%s'",
+    (agentType) => {
+      expect(codingAgentMetadata({ sessionId: "s1", agentType }).ls_agent_type).toBe(agentType);
+    },
+  );
 
   // ─── Turn markers propagate to subagent + Agent-tool runs ────────────────────
 
@@ -239,7 +250,7 @@ describe("coding-agent-v1 contract", () => {
   // ─── Unknown values are omitted, never null/empty ────────────────────────────
 
   it("omits keys whose source is unknown (no null/empty values)", () => {
-    const sparse = codingAgentMetadata({ sessionId: "s1" });
+    const sparse = codingAgentMetadata({ sessionId: "s1", agentType: "middleware" });
     expect(sparse.turn_id).toBeUndefined();
     expect(sparse.turn_number).toBeUndefined();
     expect(sparse.ls_agent_runtime_version).toBeUndefined();
@@ -248,7 +259,7 @@ describe("coding-agent-v1 contract", () => {
       expect(v === null || v === "").toBe(false);
     }
     // Identity literals are still present even with no context.
-    expect(sparse.ls_agent_kind).toBe("coding_agent");
+    expect(sparse.ls_agent_purpose).toBe("coding");
     expect(sparse.thread_id).toBe("s1");
   });
 
@@ -257,6 +268,7 @@ describe("coding-agent-v1 contract", () => {
   it("lets user-supplied base metadata override contract keys", () => {
     const meta = codingAgentMetadata({
       sessionId: "s1",
+      agentType: "root",
       base: { thread_id: "override", ls_integration: "custom" },
     });
     expect(meta.thread_id).toBe("override");
