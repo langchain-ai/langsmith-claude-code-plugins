@@ -41,6 +41,9 @@ export interface CodingAgentMetadataOptions {
   /** Run `name` used to decide whether `ls_tool_name` is needed. */
   runName?: string;
 
+  /** Invoked skill name (Skill tool runs) → `ls_skill_name`. The skill that ran. */
+  skillName?: string;
+
   /** Preserved run-type keys (ls_provider, usage_metadata, …) and compat aliases. */
   runSpecific?: Record<string, unknown>;
 }
@@ -51,9 +54,7 @@ export interface CodingAgentMetadataOptions {
  * Build the metadata for one run. Merge order (later wins): identity → dynamic
  * → runSpecific → base. Unknown values are omitted (never null/empty).
  */
-export function codingAgentMetadata(
-  opts: CodingAgentMetadataOptions,
-): Record<string, unknown> {
+export function codingAgentMetadata(opts: CodingAgentMetadataOptions): Record<string, unknown> {
   const {
     sessionId,
     base,
@@ -66,6 +67,7 @@ export function codingAgentMetadata(
     subagentType,
     toolName,
     runName,
+    skillName,
     runSpecific,
   } = opts;
 
@@ -107,9 +109,28 @@ export function codingAgentMetadata(
     if (runName && toolName !== runName) meta.ls_tool_name = toolName;
   }
 
+  // Skill tool runs: surface the invoked skill so usage is queryable via
+  // RunQueryStats (group_by metadata path=ls_skill_name).
+  if (skillName) meta.ls_skill_name = skillName;
+
   return {
     ...meta,
     ...runSpecific,
     ...base,
   };
+}
+
+/**
+ * Extract the invoked skill name from a tool call, for `ls_skill_name`.
+ * Centralizes the one "Skill" special-case so both trace paths stay one-liners.
+ * Returns undefined for non-Skill tools; the name lives in the Skill tool's
+ * `skill` input arg (`{ skill, args }`).
+ */
+export function skillNameFromTool(
+  toolName: string | undefined,
+  toolInput: unknown,
+): string | undefined {
+  if (toolName !== "Skill") return undefined;
+  const skill = (toolInput as { skill?: unknown } | null | undefined)?.skill;
+  return typeof skill === "string" ? skill : undefined;
 }

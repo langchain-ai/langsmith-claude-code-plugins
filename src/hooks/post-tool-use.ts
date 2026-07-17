@@ -13,7 +13,7 @@ import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
-import { codingAgentMetadata } from "../metadata.js";
+import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
 
 interface PostToolUseHookInput {
   session_id: string;
@@ -109,6 +109,7 @@ async function main(): Promise<void> {
           runtimeVersion: sessionState.runtime_version,
           toolName: input.tool_name,
           runName: input.tool_name,
+          skillName: skillNameFromTool(input.tool_name, input.tool_input),
         }),
       },
     });
