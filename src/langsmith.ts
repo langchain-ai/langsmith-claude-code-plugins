@@ -14,7 +14,7 @@ import { readTranscript, groupIntoTurns, resolveProvider } from "./transcript.js
 import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
-import { codingAgentMetadata } from "./metadata.js";
+import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import type { LSAgentType } from "./metadata.js";
 
 // ─── Client setup ───────────────────────────────────────────────────────────
@@ -357,6 +357,7 @@ export async function traceTurn(
             agentType,
             toolName: toolCall.tool_use.name,
             runName: toolCall.tool_use.name,
+            skillName: skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input),
           }),
         },
       });

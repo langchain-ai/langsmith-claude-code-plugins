@@ -97,7 +97,7 @@ All runs (LLM, tool, turn, subagent) automatically include identity metadata so 
 
 To override either field, supply your own value via `CC_LANGSMITH_METADATA` — user-supplied keys always win.
 
-Tool runs include the tool name, inputs, and output content.
+Tool runs include the tool name, inputs, and output content. Skill tool runs additionally set `ls_skill_name` — the invoked skill's name, read from the tool's `skill` input — so per-skill usage is queryable in run stats.
 
 Interrupted turns (where the user cancels mid-response) are marked with status `"interrupted"` in LangSmith.
 

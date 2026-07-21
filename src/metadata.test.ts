@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { codingAgentMetadata } from "./metadata.js";
+import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import validator from "./fixtures/coding-agent-v1/validator.json" with { type: "json" };
 
 type RunType = "root" | "llm" | "tool" | "subagent" | "interrupted";
@@ -204,6 +204,34 @@ describe("coding-agent-v1 contract", () => {
     const meta = codingAgentMetadata({ ...COMMON, toolName: "Bash", runName: "Agent" });
     expect(meta.ls_tool_name).toBe("Bash");
     expect(meta.tool_name).toBe("Bash");
+  });
+
+  // ─── ls_skill_name: the invoked skill on Skill tool runs ─────────────────────
+
+  it("extracts the invoked skill name only from Skill tool calls", () => {
+    expect(skillNameFromTool("Skill", { skill: "deep-research", args: "x" })).toBe("deep-research");
+    expect(skillNameFromTool("Bash", { skill: "deep-research" })).toBeUndefined();
+    expect(skillNameFromTool("Skill", {})).toBeUndefined();
+    expect(skillNameFromTool("Skill", undefined)).toBeUndefined();
+    expect(skillNameFromTool("Skill", { skill: 42 })).toBeUndefined();
+  });
+
+  it("emits ls_skill_name on a Skill tool run, and nowhere else", () => {
+    const skillRun = codingAgentMetadata({
+      ...COMMON,
+      toolName: "Skill",
+      runName: "Skill",
+      skillName: skillNameFromTool("Skill", { skill: "deep-research", args: "compare" }),
+    });
+    expect(skillRun.ls_skill_name).toBe("deep-research");
+    expect(skillRun.tool_name).toBe("Skill");
+    expect(skillRun.ls_tool_name).toBeUndefined(); // run name == tool name
+
+    // Absent on non-skill tool runs and on every other run type.
+    expect(RUNS.tool.ls_skill_name).toBeUndefined();
+    for (const rt of ["root", "llm", "subagent", "interrupted"] as RunType[]) {
+      expect(RUNS[rt].ls_skill_name, `ls_skill_name leaked onto ${rt}`).toBeUndefined();
+    }
   });
 
   // ─── Model run keeps existing conventions unchanged ──────────────────────────

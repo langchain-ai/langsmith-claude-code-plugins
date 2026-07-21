@@ -13,7 +13,7 @@ import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
-import { codingAgentMetadata } from "../metadata.js";
+import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
 import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
 
@@ -150,6 +150,7 @@ async function main(): Promise<void> {
           agentType: "root",
           toolName: input.tool_name,
           runName: input.tool_name,
+          skillName: skillNameFromTool(input.tool_name, input.tool_input),
         }),
       },
     });

@@ -12240,7 +12240,7 @@ var LS_INTEGRATION = "claude-code";
 var LS_AGENT_RUNTIME = "Claude Code";
 var LS_TRACE_SCHEMA_VERSION = "coding-agent-v1";
 function codingAgentMetadata(opts) {
-  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, agentType, subagentId, subagentType, toolName, runName, runSpecific } = opts;
+  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, agentType, subagentId, subagentType, toolName, runName, skillName, runSpecific } = opts;
   const meta = {
     // Identity & grouping — always present.
     ls_agent_purpose: LS_AGENT_PURPOSE,
@@ -12271,6 +12271,8 @@ function codingAgentMetadata(opts) {
     if (runName && toolName !== runName)
       meta.ls_tool_name = toolName;
   }
+  if (skillName)
+    meta.ls_skill_name = skillName;
   return {
     ...meta,
     ...runSpecific,
