@@ -6,11 +6,7 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
-  try {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
-  }
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -2623,14 +2619,14 @@ var levelNumbers = {
   info: 400,
   debug: 500
 };
-var parseLogLevel = (maybeLevel, sourceName, client2) => {
+var parseLogLevel = (maybeLevel, sourceName, client) => {
   if (!maybeLevel) {
     return void 0;
   }
   if (hasOwn(levelNumbers, maybeLevel)) {
     return maybeLevel;
   }
-  loggerFor(client2).warn(`${sourceName} was set to ${JSON.stringify(maybeLevel)}, expected one of ${JSON.stringify(Object.keys(levelNumbers))}`);
+  loggerFor(client).warn(`${sourceName} was set to ${JSON.stringify(maybeLevel)}, expected one of ${JSON.stringify(Object.keys(levelNumbers))}`);
   return void 0;
 };
 function noop() {
@@ -2649,9 +2645,9 @@ var noopLogger = {
   debug: noop
 };
 var cachedLoggers = /* @__PURE__ */ new WeakMap();
-function loggerFor(client2) {
-  const logger = client2.logger;
-  const logLevel = client2.logLevel ?? "off";
+function loggerFor(client) {
+  const logger = client.logger;
+  const logLevel = client.logLevel ?? "off";
   if (!logger) {
     return noopLogger;
   }
@@ -2689,7 +2685,7 @@ var formatRequestDetails = (details) => {
 };
 
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/parse.js
-async function defaultParseResponse(client2, props) {
+async function defaultParseResponse(client, props) {
   const { response, requestLogID, retryOfRequestLogID, startTime } = props;
   const body = await (async () => {
     if (response.status === 204) {
@@ -2712,7 +2708,7 @@ async function defaultParseResponse(client2, props) {
     const text = await response.text();
     return text;
   })();
-  loggerFor(client2).debug(`[${requestLogID}] response parsed`, formatRequestDetails({
+  loggerFor(client).debug(`[${requestLogID}] response parsed`, formatRequestDetails({
     retryOfRequestLogID,
     url: response.url,
     status: response.status,
@@ -2736,7 +2732,7 @@ var __classPrivateFieldGet = function(receiver, state, kind, f2) {
 };
 var _APIPromise_client;
 var APIPromise = class _APIPromise extends Promise {
-  constructor(client2, responsePromise, parseResponse = defaultParseResponse) {
+  constructor(client, responsePromise, parseResponse = defaultParseResponse) {
     super((resolve) => {
       resolve(null);
     });
@@ -2759,10 +2755,10 @@ var APIPromise = class _APIPromise extends Promise {
       value: void 0
     });
     _APIPromise_client.set(this, void 0);
-    __classPrivateFieldSet(this, _APIPromise_client, client2, "f");
+    __classPrivateFieldSet(this, _APIPromise_client, client, "f");
   }
   _thenUnwrap(transform) {
-    return new _APIPromise(__classPrivateFieldGet(this, _APIPromise_client, "f"), this.responsePromise, async (client2, props) => transform(await this.parseResponse(client2, props), props));
+    return new _APIPromise(__classPrivateFieldGet(this, _APIPromise_client, "f"), this.responsePromise, async (client, props) => transform(await this.parseResponse(client, props), props));
   }
   /**
    * Gets the raw `Response` instance instead of parsing the response
@@ -2824,7 +2820,7 @@ var __classPrivateFieldGet2 = function(receiver, state, kind, f2) {
 };
 var _AbstractPage_client;
 var AbstractPage = class {
-  constructor(client2, response, body, options) {
+  constructor(client, response, body, options) {
     _AbstractPage_client.set(this, void 0);
     Object.defineProperty(this, "options", {
       enumerable: true,
@@ -2844,7 +2840,7 @@ var AbstractPage = class {
       writable: true,
       value: void 0
     });
-    __classPrivateFieldSet2(this, _AbstractPage_client, client2, "f");
+    __classPrivateFieldSet2(this, _AbstractPage_client, client, "f");
     this.options = options;
     this.response = response;
     this.body = body;
@@ -2879,8 +2875,8 @@ var AbstractPage = class {
   }
 };
 var PagePromise = class extends APIPromise {
-  constructor(client2, request, Page) {
-    super(client2, request, async (client3, props) => new Page(client3, props.response, await defaultParseResponse(client3, props), props.options));
+  constructor(client, request, Page) {
+    super(client, request, async (client2, props) => new Page(client2, props.response, await defaultParseResponse(client2, props), props.options));
   }
   /**
    * Allow auto-paginating iteration on an unawaited list call, eg:
@@ -2897,8 +2893,8 @@ var PagePromise = class extends APIPromise {
   }
 };
 var OffsetPaginationTopLevelArray = class extends AbstractPage {
-  constructor(client2, response, body, options) {
-    super(client2, response, body, options);
+  constructor(client, response, body, options) {
+    super(client, response, body, options);
     Object.defineProperty(this, "items", {
       enumerable: true,
       configurable: true,
@@ -2924,8 +2920,8 @@ var OffsetPaginationTopLevelArray = class extends AbstractPage {
   }
 };
 var OffsetPaginationOnlineEvaluators = class extends AbstractPage {
-  constructor(client2, response, body, options) {
-    super(client2, response, body, options);
+  constructor(client, response, body, options) {
+    super(client, response, body, options);
     Object.defineProperty(this, "evaluators", {
       enumerable: true,
       configurable: true,
@@ -2958,8 +2954,8 @@ var OffsetPaginationOnlineEvaluators = class extends AbstractPage {
   }
 };
 var OffsetPaginationInsightsClusteringJobs = class extends AbstractPage {
-  constructor(client2, response, body, options) {
-    super(client2, response, body, options);
+  constructor(client, response, body, options) {
+    super(client, response, body, options);
     Object.defineProperty(this, "clustering_jobs", {
       enumerable: true,
       configurable: true,
@@ -3111,14 +3107,14 @@ function propsForError(value) {
 
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/resource.js
 var APIResource = class {
-  constructor(client2) {
+  constructor(client) {
     Object.defineProperty(this, "_client", {
       enumerable: true,
       configurable: true,
       writable: true,
       value: void 0
     });
-    this._client = client2;
+    this._client = client;
   }
 };
 
@@ -3850,7 +3846,7 @@ var Langsmith = class {
    * Create a new client instance re-using the same options given to the current client with optional overriding.
    */
   withOptions(options) {
-    const client2 = new this.constructor({
+    const client = new this.constructor({
       ...this._options,
       baseURL: this.baseURL,
       maxRetries: this.maxRetries,
@@ -3863,7 +3859,7 @@ var Langsmith = class {
       tenantID: this.tenantID,
       ...options
     });
-    return client2;
+    return client;
   }
   defaultQuery() {
     return this._options.defaultQuery;
@@ -11022,7 +11018,7 @@ function filterReplicaForHeaders(replica) {
   return filtered;
 }
 var Baggage = class _Baggage {
-  constructor(metadata, tags, project_name, replicas2) {
+  constructor(metadata, tags, project_name, replicas) {
     Object.defineProperty(this, "metadata", {
       enumerable: true,
       configurable: true,
@@ -11050,14 +11046,14 @@ var Baggage = class _Baggage {
     this.metadata = metadata;
     this.tags = tags;
     this.project_name = project_name;
-    this.replicas = replicas2;
+    this.replicas = replicas;
   }
   static fromHeader(value) {
     const items = value.split(",");
     let metadata = {};
     let tags = [];
     let project_name;
-    let replicas2;
+    let replicas;
     for (const item of items) {
       const [key, uriValue] = item.split("=");
       const value2 = decodeURIComponent(uriValue);
@@ -11069,7 +11065,7 @@ var Baggage = class _Baggage {
         project_name = value2;
       } else if (key === "langsmith-replicas") {
         const parsed = JSON.parse(value2);
-        replicas2 = parsed.map((replica) => {
+        replicas = parsed.map((replica) => {
           if (Array.isArray(replica)) {
             return replica;
           }
@@ -11077,7 +11073,7 @@ var Baggage = class _Baggage {
         });
       }
     }
-    return new _Baggage(metadata, tags, project_name, replicas2);
+    return new _Baggage(metadata, tags, project_name, replicas);
   }
   toHeader() {
     const items = [];
@@ -11269,7 +11265,7 @@ var RunTree = class _RunTree {
     }
     const defaultConfig = _RunTree.getDefaultConfig();
     const { metadata, ...config } = originalConfig;
-    const client2 = config.client ?? _RunTree.getSharedClient();
+    const client = config.client ?? _RunTree.getSharedClient();
     const dedupedMetadata = {
       ...metadata,
       ...config?.extra?.metadata
@@ -11278,7 +11274,7 @@ var RunTree = class _RunTree {
     if ("id" in config && config.id == null) {
       delete config.id;
     }
-    Object.assign(this, { ...defaultConfig, ...config, client: client2 });
+    Object.assign(this, { ...defaultConfig, ...config, client });
     this.execution_order ??= 1;
     this.child_execution_order ??= 1;
     if (!this.dotted_order) {
@@ -11700,20 +11696,20 @@ var RunTree = class _RunTree {
     const callbackManager = parentConfig?.callbacks;
     let parentRun;
     let projectName;
-    let client2;
+    let client;
     let tracingEnabled = isEnvTracingEnabled();
     if (callbackManager) {
       const parentRunId = callbackManager?.getParentRunId?.() ?? "";
       const langChainTracer = callbackManager?.handlers?.find((handler) => handler?.name == "langchain_tracer");
       parentRun = langChainTracer?.getRun?.(parentRunId);
       projectName = langChainTracer?.projectName;
-      client2 = langChainTracer?.client;
+      client = langChainTracer?.client;
       tracingEnabled = tracingEnabled || !!langChainTracer;
     }
     if (!parentRun) {
       return new _RunTree({
         ...props,
-        client: client2,
+        client,
         tracingEnabled,
         project_name: projectName
       });
@@ -11723,7 +11719,7 @@ var RunTree = class _RunTree {
       id: parentRun.id,
       trace_id: parentRun.trace_id,
       dotted_order: parentRun.dotted_order,
-      client: client2,
+      client,
       tracingEnabled,
       project_name: projectName,
       tags: [
@@ -11820,7 +11816,7 @@ function _getWriteReplicasFromEnv() {
   try {
     const parsed = JSON.parse(envVar);
     if (Array.isArray(parsed)) {
-      const replicas2 = [];
+      const replicas = [];
       for (const item of parsed) {
         if (typeof item !== "object" || item === null) {
           console.warn(`Invalid item type in LANGSMITH_RUNS_ENDPOINTS: expected object, got ${typeof item}`);
@@ -11834,19 +11830,19 @@ function _getWriteReplicasFromEnv() {
           console.warn(`Invalid api_key type in LANGSMITH_RUNS_ENDPOINTS: expected string, got ${typeof item.api_key}`);
           continue;
         }
-        replicas2.push({
+        replicas.push({
           apiUrl: item.api_url.replace(/\/$/, ""),
           apiKey: item.api_key
         });
       }
-      return replicas2;
+      return replicas;
     } else if (typeof parsed === "object" && parsed !== null) {
       _checkEndpointEnvUnset(parsed);
-      const replicas2 = [];
+      const replicas = [];
       for (const [url, key] of Object.entries(parsed)) {
         const cleanUrl = url.replace(/\/$/, "");
         if (typeof key === "string") {
-          replicas2.push({
+          replicas.push({
             apiUrl: cleanUrl,
             apiKey: key
           });
@@ -11855,7 +11851,7 @@ function _getWriteReplicasFromEnv() {
           continue;
         }
       }
-      return replicas2;
+      return replicas;
     } else {
       console.warn(`Invalid LANGSMITH_RUNS_ENDPOINTS \u2013 must be valid JSON array of objects with api_url and api_key properties, or object mapping url->apiKey, got ${typeof parsed}`);
       return [];
@@ -11868,9 +11864,9 @@ function _getWriteReplicasFromEnv() {
     return [];
   }
 }
-function _ensureWriteReplicas(replicas2) {
-  if (replicas2) {
-    return replicas2.map((replica) => {
+function _ensureWriteReplicas(replicas) {
+  if (replicas) {
+    return replicas.map((replica) => {
       if (Array.isArray(replica)) {
         return {
           projectName: replica[0],
@@ -11886,11 +11882,6 @@ function _checkEndpointEnvUnset(parsed) {
   if (Object.keys(parsed).length > 0 && getLangSmithEnvironmentVariable("ENDPOINT")) {
     throw new ConflictingEndpointsError();
   }
-}
-
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/uuid.js
-function uuid7() {
-  return v7_default();
 }
 
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/traceable.js
@@ -11919,16 +11910,17 @@ var AsyncLocalStorageProviderSingleton = new AsyncLocalStorageProvider();
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/index.js
 var __version__ = "0.7.11";
 
+// dist/config.js
+import { readFileSync as readFileSync3 } from "node:fs";
+import { userInfo } from "node:os";
+import { join } from "node:path";
+
 // dist/logger.js
 import { appendFileSync, mkdirSync as mkdirSync3, statSync as statSync2, renameSync as renameSync3 } from "node:fs";
 import { dirname } from "node:path";
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
 var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
 var debugEnabled = false;
-function initLogger(debug2) {
-  debugEnabled = debug2;
-  mkdirSync3(dirname(LOG_FILE), { recursive: true });
-}
 function rotateIfNeeded() {
   try {
     if (statSync2(LOG_FILE).size >= MAX_LOG_BYTES) {
@@ -11956,370 +11948,9 @@ function debug(message) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/anonymizer/index.js
-function extractStringNodes(data, options) {
-  const parsedOptions = { ...options, maxDepth: options.maxDepth ?? 10 };
-  const queue = [[data, 0, "", null, ""]];
-  let nextId = 0;
-  const result = [];
-  while (queue.length > 0) {
-    const task = queue.shift();
-    if (task == null)
-      continue;
-    const [value, depth, path3, parent, key] = task;
-    if (typeof value === "string") {
-      result.push({
-        value,
-        path: path3,
-        parent,
-        key,
-        _id: nextId++
-      });
-    } else if (Array.isArray(value)) {
-      if (depth >= parsedOptions.maxDepth)
-        continue;
-      for (let i = 0; i < value.length; i++) {
-        queue.push([
-          value[i],
-          depth + 1,
-          `${path3}[${i}]`,
-          value,
-          String(i)
-        ]);
-      }
-    } else if (typeof value === "object" && value != null) {
-      if (depth >= parsedOptions.maxDepth)
-        continue;
-      for (const [k, nestedValue] of Object.entries(value)) {
-        queue.push([
-          nestedValue,
-          depth + 1,
-          path3 ? `${path3}.${k}` : k,
-          value,
-          k
-        ]);
-      }
-    }
-  }
-  return result;
-}
-function deepClone(data) {
-  return JSON.parse(JSON.stringify(data));
-}
-function createAnonymizer(replacer, options) {
-  return (data) => {
-    let mutateValue = deepClone(data);
-    const nodes = extractStringNodes(mutateValue, {
-      maxDepth: options?.maxDepth
-    });
-    const processor = Array.isArray(replacer) ? (() => {
-      const replacers = replacer.map(({ pattern, type, replace }) => {
-        if (type != null && type !== "pattern")
-          throw new Error("Invalid anonymizer type");
-        return [
-          typeof pattern === "string" ? new RegExp(pattern, "g") : pattern,
-          replace ?? "[redacted]"
-        ];
-      });
-      if (replacers.length === 0)
-        throw new Error("No replacers provided");
-      return {
-        maskNodes: (nodes2) => {
-          return nodes2.reduce((memo, item) => {
-            const newValue = replacers.reduce((value, [regex, replace]) => {
-              const result = value.replace(regex, replace);
-              regex.lastIndex = 0;
-              return result;
-            }, item.value);
-            if (newValue !== item.value) {
-              memo.push({ ...item, value: newValue });
-            }
-            return memo;
-          }, []);
-        }
-      };
-    })() : typeof replacer === "function" ? {
-      maskNodes: (nodes2) => nodes2.reduce((memo, item) => {
-        const newValue = replacer(item.value, item.path);
-        if (newValue !== item.value) {
-          memo.push({ ...item, value: newValue });
-        }
-        return memo;
-      }, [])
-    } : replacer;
-    const nodesById = /* @__PURE__ */ new Map();
-    for (const node of nodes) {
-      nodesById.set(node._id, node);
-    }
-    const toUpdate = processor.maskNodes(nodes);
-    for (const node of toUpdate) {
-      if (node.path === "") {
-        mutateValue = node.value;
-      } else {
-        const asInternal = node;
-        const internal = asInternal._id !== void 0 ? nodesById.get(asInternal._id) : nodes.find((n2) => n2.path === node.path);
-        if (internal) {
-          internal.parent[internal.key] = node.value;
-        }
-      }
-    }
-    return mutateValue;
-  };
-}
-var SECRET_PLACEHOLDER = "[SECRET_DETECTED]";
-var DEFAULT_SECRET_RULES = [
-  // ── Provider API keys (prefix-anchored) ─────────────────────────────────
-  // Anthropic
-  { pattern: /sk-ant-[A-Za-z0-9_-]{20,}/g, replace: SECRET_PLACEHOLDER },
-  // OpenAI: project / service-account / admin keys, then legacy `sk-...`
-  {
-    pattern: /sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  { pattern: /sk-[A-Za-z0-9]{32,}/g, replace: SECRET_PLACEHOLDER },
-  // LangSmith (keys are multi-segment: lsv2_pt_<key>_<tail> — match the
-  // full underscore-delimited tail so none of it leaks past the placeholder)
-  {
-    pattern: /lsv2_(?:pt|sk)_[A-Za-z0-9]{32,}(?:_[A-Za-z0-9]+)*/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  { pattern: /ls__[A-Za-z0-9]{16,}/g, replace: SECRET_PLACEHOLDER },
-  // GitHub personal access / app tokens
-  { pattern: /gh[pousr]_[A-Za-z0-9]{36,}/g, replace: SECRET_PLACEHOLDER },
-  { pattern: /github_pat_[A-Za-z0-9_]{82}/g, replace: SECRET_PLACEHOLDER },
-  // GitLab personal access token
-  { pattern: /glpat-[A-Za-z0-9_-]{20,}/g, replace: SECRET_PLACEHOLDER },
-  // AWS access key id (covers AKIA/ASIA/ABIA/ACCA/A3T* prefixes)
-  {
-    pattern: /\b(?:AKIA|ASIA|ABIA|ACCA|A3T[A-Z0-9])[0-9A-Z]{16}\b/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // Google API key + OAuth access token
-  { pattern: /AIza[0-9A-Za-z_-]{35}/g, replace: SECRET_PLACEHOLDER },
-  { pattern: /ya29\.[0-9A-Za-z_-]+/g, replace: SECRET_PLACEHOLDER },
-  // Slack tokens (bot/user + app-level) + incoming webhooks
-  { pattern: /xox[baprs]-[A-Za-z0-9-]{10,}/g, replace: SECRET_PLACEHOLDER },
-  { pattern: /xapp-\d-[A-Za-z0-9-]{10,}/g, replace: SECRET_PLACEHOLDER },
-  {
-    pattern: /https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/]+/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // Stripe
-  {
-    pattern: /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{20,}\b/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // npm
-  { pattern: /npm_[A-Za-z0-9]{36}/g, replace: SECRET_PLACEHOLDER },
-  // PyPI upload token
-  {
-    pattern: /pypi-AgEIcHlwaS[A-Za-z0-9_-]{50,}/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // SendGrid
-  {
-    pattern: /SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // ── Structured tokens ────────────────────────────────────────────────────
-  // JWT (header.payload.signature)
-  {
-    pattern: /eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // PEM private key blocks (RSA/EC/OPENSSH/DSA/plain + PGP "...KEY BLOCK")
-  {
-    pattern: /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY(?: BLOCK)?-----[\s\S]+?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY(?: BLOCK)?-----/g,
-    replace: SECRET_PLACEHOLDER
-  },
-  // ── Structural / contextual (sensitive NAME + assignment) ─────────────────
-  // KEY=value or "key": "value" where the name looks sensitive. Keep the name
-  // and separator ($1), redact the value. Notes:
-  //  - (?![A-Za-z0-9]) after the keyword requires a component boundary, so
-  //    `token` matches `api_token`/`mytoken` but NOT `tokenizer`/`tokens`.
-  //  - the value may start with an auth scheme word (Bearer/Token/Basic) so a
-  //    `X-Api-Key: Bearer <tok>` shape redacts the credential, not just "Bearer".
-  //  - value excludes & and ; so query-string params past the secret survive.
-  //  - requires a 6+ char value so short non-secret values are not touched.
-  {
-    pattern: /\b([A-Za-z0-9_.-]*(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|AUTH[_-]?TOKEN|CLIENT[_-]?SECRET)(?![A-Za-z0-9])(?:[_.-][A-Za-z0-9]+)*["']?\s*[:=]\s*["']?)(?:(?:bearer|token|basic)\s+)?[^\s"'&;]{6,}/gi,
-    replace: `$1${SECRET_PLACEHOLDER}`
-  },
-  // Authorization / API-key headers. Keep the header name + separator ($1$2)
-  // and an optional scheme ($3); redact the credential.
-  {
-    pattern: /\b(authorization|x-api-key|x-auth-token)(["']?\s*[:=]\s*["']?)(bearer\s+|token\s+|basic\s+)?[A-Za-z0-9._~+/-]{8,}=*/gi,
-    replace: `$1$2$3${SECRET_PLACEHOLDER}`
-  },
-  // Bare "Bearer <token>" (any case; the scheme word is preserved via $1).
-  {
-    pattern: /\b(Bearer\s+)[A-Za-z0-9._~+/-]{10,}=*/gi,
-    replace: `$1${SECRET_PLACEHOLDER}`
-  },
-  // Credentials embedded in URLs: proto://user:PASS@host -> redact PASS only.
-  // Username is optional so proto://:PASS@host (empty user) is still covered.
-  {
-    pattern: /\b([a-z][a-z0-9+.-]*:\/\/[^:@/\s]*:)[^@/\s]+(@)/gi,
-    replace: `$1${SECRET_PLACEHOLDER}$2`
-  }
-];
-function createSecretAnonymizer(options) {
-  const rules = [...DEFAULT_SECRET_RULES, ...options?.extraRules ?? []];
-  return createAnonymizer(rules, { maxDepth: options?.maxDepth ?? 24 });
-}
-
-// dist/transcript.js
-import { readFileSync as readFileSync3, statSync as statSync3, fstatSync, openSync, readSync, closeSync } from "node:fs";
-var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
-
-// dist/state.js
-import { readFileSync as readFileSync4, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
-import { dirname as dirname2 } from "node:path";
-var LOCK_TIMEOUT_MS = 5e3;
-var LOCK_RETRY_MS = 20;
-function lockPath(stateFilePath) {
-  return `${stateFilePath}.lock`;
-}
-function sleep3(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-async function acquireLock(stateFilePath) {
-  const lock = lockPath(stateFilePath);
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync4(dirname2(stateFilePath), { recursive: true });
-  while (Date.now() < deadline) {
-    try {
-      const fd = openSync2(lock, "wx");
-      closeSync2(fd);
-      return;
-    } catch {
-      await sleep3(LOCK_RETRY_MS);
-    }
-  }
-  try {
-    unlinkSync3(lock);
-  } catch {
-  }
-}
-function releaseLock(stateFilePath) {
-  try {
-    unlinkSync3(lockPath(stateFilePath));
-  } catch {
-  }
-}
-async function atomicUpdateState(stateFilePath, fn) {
-  await acquireLock(stateFilePath);
-  try {
-    const state = loadState(stateFilePath);
-    writeFileSync3(stateFilePath, JSON.stringify(fn(state), null, 2));
-  } finally {
-    releaseLock(stateFilePath);
-  }
-}
-function loadState(stateFilePath) {
-  try {
-    const raw = readFileSync4(stateFilePath, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-function getSessionState(state, sessionId) {
-  return state[sessionId] ?? {
-    last_line: -1,
-    turn_count: 0,
-    updated: "",
-    task_run_map: {}
-  };
-}
-var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
-
-// dist/metadata.js
-var LS_AGENT_PURPOSE = "coding";
-var LS_INTEGRATION = "claude-code";
-var LS_AGENT_RUNTIME = "Claude Code";
-var LS_TRACE_SCHEMA_VERSION = "coding-agent-v1";
-function codingAgentMetadata(opts) {
-  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, agentType, subagentId, subagentType, toolName, runName, skillName, runSpecific } = opts;
-  const meta = {
-    // Identity & grouping — always present.
-    ls_agent_purpose: LS_AGENT_PURPOSE,
-    ls_integration: LS_INTEGRATION,
-    ls_agent_runtime: LS_AGENT_RUNTIME,
-    ls_trace_schema_version: LS_TRACE_SCHEMA_VERSION,
-    thread_id: sessionId
-  };
-  if (turnId)
-    meta.turn_id = turnId;
-  if (typeof turnNumber === "number")
-    meta.turn_number = turnNumber;
-  if (runtimeVersion)
-    meta.ls_agent_runtime_version = runtimeVersion;
-  if (approvalPolicy)
-    meta.approval_policy = approvalPolicy;
-  meta.ls_agent_type = agentType;
-  if (subagentId) {
-    meta.ls_subagent_id = subagentId;
-    meta.agent_id = subagentId;
-  }
-  if (subagentType) {
-    meta.ls_subagent_type = subagentType;
-    meta.agent_type = subagentType;
-  }
-  if (toolName) {
-    meta.tool_name = toolName;
-    if (runName && toolName !== runName)
-      meta.ls_tool_name = toolName;
-  }
-  if (skillName)
-    meta.ls_skill_name = skillName;
-  return {
-    ...meta,
-    ...runSpecific,
-    ...base
-  };
-}
-function skillNameFromTool(toolName, toolInput) {
-  if (toolName !== "Skill")
-    return void 0;
-  const skill = toolInput?.skill;
-  return typeof skill === "string" ? skill : void 0;
-}
-
-// dist/langsmith.js
-var client = void 0;
-var replicas = void 0;
-function initTracing(apiKey, apiUrl, providedReplicas, redact = true, extraRedactionRules) {
-  const anonymizer = redact ? createSecretAnonymizer(extraRedactionRules ? { extraRules: extraRedactionRules } : void 0) : void 0;
-  if (apiKey || anonymizer && providedReplicas) {
-    client = new Client({ apiKey: apiKey || void 0, apiUrl, anonymizer });
-  } else {
-    client = void 0;
-  }
-  replicas = providedReplicas;
-  return client;
-}
-async function flushPendingTraces() {
-  debug("Awaiting pending trace batches...");
-  await Promise.all([
-    client?.awaitPendingTraceBatches(),
-    RunTree.getSharedClient().awaitPendingTraceBatches()
-  ]);
-  debug("Trace batches flushed successfully");
-}
-function generateDottedOrderSegment(time, runId) {
-  const iso = typeof time === "string" ? time : new Date(time).toISOString();
-  const isoWithMicroseconds = `${iso.slice(0, -1)}000Z`;
-  const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
-  return stripped + runId;
-}
-
 // dist/config.js
-import { readFileSync as readFileSync5 } from "node:fs";
-import { userInfo } from "node:os";
-import { join } from "node:path";
 import { execSync } from "node:child_process";
-var LS_INTEGRATION_VERSION = true ? "0.2.2" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var LS_INTEGRATION_VERSION = true ? "0.2.1" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var PROVIDER_HOSTS = {
   github: "github.com",
   gitlab: "gitlab.com",
@@ -12327,12 +11958,12 @@ var PROVIDER_HOSTS = {
   devAzure: "dev.azure.com"
 };
 function readAnthropicUserId() {
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
-  if (!homeDir)
+  const homeDir2 = process.env.HOME ?? process.env.USERPROFILE;
+  if (!homeDir2)
     return void 0;
-  const configPath = join(homeDir, ".claude.json");
+  const configPath = join(homeDir2, ".claude.json");
   try {
-    const raw = readFileSync5(configPath, "utf-8");
+    const raw = readFileSync3(configPath, "utf-8");
     const parsed = JSON.parse(raw);
     const userId = parsed?.userID;
     if (typeof userId === "string" && userId.length > 0) {
@@ -12422,14 +12053,14 @@ function loadConfig(options) {
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
   const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
   const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
-  const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
+  const homeDir2 = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const stateFilePath = process.env.STATE_FILE ?? `${homeDir2}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
-  let replicas2;
+  let replicas;
   const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
   if (providedReplicas !== void 0) {
     try {
-      replicas2 = JSON.parse(providedReplicas);
+      replicas = JSON.parse(providedReplicas);
     } catch {
       error("Failed to parse provided CC_LANGSMITH_RUNS_ENDPOINTS. Please make sure they are valid JSON.");
     }
@@ -12488,7 +12119,7 @@ function loadConfig(options) {
     identityMetadata.anthropic_user_id = anthropicUserId;
   }
   const contractMetadata = {
-    ls_agent_purpose: "coding",
+    ls_agent_kind: "coding_agent",
     ls_integration: "claude-code",
     ls_agent_runtime: "Claude Code",
     ls_trace_schema_version: "coding-agent-v1",
@@ -12519,231 +12150,122 @@ function loadConfig(options) {
     stateFilePath,
     debug: debug2,
     parentDottedOrder,
-    replicas: replicas2,
+    replicas,
     customMetadata,
     redact,
     redactExtraRules
   };
 }
 
-// dist/utils/hook-init.js
-function initHook(cwd) {
-  const config = loadConfig({ cwd });
-  initLogger(config.debug);
-  if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
-    return null;
-  }
-  if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
-    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");
-    return null;
-  }
-  return config;
+// dist/thread-link.js
+import { readFileSync as readFileSync4, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, renameSync as renameSync4, unlinkSync as unlinkSync3 } from "node:fs";
+import { dirname as dirname2 } from "node:path";
+function firstLabel(url) {
+  return url.split(".", 1)[0];
 }
-
-// dist/utils/stdin.js
-function readStdin() {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => data += chunk);
-    process.stdin.on("end", () => {
-      try {
-        resolve(JSON.parse(data));
-      } catch (err) {
-        reject(new Error(`Failed to parse hook input: ${err}`));
-      }
-    });
-    process.stdin.on("error", reject);
+function isLocalhost2(url) {
+  const stripped = url.replace("http://", "").replace("https://", "");
+  const host = stripped.split("/")[0].split(":")[0];
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+function deriveWebHost(apiBaseUrl) {
+  const url = apiBaseUrl.replace(/\/$/, "");
+  if (isLocalhost2(url))
+    return "http://localhost:3000";
+  if (url.endsWith("/api/v1"))
+    return url.replace("/api/v1", "");
+  if (url.includes("/api") && !firstLabel(url).endsWith("api"))
+    return url.replace("/api", "");
+  const label = firstLabel(url);
+  if (label.includes("dev"))
+    return "https://dev.smith.langchain.com";
+  if (label.includes("eu"))
+    return "https://eu.smith.langchain.com";
+  if (label.includes("aws"))
+    return "https://aws.smith.langchain.com";
+  if (label.includes("apac"))
+    return "https://apac.smith.langchain.com";
+  if (label.includes("beta"))
+    return "https://beta.smith.langchain.com";
+  return "https://smith.langchain.com";
+}
+function buildThreadUrl(opts) {
+  return `${opts.webHost}/o/${opts.tenantId}/projects/p/${opts.projectId}/t/${opts.threadId}`;
+}
+function homeDir() {
+  return process.env.HOME ?? process.env.USERPROFILE ?? "";
+}
+function threadFilePath(cwd, home = homeDir()) {
+  const slug = cwd.replace(/[^a-zA-Z0-9]/g, "-");
+  return `${home}/.claude/state/langsmith-thread-${slug}.json`;
+}
+function readThreadLink(cwd, home = homeDir()) {
+  try {
+    return JSON.parse(readFileSync4(threadFilePath(cwd, home), "utf-8"));
+  } catch {
+    return void 0;
+  }
+}
+function writeThreadLink(cwd, record, home = homeDir()) {
+  const path3 = threadFilePath(cwd, home);
+  const dir = dirname2(path3);
+  mkdirSync4(dir, { recursive: true });
+  const tmpPath = `${path3}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try {
+    writeFileSync3(tmpPath, JSON.stringify(record, null, 2), { mode: 384, flag: "wx" });
+    renameSync4(tmpPath, path3);
+  } catch (err) {
+    try {
+      unlinkSync3(tmpPath);
+    } catch {
+    }
+    throw err;
+  }
+}
+async function resolveThreadUrl(client, projectName, apiBaseUrl, sessionId) {
+  const project = await client.readProject({ projectName });
+  return buildThreadUrl({
+    webHost: deriveWebHost(apiBaseUrl),
+    tenantId: project.tenant_id,
+    projectId: project.id,
+    threadId: sessionId
   });
 }
 
-// dist/background-runs.js
-function recordBackgroundRun(session, turn, backgroundId, entry) {
-  const existing = session.open_turns?.[turn.run_id];
-  return {
-    task_run_map: {
-      ...session.task_run_map,
-      [backgroundId]: entry
-    },
-    open_turns: {
-      ...session.open_turns,
-      [turn.run_id]: {
-        ...existing,
-        run_id: turn.run_id,
-        trace_id: turn.trace_id,
-        dotted_order: turn.dotted_order,
-        parent_run_id: turn.parent_run_id,
-        start_time: turn.start_time,
-        turn_number: turn.turn_number,
-        runtime_version: turn.runtime_version,
-        approval_policy: turn.approval_policy,
-        stop_seen: existing?.stop_seen ?? false,
-        agent_ids: [
-          ...(existing?.agent_ids ?? []).filter((id) => id !== backgroundId),
-          backgroundId
-        ]
-      }
-    }
-  };
+// dist/commands/trace-link.js
+function printLink(url) {
+  console.log(`\u{1F517} Open this thread in LangSmith: ${url}`);
 }
-
-// dist/workflows.js
-var WORKFLOW_TOOL_NAME = "Workflow";
-function detectWorkflowLaunch(toolName, toolResponse) {
-  if (toolName !== WORKFLOW_TOOL_NAME)
-    return void 0;
-  const r = toolResponse;
-  if (!r || r.status !== "async_launched" || !r.taskId || !r.runId)
-    return void 0;
-  return { taskId: r.taskId, runId: r.runId, workflowName: r.workflowName };
-}
-
-// dist/hooks/post-tool-use.js
 async function main() {
-  const input = await readStdin();
-  const config = initHook(input.cwd);
-  if (!config)
-    return;
-  if (input.agent_id || input.agent_type) {
-    debug("Skipping PostToolUse for subagent tool \u2014 Stop hook handles tracing");
+  const cwd = process.cwd();
+  if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
+    console.log("LangSmith tracing is disabled. Set TRACE_TO_LANGSMITH=true (plus a LangSmith API key) to trace this session.");
     return;
   }
-  const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
-  const state = loadState(config.stateFilePath);
-  const sessionState = getSessionState(state, input.session_id);
-  const parentRunId = sessionState.current_turn_run_id;
-  const traceId = sessionState.current_trace_id;
-  const parentDottedOrder = sessionState.current_dotted_order;
-  if (!parentRunId || !traceId || !parentDottedOrder) {
-    error("No current_turn_run_id or trace_id in state - UserPromptSubmit hook may not have run");
+  const config = loadConfig({ cwd });
+  if (!config.apiKey) {
+    console.log("No LangSmith API key found. Set CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY to enable trace links.");
     return;
   }
-  const toolRunId = uuid7();
-  const startTime = sessionState.tool_start_times?.[input.tool_use_id] ?? Date.now();
-  const toolEndTime = Date.now();
-  const startTimeIso = new Date(startTime).toISOString();
-  const toolEndTimeIso = new Date(toolEndTime).toISOString();
-  const toolDottedOrderSegment = generateDottedOrderSegment(startTime, toolRunId);
-  const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
-  const agentId = input.tool_response.agentId;
-  const workflow = !agentId ? detectWorkflowLaunch(input.tool_name, input.tool_response) : void 0;
-  if (agentId) {
-    debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
-  } else if (workflow) {
-    debug(`Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`);
-    const runTree = new RunTree({
-      client: client2,
-      replicas: config.replicas,
-      id: toolRunId,
-      name: "Workflow",
-      run_type: "tool",
-      inputs: { input: input.tool_input },
-      project_name: config.project,
-      start_time: startTimeIso,
-      // No end_time — left open until finalizeNotificationChain closes it.
-      parent_run_id: parentRunId,
-      trace_id: traceId,
-      dotted_order: toolDottedOrder,
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId: input.session_id,
-          base: config.customMetadata,
-          turnNumber: sessionState.current_turn_number,
-          runtimeVersion: sessionState.runtime_version,
-          agentType: "root",
-          toolName: "Workflow",
-          runName: "Workflow"
-        })
-      }
-    });
-    await runTree.postRun();
-  } else {
-    const runTree = new RunTree({
-      client: client2,
-      replicas: config.replicas,
-      id: toolRunId,
-      name: input.tool_name,
-      run_type: "tool",
-      inputs: { input: input.tool_input },
-      outputs: { output: input.tool_response },
-      project_name: config.project,
-      start_time: startTimeIso,
-      end_time: toolEndTimeIso,
-      parent_run_id: parentRunId,
-      trace_id: traceId,
-      dotted_order: toolDottedOrder,
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId: input.session_id,
-          base: config.customMetadata,
-          // turn_id (promptId) isn't in the PostToolUse payload; turn_number is
-          // sufficient (the contract needs at least one of the two).
-          turnNumber: sessionState.current_turn_number,
-          runtimeVersion: sessionState.runtime_version,
-          agentType: "root",
-          toolName: input.tool_name,
-          runName: input.tool_name,
-          skillName: skillNameFromTool(input.tool_name, input.tool_input)
-        })
-      }
-    });
-    await runTree.postRun();
+  const record = readThreadLink(cwd);
+  if (!record) {
+    console.log("No LangSmith thread recorded for this project yet. Send a prompt to start tracing, then run /langsmith-tracing:trace again.");
+    return;
   }
-  await atomicUpdateState(config.stateFilePath, (freshState) => {
-    const freshSession = getSessionState(freshState, input.session_id);
-    let backgroundUpdate;
-    if (agentId || workflow) {
-      const deferred = {
-        trace_id: traceId,
-        parent_run_id: parentRunId,
-        start_time: startTimeIso,
-        end_time: toolEndTimeIso,
-        inputs: input.tool_input,
-        outputs: input.tool_response,
-        project_name: config.project
-      };
-      const launchingTurn = {
-        run_id: parentRunId,
-        trace_id: traceId,
-        dotted_order: parentDottedOrder,
-        parent_run_id: sessionState.current_parent_run_id,
-        start_time: sessionState.current_turn_start,
-        turn_number: sessionState.current_turn_number,
-        runtime_version: sessionState.runtime_version,
-        approval_policy: sessionState.approval_policy
-      };
-      backgroundUpdate = recordBackgroundRun(freshSession, launchingTurn, agentId ?? workflow.taskId, {
-        run_id: toolRunId,
-        dotted_order: toolDottedOrder,
-        deferred,
-        ...workflow ? { workflow_run_id: workflow.runId, is_workflow: true, subagent_done: true } : {}
-      });
-    }
-    return {
-      ...freshState,
-      [input.session_id]: {
-        ...freshSession,
-        last_tool_end_time: toolEndTime,
-        ...backgroundUpdate,
-        // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this
-        // tool call from the transcript. A deferred Agent tool is skipped there
-        // via its agentId link instead, so it's the one case we don't record —
-        // but a Workflow tool call has no agentId, so without this it would get a
-        // duplicate "Workflow" tool run next to the open one posted above.
-        ...agentId ? {} : {
-          traced_tool_use_ids: [...freshSession.traced_tool_use_ids ?? [], input.tool_use_id]
-        }
-      }
-    };
-  });
-  if (!agentId) {
-    await flushPendingTraces();
+  if (record.url) {
+    printLink(record.url);
+    return;
+  }
+  try {
+    const client = new Client({ apiKey: config.apiKey, apiUrl: config.apiBaseUrl });
+    const url = await resolveThreadUrl(client, config.project, config.apiBaseUrl, record.session_id);
+    writeThreadLink(cwd, { ...record, url, updated: (/* @__PURE__ */ new Date()).toISOString() });
+    printLink(url);
+  } catch {
+    console.log(`Couldn't resolve the LangSmith project URL for "${config.project}". Thread id (session): ${record.session_id}`);
   }
 }
 main().catch((err) => {
-  try {
-    error(`PostToolUse hook fatal error: ${err}`);
-  } catch {
-  }
+  console.log(`Could not build a LangSmith link: ${err}`);
   process.exit(0);
 });

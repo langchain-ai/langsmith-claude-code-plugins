@@ -13288,10 +13288,10 @@ var PROVIDER_HOSTS = {
   devAzure: "dev.azure.com"
 };
 function readAnthropicUserId() {
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
-  if (!homeDir)
+  const homeDir2 = process.env.HOME ?? process.env.USERPROFILE;
+  if (!homeDir2)
     return void 0;
-  const configPath = join(homeDir, ".claude.json");
+  const configPath = join(homeDir2, ".claude.json");
   try {
     const raw = readFileSync5(configPath, "utf-8");
     const parsed = JSON.parse(raw);
@@ -13323,7 +13323,12 @@ function parseRepoName(remoteUrl) {
 }
 function getRepoName(cwd) {
   try {
-    const output = execSync("git remote -v", { cwd, encoding: "utf-8", timeout: 5e3 });
+    const output = execSync("git remote -v", {
+      cwd,
+      encoding: "utf-8",
+      timeout: 5e3,
+      stdio: ["ignore", "pipe", "ignore"]
+    });
     const lines = output.trim().split("\n").filter(Boolean);
     const remotes = [];
     for (const line of lines) {
@@ -13353,14 +13358,20 @@ function getGitInfo(cwd) {
     const branch = execSync("git rev-parse --abbrev-ref HEAD", {
       cwd,
       encoding: "utf-8",
-      timeout: 5e3
+      timeout: 5e3,
+      stdio: ["ignore", "pipe", "ignore"]
     }).trim();
     if (branch && branch !== "HEAD")
       result.branch = branch;
   } catch {
   }
   try {
-    const commit = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8", timeout: 5e3 }).trim();
+    const commit = execSync("git rev-parse HEAD", {
+      cwd,
+      encoding: "utf-8",
+      timeout: 5e3,
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
     if (commit)
       result.commit = commit;
   } catch {
@@ -13372,8 +13383,8 @@ function loadConfig(options) {
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
   const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
   const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
-  const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
+  const homeDir2 = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const stateFilePath = process.env.STATE_FILE ?? `${homeDir2}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
   let replicas2;
   const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
@@ -13508,6 +13519,104 @@ function readStdin() {
     });
     process.stdin.on("error", reject);
   });
+}
+
+// dist/thread-link.js
+import { readFileSync as readFileSync6, writeFileSync as writeFileSync4, mkdirSync as mkdirSync5, renameSync as renameSync4, unlinkSync as unlinkSync4 } from "node:fs";
+import { dirname as dirname3 } from "node:path";
+function firstLabel(url) {
+  return url.split(".", 1)[0];
+}
+function isLocalhost2(url) {
+  const stripped = url.replace("http://", "").replace("https://", "");
+  const host = stripped.split("/")[0].split(":")[0];
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+function deriveWebHost(apiBaseUrl) {
+  const url = apiBaseUrl.replace(/\/$/, "");
+  if (isLocalhost2(url))
+    return "http://localhost:3000";
+  if (url.endsWith("/api/v1"))
+    return url.replace("/api/v1", "");
+  if (url.includes("/api") && !firstLabel(url).endsWith("api"))
+    return url.replace("/api", "");
+  const label = firstLabel(url);
+  if (label.includes("dev"))
+    return "https://dev.smith.langchain.com";
+  if (label.includes("eu"))
+    return "https://eu.smith.langchain.com";
+  if (label.includes("aws"))
+    return "https://aws.smith.langchain.com";
+  if (label.includes("apac"))
+    return "https://apac.smith.langchain.com";
+  if (label.includes("beta"))
+    return "https://beta.smith.langchain.com";
+  return "https://smith.langchain.com";
+}
+function buildThreadUrl(opts) {
+  return `${opts.webHost}/o/${opts.tenantId}/projects/p/${opts.projectId}/t/${opts.threadId}`;
+}
+function homeDir() {
+  return process.env.HOME ?? process.env.USERPROFILE ?? "";
+}
+function threadFilePath(cwd, home = homeDir()) {
+  const slug = cwd.replace(/[^a-zA-Z0-9]/g, "-");
+  return `${home}/.claude/state/langsmith-thread-${slug}.json`;
+}
+function readThreadLink(cwd, home = homeDir()) {
+  try {
+    return JSON.parse(readFileSync6(threadFilePath(cwd, home), "utf-8"));
+  } catch {
+    return void 0;
+  }
+}
+function writeThreadLink(cwd, record, home = homeDir()) {
+  const path3 = threadFilePath(cwd, home);
+  const dir = dirname3(path3);
+  mkdirSync5(dir, { recursive: true });
+  const tmpPath = `${path3}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try {
+    writeFileSync4(tmpPath, JSON.stringify(record, null, 2), { mode: 384, flag: "wx" });
+    renameSync4(tmpPath, path3);
+  } catch (err) {
+    try {
+      unlinkSync4(tmpPath);
+    } catch {
+    }
+    throw err;
+  }
+}
+async function resolveThreadUrl(client2, projectName, apiBaseUrl, sessionId) {
+  const project = await client2.readProject({ projectName });
+  return buildThreadUrl({
+    webHost: deriveWebHost(apiBaseUrl),
+    tenantId: project.tenant_id,
+    projectId: project.id,
+    threadId: sessionId
+  });
+}
+function withTimeout(p, ms) {
+  return Promise.race([
+    p,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("thread-link timeout")), ms))
+  ]);
+}
+async function maybeRecordThreadLink(opts) {
+  const existing = readThreadLink(opts.cwd);
+  if (existing?.session_id === opts.sessionId && existing.url)
+    return;
+  const record = {
+    session_id: opts.sessionId,
+    project: opts.project,
+    updated: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  if (opts.client) {
+    try {
+      record.url = await withTimeout(resolveThreadUrl(opts.client, opts.project, opts.apiBaseUrl, opts.sessionId), opts.timeoutMs ?? 4e3);
+    } catch {
+    }
+  }
+  writeThreadLink(opts.cwd, record);
 }
 
 // dist/hooks/user-prompt-submit.js
@@ -13666,6 +13775,17 @@ async function main() {
       }
     };
   });
+  try {
+    await maybeRecordThreadLink({
+      cwd: input.cwd,
+      sessionId: input.session_id,
+      project: config.project,
+      apiBaseUrl: config.apiBaseUrl,
+      client: client2
+    });
+  } catch (err) {
+    debug(`Failed to record thread link: ${err}`);
+  }
   const duration = ((Date.now() - hookStartTime) / 1e3).toFixed(1);
   debug(`UserPromptSubmit hook completed in ${duration}s`);
 }

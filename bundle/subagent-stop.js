@@ -13242,7 +13242,12 @@ function parseRepoName(remoteUrl) {
 }
 function getRepoName(cwd) {
   try {
-    const output = execSync("git remote -v", { cwd, encoding: "utf-8", timeout: 5e3 });
+    const output = execSync("git remote -v", {
+      cwd,
+      encoding: "utf-8",
+      timeout: 5e3,
+      stdio: ["ignore", "pipe", "ignore"]
+    });
     const lines = output.trim().split("\n").filter(Boolean);
     const remotes = [];
     for (const line of lines) {
@@ -13272,14 +13277,20 @@ function getGitInfo(cwd) {
     const branch = execSync("git rev-parse --abbrev-ref HEAD", {
       cwd,
       encoding: "utf-8",
-      timeout: 5e3
+      timeout: 5e3,
+      stdio: ["ignore", "pipe", "ignore"]
     }).trim();
     if (branch && branch !== "HEAD")
       result.branch = branch;
   } catch {
   }
   try {
-    const commit = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8", timeout: 5e3 }).trim();
+    const commit = execSync("git rev-parse HEAD", {
+      cwd,
+      encoding: "utf-8",
+      timeout: 5e3,
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
     if (commit)
       result.commit = commit;
   } catch {
