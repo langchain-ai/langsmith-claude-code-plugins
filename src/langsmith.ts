@@ -6,7 +6,7 @@
  * serialization, retries, and auth automatically.
  */
 
-import { Client, RunTree, RunTreeConfig, uuid7 } from "langsmith";
+import { Client, RunTree, RunTreeConfig, uuid7FromTime } from "langsmith";
 import { createSecretAnonymizer } from "langsmith/anonymizer";
 import type { StringNodeRule } from "langsmith/anonymizer";
 import type { Turn, ContentBlock, Usage, OpenTurn, SessionState } from "./types.js";
@@ -234,7 +234,7 @@ export async function traceTurn(
   } else {
     // Create a new turn run for interrupted/standalone turns
     shouldCreateTurn = true;
-    turnRunId = uuid7();
+    turnRunId = uuid7FromTime(turn.userTimestamp);
     traceId = turnRunId; // This turn is its own trace root
 
     parentDottedOrder = generateDottedOrderSegment(turn.userTimestamp, turnRunId);
@@ -283,7 +283,7 @@ export async function traceTurn(
     const assistantContent = formatContent(llmCall.content);
 
     // Generate run ID for this LLM call
-    const assistantRunId = uuid7();
+    const assistantRunId = uuid7FromTime(llmCall.startTime);
     const assistantDottedOrderSegment = generateDottedOrderSegment(
       llmCall.startTime,
       assistantRunId,
@@ -328,7 +328,7 @@ export async function traceTurn(
       const toolStartTime = llmCall.endTime <= toolEndTime ? llmCall.endTime : toolEndTime;
 
       // Generate run ID for this tool
-      const toolRunId = uuid7();
+      const toolRunId = uuid7FromTime(toolStartTime);
       const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTime, toolRunId);
       const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
 
@@ -956,7 +956,7 @@ async function traceSubagentChain(opts: {
   turnId?: string;
   turnNumber?: number;
 }): Promise<void> {
-  const subagentChainId = uuid7();
+  const subagentChainId = uuid7FromTime(opts.startTime);
   const subagentChainDottedOrder = `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, subagentChainId)}`;
 
   const runTree = new RunTree({

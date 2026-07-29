@@ -11,7 +11,7 @@
  * transcript before closing it with "User interrupt".
  */
 
-import { RunTree, uuid7 } from "langsmith";
+import { RunTree, uuid7FromTime } from "langsmith";
 import { debug, error } from "../logger.js";
 import {
   initTracing,
@@ -148,8 +148,8 @@ async function main(): Promise<void> {
 
   const turnNum = sessionState.turn_count + interruptedTurnsTraced + 1;
 
-  const runId = uuid7();
   const startTime = new Date().toISOString();
+  const runId = uuid7FromTime(startTime);
   const segment = generateDottedOrderSegment(startTime, runId);
 
   // Decide where this turn nests.

@@ -6,7 +6,7 @@
  * Creates a LangSmith run capturing the compaction event and summary.
  */
 
-import { RunTree, uuid7 } from "langsmith";
+import { RunTree, uuid7FromTime } from "langsmith";
 import { debug, error } from "../logger.js";
 import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
@@ -47,7 +47,7 @@ async function main(): Promise<void> {
     ? new Date(sessionState.compaction_start_time).toISOString()
     : endTime;
 
-  const runId = uuid7();
+  const runId = uuid7FromTime(startTime);
   const segment = generateDottedOrderSegment(startTime, runId);
 
   // Nest under the current turn's trace if one is active, otherwise standalone.

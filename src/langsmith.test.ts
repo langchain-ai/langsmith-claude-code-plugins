@@ -57,7 +57,6 @@ vi.mock("langsmith", async (importOriginal) => {
   return {
     RunTree: MockRunTree,
     Client: MockClient,
-    uuid7: actual.uuid7,
     uuid7FromTime: mockUuid7FromTime,
   };
 });
@@ -1214,7 +1213,12 @@ describe("traceTurn", () => {
           endTime: "2025-01-01T00:00:02Z",
           toolCalls: [
             {
-              tool_use: { id: "tool-1", name: "Read", input: { file: "test.ts" } },
+              tool_use: {
+                type: "tool_use",
+                id: "tool-1",
+                name: "Read",
+                input: { file: "test.ts" },
+              },
               result: { content: "file contents", timestamp: "2025-01-01T00:00:03Z" },
             },
           ],
