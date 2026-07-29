@@ -5,13 +5,23 @@ import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 const mockCreateRun = vi.fn().mockResolvedValue(undefined);
 const mockUpdateRun = vi.fn().mockResolvedValue(undefined);
 const mockAwaitPendingTraceBatches = vi.fn().mockResolvedValue(undefined);
+const { mockUuid7FromTime } = vi.hoisted(() => ({
+  mockUuid7FromTime: vi.fn(),
+}));
+
+function timestampFromUuid7(uuid: string): number {
+  return Number.parseInt(uuid.replaceAll("-", "").slice(0, 12), 16);
+}
 
 // Track the last RunTree params for assertions
 let lastRunTreeParams: Record<string, unknown> | null = null;
 // Track all RunTree instances with their operations
 let allRunTreeInstances: Array<{ params: Record<string, unknown>; ops: string[] }> = [];
 
-vi.mock("langsmith", () => {
+vi.mock("langsmith", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("langsmith")>();
+  mockUuid7FromTime.mockImplementation(actual.uuid7FromTime);
+
   class MockClient {
     createRun = mockCreateRun;
     updateRun = mockUpdateRun;
@@ -47,7 +57,8 @@ vi.mock("langsmith", () => {
   return {
     RunTree: MockRunTree,
     Client: MockClient,
-    uuid7: () => `test-uuid-${Math.random().toString(36).slice(2, 15)}`,
+    uuid7: actual.uuid7,
+    uuid7FromTime: mockUuid7FromTime,
   };
 });
 
@@ -227,6 +238,7 @@ describe("traceTurn", () => {
     mockCreateRun.mockClear();
     mockUpdateRun.mockClear();
     mockAwaitPendingTraceBatches.mockClear();
+    mockUuid7FromTime.mockClear();
     allRunTreeInstances = [];
     initTracing("test-api-key", "https://test.api.com");
   });
@@ -280,6 +292,11 @@ describe("traceTurn", () => {
     expect(assistantUpdateArgs.extra.metadata.ls_provider).toBe("anthropic");
     expect(assistantUpdateArgs.extra.metadata.ls_model_name).toBe("claude-sonnet-4-5");
     expect(assistantUpdateArgs.extra.metadata.ls_invocation_params.model).toBe("claude-sonnet-4-5");
+
+    expect(timestampFromUuid7(turnCall.id)).toBe(Date.parse(turnCall.start_time));
+    expect(timestampFromUuid7(llmCall.id)).toBe(Date.parse(llmCall.start_time));
+    expect(mockUuid7FromTime).toHaveBeenNthCalledWith(1, turnCall.start_time);
+    expect(mockUuid7FromTime).toHaveBeenNthCalledWith(2, llmCall.start_time);
   });
 
   it("uses existing parentRunId and skips creating turn run", async () => {
@@ -390,6 +407,13 @@ describe("traceTurn", () => {
     const turnCall = mockCreateRun.mock.calls[0][0];
     const llmCall = mockCreateRun.mock.calls[1][0];
     const toolCall = mockCreateRun.mock.calls[2][0];
+
+    expect(timestampFromUuid7(turnCall.id)).toBe(Date.parse(turnCall.start_time));
+    expect(timestampFromUuid7(llmCall.id)).toBe(Date.parse(llmCall.start_time));
+    expect(timestampFromUuid7(toolCall.id)).toBe(Date.parse(toolCall.start_time));
+    expect(mockUuid7FromTime).toHaveBeenNthCalledWith(1, turnCall.start_time);
+    expect(mockUuid7FromTime).toHaveBeenNthCalledWith(2, llmCall.start_time);
+    expect(mockUuid7FromTime).toHaveBeenNthCalledWith(3, toolCall.start_time);
 
     // Tool is child of turn, not assistant
     expect(toolCall.parent_run_id).toBe(turnCall.id);
