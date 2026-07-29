@@ -7,7 +7,7 @@
  * so SubagentStop can nest the subagent trace under it.
  */
 
-import { RunTree, uuid7 } from "langsmith";
+import { RunTree, uuid7FromTime } from "langsmith";
 import { debug, error } from "../logger.js";
 import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
@@ -68,8 +68,8 @@ async function main(): Promise<void> {
   // Generate run ID and dotted order for this tool.
   // Use PreToolUse's recorded start time if available (accurate wall-clock time
   // from before the tool ran), otherwise fall back to Date.now().
-  const toolRunId = uuid7();
   const startTime = sessionState.tool_start_times?.[input.tool_use_id] ?? Date.now();
+  const toolRunId = uuid7FromTime(startTime);
   const toolEndTime = Date.now();
   // Convert to ISO for RunTree (avoids internal timestamp mangling)
   const startTimeIso = new Date(startTime).toISOString();
