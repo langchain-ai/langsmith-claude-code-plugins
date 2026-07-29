@@ -11888,11 +11888,6 @@ function _checkEndpointEnvUnset(parsed) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/uuid.js
-function uuid7() {
-  return v7_default();
-}
-
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/traceable.js
 var MockAsyncLocalStorage = class {
   getStore() {
@@ -12607,8 +12602,8 @@ async function main() {
     error("No current_turn_run_id or trace_id in state - UserPromptSubmit hook may not have run");
     return;
   }
-  const toolRunId = uuid7();
   const startTime = sessionState.tool_start_times?.[input.tool_use_id] ?? Date.now();
+  const toolRunId = uuid7FromTime(startTime);
   const toolEndTime = Date.now();
   const startTimeIso = new Date(startTime).toISOString();
   const toolEndTimeIso = new Date(toolEndTime).toISOString();

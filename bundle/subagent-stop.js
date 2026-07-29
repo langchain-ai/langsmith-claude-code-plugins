@@ -11993,11 +11993,6 @@ function _checkEndpointEnvUnset(parsed) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/uuid.js
-function uuid7() {
-  return v7_default();
-}
-
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/traceable.js
 var MockAsyncLocalStorage = class {
   getStore() {
@@ -12598,7 +12593,7 @@ async function traceTurn(options) {
     }
   } else {
     shouldCreateTurn = true;
-    turnRunId = uuid7();
+    turnRunId = uuid7FromTime(turn.userTimestamp);
     traceId = turnRunId;
     parentDottedOrder = generateDottedOrderSegment(turn.userTimestamp, turnRunId);
     debug(`Creating new standalone turn run ${turnRunId}`);
@@ -12636,7 +12631,7 @@ async function traceTurn(options) {
   let lastEndTime = turn.userTimestamp;
   for (const llmCall of turn.llmCalls) {
     const assistantContent = formatContent(llmCall.content);
-    const assistantRunId = uuid7();
+    const assistantRunId = uuid7FromTime(llmCall.startTime);
     const assistantDottedOrderSegment = generateDottedOrderSegment(llmCall.startTime, assistantRunId);
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
     const assistantRunTree = new RunTree({
@@ -12665,7 +12660,7 @@ async function traceTurn(options) {
       }
       const toolEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
       const toolStartTime = llmCall.endTime <= toolEndTime ? llmCall.endTime : toolEndTime;
-      const toolRunId = uuid7();
+      const toolRunId = uuid7FromTime(toolStartTime);
       const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTime, toolRunId);
       const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
       const runTree2 = new RunTree({
@@ -12936,7 +12931,7 @@ async function tracePendingSubagents(options) {
   return openedAgentRunIds;
 }
 async function traceSubagentChain(opts) {
-  const subagentChainId = uuid7();
+  const subagentChainId = uuid7FromTime(opts.startTime);
   const subagentChainDottedOrder = `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, subagentChainId)}`;
   const runTree = new RunTree({
     client,

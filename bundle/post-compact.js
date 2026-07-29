@@ -11888,11 +11888,6 @@ function _checkEndpointEnvUnset(parsed) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/uuid.js
-function uuid7() {
-  return v7_default();
-}
-
 // node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/traceable.js
 var MockAsyncLocalStorage = class {
   getStore() {
@@ -12552,7 +12547,7 @@ async function main() {
   const sessionState = getSessionState(state, input.session_id);
   const endTime = (/* @__PURE__ */ new Date()).toISOString();
   const startTime = sessionState.compaction_start_time ? new Date(sessionState.compaction_start_time).toISOString() : endTime;
-  const runId = uuid7();
+  const runId = uuid7FromTime(startTime);
   const segment = generateDottedOrderSegment(startTime, runId);
   const parentRunId = sessionState.current_turn_run_id;
   const traceId = sessionState.current_trace_id ?? runId;
