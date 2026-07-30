@@ -290,12 +290,42 @@ describe("traceTurn", () => {
     const assistantUpdateArgs = mockUpdateRun.mock.calls[0][1];
     expect(assistantUpdateArgs.extra.metadata.ls_provider).toBe("anthropic");
     expect(assistantUpdateArgs.extra.metadata.ls_model_name).toBe("claude-sonnet-4-5");
-    expect(assistantUpdateArgs.extra.metadata.ls_invocation_params.model).toBe("claude-sonnet-4-5");
+    expect(assistantUpdateArgs.extra.metadata.ls_invocation_params).toEqual({
+      model: "claude-sonnet-4-5",
+    });
 
     expect(timestampFromUuid7(turnCall.id)).toBe(Date.parse(turnCall.start_time));
     expect(timestampFromUuid7(llmCall.id)).toBe(Date.parse(llmCall.start_time));
     expect(mockUuid7FromTime).toHaveBeenNthCalledWith(1, turnCall.start_time);
     expect(mockUuid7FromTime).toHaveBeenNthCalledWith(2, llmCall.start_time);
+  });
+
+  it("stamps effort and service_tier into ls_invocation_params when present", async () => {
+    const turn: Turn = {
+      userContent: "Hello",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        {
+          content: [{ type: "text", text: "Hi there!" }],
+          model: "claude-opus-5",
+          usage: { input_tokens: 10, output_tokens: 5, service_tier: "standard" },
+          effort: "high",
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [],
+        },
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({ turn, sessionId: "session-123", turnNum: 1, project: "test-project" });
+
+    const assistantUpdateArgs = mockUpdateRun.mock.calls[0][1];
+    expect(assistantUpdateArgs.extra.metadata.ls_invocation_params).toEqual({
+      model: "claude-opus-5",
+      effort: "high",
+      service_tier: "standard",
+    });
   });
 
   it("uses existing parentRunId and skips creating turn run", async () => {
