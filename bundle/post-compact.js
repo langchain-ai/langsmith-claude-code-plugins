@@ -12335,17 +12335,28 @@ function readAnthropicUserId() {
 function readLocalUsername() {
   return userInfo().username;
 }
-var GIT_PROVIDERS_REGEX = {
-  github: /[@/](?:github\.com)[:/](.+?)(?:\.git)?\s/,
-  gitlab: /[@/](?:gitlab\.com)[:/](.+?)(?:\.git)?\s/,
-  bitbucket: /[@/](?:bitbucket\.org)[:/](.+?)(?:\.git)?\s/,
-  devAzure: /[@/](?:dev\.azure\.com)[:/](.+?)(?:\.git)?\s/
+var GIT_PROVIDERS = {
+  "github.com": "github",
+  "gitlab.com": "gitlab",
+  "bitbucket.org": "bitbucket",
+  "dev.azure.com": "devAzure"
 };
 function parseRepoName(remoteUrl) {
-  for (const [provider, regex] of Object.entries(GIT_PROVIDERS_REGEX)) {
-    const match = remoteUrl.match(regex);
-    if (match)
-      return { provider, name: match[1] };
+  const value = remoteUrl.trim();
+  try {
+    const url = new URL(value);
+    const provider = GIT_PROVIDERS[url.hostname.toLowerCase()];
+    const name = url.pathname.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "");
+    if (provider && name)
+      return { provider, name };
+  } catch {
+  }
+  const scpMatch = value.match(/^(?:[^@]+@)?([^:]+):\/?(.+)$/);
+  if (scpMatch) {
+    const provider = GIT_PROVIDERS[scpMatch[1].toLowerCase()];
+    const name = scpMatch[2].replace(/\/+$/, "").replace(/\.git$/, "");
+    if (provider && name)
+      return { provider, name };
   }
   return void 0;
 }

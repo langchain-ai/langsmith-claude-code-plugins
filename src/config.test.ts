@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { loadConfig } from "./config.js";
+import { loadConfig, parseRepoName } from "./config.js";
 import { execSync } from "node:child_process";
 
 vi.mock("node:child_process", { spy: true });
@@ -404,6 +404,24 @@ describe("loadConfig", () => {
       const config = loadConfig({ cwd: __dirname });
       expect(config.customMetadata).not.toHaveProperty("git_branch");
       expect(config.customMetadata).toMatchObject({ git_commit_sha: "deadbeef" });
+    });
+  });
+});
+
+describe("parseRepoName", () => {
+  it.each([
+    "https://username:password@github.com/langchain-ai/example.git",
+    "http://username:password@gitlab.com/langchain-ai/example.git",
+    "ssh://username:password@bitbucket.org/langchain-ai/example.git",
+    "ssh://username:password@github.com:2222/langchain-ai/example.git",
+  ])("excludes credentials from URL repository names: %s", (url) => {
+    expect(parseRepoName(url)?.name).toBe("langchain-ai/example");
+  });
+
+  it("parses SCP-style SSH remotes", () => {
+    expect(parseRepoName("git@github.com:langchain-ai/example.git")).toEqual({
+      provider: "github",
+      name: "langchain-ai/example",
     });
   });
 });
