@@ -12312,6 +12312,8 @@ function mergeAssistantChunks(chunks) {
     model: stripModelDateSuffix(first.message.model),
     usage: last.message.usage,
     // SSE usage is cumulative; last chunk has final totals.
+    // Top-level field; not every chunk (or CC version) carries it.
+    effort: chunks.find((c) => c.effort !== void 0)?.effort,
     startTime: first.timestamp,
     endTime: last.timestamp
   };
@@ -12385,6 +12387,7 @@ function groupIntoTurns(messages) {
         content: merged.content,
         model: merged.model,
         usage: merged.usage,
+        effort: merged.effort,
         startTime: merged.startTime,
         endTime: merged.endTime,
         toolCalls
@@ -12759,7 +12762,10 @@ async function traceTurn(options) {
             ls_provider: resolveProvider(llmCall.model),
             ls_model_name: llmCall.model,
             ls_invocation_params: {
-              model: llmCall.model
+              model: llmCall.model,
+              // Omitted by older CC versions and SDK-launched sessions.
+              ...llmCall.effort !== void 0 ? { effort: llmCall.effort } : {},
+              ...llmCall.usage?.service_tier !== void 0 ? { service_tier: llmCall.usage.service_tier } : {}
             },
             usage_metadata: buildUsageMetadata(llmCall.usage),
             ...llmCall.synthetic ? { synthetic: true } : {}
@@ -13150,7 +13156,7 @@ import { readFileSync as readFileSync5 } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-var LS_INTEGRATION_VERSION = true ? "0.2.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var LS_INTEGRATION_VERSION = true ? "0.2.4" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var PROVIDER_HOSTS = {
   github: "github.com",
   gitlab: "gitlab.com",
