@@ -26,6 +26,7 @@ import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
 import { codingAgentMetadata } from "../metadata.js";
+import { maybeRecordThreadLink } from "../thread-link.js";
 
 interface UserPromptSubmitHookInput {
   session_id: string;
@@ -286,6 +287,20 @@ async function main(): Promise<void> {
       },
     };
   });
+
+  // Best-effort: record this session's LangSmith thread link for the
+  // /langsmith-tracing:trace command. Once per session, timeout-guarded.
+  try {
+    await maybeRecordThreadLink({
+      cwd: input.cwd,
+      sessionId: input.session_id,
+      project: config.project,
+      apiBaseUrl: config.apiBaseUrl,
+      client,
+    });
+  } catch (err) {
+    debug(`Failed to record thread link: ${err}`);
+  }
 
   const duration = ((Date.now() - hookStartTime) / 1000).toFixed(1);
   debug(`UserPromptSubmit hook completed in ${duration}s`);
