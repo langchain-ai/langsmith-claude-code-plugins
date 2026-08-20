@@ -594,16 +594,16 @@ var require_dist = __commonJS({
   }
 });
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/regex.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/uuid/src/regex.js
 var regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/validate.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/uuid/src/validate.js
 function validate(uuid) {
   return typeof uuid === "string" && regex_default.test(uuid);
 }
 var validate_default = validate;
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/parse.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/uuid/src/parse.js
 function parse(uuid) {
   if (!validate_default(uuid)) {
     throw TypeError("Invalid UUID");
@@ -635,7 +635,7 @@ function parse(uuid) {
 }
 var parse_default = parse;
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/stringify.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/uuid/src/stringify.js
 var byteToHex = [];
 for (let i = 0; i < 256; ++i) {
   byteToHex.push((i + 256).toString(16).slice(1));
@@ -644,13 +644,13 @@ function unsafeStringify(arr2, offset = 0) {
   return (byteToHex[arr2[offset + 0]] + byteToHex[arr2[offset + 1]] + byteToHex[arr2[offset + 2]] + byteToHex[arr2[offset + 3]] + "-" + byteToHex[arr2[offset + 4]] + byteToHex[arr2[offset + 5]] + "-" + byteToHex[arr2[offset + 6]] + byteToHex[arr2[offset + 7]] + "-" + byteToHex[arr2[offset + 8]] + byteToHex[arr2[offset + 9]] + "-" + byteToHex[arr2[offset + 10]] + byteToHex[arr2[offset + 11]] + byteToHex[arr2[offset + 12]] + byteToHex[arr2[offset + 13]] + byteToHex[arr2[offset + 14]] + byteToHex[arr2[offset + 15]]).toLowerCase();
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/rng.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/uuid/src/rng.js
 var rnds8 = new Uint8Array(16);
 function rng() {
   return crypto.getRandomValues(rnds8);
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v4.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/uuid/src/v4.js
 function v4(options, buf, offset) {
   if (!buf && !options && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -679,7 +679,7 @@ function _v4(options, buf, offset) {
 }
 var v4_default = v4;
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/sha1.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/uuid/src/sha1.js
 function f(s, x, y, z) {
   switch (s) {
     case 0:
@@ -747,7 +747,7 @@ function sha1(bytes) {
 }
 var sha1_default = sha1;
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v35.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/uuid/src/v35.js
 function stringToBytes(str) {
   str = unescape(encodeURIComponent(str));
   const bytes = new Uint8Array(str.length);
@@ -786,7 +786,7 @@ function v35(version, hash, value, namespace, buf, offset) {
   return unsafeStringify(bytes);
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v5.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/uuid/src/v5.js
 function v5(value, namespace, buf, offset) {
   return v35(80, sha1_default, value, namespace, buf, offset);
 }
@@ -794,7 +794,7 @@ v5.DNS = DNS;
 v5.URL = URL2;
 var v5_default = v5;
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/uuid/src/v7.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/uuid/src/v7.js
 var _state = {};
 function v7(options, buf, offset) {
   let bytes;
@@ -856,7 +856,7 @@ function v7Bytes(rnds, msecs, seq, buf, offset = 0) {
 }
 var v7_default = v7;
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/experimental/otel/constants.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/experimental/otel/constants.js
 var GEN_AI_OPERATION_NAME = "gen_ai.operation.name";
 var GEN_AI_SYSTEM = "gen_ai.system";
 var GEN_AI_REQUEST_MODEL = "gen_ai.request.model";
@@ -892,12 +892,12 @@ var LANGSMITH_REQUEST_STREAMING = "langsmith.request.streaming";
 var LANGSMITH_REQUEST_HEADERS = "langsmith.request.headers";
 var LANGSMITH_USAGE_METADATA = "langsmith.usage_metadata";
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/env.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/env.js
 var globalEnv;
 var isBrowser = () => typeof window !== "undefined" && typeof window.document !== "undefined";
 var isWebWorker = () => typeof globalThis === "object" && globalThis.constructor && globalThis.constructor.name === "DedicatedWorkerGlobalScope";
 var isJsDom = () => typeof window !== "undefined" && window.name === "nodejs" || typeof navigator !== "undefined" && navigator.userAgent.includes("jsdom");
-var isDeno = () => typeof Deno !== "undefined";
+var isDeno = () => typeof globalThis.Deno !== "undefined";
 var isNode = () => typeof process !== "undefined" && typeof process.versions !== "undefined" && typeof process.versions.node !== "undefined" && !isDeno();
 var getEnv = () => {
   if (globalEnv) {
@@ -1054,7 +1054,7 @@ function resolveTracingMode(configValue) {
   return "langsmith";
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/otel.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/singletons/otel.js
 var MockTracer = class {
   constructor() {
     Object.defineProperty(this, "hasWarned", {
@@ -1160,7 +1160,7 @@ function getDefaultOTLPTracerComponents() {
   return OTELProviderSingleton.getDefaultOTLPTracerComponents();
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/experimental/otel/translator.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/experimental/otel/translator.js
 var WELL_KNOWN_OPERATION_NAMES = {
   llm: "chat",
   tool: "execute_tool",
@@ -1508,7 +1508,7 @@ var LangSmithToOTELTranslator = class {
   }
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/is-network-error/index.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/is-network-error/index.js
 var objectToString = Object.prototype.toString;
 var isError = (value) => objectToString.call(value) === "[object Error]";
 var errorMessages = /* @__PURE__ */ new Set([
@@ -1547,7 +1547,7 @@ function isNetworkError(error2) {
   return errorMessages.has(message);
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/p-retry/index.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/p-retry/index.js
 function validateRetries(retries) {
   if (typeof retries === "number") {
     if (retries < 0) {
@@ -1720,11 +1720,11 @@ async function pRetry(input, options = {}) {
   throw new Error("Retry attempts exhausted without throwing an error.");
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/p-queue.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/p-queue.js
 var import_p_queue = __toESM(require_dist(), 1);
 var PQueue = "default" in import_p_queue.default ? import_p_queue.default.default : import_p_queue.default;
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/async_caller.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/async_caller.js
 var STATUS_RETRYABLE = [
   408,
   // Request Timeout
@@ -1852,7 +1852,7 @@ var AsyncCaller = class {
   }
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/messages.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/messages.js
 function isLangChainMessage(message) {
   return typeof message?._getType === "function";
 }
@@ -1867,7 +1867,7 @@ function convertLangChainMessageToExample(message) {
   return converted;
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/uuid.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/utils/uuid.js
 var uuid4 = function() {
   const { crypto: crypto2 } = globalThis;
   if (crypto2?.randomUUID) {
@@ -1879,7 +1879,7 @@ var uuid4 = function() {
   return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (+c ^ randomByte() & 15 >> +c / 4).toString(16));
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/errors.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/errors.js
 function isAbortError(err) {
   return typeof err === "object" && err !== null && // Spec-compliant fetch implementations
   ("name" in err && err.name === "AbortError" || // Expo fetch
@@ -1910,7 +1910,7 @@ var castToError = (err) => {
   return new Error(err);
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/error.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/core/error.js
 var LangsmithError = class extends Error {
 };
 var APIError = class _APIError extends LangsmithError {
@@ -2017,7 +2017,7 @@ var RateLimitError = class extends APIError {
 var InternalServerError = class extends APIError {
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/values.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/utils/values.js
 var startsWithSchemeRegexp = /^[a-z][a-z0-9+.-]*:/i;
 var isAbsoluteURL = (url) => {
   return startsWithSchemeRegexp.test(url);
@@ -2057,13 +2057,13 @@ var safeJSON = (text) => {
   }
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/sleep.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/utils/sleep.js
 var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/version.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/version.js
 var VERSION = "0.0.1";
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/detect-platform.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/detect-platform.js
 function getDetectedPlatform() {
   if (typeof Deno !== "undefined" && Deno.build != null) {
     return "deno";
@@ -2189,7 +2189,7 @@ var getPlatformHeaders = () => {
   return _platformHeaders ??= getPlatformProperties();
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/shims.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/shims.js
 function getDefaultFetch() {
   if (typeof fetch !== "undefined") {
     return fetch;
@@ -2234,7 +2234,7 @@ async function CancelReadableStream(stream) {
   await cancelPromise;
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/request-options.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/request-options.js
 var FallbackEncoder = ({ headers, body }) => {
   return {
     bodyHeaders: {
@@ -2244,7 +2244,7 @@ var FallbackEncoder = ({ headers, body }) => {
   };
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/qs/formats.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/qs/formats.js
 var default_format = "RFC3986";
 var default_formatter = (v) => String(v);
 var formatters = {
@@ -2253,7 +2253,7 @@ var formatters = {
 };
 var RFC1738 = "RFC1738";
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/qs/utils.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/qs/utils.js
 var has = (obj, key) => (has = Object.hasOwn ?? Function.prototype.call.bind(Object.prototype.hasOwnProperty), has(obj, key));
 var hex_table = /* @__PURE__ */ (() => {
   const array = [];
@@ -2332,7 +2332,7 @@ function maybe_map(val, fn) {
   return fn(val);
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/qs/stringify.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/qs/stringify.js
 var array_prefix_generators = {
   brackets(prefix) {
     return String(prefix) + "[]";
@@ -2610,12 +2610,12 @@ function stringify(object, opts = {}) {
   return joined.length > 0 ? prefix + joined : "";
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/query.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/utils/query.js
 function stringifyQuery(query) {
-  return stringify(query, { arrayFormat: "comma" });
+  return stringify(query, { arrayFormat: "repeat" });
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/log.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/utils/log.js
 var levelNumbers = {
   off: 0,
   error: 200,
@@ -2688,7 +2688,7 @@ var formatRequestDetails = (details) => {
   return details;
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/parse.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/parse.js
 async function defaultParseResponse(client2, props) {
   const { response, requestLogID, retryOfRequestLogID, startTime } = props;
   const body = await (async () => {
@@ -2722,7 +2722,7 @@ async function defaultParseResponse(client2, props) {
   return body;
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/api-promise.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/core/api-promise.js
 var __classPrivateFieldSet = function(receiver, state, value, kind, f2) {
   if (kind === "m") throw new TypeError("Private method is not writable");
   if (kind === "a" && !f2) throw new TypeError("Private accessor was defined without a setter");
@@ -2810,7 +2810,7 @@ var APIPromise = class _APIPromise extends Promise {
 };
 _APIPromise_client = /* @__PURE__ */ new WeakMap();
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/pagination.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/core/pagination.js
 var __classPrivateFieldSet2 = function(receiver, state, value, kind, f2) {
   if (kind === "m") throw new TypeError("Private method is not writable");
   if (kind === "a" && !f2) throw new TypeError("Private accessor was defined without a setter");
@@ -2923,6 +2923,33 @@ var OffsetPaginationTopLevelArray = class extends AbstractPage {
     };
   }
 };
+var OffsetPaginationIssues = class extends AbstractPage {
+  constructor(client2, response, body, options) {
+    super(client2, response, body, options);
+    Object.defineProperty(this, "items", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    this.items = body || [];
+  }
+  getPaginatedItems() {
+    return this.items ?? [];
+  }
+  nextPageRequestOptions() {
+    const offset = this.options.query.offset ?? 0;
+    const length = this.getPaginatedItems().length;
+    const currentCount = offset + length;
+    return {
+      ...this.options,
+      query: {
+        ...maybeObj(this.options.query),
+        offset: currentCount
+      }
+    };
+  }
+};
 var OffsetPaginationOnlineEvaluators = class extends AbstractPage {
   constructor(client2, response, body, options) {
     super(client2, response, body, options);
@@ -2957,35 +2984,78 @@ var OffsetPaginationOnlineEvaluators = class extends AbstractPage {
     };
   }
 };
-var OffsetPaginationInsightsClusteringJobs = class extends AbstractPage {
+var ItemsCursorPostPagination = class extends AbstractPage {
   constructor(client2, response, body, options) {
     super(client2, response, body, options);
-    Object.defineProperty(this, "clustering_jobs", {
+    Object.defineProperty(this, "items", {
       enumerable: true,
       configurable: true,
       writable: true,
       value: void 0
     });
-    this.clustering_jobs = body.clustering_jobs || [];
+    Object.defineProperty(this, "next_cursor", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    this.items = body.items || [];
+    this.next_cursor = body.next_cursor || "";
   }
   getPaginatedItems() {
-    return this.clustering_jobs ?? [];
+    return this.items ?? [];
   }
   nextPageRequestOptions() {
-    const offset = this.options.query.offset ?? 0;
-    const length = this.getPaginatedItems().length;
-    const currentCount = offset + length;
+    const cursor = this.next_cursor;
+    if (!cursor) {
+      return null;
+    }
+    return {
+      ...this.options,
+      body: {
+        ...maybeObj(this.options.body),
+        cursor
+      }
+    };
+  }
+};
+var ItemsCursorGetPagination = class extends AbstractPage {
+  constructor(client2, response, body, options) {
+    super(client2, response, body, options);
+    Object.defineProperty(this, "items", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "next_cursor", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    this.items = body.items || [];
+    this.next_cursor = body.next_cursor || "";
+  }
+  getPaginatedItems() {
+    return this.items ?? [];
+  }
+  nextPageRequestOptions() {
+    const cursor = this.next_cursor;
+    if (!cursor) {
+      return null;
+    }
     return {
       ...this.options,
       query: {
         ...maybeObj(this.options.query),
-        offset: currentCount
+        cursor
       }
     };
   }
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/uploads.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/uploads.js
 var checkFileSupport = () => {
   if (typeof File === "undefined") {
     const { process: process2 } = globalThis;
@@ -3001,63 +3071,8 @@ function getName(value) {
   return (typeof value === "object" && value !== null && ("name" in value && value.name && String(value.name) || "url" in value && value.url && String(value.url) || "filename" in value && value.filename && String(value.filename) || "path" in value && value.path && String(value.path)) || "").split(/[\\/]/).pop() || void 0;
 }
 var isAsyncIterable = (value) => value != null && typeof value === "object" && typeof value[Symbol.asyncIterator] === "function";
-var multipartFormRequestOptions = async (opts, fetch2) => {
-  return { ...opts, body: await createForm(opts.body, fetch2) };
-};
-var supportsFormDataMap = /* @__PURE__ */ new WeakMap();
-function supportsFormData(fetchObject) {
-  const fetch2 = typeof fetchObject === "function" ? fetchObject : fetchObject.fetch;
-  const cached = supportsFormDataMap.get(fetch2);
-  if (cached)
-    return cached;
-  const promise = (async () => {
-    try {
-      const FetchResponse = "Response" in fetch2 ? fetch2.Response : (await fetch2("data:,")).constructor;
-      const data = new FormData();
-      if (data.toString() === await new FetchResponse(data).text()) {
-        return false;
-      }
-      return true;
-    } catch {
-      return true;
-    }
-  })();
-  supportsFormDataMap.set(fetch2, promise);
-  return promise;
-}
-var createForm = async (body, fetch2) => {
-  if (!await supportsFormData(fetch2)) {
-    throw new TypeError("The provided fetch function does not support file uploads with the current global FormData class.");
-  }
-  const form = new FormData();
-  await Promise.all(Object.entries(body || {}).map(([key, value]) => addFormValue(form, key, value)));
-  return form;
-};
-var isNamedBlob = (value) => value instanceof Blob && "name" in value;
-var addFormValue = async (form, key, value) => {
-  if (value === void 0)
-    return;
-  if (value == null) {
-    throw new TypeError(`Received null for "${key}"; to pass null in FormData, you must use the string 'null'`);
-  }
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    form.append(key, String(value));
-  } else if (value instanceof Response) {
-    form.append(key, makeFile([await value.blob()], getName(value)));
-  } else if (isAsyncIterable(value)) {
-    form.append(key, makeFile([await new Response(ReadableStreamFrom(value)).blob()], getName(value)));
-  } else if (isNamedBlob(value)) {
-    form.append(key, value, getName(value));
-  } else if (Array.isArray(value)) {
-    await Promise.all(value.map((entry) => addFormValue(form, key + "[]", entry)));
-  } else if (typeof value === "object") {
-    await Promise.all(Object.entries(value).map(([name, prop]) => addFormValue(form, `${key}[${name}]`, prop)));
-  } else {
-    throw new TypeError(`Invalid value given to form, expected a string, number, boolean, object, Array, File or Blob but got ${value} instead`);
-  }
-};
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/to-file.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/to-file.js
 var isBlobLike = (value) => value != null && typeof value === "object" && typeof value.size === "number" && typeof value.type === "string" && typeof value.text === "function" && typeof value.slice === "function" && typeof value.arrayBuffer === "function";
 var isFileLike = (value) => value != null && typeof value === "object" && typeof value.name === "string" && typeof value.lastModified === "number" && isBlobLike(value);
 var isResponseLike = (value) => value != null && typeof value === "object" && typeof value.url === "string" && typeof value.blob === "function";
@@ -3109,7 +3124,7 @@ function propsForError(value) {
   return `; props: [${props.map((p) => `"${p}"`).join(", ")}]`;
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/core/resource.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/core/resource.js
 var APIResource = class {
   constructor(client2) {
     Object.defineProperty(this, "_client", {
@@ -3122,7 +3137,7 @@ var APIResource = class {
   }
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/path.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/utils/path.js
 function encodeURIPath(str) {
   return str.replace(/[^A-Za-z0-9\-._~!$&'()*+,;=:@]+/g, encodeURIComponent);
 }
@@ -3177,273 +3192,327 @@ ${underline}`);
 };
 var path = /* @__PURE__ */ createPathTagFunction(encodeURIPath);
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/comparative.js
-var Comparative = class extends APIResource {
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/annotation-queues/items.js
+var Items = class extends APIResource {
   /**
-   * Create a comparative experiment.
+   * Add RUN or THREAD items to a single annotation queue. RUN items require run_id
+   * unless they are created from a suggested example. THREAD items require thread_id
+   * and project_id.
    */
-  create(body, options) {
-    return this._client.post("/api/v1/datasets/comparative", { body, ...options });
-  }
-  /**
-   * Delete a specific comparative experiment.
-   */
-  delete(comparativeExperimentID, options) {
-    return this._client.delete(path`/api/v1/datasets/comparative/${comparativeExperimentID}`, options);
-  }
-};
-
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/experiments.js
-var Experiments = class extends APIResource {
-  /**
-   * Stream grouped and aggregated experiments.
-   */
-  grouped(datasetID, body, options) {
-    return this._client.post(path`/api/v1/datasets/${datasetID}/experiments/grouped`, { body, ...options });
-  }
-};
-
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/group.js
-var Group = class extends APIResource {
-  /**
-   * Fetch examples for a dataset, and fetch the runs for each example if they are
-   * associated with the given session_ids.
-   */
-  runs(datasetID, body, options) {
-    return this._client.post(path`/api/v1/datasets/${datasetID}/group/runs`, { body, ...options });
-  }
-};
-
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/runs.js
-var Runs = class extends APIResource {
-  /**
-   * Fetch examples for a dataset, and fetch the runs for each example if they are
-   * associated with the given session_ids.
-   */
-  create(datasetID, params, options) {
-    const { format, ...body } = params;
-    return this._client.post(path`/api/v1/datasets/${datasetID}/runs`, {
-      query: { format },
+  create(queueID, params, options) {
+    const { extend_trace_retention, ...body } = params;
+    return this._client.post(path`/api/v1/platform/annotation-queues/${queueID}/items`, {
+      query: { extend_trace_retention },
       body,
       ...options
     });
   }
   /**
-   * Fetch the number of regressions/improvements for each example in a dataset,
-   * between sessions[0] and sessions[1].
+   * Partially update mutable timestamps (added_at, last_reviewed_time) for a RUN or
+   * THREAD annotation queue item. Omit a field, or pass JSON null, to leave it
+   * unchanged.
    */
-  delta(datasetID, body, options) {
-    return this._client.post(path`/api/v1/datasets/${datasetID}/runs/delta`, { body, ...options });
-  }
-};
-
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/share.js
-var Share = class extends APIResource {
-  /**
-   * Share a dataset.
-   */
-  create(datasetID, params = {}, options) {
-    const { share_projects } = params ?? {};
-    return this._client.put(path`/api/v1/datasets/${datasetID}/share`, {
-      query: { share_projects },
+  update(itemID, params, options) {
+    const { queue_id, ...body } = params;
+    return this._client.patch(path`/api/v1/platform/annotation-queues/${queue_id}/items/${itemID}`, {
+      body,
       ...options
     });
   }
   /**
-   * Get the state of sharing a dataset
+   * List RUN and THREAD items in a single annotation queue for one review status
+   * section, with opaque cursor pagination. Optional item_type=RUN|THREAD filters
+   * the page. direction=backward returns items before the supplied cursor. The
+   * response contains item metadata only, not expanded run or thread payloads.
+   * status=archived returns items whose queue review requirements have been
+   * satisfied, not merely items the caller personally marked completed.
    */
-  retrieve(datasetID, options) {
-    return this._client.get(path`/api/v1/datasets/${datasetID}/share`, options);
+  list(queueID, query, options) {
+    return this._client.getAPIList(path`/api/v1/platform/annotation-queues/${queueID}/items`, ItemsCursorGetPagination, { query, ...options });
   }
   /**
-   * Unshare a dataset.
+   * Log the caller's reviewer status for a RUN or THREAD annotation queue item. A
+   * null status re-shows the item for this reviewer.
    */
-  deleteAll(datasetID, options) {
-    return this._client.delete(path`/api/v1/datasets/${datasetID}/share`, options);
+  createStatus(queueItemID, body, options) {
+    return this._client.post(path`/api/v1/platform/annotation-queues/items/${queueItemID}/status`, {
+      body,
+      ...options
+    });
+  }
+  /**
+   * Remove RUN or THREAD items from a single annotation queue by item ID.
+   */
+  deleteAll(queueID, body, options) {
+    return this._client.post(path`/api/v1/platform/annotation-queues/${queueID}/items/delete`, {
+      body,
+      ...options
+    });
+  }
+  /**
+   * Returns the number of annotation queue items for the requested reviewer-specific
+   * or archived bucket.
+   */
+  retrieveCount(queueID, query, options) {
+    return this._client.get(path`/api/v1/platform/annotation-queues/${queueID}/items/count`, {
+      query,
+      ...options
+    });
+  }
+  /**
+   * Resolve a RUN or THREAD item to its current review section and zero-based
+   * position for deep linking.
+   */
+  retrievePlacement(itemID, params, options) {
+    const { queue_id } = params;
+    return this._client.get(path`/api/v1/platform/annotation-queues/${queue_id}/items/${itemID}/placement`, options);
   }
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/splits.js
-var Splits = class extends APIResource {
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/annotation-queues/runs.js
+var Runs = class extends APIResource {
   /**
-   * Update Dataset Splits
+   * Add Runs To Annotation Queue
+   *
+   * @deprecated Deprecated: use the annotation queue items create endpoint (POST /api/v1/platform/annotation-queues/{queue_id}/items) instead. Will be removed after Jan 31, 2027.
    */
-  create(datasetID, body, options) {
-    return this._client.put(path`/api/v1/datasets/${datasetID}/splits`, { body, ...options });
+  create(queueID, params, options) {
+    const { body, extend_trace_retention } = params;
+    return this._client.post(path`/api/v1/annotation-queues/${queueID}/runs`, {
+      query: { extend_trace_retention },
+      body,
+      ...options
+    });
   }
   /**
-   * Get Dataset Splits
+   * Update Run In Annotation Queue
+   *
+   * @deprecated Deprecated: use the annotation queue items update method (PATCH /api/v1/platform/annotation-queues/{queue_id}/items/{item_id}) instead. Will be removed after Jan 31, 2027.
    */
-  retrieve(datasetID, query = {}, options) {
-    return this._client.get(path`/api/v1/datasets/${datasetID}/splits`, { query, ...options });
+  update(queueRunID, params, options) {
+    const { queue_id, ...body } = params;
+    return this._client.patch(path`/api/v1/annotation-queues/${queue_id}/runs/${queueRunID}`, {
+      body,
+      ...options
+    });
+  }
+  /**
+   * Get Runs From Annotation Queue
+   *
+   * @deprecated Deprecated: use the annotation queue items list method (GET /api/v1/platform/annotation-queues/{queue_id}/items) instead. Will be removed after Jan 31, 2027.
+   */
+  list(queueID, query = {}, options) {
+    return this._client.get(path`/api/v1/annotation-queues/${queueID}/runs`, { query, ...options });
+  }
+  /**
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @deprecated Deprecated: use the annotation queue items create endpoint (POST /api/v1/platform/annotation-queues/{queue_id}/items) instead. Will be removed after Jan 31, 2027.
+   */
+  createByKey(queueID, params, options) {
+    const { body, extend_trace_retention } = params;
+    return this._client.post(path`/api/v1/annotation-queues/${queueID}/runs/by-key`, {
+      query: { extend_trace_retention },
+      body,
+      ...options
+    });
+  }
+  /**
+   * Delete Runs From Annotation Queue
+   *
+   * @deprecated Deprecated: use the annotation queue items delete_all method (POST /api/v1/platform/annotation-queues/{queue_id}/items/delete) instead. Will be removed after Jan 31, 2027.
+   */
+  deleteAll(queueID, body, options) {
+    return this._client.post(path`/api/v1/annotation-queues/${queueID}/runs/delete`, { body, ...options });
+  }
+  /**
+   * Delete Run From Annotation Queue
+   *
+   * @deprecated Deprecated: use the annotation queue items delete_all method (POST /api/v1/platform/annotation-queues/{queue_id}/items/delete) with the item ID instead. Will be removed after Jan 31, 2027.
+   */
+  deleteQueue(queueRunID, params, options) {
+    const { queue_id } = params;
+    return this._client.delete(path`/api/v1/annotation-queues/${queue_id}/runs/${queueRunID}`, options);
   }
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/versions.js
-var Versions = class extends APIResource {
-  /**
-   * Get dataset versions.
-   */
-  list(datasetID, query = {}, options) {
-    return this._client.getAPIList(path`/api/v1/datasets/${datasetID}/versions`, OffsetPaginationTopLevelArray, { query, ...options });
-  }
-  /**
-   * Get diff between two dataset versions.
-   */
-  retrieveDiff(datasetID, query, options) {
-    return this._client.get(path`/api/v1/datasets/${datasetID}/versions/diff`, { query, ...options });
-  }
-};
-
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/datasets.js
-var Datasets = class extends APIResource {
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/annotation-queues/annotation-queues.js
+var AnnotationQueues = class extends APIResource {
   constructor() {
     super(...arguments);
-    Object.defineProperty(this, "versions", {
-      enumerable: true,
-      configurable: true,
-      writable: true,
-      value: new Versions(this._client)
-    });
     Object.defineProperty(this, "runs", {
       enumerable: true,
       configurable: true,
       writable: true,
       value: new Runs(this._client)
     });
-    Object.defineProperty(this, "group", {
+    Object.defineProperty(this, "items", {
       enumerable: true,
       configurable: true,
       writable: true,
-      value: new Group(this._client)
-    });
-    Object.defineProperty(this, "experiments", {
-      enumerable: true,
-      configurable: true,
-      writable: true,
-      value: new Experiments(this._client)
-    });
-    Object.defineProperty(this, "share", {
-      enumerable: true,
-      configurable: true,
-      writable: true,
-      value: new Share(this._client)
-    });
-    Object.defineProperty(this, "comparative", {
-      enumerable: true,
-      configurable: true,
-      writable: true,
-      value: new Comparative(this._client)
-    });
-    Object.defineProperty(this, "splits", {
-      enumerable: true,
-      configurable: true,
-      writable: true,
-      value: new Splits(this._client)
+      value: new Items(this._client)
     });
   }
   /**
-   * Create a new dataset.
+   * Get Annotation Queue
    */
-  create(body, options) {
-    return this._client.post("/api/v1/datasets", { body, ...options });
+  retrieve(queueID, options) {
+    return this._client.get(path`/api/v1/annotation-queues/${queueID}`, options);
   }
   /**
-   * Get a specific dataset.
+   * Update Annotation Queue
    */
-  retrieve(datasetID, options) {
-    return this._client.get(path`/api/v1/datasets/${datasetID}`, options);
+  update(queueID, body, options) {
+    return this._client.patch(path`/api/v1/annotation-queues/${queueID}`, { body, ...options });
   }
   /**
-   * Update a specific dataset.
+   * Delete Annotation Queue
    */
-  update(datasetID, body, options) {
-    return this._client.patch(path`/api/v1/datasets/${datasetID}`, { body, ...options });
+  delete(queueID, options) {
+    return this._client.delete(path`/api/v1/annotation-queues/${queueID}`, options);
   }
   /**
-   * Get all datasets by query params and owner.
+   * Create Annotation Queue
    */
-  list(params = {}, options) {
-    const { datatype, ...query } = params ?? {};
-    return this._client.getAPIList("/api/v1/datasets", OffsetPaginationTopLevelArray, {
-      query: { data_type: datatype, ...query },
+  annotationQueues(body, options) {
+    return this._client.post("/api/v1/annotation-queues", { body, ...options });
+  }
+  /**
+   * Create Identity Annotation Queue Run Status
+   *
+   * @deprecated Deprecated: use the annotation queue items create_status method (POST /api/v1/platform/annotation-queues/items/{queue_item_id}/status) instead. Will be removed after Jan 31, 2027.
+   */
+  createRunStatus(annotationQueueRunID, body, options) {
+    return this._client.post(path`/api/v1/annotation-queues/status/${annotationQueueRunID}`, {
+      body,
       ...options
     });
   }
   /**
-   * Delete a specific dataset.
+   * Export Annotation Queue Archived Runs
    */
-  delete(datasetID, options) {
-    return this._client.delete(path`/api/v1/datasets/${datasetID}`, options);
+  export(queueID, body, options) {
+    return this._client.post(path`/api/v1/annotation-queues/${queueID}/export`, { body, ...options });
   }
   /**
-   * Clone a dataset.
+   * Populate annotation queue with runs from an experiment.
    */
-  clone(body, options) {
-    return this._client.post("/api/v1/datasets/clone", { body, ...options });
+  populate(body, options) {
+    return this._client.post("/api/v1/annotation-queues/populate", { body, ...options });
   }
   /**
-   * Download a dataset as CSV format.
+   * Get Annotation Queues
    */
-  retrieveCsv(datasetID, query = {}, options) {
-    return this._client.get(path`/api/v1/datasets/${datasetID}/csv`, { query, ...options });
+  retrieveAnnotationQueues(query = {}, options) {
+    return this._client.getAPIList("/api/v1/annotation-queues", OffsetPaginationTopLevelArray, { query, ...options });
   }
   /**
-   * Download a dataset as CSV format.
+   * Get Annotation Queues For Run
    */
-  retrieveJSONL(datasetID, query = {}, options) {
-    return this._client.get(path`/api/v1/datasets/${datasetID}/jsonl`, { query, ...options });
+  retrieveQueues(runID, options) {
+    return this._client.get(path`/api/v1/annotation-queues/${runID}/queues`, options);
   }
   /**
-   * Download a dataset as OpenAI Evals Jsonl format.
+   * Get a run from an annotation queue
+   *
+   * @deprecated Deprecated: use the annotation queue items list and retrieve_placement methods instead, which call GET /api/v1/platform/annotation-queues/{queue_id}/items and GET /api/v1/platform/annotation-queues/{queue_id}/items/{item_id}/placement. Will be removed after Jan 31, 2027.
    */
-  retrieveOpenAI(datasetID, query = {}, options) {
-    return this._client.get(path`/api/v1/datasets/${datasetID}/openai`, { query, ...options });
+  retrieveRun(index, params, options) {
+    const { queue_id, ...query } = params;
+    return this._client.get(path`/api/v1/annotation-queues/${queue_id}/run/${index}`, { query, ...options });
   }
   /**
-   * Download a dataset as OpenAI Jsonl format.
+   * Get Size From Annotation Queue
+   *
+   * @deprecated Deprecated: use the annotation queue items retrieve_count method (GET /api/v1/platform/annotation-queues/{queue_id}/items/count) with the desired status instead. Will be removed after Jan 31, 2027.
    */
-  retrieveOpenAIFt(datasetID, query = {}, options) {
-    return this._client.get(path`/api/v1/datasets/${datasetID}/openai_ft`, { query, ...options });
+  retrieveSize(queueID, query = {}, options) {
+    return this._client.get(path`/api/v1/annotation-queues/${queueID}/size`, { query, ...options });
   }
   /**
-   * Get dataset version by as_of or exact tag.
+   * Get Total Archived From Annotation Queue
+   *
+   * @deprecated Deprecated: use the annotation queue items retrieve_count method (GET /api/v1/platform/annotation-queues/{queue_id}/items/count?status=archived) instead. Will be removed after Jan 31, 2027.
    */
-  retrieveVersion(datasetID, query = {}, options) {
-    return this._client.get(path`/api/v1/datasets/${datasetID}/version`, { query, ...options });
+  retrieveTotalArchived(queueID, query = {}, options) {
+    return this._client.get(path`/api/v1/annotation-queues/${queueID}/total_archived`, { query, ...options });
   }
   /**
-   * Set a tag on a dataset version.
+   * Get Total Size From Annotation Queue
+   *
+   * @deprecated Deprecated: use the annotation queue items retrieve_count method (GET /api/v1/platform/annotation-queues/{queue_id}/items/count?status=all) instead. Will be removed after Jan 31, 2027.
    */
-  updateTags(datasetID, body, options) {
-    return this._client.put(path`/api/v1/datasets/${datasetID}/tags`, { body, ...options });
-  }
-  /**
-   * Create a new dataset from a CSV or JSONL file.
-   */
-  upload(body, options) {
-    return this._client.post("/api/v1/datasets/upload", multipartFormRequestOptions({ body, ...options }, this._client));
+  retrieveTotalSize(queueID, options) {
+    return this._client.get(path`/api/v1/annotation-queues/${queueID}/total_size`, options);
   }
 };
-Datasets.Versions = Versions;
-Datasets.Runs = Runs;
-Datasets.Group = Group;
-Datasets.Experiments = Experiments;
-Datasets.Share = Share;
-Datasets.Comparative = Comparative;
-Datasets.Splits = Splits;
+AnnotationQueues.Runs = Runs;
+AnnotationQueues.Items = Items;
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/info.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/experiment-runs.js
+var ExperimentRuns = class extends APIResource {
+  /**
+   * Returns a paginated page of dataset examples with runs from the requested
+   * experiments. Response uses the canonical `{items, next_cursor}` envelope.
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   */
+  query(datasetID, body, options) {
+    return this._client.getAPIList(path`/api/v2/datasets/${datasetID}/experiment-runs`, ItemsCursorPostPagination, { body, method: "post", ...options });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/datasets/datasets.js
+var Datasets = class extends APIResource {
+  constructor() {
+    super(...arguments);
+    Object.defineProperty(this, "experimentRuns", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new ExperimentRuns(this._client)
+    });
+  }
+};
+Datasets.ExperimentRuns = ExperimentRuns;
+
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/info.js
 var Info = class extends APIResource {
   /**
-   * Get information about the current deployment of LangSmith.
+   * Returns information about the current LangSmith deployment: version, instance
+   * feature flags, batch-ingest limits, and max SDK versions. Unauthenticated by
+   * default; set FF_INFO_ENDPOINT_AUTH_REQUIRED=true to require auth.
    */
   list(options) {
     return this._client.get("/api/v1/info", options);
   }
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/headers.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/issues.js
+var Issues = class extends APIResource {
+  /**
+   * **Beta:** This endpoint is in active development and may change without notice.
+   *
+   * Returns one issue for the authenticated tenant.
+   */
+  retrieve(id, options) {
+    return this._client.get(path`/api/v1/platform/issues/${id}`, options);
+  }
+  /**
+   * **Beta:** This endpoint is in active development and may change without notice.
+   *
+   * Returns issues for the authenticated tenant, optionally filtered by session,
+   * status, severity, tag, or last modified time.
+   */
+  list(query = {}, options) {
+    return this._client.getAPIList("/api/v1/platform/issues", OffsetPaginationIssues, {
+      query,
+      ...options
+    });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/headers.js
 var brand_privateNullableHeaders = /* @__PURE__ */ Symbol("brand.privateNullableHeaders");
 function* iterateHeaders(headers) {
   if (!headers)
@@ -3506,32 +3575,32 @@ var buildHeaders = (newHeaders) => {
   return { [brand_privateNullableHeaders]: true, values: targetHeaders, nulls: nullHeaders };
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/online-evaluators.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/online-evaluators.js
 var OnlineEvaluators = class extends APIResource {
   /**
    * Create a new LLM or code evaluator for the current workspace.
    */
   create(body, options) {
-    return this._client.post("/v1/platform/evaluators", { body, ...options });
+    return this._client.post("/api/v1/platform/evaluators", { body, ...options });
   }
   /**
    * Retrieve a single evaluator by its ID.
    */
   retrieve(evaluatorID, options) {
-    return this._client.get(path`/v1/platform/evaluators/${evaluatorID}`, options);
+    return this._client.get(path`/api/v1/platform/evaluators/${evaluatorID}`, options);
   }
   /**
    * Update an existing evaluator's name, LLM configuration, or code configuration.
    */
   update(evaluatorID, body, options) {
-    return this._client.patch(path`/v1/platform/evaluators/${evaluatorID}`, { body, ...options });
+    return this._client.patch(path`/api/v1/platform/evaluators/${evaluatorID}`, { body, ...options });
   }
   /**
    * List evaluators for the current workspace, with optional filtering by type,
    * name, tag, feedback key, or resource ID.
    */
   list(query = {}, options) {
-    return this._client.getAPIList("/v1/platform/evaluators", OffsetPaginationOnlineEvaluators, { query, ...options });
+    return this._client.getAPIList("/api/v1/platform/evaluators", OffsetPaginationOnlineEvaluators, { query, ...options });
   }
   /**
    * Delete an evaluator. When delete_run_rules is true, all run rules referencing
@@ -3541,7 +3610,7 @@ var OnlineEvaluators = class extends APIResource {
    */
   delete(evaluatorID, params = {}, options) {
     const { delete_run_rules } = params ?? {};
-    return this._client.delete(path`/v1/platform/evaluators/${evaluatorID}`, {
+    return this._client.delete(path`/api/v1/platform/evaluators/${evaluatorID}`, {
       query: { delete_run_rules },
       ...options,
       headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
@@ -3552,7 +3621,7 @@ var OnlineEvaluators = class extends APIResource {
    */
   bulkDelete(params, options) {
     const { evaluator_ids, delete_run_rules } = params;
-    return this._client.delete("/v1/platform/evaluators", {
+    return this._client.delete("/api/v1/platform/evaluators", {
       query: { evaluator_ids, delete_run_rules },
       ...options
     });
@@ -3564,124 +3633,500 @@ var OnlineEvaluators = class extends APIResource {
    * be supplied with group_by to narrow listing aggregations.
    */
   spend(query, options) {
-    return this._client.get("/v1/platform/evaluators/spend", { query, ...options });
+    return this._client.get("/api/v1/platform/evaluators/spend", { query, ...options });
   }
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/sessions/insights.js
-var Insights = class extends APIResource {
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/public/runs.js
+var Runs2 = class extends APIResource {
   /**
-   * Create an insights job.
+   * Returns one run within the trace identified by the share token. The request
+   * supplies only the run ID and that run's exact start_time coordinate.
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @example
+   * ```ts
+   * const run = await client.public.runs.retrieve(
+   *   '182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e',
+   *   {
+   *     share_token: '182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e',
+   *     selects: ['string'],
+   *     start_time: '2019-12-27T18:11:19.117Z',
+   *   },
+   * );
+   * ```
    */
-  create(sessionID, body, options) {
-    return this._client.post(path`/api/v1/sessions/${sessionID}/insights`, { body, ...options });
-  }
-  /**
-   * Update a session cluster job.
-   */
-  update(jobID, params, options) {
-    const { session_id, ...body } = params;
-    return this._client.patch(path`/api/v1/sessions/${session_id}/insights/${jobID}`, { body, ...options });
-  }
-  /**
-   * Get all clusters for a session.
-   */
-  list(sessionID, query = {}, options) {
-    return this._client.getAPIList(path`/api/v1/sessions/${sessionID}/insights`, OffsetPaginationInsightsClusteringJobs, { query, ...options });
-  }
-  /**
-   * Delete a session cluster job.
-   */
-  delete(jobID, params, options) {
-    const { session_id } = params;
-    return this._client.delete(path`/api/v1/sessions/${session_id}/insights/${jobID}`, options);
-  }
-  /**
-   * Get a specific cluster job for a session.
-   */
-  retrieveJob(jobID, params, options) {
-    const { session_id } = params;
-    return this._client.get(path`/api/v1/sessions/${session_id}/insights/${jobID}`, options);
-  }
-  /**
-   * Get all runs for a cluster job, optionally filtered by cluster.
-   */
-  retrieveRuns(jobID, params, options) {
-    const { session_id, ...query } = params;
-    return this._client.get(path`/api/v1/sessions/${session_id}/insights/${jobID}/runs`, {
+  retrieve(runID, params, options) {
+    const { share_token, Accept, ...query } = params;
+    return this._client.get(path`/api/v2/public/${share_token}/run/${runID}`, {
       query,
+      ...options,
+      headers: buildHeaders([{ ...Accept != null ? { Accept } : void 0 }, options?.headers])
+    });
+  }
+  /**
+   * Returns all runs within the trace identified by the share token. The share token
+   * supplies the tenant, project, and trace scope.
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @example
+   * ```ts
+   * const response = await client.public.runs.query(
+   *   '182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e',
+   * );
+   * ```
+   */
+  query(shareToken, params, options) {
+    const { Accept, ...body } = params;
+    return this._client.post(path`/api/v2/public/${shareToken}/runs/query`, {
+      body,
+      ...options,
+      headers: buildHeaders([{ ...Accept != null ? { Accept } : void 0 }, options?.headers])
+    });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/public/public.js
+var Public = class extends APIResource {
+  constructor() {
+    super(...arguments);
+    Object.defineProperty(this, "runs", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Runs2(this._client)
+    });
+  }
+};
+Public.Runs = Runs2;
+
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/runs/share.js
+var Share = class extends APIResource {
+  /**
+   * Creates or returns a share token for a run. Child runs share their trace root.
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @example
+   * ```ts
+   * const share = await client.runs.share.create(
+   *   '182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e',
+   * );
+   * ```
+   */
+  create(runID, body, options) {
+    return this._client.post(path`/api/v2/runs/${runID}/share`, { body, ...options });
+  }
+  /**
+   * Deletes the share token for the trace identified by trace_id and session_id.
+   * Idempotent: returns 204 whether or not a share token existed.
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @example
+   * ```ts
+   * await client.runs.share.delete(
+   *   '182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e',
+   * );
+   * ```
+   */
+  delete(traceID, body, options) {
+    return this._client.delete(path`/api/v2/runs/${traceID}/share`, {
+      body,
+      ...options,
+      headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
+    });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/runs/runs.js
+var Runs3 = class extends APIResource {
+  constructor() {
+    super(...arguments);
+    Object.defineProperty(this, "share", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Share(this._client)
+    });
+    Object.defineProperty(this, "retrieve", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: this.retrieveV2
+    });
+    Object.defineProperty(this, "query", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: this.queryV2
+    });
+  }
+  /**
+   * Returns the URL to view a specific run in the LangSmith UI. The caller must
+   * supply the run's project_id and trace_id as query parameters; start_time is
+   * optional.
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @example
+   * ```ts
+   * const response = await client.runs.getURL(
+   *   '182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e',
+   *   { project_id: 'project_id', trace_id: 'trace_id' },
+   * );
+   * ```
+   */
+  getURL(runID, query, options) {
+    return this._client.get(path`/api/v2/runs/${runID}/url`, { query, ...options });
+  }
+  /**
+   * Returns a paginated list of runs for the given projects within min/max
+   * start_time. Supports filters, cursor pagination, and `selects` to select fields
+   * to return.
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @example
+   * ```ts
+   * // Automatically fetches more pages as needed.
+   * for await (const run of client.runs.queryV2()) {
+   *   // ...
+   * }
+   * ```
+   */
+  queryV2(params, options) {
+    const { Accept, ...body } = params;
+    return this._client.getAPIList("/api/v2/runs/query", ItemsCursorPostPagination, {
+      body,
+      method: "post",
+      ...options,
+      headers: buildHeaders([{ ...Accept != null ? { Accept } : void 0 }, options?.headers])
+    });
+  }
+  /**
+   * Returns one run by ID for the given session. Use the `selects` query parameter
+   * (repeatable) to select fields to return.
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @example
+   * ```ts
+   * const run = await client.runs.retrieveV2(
+   *   '182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e',
+   *   { project_id: '182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e' },
+   * );
+   * ```
+   */
+  retrieveV2(runID, params, options) {
+    const { Accept, ...query } = params;
+    return this._client.get(path`/api/v2/runs/${runID}`, {
+      query,
+      ...options,
+      headers: buildHeaders([{ ...Accept != null ? { Accept } : void 0 }, options?.headers])
+    });
+  }
+};
+Runs3.Share = Share;
+
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/sandboxes/boxes.js
+var Boxes = class extends APIResource {
+  /**
+   * Create a new sandbox from a snapshot. Provide at most one of `snapshot_id` or
+   * `snapshot_name`; if neither is provided, the server uses the default snapshot.
+   */
+  create(body, options) {
+    return this._client.post("/api/v2/sandboxes/boxes", { body, ...options });
+  }
+  /**
+   * Retrieve a sandbox by name. Stale provisioning sandboxes are auto-failed.
+   */
+  retrieve(name, options) {
+    return this._client.get(path`/api/v2/sandboxes/boxes/${name}`, options);
+  }
+  /**
+   * Update a sandbox's display name. The name must be unique within the tenant.
+   */
+  update(name, body, options) {
+    return this._client.patch(path`/api/v2/sandboxes/boxes/${name}`, { body, ...options });
+  }
+  /**
+   * List sandboxes for the authenticated tenant, with optional filtering, sorting,
+   * and pagination.
+   */
+  list(query = {}, options) {
+    return this._client.get("/api/v2/sandboxes/boxes", { query, ...options });
+  }
+  /**
+   * Delete a sandbox by name or UUID. Tears down the sandbox runtime and removes the
+   * DB record.
+   */
+  delete(name, options) {
+    return this._client.delete(path`/api/v2/sandboxes/boxes/${name}`, {
+      ...options,
+      headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
+    });
+  }
+  /**
+   * Create a snapshot by capturing the current state of a sandbox or promoting an
+   * existing checkpoint.
+   */
+  createSnapshot(name, body, options) {
+    return this._client.post(path`/api/v2/sandboxes/boxes/${name}/snapshot`, { body, ...options });
+  }
+  /**
+   * Create a short-lived JWT for accessing an HTTP service running on a specific
+   * port inside a sandbox. Returns a browser_url (sets auth cookie via redirect), a
+   * service_url (for use with the X-Langsmith-Sandbox-Service-Token header), the raw
+   * token, and its expiry.
+   */
+  generateServiceURL(name, body, options) {
+    return this._client.post(path`/api/v2/sandboxes/boxes/${name}/service-url`, { body, ...options });
+  }
+  /**
+   * Retrieve the lightweight status of a sandbox for polling.
+   */
+  getStatus(name, options) {
+    return this._client.get(path`/api/v2/sandboxes/boxes/${name}/status`, options);
+  }
+  /**
+   * Start a stopped or failed sandbox. This endpoint is not idempotent.
+   */
+  start(name, options) {
+    return this._client.post(path`/api/v2/sandboxes/boxes/${name}/start`, options);
+  }
+  /**
+   * Stop a ready sandbox. This endpoint is not idempotent; the filesystem is
+   * preserved for later restart.
+   */
+  stop(name, options) {
+    return this._client.post(path`/api/v2/sandboxes/boxes/${name}/stop`, {
+      ...options,
+      headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
+    });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/sandboxes/registries.js
+var Registries = class extends APIResource {
+  /**
+   * Create a sandbox registry for pulling private images.
+   */
+  create(body, options) {
+    return this._client.post("/api/v2/sandboxes/registries", { body, ...options });
+  }
+  /**
+   * Get a sandbox registry by name.
+   */
+  retrieve(name, options) {
+    return this._client.get(path`/api/v2/sandboxes/registries/${name}`, options);
+  }
+  /**
+   * Update a sandbox registry's name and/or credentials.
+   */
+  update(name, body, options) {
+    return this._client.patch(path`/api/v2/sandboxes/registries/${name}`, { body, ...options });
+  }
+  /**
+   * List sandbox registries for pulling private images.
+   */
+  list(query = {}, options) {
+    return this._client.get("/api/v2/sandboxes/registries", { query, ...options });
+  }
+  /**
+   * Delete a sandbox registry by name.
+   */
+  delete(name, options) {
+    return this._client.delete(path`/api/v2/sandboxes/registries/${name}`, {
+      ...options,
+      headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
+    });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/sandboxes/snapshots.js
+var Snapshots = class extends APIResource {
+  /**
+   * Create a snapshot from a Docker image (async build).
+   */
+  create(body, options) {
+    return this._client.post("/api/v2/sandboxes/snapshots", { body, ...options });
+  }
+  /**
+   * Get a sandbox snapshot by ID.
+   */
+  retrieve(snapshotID, options) {
+    return this._client.get(path`/api/v2/sandboxes/snapshots/${snapshotID}`, options);
+  }
+  /**
+   * List sandbox snapshots for the authenticated tenant, with optional filtering,
+   * sorting, and pagination.
+   */
+  list(query = {}, options) {
+    return this._client.get("/api/v2/sandboxes/snapshots", { query, ...options });
+  }
+  /**
+   * Delete a snapshot by ID. The underlying storage is reclaimed asynchronously.
+   */
+  delete(snapshotID, options) {
+    return this._client.delete(path`/api/v2/sandboxes/snapshots/${snapshotID}`, {
+      ...options,
+      headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
+    });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/sandboxes/sandboxes.js
+var Sandboxes = class extends APIResource {
+  constructor() {
+    super(...arguments);
+    Object.defineProperty(this, "boxes", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Boxes(this._client)
+    });
+    Object.defineProperty(this, "registries", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Registries(this._client)
+    });
+    Object.defineProperty(this, "snapshots", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Snapshots(this._client)
+    });
+  }
+};
+Sandboxes.Boxes = Boxes;
+Sandboxes.Registries = Registries;
+Sandboxes.Snapshots = Snapshots;
+
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/threads.js
+var Threads = class extends APIResource {
+  /**
+   * Retrieve all traces belonging to a specific thread within a project.
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @example
+   * ```ts
+   * // Automatically fetches more pages as needed.
+   * for await (const threadTrace of client.threads.listTraces(
+   *   'thread_id',
+   *   { project_id: '182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e' },
+   * )) {
+   *   // ...
+   * }
+   * ```
+   */
+  listTraces(threadID, query, options) {
+    return this._client.getAPIList(path`/api/v2/threads/${threadID}/traces`, ItemsCursorGetPagination, { query, ...options });
+  }
+  /**
+   * Query threads within a project (session), with cursor-based pagination. Returns
+   * threads matching the given time range and optional filter.
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @example
+   * ```ts
+   * // Automatically fetches more pages as needed.
+   * for await (const thread of client.threads.query()) {
+   *   // ...
+   * }
+   * ```
+   */
+  query(body, options) {
+    return this._client.getAPIList("/api/v2/threads/query", ItemsCursorPostPagination, {
+      body,
+      method: "post",
+      ...options
+    });
+  }
+  /**
+   * Compute aggregate stats for a single thread (turn count, latency percentiles,
+   * token/cost sums, and detail breakdowns) within a project.
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @example
+   * ```ts
+   * const threadStats = await client.threads.stats(
+   *   'thread_id',
+   *   {
+   *     selects: ['TURNS'],
+   *     session_id: '182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e',
+   *   },
+   * );
+   * ```
+   */
+  stats(threadID, query, options) {
+    return this._client.get(path`/api/v2/threads/${threadID}/stats`, { query, ...options });
+  }
+};
+
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/resources/traces.js
+var Traces = class extends APIResource {
+  /**
+   * Returns runs for a trace ID within min/max start time. Optional `filter`;
+   * repeatable `selects` to select fields to return.
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @example
+   * ```ts
+   * const response = await client.traces.listRuns(
+   *   '182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e',
+   *   { project_id: '182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e' },
+   * );
+   * ```
+   */
+  listRuns(traceID, params, options) {
+    const { Accept, ...query } = params;
+    return this._client.get(path`/api/v2/traces/${traceID}/runs`, {
+      query,
+      ...options,
+      headers: buildHeaders([{ ...Accept != null ? { Accept } : void 0 }, options?.headers])
+    });
+  }
+  /**
+   * Returns a paginated list of traces (root runs) for a single tracing project.
+   * Each item carries the trace's root run plus optional trace-wide aggregates
+   * (`total_tokens`, `total_cost`, `first_token_time`) under `trace_aggregates`, so
+   * clients never have to merge by `trace_id`.
+   *
+   * Traces are scanned within a `start_time` window: `min_start_time` defaults to 24
+   * hours before the request, `max_start_time` defaults to the request time. Set
+   * either explicitly to widen or narrow the window.
+   *
+   * Supports filters (`trace_filter`, `tree_filter`), cursor pagination (`cursor`),
+   * and field projection (`selects`).
+   *
+   * Self-hosted deployments require LangSmith `v0.16` or later.
+   *
+   * @example
+   * ```ts
+   * // Automatically fetches more pages as needed.
+   * for await (const trace of client.traces.query()) {
+   *   // ...
+   * }
+   * ```
+   */
+  query(body, options) {
+    return this._client.getAPIList("/api/v2/traces/query", ItemsCursorPostPagination, {
+      body,
+      method: "post",
       ...options
     });
   }
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/resources/sessions/sessions.js
-var Sessions = class extends APIResource {
-  constructor() {
-    super(...arguments);
-    Object.defineProperty(this, "insights", {
-      enumerable: true,
-      configurable: true,
-      writable: true,
-      value: new Insights(this._client)
-    });
-  }
-  /**
-   * Create a new session.
-   */
-  create(params, options) {
-    const { upsert, ...body } = params;
-    return this._client.post("/api/v1/sessions", { query: { upsert }, body, ...options });
-  }
-  /**
-   * Get a specific session.
-   */
-  retrieve(sessionID, params = {}, options) {
-    const { accept, ...query } = params ?? {};
-    return this._client.get(path`/api/v1/sessions/${sessionID}`, {
-      query,
-      ...options,
-      headers: buildHeaders([{ ...accept != null ? { accept } : void 0 }, options?.headers])
-    });
-  }
-  /**
-   * Update a session.
-   */
-  update(sessionID, body, options) {
-    return this._client.patch(path`/api/v1/sessions/${sessionID}`, { body, ...options });
-  }
-  /**
-   * Get all sessions.
-   */
-  list(params = {}, options) {
-    const { accept, ...query } = params ?? {};
-    return this._client.getAPIList("/api/v1/sessions", OffsetPaginationTopLevelArray, {
-      query,
-      ...options,
-      headers: buildHeaders([{ ...accept != null ? { accept } : void 0 }, options?.headers])
-    });
-  }
-  /**
-   * Delete a specific session.
-   */
-  delete(sessionID, options) {
-    return this._client.delete(path`/api/v1/sessions/${sessionID}`, options);
-  }
-  /**
-   * Get a prebuilt dashboard for a tracing project.
-   */
-  dashboard(sessionID, params, options) {
-    const { accept, ...body } = params;
-    return this._client.post(path`/api/v1/sessions/${sessionID}/dashboard`, {
-      body,
-      ...options,
-      headers: buildHeaders([{ ...accept != null ? { accept } : void 0 }, options?.headers])
-    });
-  }
-};
-Sessions.Insights = Insights;
-
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/internal/utils/env.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/internal/utils/env.js
 var readEnv = (env) => {
   if (typeof globalThis.process !== "undefined") {
     return globalThis.process.env?.[env]?.trim() || void 0;
@@ -3692,7 +4137,7 @@ var readEnv = (env) => {
   return void 0;
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/_openapi_client/client.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/_openapi_client/client.js
 var __classPrivateFieldSet3 = function(receiver, state, value, kind, f2) {
   if (kind === "m") throw new TypeError("Private method is not writable");
   if (kind === "a" && !f2) throw new TypeError("Private accessor was defined without a setter");
@@ -3791,17 +4236,29 @@ var Langsmith = class {
       writable: true,
       value: void 0
     });
-    Object.defineProperty(this, "sessions", {
-      enumerable: true,
-      configurable: true,
-      writable: true,
-      value: new Sessions(this)
-    });
     Object.defineProperty(this, "datasets", {
       enumerable: true,
       configurable: true,
       writable: true,
       value: new Datasets(this)
+    });
+    Object.defineProperty(this, "runs", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Runs3(this)
+    });
+    Object.defineProperty(this, "threads", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Threads(this)
+    });
+    Object.defineProperty(this, "traces", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Traces(this)
     });
     Object.defineProperty(this, "onlineEvaluators", {
       enumerable: true,
@@ -3809,11 +4266,35 @@ var Langsmith = class {
       writable: true,
       value: new OnlineEvaluators(this)
     });
+    Object.defineProperty(this, "public", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Public(this)
+    });
+    Object.defineProperty(this, "annotationQueues", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new AnnotationQueues(this)
+    });
     Object.defineProperty(this, "info", {
       enumerable: true,
       configurable: true,
       writable: true,
       value: new Info(this)
+    });
+    Object.defineProperty(this, "issues", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Issues(this)
+    });
+    Object.defineProperty(this, "sandboxes", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: new Sandboxes(this)
     });
     const options = {
       apiKey,
@@ -4307,21 +4788,34 @@ Object.defineProperty(Langsmith, "toFile", {
   writable: true,
   value: toFile
 });
-Langsmith.Sessions = Sessions;
 Langsmith.Datasets = Datasets;
+Langsmith.Runs = Runs3;
+Langsmith.Threads = Threads;
+Langsmith.Traces = Traces;
 Langsmith.OnlineEvaluators = OnlineEvaluators;
+Langsmith.Public = Public;
+Langsmith.AnnotationQueues = AnnotationQueues;
 Langsmith.Info = Info;
+Langsmith.Issues = Issues;
+Langsmith.Sandboxes = Sandboxes;
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/warn.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/warn.js
 var warnedMessages = {};
-function warnOnce(message) {
-  if (!warnedMessages[message]) {
-    console.warn(message);
-    warnedMessages[message] = true;
+function warnOnce(message, options) {
+  const key = options?.code ?? message;
+  if (!warnedMessages[key]) {
+    warnedMessages[key] = true;
+    if (options?.type && typeof process !== "undefined" && typeof process.emitWarning === "function") {
+      process.emitWarning(message, { type: options.type, code: options.code });
+    } else if (options?.type && options?.code) {
+      console.warn(`${options.type} [${options.code}]: ${message}`);
+    } else {
+      console.warn(message);
+    }
   }
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/xxhash/xxhash.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/xxhash/xxhash.js
 var n = (n2) => BigInt(n2);
 var PRIME32_1 = n("0x9E3779B1");
 var PRIME32_2 = n("0x85EBCA77");
@@ -4601,7 +5095,7 @@ function xxh128ToBytes(hash128) {
   return result;
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/_uuid.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/_uuid.js
 var UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function assertUuid(str, which) {
   if (!UUID_REGEX.test(str)) {
@@ -4663,10 +5157,24 @@ function nonCryptographicUuid7Deterministic(originalId, key) {
   return bytesToUuid(b);
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/constants.js
-var _MIN_BACKEND_VERSION = "0.16.5rc1";
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/v2_migration.js
+var QueryBackend = {
+  CLICKHOUSE_ONLY: "clickhouse_only",
+  SMITHDB_ONLY: "smithdb_only",
+  DUAL: "dual"
+};
+function getQueryBackend(instanceFlags) {
+  const flags = instanceFlags ?? {};
+  const chEnabled = Boolean(flags.ch_query_enabled ?? true);
+  const sdbEnabled = Boolean(flags.sdb_query_enabled ?? false);
+  if (!chEnabled && sdbEnabled)
+    return QueryBackend.SMITHDB_ONLY;
+  if (chEnabled && sdbEnabled)
+    return QueryBackend.DUAL;
+  return QueryBackend.CLICKHOUSE_ONLY;
+}
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/error.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/error.js
 function getInvalidPromptIdentifierMsg(identifier) {
   return `Invalid prompt identifier format: "${identifier}". Expected one of:
   - "prompt-name" (for private prompts)
@@ -4762,7 +5270,7 @@ function isConflictingEndpointsError(err) {
   return typeof err === "object" && err !== null && err.code === ERR_CONFLICTING_ENDPOINTS;
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/prompts.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/prompts.js
 function parseHubIdentifier(identifier) {
   if (!identifier || identifier.split("/").length > 2 || identifier.startsWith("/") || identifier.endsWith("/") || identifier.split(":").length > 2) {
     throw new Error(getInvalidPromptIdentifierMsg(identifier));
@@ -4783,7 +5291,7 @@ function parseHubIdentifier(identifier) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/fs.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/fs.js
 import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -4837,7 +5345,7 @@ async function rmRecursive(filePath) {
   await nodeFsPromises.rm(filePath, { recursive: true, force: true });
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/prompt_cache/index.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/prompt_cache/index.js
 function isStale(entry, ttlSeconds) {
   if (ttlSeconds === null) {
     return false;
@@ -5111,7 +5619,7 @@ var PromptCache = class {
 };
 var promptCacheSingleton = new PromptCache();
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/fetch.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/singletons/fetch.js
 var DEFAULT_FETCH_IMPLEMENTATION = (...args) => fetch(...args);
 var globalFetchSupportsWebStreaming = void 0;
 var LANGSMITH_FETCH_IMPLEMENTATION_KEY = /* @__PURE__ */ Symbol.for("ls:fetch_implementation");
@@ -5136,7 +5644,7 @@ var _getFetchImplementation = (debug2) => {
   };
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/profile-lock.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/profile-lock.js
 var LOCK_POLL_INTERVAL_MS = 10;
 var LOCK_STALE_AFTER_MS = 1e4;
 var LOCK_METADATA_FILE = "created_at";
@@ -5219,11 +5727,13 @@ ${owner}
   };
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/profiles.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/profiles.js
 var DEFAULT_API_URL = "https://api.smith.langchain.com";
 var OAUTH_CLIENT_ID = "langsmith-cli";
 var TOKEN_REFRESH_LEEWAY_MS = 6e4;
 var TOKEN_REFRESH_TIMEOUT_MS = 1e4;
+var OAUTH_DISCOVERY_TIMEOUT_MS = 5e3;
+var WELL_KNOWN_OAUTH_PATH = "/.well-known/oauth-authorization-server";
 function isBrowserLikeRuntime() {
   const env = getEnv();
   return env === "browser" || env === "webworker";
@@ -5302,6 +5812,93 @@ function normalizeConfigUrl(apiUrl) {
   }
   const apiV1Suffix = "/api/v1";
   return normalized.endsWith(apiV1Suffix) ? normalized.slice(0, -apiV1Suffix.length) : normalized;
+}
+function oauthDiscoveryCandidates(apiUrl) {
+  const given = normalizeConfigUrl(apiUrl);
+  const origin = given.endsWith("/api") ? given.slice(0, -"/api".length) : given;
+  const candidates = [];
+  for (const candidate of [given, `${origin}/api`, origin]) {
+    if (candidate && candidate !== "/api" && !candidates.includes(candidate)) {
+      candidates.push(candidate);
+    }
+  }
+  return candidates;
+}
+function isTrustedOAuthMetadata(doc, base) {
+  const { issuer } = doc;
+  if (typeof issuer !== "string" || issuer.replace(/\/+$/, "") !== base.replace(/\/+$/, "")) {
+    return false;
+  }
+  let issuerUrl;
+  try {
+    issuerUrl = new URL(issuer);
+  } catch {
+    return false;
+  }
+  for (const endpoint of [
+    doc.device_authorization_endpoint,
+    doc.token_endpoint
+  ]) {
+    if (typeof endpoint !== "string" || !endpoint) {
+      return false;
+    }
+    try {
+      const url = new URL(endpoint);
+      if (url.protocol !== issuerUrl.protocol || url.host !== issuerUrl.host) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+function oauthMetadataUrls(base) {
+  const appended = `${base}${WELL_KNOWN_OAUTH_PATH}`;
+  let inserted;
+  try {
+    const url = new URL(base);
+    inserted = `${url.origin}${WELL_KNOWN_OAUTH_PATH}${url.pathname === "/" ? "" : url.pathname}`;
+  } catch {
+    return [appended];
+  }
+  return inserted === appended ? [inserted] : [inserted, appended];
+}
+async function fetchOAuthMetadata(url, base, fetchImplementation) {
+  let response;
+  try {
+    response = await fetchImplementation(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(OAUTH_DISCOVERY_TIMEOUT_MS)
+    });
+  } catch {
+    return void 0;
+  }
+  if (!response.ok) {
+    return void 0;
+  }
+  let doc;
+  try {
+    doc = await response.json();
+  } catch {
+    return void 0;
+  }
+  if (!doc || typeof doc !== "object" || !isTrustedOAuthMetadata(doc, base)) {
+    return void 0;
+  }
+  return doc;
+}
+async function resolveTokenEndpoint(apiUrl, fetchImplementation) {
+  for (const base of oauthDiscoveryCandidates(apiUrl)) {
+    for (const url of oauthMetadataUrls(base)) {
+      const doc = await fetchOAuthMetadata(url, base, fetchImplementation);
+      if (doc) {
+        return doc.token_endpoint;
+      }
+    }
+  }
+  return `${normalizeConfigUrl(apiUrl)}/oauth/token`;
 }
 function applyTokenResponse(profile, token) {
   profile.oauth ??= {};
@@ -5435,7 +6032,8 @@ var ProfileAuth = class {
         client_id: OAUTH_CLIENT_ID,
         refresh_token: this.state.profile.oauth?.refresh_token ?? refreshToken
       });
-      const response = await fetchImplementation(`${normalizeConfigUrl(refreshApiUrl)}/oauth/token`, {
+      const tokenEndpoint = await resolveTokenEndpoint(refreshApiUrl, fetchImplementation);
+      const response = await fetchImplementation(tokenEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded"
@@ -5487,7 +6085,7 @@ function authHeaderFromProfile(profile) {
   return void 0;
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/fast-safe-stringify/index.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/fast-safe-stringify/index.js
 var LIMIT_REPLACE_NODE = "[...]";
 var CIRCULAR_REPLACE_NODE = { result: "[Circular]" };
 var arr = [];
@@ -5777,12 +6375,12 @@ function replaceGetterValues(replacer) {
   };
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/worker_threads.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/worker_threads.js
 import { Worker as NodeWorker } from "node:worker_threads";
 var Worker = NodeWorker;
 var WORKER_THREADS_AVAILABLE = true;
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/serialize_worker.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/serialize_worker.js
 var WORKER_SOURCE = (
   /* js */
   `
@@ -6067,7 +6665,7 @@ function hasLargeString(value, threshold = LARGE_STRING_THRESHOLD, nodeBudget = 
   return false;
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/client.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/client.js
 function assertPullPublicPromptAllowed(promptIdentifier, dangerouslyPullPublicPrompt) {
   const [owner] = parseHubIdentifier(promptIdentifier);
   if (owner !== "-" && !dangerouslyPullPublicPrompt) {
@@ -6156,22 +6754,66 @@ function _formatFeedbackScore(score) {
   }
   return score;
 }
-function _checkBackendVersion(version, minVersion = _MIN_BACKEND_VERSION) {
+function _checkBackendVersion(backendVersion, minVersion) {
+  if (!backendVersion) {
+    return;
+  }
   const parse2 = (v) => v.split(".").map((s) => parseInt(s, 10));
-  const [maj, min, pat] = parse2(version);
+  const [maj, min, pat] = parse2(backendVersion);
   const [rMaj, rMin, rPat] = parse2(minVersion);
   if (isNaN(maj) || isNaN(min) || isNaN(pat) || isNaN(rMaj) || isNaN(rMin) || isNaN(rPat)) {
-    console.warn(`[LANGSMITH]: Could not parse backend version ${JSON.stringify(version)} for compatibility check.`);
+    console.warn(`[LANGSMITH]: Could not parse backend version ${JSON.stringify(backendVersion)} for compatibility check.`);
     return;
   }
   if (maj < rMaj || maj === rMaj && min < rMin || maj === rMaj && min === rMin && pat < rPat) {
-    console.warn(`[LANGSMITH]: Backend version ${JSON.stringify(version)} is older than the minimum version required by this SDK (${JSON.stringify(minVersion)}). Some features may not work as expected.`);
+    console.warn(`[LANGSMITH]: Backend version ${JSON.stringify(backendVersion)} is older than the minimum version required by this SDK (${JSON.stringify(minVersion)}). Some features may not work as expected. See https://docs.langchain.com/langsmith/smithdb-sdk-migration`);
   }
 }
 var DEFAULT_UNCOMPRESSED_BATCH_SIZE_LIMIT_BYTES = 24 * 1024 * 1024;
 var DEFAULT_MAX_SIZE_BYTES = 1024 * 1024 * 1024;
 var SERVER_INFO_REQUEST_TIMEOUT_MS = 1e4;
 var DEFAULT_BATCH_SIZE_LIMIT = 100;
+function assertValidHeader(name, value) {
+  new Headers({ [name]: value });
+}
+function assertValidHeaders(headers) {
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    assertValidHeader(name, value);
+  }
+}
+function normalizeHeaders(headers) {
+  if (!headers)
+    return {};
+  const entries = headers instanceof Headers ? [...headers.entries()] : Array.isArray(headers) ? headers.map(([name, value]) => [name, value]) : Object.entries(headers);
+  const normalized = {};
+  const nameByLower = /* @__PURE__ */ new Map();
+  for (const [name, value] of entries) {
+    assertValidHeader(name, value);
+    const lowerName = name.toLowerCase();
+    const existingName = nameByLower.get(lowerName);
+    if (existingName === void 0) {
+      nameByLower.set(lowerName, name);
+      normalized[name] = value;
+    } else {
+      normalized[existingName] = value;
+    }
+  }
+  return normalized;
+}
+function mergeCallerHeaders(base, overrides, reserved) {
+  const merged = { ...base };
+  const nameByLower = new Map(Object.keys(merged).map((name) => [name.toLowerCase(), name]));
+  for (const [name, value] of Object.entries(overrides)) {
+    const lowerName = name.toLowerCase();
+    merged[nameByLower.get(lowerName) ?? name] = value;
+  }
+  for (const name of Object.keys(merged)) {
+    if (reserved.has(name.toLowerCase())) {
+      delete merged[name];
+    }
+  }
+  return merged;
+}
 var AutoBatchQueue = class {
   constructor(maxSizeBytes) {
     Object.defineProperty(this, "items", {
@@ -6214,6 +6856,7 @@ var AutoBatchQueue = class {
       otelContext: item.otelContext,
       apiKey: item.apiKey,
       apiUrl: item.apiUrl,
+      workspaceId: item.workspaceId,
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       itemPromiseResolve,
       itemPromise,
@@ -6249,6 +6892,7 @@ var AutoBatchQueue = class {
         otelContext: it.otelContext,
         apiKey: it.apiKey,
         apiUrl: it.apiUrl,
+        workspaceId: it.workspaceId,
         size: it.size
       })),
       () => popped.forEach((it) => it.itemPromiseResolve())
@@ -6497,6 +7141,12 @@ var Client = class _Client {
       writable: true,
       value: void 0
     });
+    Object.defineProperty(this, "anonymizer", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
     Object.defineProperty(this, "omitTracedRuntimeInfo", {
       enumerable: true,
       configurable: true,
@@ -6557,7 +7207,19 @@ var Client = class _Client {
       writable: true,
       value: void 0
     });
-    Object.defineProperty(this, "openAPIClient", {
+    Object.defineProperty(this, "_fetchOptionsHeaders", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: {}
+    });
+    Object.defineProperty(this, "_openAPIClient", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: void 0
+    });
+    Object.defineProperty(this, "_openAPIClientSignature", {
       enumerable: true,
       configurable: true,
       writable: true,
@@ -6592,6 +7254,12 @@ var Client = class _Client {
       configurable: true,
       writable: true,
       value: void 0
+    });
+    Object.defineProperty(this, "_stainlessVersionsChecked", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: /* @__PURE__ */ new Set()
     });
     Object.defineProperty(this, "manualFlushMode", {
       enumerable: true,
@@ -6734,15 +7402,19 @@ var Client = class _Client {
     });
     this.hideInputs = config.hideInputs ?? config.anonymizer ?? defaultConfig.hideInputs;
     this.hideOutputs = config.hideOutputs ?? config.anonymizer ?? defaultConfig.hideOutputs;
-    this.hideMetadata = config.hideMetadata ?? defaultConfig.hideMetadata;
+    this.hideMetadata = config.hideMetadata ?? config.anonymizer ?? defaultConfig.hideMetadata;
+    this.anonymizer = config.anonymizer;
     this.omitTracedRuntimeInfo = config.omitTracedRuntimeInfo ?? false;
     this.autoBatchTracing = config.autoBatchTracing ?? this.autoBatchTracing;
     this.autoBatchQueue = new AutoBatchQueue(maxMemory);
     this.blockOnRootRunFinalization = config.blockOnRootRunFinalization ?? this.blockOnRootRunFinalization;
     this.batchSizeBytesLimit = config.batchSizeBytesLimit;
     this.batchSizeLimit = config.batchSizeLimit;
-    this.fetchOptions = config.fetchOptions || {};
-    this.openAPIClient = this._newOpenAPIClient();
+    const { headers: fetchOptionsHeaders, ...fetchOptions } = config.fetchOptions || {};
+    this.fetchOptions = fetchOptions;
+    this._fetchOptionsHeaders = normalizeHeaders(fetchOptionsHeaders);
+    assertValidHeaders(config.headers);
+    this._customHeaders = config.headers ?? {};
     this.manualFlushMode = config.manualFlushMode ?? this.manualFlushMode;
     this._tracingMode = resolveTracingMode(config.tracingMode);
     if (this._tracingMode === "otel") {
@@ -6764,7 +7436,6 @@ var Client = class _Client {
     } else if (!config.disablePromptCache) {
       this._promptCache = promptCacheSingleton;
     }
-    this._customHeaders = config.headers ?? {};
   }
   static getDefaultClientConfig() {
     const profileConfig = loadProfileClientConfig();
@@ -6822,10 +7493,44 @@ var Client = class _Client {
       return this.webUrl;
     }
   }
+  /**
+   * The headers this client sets from its own config, which a caller-supplied
+   * header must not replace.
+   *
+   * Only what the client *actually* supplies: passing an explicit `Authorization`
+   * or `x-api-key` header with no configured credential is a supported way to
+   * authenticate (see `hasExplicitAuthHeader`), so those must survive.
+   */
+  get _sdkControlledHeaders() {
+    const names = /* @__PURE__ */ new Set();
+    if (this.apiKey !== void 0) {
+      names.add("x-api-key");
+    } else {
+      const profileAuthHeader = this.profileAuth?.currentAuthHeader();
+      if (profileAuthHeader) {
+        names.add(profileAuthHeader.name.toLowerCase());
+      }
+    }
+    if (this.workspaceId) {
+      names.add("x-tenant-id");
+    }
+    return names;
+  }
+  /**
+   * Headers supplied by the caller, through either `config.headers` or
+   * `config.fetchOptions.headers`, with the ones this SDK sets removed.
+   *
+   * `_customHeaders` is normalized here rather than at assignment because it is
+   * public and mutable: `get headers` hands back the caller's own object, so its
+   * contents can change (and can become malformed) at any point.
+   */
+  get _callerHeaders() {
+    return mergeCallerHeaders(normalizeHeaders(this._customHeaders), this._fetchOptionsHeaders, this._sdkControlledHeaders);
+  }
   get _mergedHeaders() {
     const headers = {
       "User-Agent": `langsmith-js/${__version__}`,
-      ...this._customHeaders
+      ...this._callerHeaders
     };
     if (this.apiKey !== void 0) {
       headers["x-api-key"] = `${this.apiKey}`;
@@ -6841,6 +7546,29 @@ var Client = class _Client {
     return headers;
   }
   /**
+   * The auth options and caller headers to build the generated client with.
+   *
+   * The generated client applies `defaultHeaders` *after* its own auth headers,
+   * so the ones this SDK sets are already dropped from `_callerHeaders` to keep
+   * the precedence of `_mergedHeaders`, where required headers win.
+   */
+  get _openAPIAuth() {
+    const headers = { ...this._callerHeaders };
+    const callerApiKeyName = Object.keys(headers).find((name) => name.toLowerCase() === "x-api-key");
+    let apiKey = this.apiKey;
+    if (apiKey === void 0 && callerApiKeyName !== void 0) {
+      apiKey = headers[callerApiKeyName] ?? void 0;
+      delete headers[callerApiKeyName];
+    }
+    if (apiKey === void 0 && this.workspaceId === void 0) {
+      headers["X-API-Key"] = null;
+    }
+    return {
+      apiKey,
+      defaultHeaders: Object.keys(headers).length > 0 ? headers : void 0
+    };
+  }
+  /**
    * Get or set custom headers for the client.
    * Custom headers are merged with default headers (User-Agent, x-api-key, x-tenant-id).
    * Custom headers will not override the default required headers.
@@ -6849,30 +7577,89 @@ var Client = class _Client {
     return this._customHeaders;
   }
   set headers(value) {
+    assertValidHeaders(value);
     this._customHeaders = value ?? {};
   }
   _getOpenAPIBaseUrl() {
-    return this.apiUrl.endsWith("/v1") ? this.apiUrl.slice(0, -3) : this.apiUrl;
+    const url = this.apiUrl.replace(/\/$/, "");
+    for (const suffix of ["/api/v1", "/api"]) {
+      if (url.endsWith(suffix))
+        return url.slice(0, -suffix.length);
+    }
+    return url;
   }
-  _newOpenAPIClient() {
-    const defaultHeaders = this.apiKey === void 0 && this.workspaceId === void 0 ? { "X-API-Key": null } : void 0;
-    const { method: _method, headers: _headers, body: _body, signal: _signal, ...openAPIFetchOptions } = this.fetchOptions;
+  /**
+   * The generated OpenAPI client, rebuilt whenever its auth or headers change.
+   *
+   * The generated client captures `defaultHeaders` and `apiKey` when it is
+   * built, while the handwritten paths recompute `_mergedHeaders` per request.
+   * Rebuilding on change keeps the two halves from diverging when the inputs
+   * move underneath us — a caller mutating the object returned by
+   * `get headers`, or a profile whose auth header only becomes available after
+   * its token is refreshed.
+   */
+  get openAPIClient() {
+    const auth = this._openAPIAuth;
+    const signature = JSON.stringify([auth.apiKey, auth.defaultHeaders]);
+    if (this._openAPIClient === void 0 || this._openAPIClientSignature !== signature) {
+      this._openAPIClientSignature = signature;
+      this._openAPIClient = this._newOpenAPIClient(auth);
+    }
+    return this._openAPIClient;
+  }
+  _newOpenAPIClient(auth = this._openAPIAuth) {
+    const { method: _method, body: _body, signal: _signal, ...openAPIFetchOptions } = this.fetchOptions;
     return new Langsmith({
-      apiKey: this.apiKey,
+      apiKey: auth.apiKey,
       tenantID: this.workspaceId,
       baseURL: this._getOpenAPIBaseUrl(),
       timeout: this.timeout_ms,
       fetch: this._fetch,
       fetchOptions: openAPIFetchOptions,
-      defaultHeaders
+      defaultHeaders: auth.defaultHeaders
     });
   }
   _getPlatformEndpointPath(path3) {
     const needsV1Prefix = this.apiUrl.slice(-3) !== "/v1" && this.apiUrl.slice(-4) !== "/v1/";
     return needsV1Prefix ? `/v1/platform/${path3}` : `/platform/${path3}`;
   }
-  get onlineEvaluators() {
+  get evaluators() {
+    this._checkStainlessVersion("0.16.0");
     return this.openAPIClient.onlineEvaluators;
+  }
+  get runs() {
+    this._checkStainlessVersion("0.16.0");
+    return this.openAPIClient.runs;
+  }
+  /** Access the v2 sandboxes resource (registries, snapshots, boxes). */
+  get sandboxes() {
+    this._checkStainlessVersion("0.16.0");
+    return this.openAPIClient.sandboxes;
+  }
+  /** Access the v2 datasets resource (experimentRuns, etc.). */
+  get datasets() {
+    this._checkStainlessVersion("0.16.0");
+    return this.openAPIClient.datasets;
+  }
+  /** Access the annotation queues resource (runs, items). */
+  get annotationQueues() {
+    this._checkStainlessVersion("0.16.14");
+    return this.openAPIClient.annotationQueues;
+  }
+  /** Access the threads resource (query, stats, listTraces). */
+  get threads() {
+    this._checkStainlessVersion("0.16.0");
+    return this.openAPIClient.threads;
+  }
+  /** Access the traces resource (query, listRuns). */
+  get traces() {
+    this._checkStainlessVersion("0.16.0");
+    return this.openAPIClient.traces;
+  }
+  /** Access the public shared-run resource. */
+  get public() {
+    this._checkStainlessVersion("0.16.0");
+    return this.openAPIClient.public;
   }
   async processInputs(inputs) {
     if (this.hideInputs === false) {
@@ -6911,6 +7698,25 @@ var Client = class _Client {
     return metadata;
   }
   /**
+   * Apply the configured anonymizer to a run's error string.
+   *
+   * Unlike inputs/outputs, `error` is a plain string (an exception message or
+   * traceback) that can carry credentials the user never explicitly logged --
+   * e.g. an HTTP-client error whose message embeds an `Authorization` header.
+   * The anonymizer is typed `(KVMap) => KVMap`, so the string is wrapped as
+   * `{ error }`, scrubbed, and unwrapped. Mirrors the Python SDK's
+   * `Client._hide_run_error`.
+   *
+   * TODO: Update anonymizer to always nest inputs/outputs/error for consistency
+   */
+  async processError(error2) {
+    if (this.anonymizer == null) {
+      return error2;
+    }
+    const result = await this.anonymizer({ error: error2 });
+    return typeof result?.error === "string" ? result.error : error2;
+  }
+  /**
    * Filter content from new_token events to prevent streaming LLM output
    * from being uploaded via events.
    */
@@ -6933,6 +7739,9 @@ var Client = class _Client {
     }
     if (runParams.outputs !== void 0) {
       runParams.outputs = await this.processOutputs(runParams.outputs);
+    }
+    if (runParams.error !== void 0) {
+      runParams.error = await this.processError(runParams.error);
     }
     if (runParams.extra != null && "metadata" in runParams.extra) {
       runParams.extra = {
@@ -7098,8 +7907,9 @@ var Client = class _Client {
       const batchesByDestination = batch.reduce((acc, item) => {
         const apiUrl = item.apiUrl ?? this.apiUrl;
         const apiKey = item.apiKey ?? this.apiKey;
-        const isDefault = item.apiKey === this.apiKey && item.apiUrl === this.apiUrl;
-        const batchKey = isDefault ? "default" : `${apiUrl}|${apiKey}`;
+        const workspaceId = item.workspaceId ?? this.workspaceId;
+        const isDefault = item.apiKey === this.apiKey && item.apiUrl === this.apiUrl && item.workspaceId === this.workspaceId;
+        const batchKey = isDefault ? "default" : `${apiUrl}|${apiKey}|${workspaceId ?? ""}`;
         if (!acc[batchKey]) {
           acc[batchKey] = [];
         }
@@ -7108,9 +7918,13 @@ var Client = class _Client {
       }, {});
       const batchPromises = [];
       for (const [batchKey, batch2] of Object.entries(batchesByDestination)) {
+        const isDefault = batchKey === "default";
+        const parts = isDefault ? [] : batchKey.split("|");
+        const workspaceIdPart = parts[2];
         const batchPromise = this._processBatch(batch2, {
-          apiUrl: batchKey === "default" ? void 0 : batchKey.split("|")[0],
-          apiKey: batchKey === "default" ? void 0 : batchKey.split("|")[1]
+          apiUrl: isDefault ? void 0 : parts[0],
+          apiKey: isDefault ? void 0 : parts[1],
+          workspaceId: isDefault || !workspaceIdPart ? void 0 : workspaceIdPart
         });
         batchPromises.push(batchPromise);
       }
@@ -7175,6 +7989,9 @@ var Client = class _Client {
     const batchSizeBytes = batch.reduce((sum, item) => sum + (item.size ?? 0), 0);
     try {
       if (this.langSmithToOTELTranslator !== void 0) {
+        for (const item of batch) {
+          item.item = await this._maskRunMetadata(item.item);
+        }
         this._sendBatchToOTELTranslator(batch);
       } else {
         const ingestParams = {
@@ -7240,6 +8057,25 @@ var Client = class _Client {
       this.langSmithToOTELTranslator.exportBatch(operations, otelContextMap);
     }
   }
+  async _maskRunMetadata(run) {
+    if (run.extra?.metadata == null) {
+      return run;
+    }
+    return {
+      ...run,
+      extra: {
+        ...run.extra,
+        metadata: await this.processMetadata(run.extra.metadata)
+      }
+    };
+  }
+  async _mergeRuntimeEnvAndMaskMetadata(run) {
+    const merged = mergeRuntimeEnvIntoRun(run, this.cachedLSEnvVarsForMetadata, this.omitTracedRuntimeInfo);
+    if (this.omitTracedRuntimeInfo) {
+      return merged;
+    }
+    return this._maskRunMetadata(merged);
+  }
   async processRunOperation(item) {
     clearTimeout(this.autoBatchTimeout);
     this.autoBatchTimeout = void 0;
@@ -7284,15 +8120,21 @@ var Client = class _Client {
     }
     return json;
   }
+  _checkStainlessVersion(minVersion) {
+    if (this._stainlessVersionsChecked.has(minVersion))
+      return;
+    this._stainlessVersionsChecked.add(minVersion);
+    this._ensureServerInfo().then((serverInfo) => {
+      _checkBackendVersion(serverInfo?.version, minVersion);
+    }).catch(() => {
+    });
+  }
   async _ensureServerInfo() {
     if (this._getServerInfoPromise === void 0) {
       this._getServerInfoPromise = (async () => {
         if (this._serverInfo === void 0) {
           try {
             this._serverInfo = await this._getServerInfo();
-            if (this._serverInfo?.version) {
-              _checkBackendVersion(this._serverInfo.version);
-            }
           } catch (e) {
             console.warn(`[LANGSMITH]: Failed to fetch info on supported operations. Falling back to batch operations and default limits. Info: ${e.status ?? "Unspecified status code"} ${e.message}`);
           }
@@ -7306,6 +8148,22 @@ var Client = class _Client {
       }
       return serverInfo;
     });
+  }
+  async _supportsSDBQuery() {
+    const serverInfo = await this._ensureServerInfo();
+    return serverInfo.instance_flags?.sdb_query_enabled === true;
+  }
+  /**
+   * Throw on SmithDB-only deployments, warn elsewhere. Call only when run-level
+   * feedback has no sessionId.
+   */
+  async _checkFeedbackSessionId() {
+    const docs = "https://docs.langchain.com/langsmith/smithdb-sdk-migration#feedback-create";
+    const serverInfo = await this._ensureServerInfo();
+    if (getQueryBackend(serverInfo.instance_flags) === QueryBackend.SMITHDB_ONLY) {
+      throw new Error(`sessionId must be provided when creating feedback for a run: this deployment cannot locate the run without it. See ${docs}`);
+    }
+    warnOnce(`Creating feedback for a run without sessionId is deprecated and will stop working in a future release. See ${docs}`);
   }
   async _getSettings() {
     if (!this.settings) {
@@ -7357,11 +8215,12 @@ var Client = class _Client {
         item: runCreate,
         otelContext,
         apiKey: options?.apiKey,
-        apiUrl: options?.apiUrl
+        apiUrl: options?.apiUrl,
+        workspaceId: options?.workspaceId
       }).catch(console.error);
       return;
     }
-    const mergedRunCreateParam = mergeRuntimeEnvIntoRun(runCreate, this.cachedLSEnvVarsForMetadata, this.omitTracedRuntimeInfo);
+    const mergedRunCreateParam = await this._mergeRuntimeEnvAndMaskMetadata(runCreate);
     if (options?.apiKey !== void 0) {
       headers["x-api-key"] = options.apiKey;
     }
@@ -7446,6 +8305,9 @@ var Client = class _Client {
     };
     if (options?.apiKey !== void 0) {
       headers["x-api-key"] = options.apiKey;
+    }
+    if (options?.workspaceId !== void 0) {
+      headers["x-tenant-id"] = options.workspaceId;
     }
     await this.batchIngestCaller.callWithOptions({ sizeBytes: options?.sizeBytes }, async () => {
       const res = await this._fetch(`${options?.apiUrl ?? this.apiUrl}/runs/batch`, {
@@ -7651,6 +8513,9 @@ var Client = class _Client {
         if (options?.apiKey !== void 0) {
           headers["x-api-key"] = options.apiKey;
         }
+        if (options?.workspaceId !== void 0) {
+          headers["x-tenant-id"] = options.workspaceId;
+        }
         let transformedBody = body;
         if (options?.useGzip && typeof body === "object" && "pipeThrough" in body) {
           transformedBody = body.pipeThrough(new CompressionStream("gzip"));
@@ -7706,6 +8571,9 @@ Context: ${context}`);
     if (run.outputs) {
       run.outputs = await this.processOutputs(run.outputs);
     }
+    if (run.error) {
+      run.error = await this.processError(run.error);
+    }
     if (run.extra != null && "metadata" in run.extra) {
       run.extra = {
         ...run.extra,
@@ -7727,7 +8595,8 @@ Context: ${context}`);
           item: data,
           otelContext,
           apiKey: options?.apiKey,
-          apiUrl: options?.apiUrl
+          apiUrl: options?.apiUrl,
+          workspaceId: options?.workspaceId
         }).catch(console.error);
         return;
       } else {
@@ -7736,7 +8605,8 @@ Context: ${context}`);
           item: data,
           otelContext,
           apiKey: options?.apiKey,
-          apiUrl: options?.apiUrl
+          apiUrl: options?.apiUrl,
+          workspaceId: options?.workspaceId
         }).catch(console.error);
       }
       return;
@@ -7764,7 +8634,20 @@ Context: ${context}`);
       return res;
     });
   }
+  /** @deprecated Use `client.runs.retrieve()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#runs-retrieve for the migration guide. Will be removed after Jan 31, 2027. */
   async readRun(runId, { loadChildRuns } = { loadChildRuns: false }) {
+    warnOnce("readRun() is deprecated and will be removed after Jan 31, 2027. Use client.runs.retrieve() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#runs-retrieve for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_READ_RUN" });
+    return this._readRun(runId, { loadChildRuns });
+  }
+  /**
+   * Fetch a run without emitting the `readRun()` deprecation warning.
+   *
+   * Internal callers use this so that a supported method doesn't warn about a
+   * deprecated one the caller never invoked.
+   *
+   * @internal
+   */
+  async _readRun(runId, { loadChildRuns } = { loadChildRuns: false }) {
     assertUuid(runId);
     let run = _normalizeRunTimestamps(await this._get(`/runs/${runId}`));
     if (loadChildRuns) {
@@ -7772,7 +8655,9 @@ Context: ${context}`);
     }
     return run;
   }
+  /** @deprecated Use `client.runs.getURL()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#runs-get-url for the migration guide. Will be removed after Jan 31, 2027. */
   async getRunUrl({ runId, run, projectOpts }) {
+    warnOnce("getRunUrl() is deprecated and will be removed after Jan 31, 2027. Use client.runs.getURL() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#runs-get-url for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_GET_RUN_URL" });
     if (run !== void 0) {
       let sessionId;
       if (run.session_id) {
@@ -7790,7 +8675,7 @@ Context: ${context}`);
       const tenantId = await this._getTenantId();
       return `${this.getHostUrl()}/o/${tenantId}/projects/p/${sessionId}/r/${run.id}?poll=true`;
     } else if (runId !== void 0) {
-      const run_ = await this.readRun(runId);
+      const run_ = await this._readRun(runId);
       if (!run_.app_path) {
         throw new Error(`Run ${runId} has no app_path`);
       }
@@ -7801,7 +8686,7 @@ Context: ${context}`);
     }
   }
   async _loadChildRuns(run) {
-    const childRuns = await toArray(this.listRuns({
+    const childRuns = await toArray(this._listRuns({
       isRoot: false,
       projectId: run.session_id,
       traceId: run.trace_id
@@ -7831,6 +8716,7 @@ Context: ${context}`);
   }
   /**
    * List runs from the LangSmith server.
+   * @deprecated Use `client.runs.query()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#runs-query for the migration guide. Will be removed after Jan 31, 2027.
    * @param projectId - The ID of the project to filter by.
    * @param projectName - The name of the project to filter by.
    * @param parentRunId - The ID of the parent run to filter by.
@@ -7912,6 +8798,18 @@ Context: ${context}`);
    * });
    */
   async *listRuns(props) {
+    warnOnce("listRuns() is deprecated and will be removed after Jan 31, 2027. Use client.runs.query() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#runs-query for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_LIST_RUNS" });
+    yield* this._listRuns(props);
+  }
+  /**
+   * List runs without emitting the `listRuns()` deprecation warning.
+   *
+   * Internal callers use this so that a supported method doesn't warn about a
+   * deprecated one the caller never invoked.
+   *
+   * @internal
+   */
+  async *_listRuns(props) {
     const { projectId, projectName, parentRunId, traceId, referenceExampleId, startTime, executionOrder, isRoot, runType, error: error2, id, query, filter, traceFilter, treeFilter, limit: limit2, select, order } = props;
     let projectIds = [];
     if (projectId) {
@@ -8041,14 +8939,16 @@ Context: ${context}`);
       }
     }
   }
+  /** @deprecated Use `client.threads.listTraces()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#threads-list-traces for the migration guide. Will be removed after Jan 31, 2027. */
   async *readThread(props) {
+    warnOnce("readThread() is deprecated and will be removed after Jan 31, 2027. Use client.threads.listTraces() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#threads-list-traces for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_READ_THREAD" });
     const { threadId, projectId, projectName, isRoot = true, limit: limit2, filter: userFilter, order = "asc" } = props;
     if (!projectId && !projectName) {
       throw new Error("threadId requires projectId or projectName");
     }
     const threadFilter = `eq(thread_id, ${JSON.stringify(threadId)})`;
     const combinedFilter = userFilter ? `and(${threadFilter}, ${userFilter})` : threadFilter;
-    yield* this.listRuns({
+    yield* this._listRuns({
       projectId: projectId ?? void 0,
       projectName: projectName ?? void 0,
       isRoot,
@@ -8057,7 +8957,9 @@ Context: ${context}`);
       order
     });
   }
+  /** @deprecated Use `client.threads.query()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#threads-query for the migration guide. Will be removed after Jan 31, 2027. */
   async listThreads(props) {
+    warnOnce("listThreads() is deprecated and will be removed after Jan 31, 2027. Use client.threads.query() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#threads-query for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_LIST_THREADS" });
     const { projectId, projectName, limit: limit2, offset = 0, filter, startTime, isRoot = true } = props;
     if (!projectId && !projectName) {
       throw new Error("Either projectId or projectName must be provided");
@@ -8166,6 +9068,9 @@ Context: ${context}`);
         ...await Promise.all(projectNames.map((name) => this.readProject({ projectName: name }).then((project) => project.id)))
       ];
     }
+    if (projectIds_.length === 0) {
+      throw new Error("At least one of projectNames or projectIds must be provided.");
+    }
     const payload = {
       id,
       trace,
@@ -8199,7 +9104,9 @@ Context: ${context}`);
     const result = await response.json();
     return result;
   }
+  /** @deprecated Use `client.runs.share.create()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#share-and-read-public-runs for the migration guide. Will be removed after Jan 31, 2027. */
   async shareRun(runId, { shareId } = {}) {
+    warnOnce("shareRun() is deprecated and will be removed after Jan 31, 2027. Use client.runs.share.create() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#share-and-read-public-runs for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_SHARE_RUN" });
     const data = {
       run_id: runId,
       share_token: shareId || v4_default()
@@ -8223,7 +9130,9 @@ Context: ${context}`);
     }
     return `${this.getHostUrl()}/public/${result["share_token"]}/r`;
   }
+  /** @deprecated Use `client.runs.share.delete()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#share-and-read-public-runs for the migration guide. Will be removed after Jan 31, 2027. */
   async unshareRun(runId) {
+    warnOnce("unshareRun() is deprecated and will be removed after Jan 31, 2027. Use client.runs.share.delete() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#share-and-read-public-runs for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_UNSHARE_RUN" });
     assertUuid(runId);
     await this.caller.call(async () => {
       const res = await this._fetch(`${this.apiUrl}/runs/${runId}/share`, {
@@ -8236,7 +9145,12 @@ Context: ${context}`);
       return res;
     });
   }
+  /** @deprecated Use `client.runs.retrieve({ selects: ["SHARE_URL"] })` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#share-and-read-public-runs for the migration guide. Will be removed after Jan 31, 2027. */
   async readRunSharedLink(runId) {
+    warnOnce('readRunSharedLink() is deprecated and will be removed after Jan 31, 2027. Use client.runs.retrieve({ selects: ["SHARE_URL"] }) instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#share-and-read-public-runs for the migration guide.', {
+      type: "DeprecationWarning",
+      code: "LANGSMITH_DEPRECATED_READ_RUN_SHARED_LINK"
+    });
     assertUuid(runId);
     const response = await this.caller.call(async () => {
       const res = await this._fetch(`${this.apiUrl}/runs/${runId}/share`, {
@@ -8254,7 +9168,12 @@ Context: ${context}`);
     }
     return `${this.getHostUrl()}/public/${result["share_token"]}/r`;
   }
+  /** @deprecated Use `client.public.runs.query()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#share-and-read-public-runs for the migration guide. Will be removed after Jan 31, 2027. */
   async listSharedRuns(shareToken, { runIds } = {}) {
+    warnOnce("listSharedRuns() is deprecated and will be removed after Jan 31, 2027. Use client.public.runs.query() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#share-and-read-public-runs for the migration guide.", {
+      type: "DeprecationWarning",
+      code: "LANGSMITH_DEPRECATED_LIST_SHARED_RUNS"
+    });
     const queryParams = new URLSearchParams({
       share_token: shareToken
     });
@@ -8401,7 +9320,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       _hostUrl: this.getHostUrl()
     }));
   }
-  async createProject({ projectName, description = null, metadata = null, upsert = false, projectExtra = null, referenceDatasetId = null, numExamples = null, numRepetitions = null, evaluatorKeys = null }) {
+  async createProject({ projectName, description = null, metadata = null, upsert = false, projectExtra = null, referenceDatasetId = null, numExamples = null, numRepetitions = null, evaluatorKeys = null, tagValueIds = null }) {
     const upsert_ = upsert ? `?upsert=true` : "";
     const endpoint = `${this.apiUrl}/sessions${upsert_}`;
     const extra = projectExtra || {};
@@ -8424,6 +9343,9 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     if (evaluatorKeys != null && evaluatorKeys.length > 0) {
       body["evaluator_keys"] = evaluatorKeys;
+    }
+    if (tagValueIds !== null) {
+      body["tag_value_ids"] = tagValueIds;
     }
     const serializedBody = JSON.stringify(body);
     const response = await this.caller.call(async () => {
@@ -8651,7 +9573,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     const result = await response.json();
     return result;
   }
-  async createDataset(name, { description, dataType, inputsSchema, outputsSchema, metadata } = {}) {
+  async createDataset(name, { description, dataType, inputsSchema, outputsSchema, metadata, tagValueIds } = {}) {
     const body = {
       name,
       description,
@@ -8665,6 +9587,9 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     if (outputsSchema) {
       body.outputs_schema_definition = outputsSchema;
+    }
+    if (tagValueIds !== void 0) {
+      body.tag_value_ids = tagValueIds;
     }
     const serializedBody = JSON.stringify(body);
     const response = await this.caller.call(async () => {
@@ -9244,12 +10169,16 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       return res;
     });
   }
-  async createFeedback(runId, key, { score, value, correction, comment, sourceInfo, feedbackSourceType = "api", sourceRunId, feedbackId, feedbackConfig, projectId, comparativeExperimentId, sessionId, startTime, extendTraceRetention }) {
+  async createFeedback(runIdOrParams, keyArg, optionsArg) {
+    const { runId = null, key, score, value, correction, comment, sourceInfo, feedbackSourceType = "api", sourceRunId, feedbackId, feedbackConfig, projectId, comparativeExperimentId, sessionId, startTime, extendTraceRetention } = typeof runIdOrParams === "object" && runIdOrParams !== null ? runIdOrParams : { runId: runIdOrParams, key: keyArg, ...optionsArg };
     if (!runId && !projectId) {
       throw new Error("One of runId or projectId must be provided");
     }
     if (runId && projectId) {
       throw new Error("Only one of runId or projectId can be provided");
+    }
+    if (runId && sessionId === void 0) {
+      await this._checkFeedbackSessionId();
     }
     const feedback_source = {
       type: feedbackSourceType ?? "api",
@@ -9467,7 +10396,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
     }
     return results_;
   }
-  async _logEvaluationFeedback(evaluatorResponse, run, sourceInfo) {
+  async _logEvaluationFeedback(evaluatorResponse, run, sourceInfo, sessionId) {
     const evalResults = this._selectEvalResults(evaluatorResponse);
     const feedbacks = [];
     for (const res of evalResults) {
@@ -9490,14 +10419,18 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         sourceRunId: res.sourceRunId,
         feedbackConfig: res.feedbackConfig,
         feedbackSourceType: "model",
-        sessionId: run?.session_id,
+        sessionId: run?.session_id ?? sessionId,
         startTime: run?.start_time
       }));
     }
     return [evalResults, feedbacks];
   }
-  async logEvaluationFeedback(evaluatorResponse, run, sourceInfo) {
-    const [results] = await this._logEvaluationFeedback(evaluatorResponse, run, sourceInfo);
+  async logEvaluationFeedback(evaluatorResponseOrParams, run, sourceInfo, sessionId) {
+    if (evaluatorResponseOrParams != null && typeof evaluatorResponseOrParams === "object" && "evaluatorResponse" in evaluatorResponseOrParams) {
+      const [results2] = await this._logEvaluationFeedback(evaluatorResponseOrParams.evaluatorResponse, evaluatorResponseOrParams.run, evaluatorResponseOrParams.sourceInfo, evaluatorResponseOrParams.projectId);
+      return results2;
+    }
+    const [results] = await this._logEvaluationFeedback(evaluatorResponseOrParams, run, sourceInfo, sessionId);
     return results;
   }
   /**
@@ -9744,13 +10677,49 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
   }
   /**
    * Add runs to an annotation queue with the specified queue ID.
+   *
+   * The second argument is either:
+   * - `RunKey[]` (preferred): each entry carries the run's full lookup key, so
+   *   it can be located directly without a scan. Required for workspaces served
+   *   by SmithDB; routes to `POST /runs/by-key`.
+   * - `string[]`: a plain list of run IDs. **Deprecated**: this path will be
+   *   removed after Jan 31, 2027; prefer the key form. Routes to `POST /runs`.
+   *   See https://docs.langchain.com/langsmith/smithdb-sdk-migration#annotation-queues-add-runs.
+   *
+   * If every element is a string (or the list is empty) it is treated as run
+   * IDs; otherwise the list is treated as `RunKey` objects.
+   *
    * @param queueId - The ID of the annotation queue
-   * @param runIds - The IDs of the runs to be added to the annotation queue
+   * @param runs - Either a list of run IDs (deprecated) or a list of run keys.
    */
-  async addRunsToAnnotationQueue(queueId, runIds) {
-    const body = JSON.stringify(runIds.map((id, i) => assertUuid(id, `runIds[${i}]`).toString()));
+  async addRunsToAnnotationQueue(queueId, runs) {
+    const base = `${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}/runs`;
+    const allStrings = runs.every((r) => typeof r === "string");
+    let url;
+    let body;
+    if (!allStrings) {
+      url = `${base}/by-key`;
+      body = JSON.stringify(runs.map((run, i) => {
+        const serialized = {
+          run_id: assertUuid(run.runId, `runs[${i}].runId`).toString(),
+          session_id: assertUuid(run.sessionId, `runs[${i}].sessionId`).toString(),
+          start_time: typeof run.startTime === "string" ? run.startTime : new Date(run.startTime).toISOString()
+        };
+        if (run.sourceProposedExampleId != null) {
+          serialized.source_proposed_example_id = assertUuid(run.sourceProposedExampleId, `runs[${i}].sourceProposedExampleId`).toString();
+        }
+        return serialized;
+      }));
+    } else {
+      warnOnce("Passing run IDs as strings to addRunsToAnnotationQueue() is deprecated and will be removed after Jan 31, 2027. Use RunKey[] instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration#annotation-queues-add-runs for the migration guide.", {
+        type: "DeprecationWarning",
+        code: "LANGSMITH_DEPRECATED_ADD_RUNS_STRING_IDS"
+      });
+      url = base;
+      body = JSON.stringify(runs.map((id, i) => assertUuid(id, `runs[${i}]`).toString()));
+    }
     await this.caller.call(async () => {
-      const res = await this._fetch(`${this.apiUrl}/annotation-queues/${assertUuid(queueId, "queueId")}/runs`, {
+      const res = await this._fetch(url, {
         method: "POST",
         headers: {
           ...this._mergedHeaders,
@@ -10949,7 +11918,7 @@ function isExampleCreate(input) {
   return "dataset_id" in input || "dataset_name" in input;
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/env.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/env.js
 var isEnvTracingEnabled = (tracingEnabled) => {
   if (tracingEnabled !== void 0) {
     return tracingEnabled;
@@ -10958,11 +11927,11 @@ var isEnvTracingEnabled = (tracingEnabled) => {
   return !!envVars.find((envVar) => getLangSmithEnvironmentVariable(envVar) === "true");
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/constants.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/singletons/constants.js
 var _LC_CONTEXT_VARIABLES_KEY = /* @__PURE__ */ Symbol.for("lc:context_variables");
 var _REPLICA_TRACE_ROOTS_KEY = /* @__PURE__ */ Symbol.for("langsmith:replica_trace_roots");
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/context_vars.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/context_vars.js
 function getContextVar(runTree, key) {
   if (_LC_CONTEXT_VARIABLES_KEY in runTree) {
     const contextVars = runTree[_LC_CONTEXT_VARIABLES_KEY];
@@ -10979,13 +11948,13 @@ function setContextVar(runTree, key, value) {
   runTree[_LC_CONTEXT_VARIABLES_KEY] = contextVars;
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/utils/project.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/utils/project.js
 var getDefaultProjectName = () => {
   return getLangSmithEnvironmentVariable("PROJECT") ?? getEnvironmentVariable("LANGCHAIN_SESSION") ?? // TODO: Deprecate
   "default";
 };
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/run_trees.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/run_trees.js
 var TIMESTAMP_LENGTH = 36;
 var UUID_NAMESPACE_DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 function getReplicaKey(replica) {
@@ -11009,12 +11978,16 @@ function convertToDottedOrderFormat(epoch, runId, executionOrder = 1) {
 }
 var HEADER_SAFE_REPLICA_FIELDS = /* @__PURE__ */ new Set([
   "projectName",
+  "primary",
   "updates",
   "reroot"
 ]);
 function filterReplicaForHeaders(replica) {
   const filtered = {};
   for (const key of Object.keys(replica)) {
+    if (key === "primary" && typeof replica[key] !== "boolean") {
+      continue;
+    }
     if (HEADER_SAFE_REPLICA_FIELDS.has(key)) {
       filtered[key] = replica[key];
     }
@@ -11472,9 +12445,9 @@ var RunTree = class _RunTree {
     }
   }
   _remapForProject(params) {
-    const { projectName, runtimeEnv, excludeChildRuns = true, reroot = false, distributedParentId, apiUrl, apiKey, workspaceId } = params;
+    const { projectName, primary, runtimeEnv, excludeChildRuns = true, reroot = false, distributedParentId, apiUrl, apiKey, workspaceId } = params;
     const baseRun = this._convertToCreate(this, runtimeEnv, excludeChildRuns);
-    if (projectName === this.project_name) {
+    if (primary === void 0 && projectName === this.project_name) {
       return {
         ...baseRun,
         session_name: projectName
@@ -11530,6 +12503,12 @@ var RunTree = class _RunTree {
         }
       }
     }
+    if (primary) {
+      return {
+        ...baseRun,
+        session_name: projectName
+      };
+    }
     const oldId = baseRun.id;
     const newId = nonCryptographicUuid7Deterministic(oldId, projectName);
     let newTraceId;
@@ -11568,9 +12547,10 @@ var RunTree = class _RunTree {
     try {
       const runtimeEnv = getRuntimeEnvironment();
       if (this.replicas && this.replicas.length > 0) {
-        for (const { projectName, apiKey, apiUrl, workspaceId, reroot, client: replicaClient } of this.replicas) {
+        for (const { projectName, primary, apiKey, apiUrl, workspaceId, reroot, client: replicaClient } of this.replicas) {
           const runCreate = this._remapForProject({
             projectName: projectName ?? this.project_name,
+            primary,
             runtimeEnv,
             excludeChildRuns: true,
             reroot,
@@ -11603,9 +12583,10 @@ var RunTree = class _RunTree {
   }
   async patchRun(options) {
     if (this.replicas && this.replicas.length > 0) {
-      for (const { projectName, apiKey, apiUrl, workspaceId, updates, reroot, client: replicaClient } of this.replicas) {
+      for (const { projectName, primary, apiKey, apiUrl, workspaceId, updates, reroot, client: replicaClient } of this.replicas) {
         const runData = this._remapForProject({
           projectName: projectName ?? this.project_name,
+          primary,
           runtimeEnv: void 0,
           excludeChildRuns: true,
           reroot,
@@ -11834,9 +12815,19 @@ function _getWriteReplicasFromEnv() {
           console.warn(`Invalid api_key type in LANGSMITH_RUNS_ENDPOINTS: expected string, got ${typeof item.api_key}`);
           continue;
         }
+        if (item.project_name !== void 0 && item.project_name !== null && typeof item.project_name !== "string") {
+          console.warn(`Invalid project_name type in LANGSMITH_RUNS_ENDPOINTS: expected string, got ${typeof item.project_name}`);
+          continue;
+        }
+        if (item.primary !== void 0 && typeof item.primary !== "boolean") {
+          console.warn(`Invalid primary type in LANGSMITH_RUNS_ENDPOINTS: expected boolean, got ${typeof item.primary}`);
+          continue;
+        }
         replicas2.push({
           apiUrl: item.api_url.replace(/\/$/, ""),
-          apiKey: item.api_key
+          apiKey: item.api_key,
+          projectName: item.project_name ?? void 0,
+          primary: item.primary ?? void 0
         });
       }
       return replicas2;
@@ -11869,18 +12860,19 @@ function _getWriteReplicasFromEnv() {
   }
 }
 function _ensureWriteReplicas(replicas2) {
-  if (replicas2) {
-    return replicas2.map((replica) => {
-      if (Array.isArray(replica)) {
-        return {
-          projectName: replica[0],
-          updates: replica[1]
-        };
-      }
-      return replica;
-    });
+  const ensured = replicas2 ? replicas2.map((replica) => {
+    if (Array.isArray(replica)) {
+      return {
+        projectName: replica[0],
+        updates: replica[1]
+      };
+    }
+    return replica;
+  }) : _getWriteReplicasFromEnv();
+  if (ensured.filter((replica) => replica.primary === true).length > 1) {
+    throw new Error("Only one replica can be marked as primary.");
   }
-  return _getWriteReplicasFromEnv();
+  return ensured;
 }
 function _checkEndpointEnvUnset(parsed) {
   if (Object.keys(parsed).length > 0 && getLangSmithEnvironmentVariable("ENDPOINT")) {
@@ -11888,7 +12880,7 @@ function _checkEndpointEnvUnset(parsed) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/singletons/traceable.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/singletons/traceable.js
 var MockAsyncLocalStorage = class {
   getStore() {
     return void 0;
@@ -11911,8 +12903,8 @@ var AsyncLocalStorageProvider = class {
 };
 var AsyncLocalStorageProviderSingleton = new AsyncLocalStorageProvider();
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/index.js
-var __version__ = "0.7.11";
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/index.js
+var __version__ = "0.8.11";
 
 // dist/logger.js
 import { appendFileSync, mkdirSync as mkdirSync3, statSync as statSync2, renameSync as renameSync3 } from "node:fs";
@@ -11957,7 +12949,7 @@ function debug(message) {
   }
 }
 
-// node_modules/.pnpm/langsmith@0.7.11/node_modules/langsmith/dist/anonymizer/index.js
+// node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/anonymizer/index.js
 function extractStringNodes(data, options) {
   const parsedOptions = { ...options, maxDepth: options.maxDepth ?? 10 };
   const queue = [[data, 0, "", null, ""]];
