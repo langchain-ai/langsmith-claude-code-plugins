@@ -51,6 +51,7 @@ function makeAssistant(
     toolUses?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
     usage?: { input_tokens: number; output_tokens: number };
     stop_reason?: string | null;
+    effort?: string;
   } = {},
 ): AssistantMessage {
   const content: AssistantMessage["message"]["content"] = [{ type: "text" as const, text }];
@@ -70,6 +71,7 @@ function makeAssistant(
       stop_reason: opts.stop_reason,
     },
     timestamp: opts.ts ?? "2025-01-01T00:00:01Z",
+    effort: opts.effort,
   };
 }
 
@@ -440,6 +442,31 @@ describe("groupIntoTurns", () => {
     ];
     const turns = groupIntoTurns(messages);
     expect(turns[0].llmCalls[0].model).toBe("claude-sonnet-4-5");
+  });
+
+  it("captures top-level effort on the LLM call", () => {
+    const messages: TranscriptMessage[] = [
+      makeUser("Hi"),
+      makeAssistant("msg_1", "Hello", { effort: "high" }),
+    ];
+    const turns = groupIntoTurns(messages);
+    expect(turns[0].llmCalls[0].effort).toBe("high");
+  });
+
+  it("leaves effort undefined when the transcript omits it", () => {
+    const messages: TranscriptMessage[] = [makeUser("Hi"), makeAssistant("msg_1", "Hello")];
+    const turns = groupIntoTurns(messages);
+    expect(turns[0].llmCalls[0].effort).toBeUndefined();
+  });
+
+  it("picks up effort from any streaming chunk of a message", () => {
+    const messages: TranscriptMessage[] = [
+      makeUser("Hi"),
+      makeAssistant("msg_1", "Hel", { ts: "2025-01-01T00:00:01Z" }),
+      makeAssistant("msg_1", "lo", { ts: "2025-01-01T00:00:02Z", effort: "low" }),
+    ];
+    const turns = groupIntoTurns(messages);
+    expect(turns[0].llmCalls[0].effort).toBe("low");
   });
 
   it("returns empty array for no messages", () => {

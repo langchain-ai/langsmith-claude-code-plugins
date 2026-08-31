@@ -247,6 +247,7 @@ function mergeAssistantChunks(chunks: AssistantMessage[]): {
   content: ContentBlock[];
   model: string;
   usage: Usage;
+  effort?: string;
   startTime: string;
   endTime: string;
 } {
@@ -265,6 +266,8 @@ function mergeAssistantChunks(chunks: AssistantMessage[]): {
     content: merged,
     model: stripModelDateSuffix(first.message.model),
     usage: last.message.usage, // SSE usage is cumulative; last chunk has final totals.
+    // Top-level field; not every chunk (or CC version) carries it.
+    effort: chunks.find((c) => c.effort !== undefined)?.effort,
     startTime: first.timestamp,
     endTime: last.timestamp,
   };
@@ -382,6 +385,7 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         content: merged.content,
         model: merged.model,
         usage: merged.usage,
+        effort: merged.effort,
         startTime: merged.startTime,
         endTime: merged.endTime,
         toolCalls,

@@ -71,6 +71,7 @@ export interface Usage {
   output_tokens: number;
   cache_read_input_tokens?: number;
   cache_creation_input_tokens?: number;
+  service_tier?: string;
 }
 
 /** A user message (human input) in the transcript. */
@@ -112,6 +113,8 @@ export interface AssistantMessage {
   };
   timestamp: string;
   promptId?: string;
+  /** Reasoning effort, top-level (not in `message`). Added in CC 2.1.212. */
+  effort?: string;
 }
 
 export type TranscriptMessage = UserMessage | ToolResultMessage | AssistantMessage;
@@ -141,6 +144,8 @@ export interface LLMCall {
   startTime: string;
   /** Timestamp of last chunk (end time). */
   endTime: string;
+  /** Reasoning effort, if the transcript recorded one. */
+  effort?: string;
   /** Tool calls made in this response. */
   toolCalls: ToolCall[];
   /** True if this LLM call was synthesized (not from the transcript). */
