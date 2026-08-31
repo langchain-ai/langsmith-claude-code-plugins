@@ -16,6 +16,7 @@ const entryPoints = [
   "dist/hooks/pre-compact.js",
   "dist/hooks/post-compact.js",
   "dist/hooks/session-end.js",
+  "dist/commands/trace-link.js",
 ];
 
 await build({
@@ -24,6 +25,8 @@ await build({
   platform: "node",
   format: "esm",
   outdir: "bundle",
+  // Flat output (bundle/<name>.js) regardless of entry subdir (hooks/, commands/).
+  entryNames: "[name]",
   // tsc output already has shebangs; esbuild strips them during bundling
   // Mark node builtins as external (they're available at runtime)
   external: ["node:*"],
