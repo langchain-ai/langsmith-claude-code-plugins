@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  readFileSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -8,7 +16,11 @@ import {
   getSessionState,
   updateSessionState,
   atomicUpdateState,
+  recoverAndUpdateState,
   pruneOldSessions,
+  getTracingMode,
+  parseTraceCommand,
+  traceCommandResponse,
 } from "./state.js";
 
 let tmpDir: string;
@@ -20,6 +32,31 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe("trace policy", () => {
+  it("defaults absent sessions to full and malformed state to metadata", () => {
+    expect(getTracingMode({}, "new")).toBe("full");
+    const path = join(tmpDir, "bad-policy.json");
+    writeFileSync(path, "not json");
+    expect(getTracingMode(loadState(path), "session")).toBe("metadata");
+  });
+
+  it("reports the master switch independently of the subordinate preference", () => {
+    expect(JSON.parse(traceCommandResponse("full", false)).reason).toContain(
+      "master switch is disabled",
+    );
+    expect(JSON.parse(traceCommandResponse("metadata", true)).reason).toContain("metadata only");
+  });
+
+  it("parses only exact lowercase trace commands", () => {
+    expect(parseTraceCommand("/trace on")).toBe("on");
+    expect(parseTraceCommand("/trace off")).toBe("off");
+    expect(parseTraceCommand("/trace status")).toBe("status");
+    expect(parseTraceCommand("/TRACE ON")).toBeUndefined();
+    expect(parseTraceCommand(" /trace off")).toBeUndefined();
+    expect(parseTraceCommand("/trace off now")).toBeUndefined();
+  });
 });
 
 describe("loadState", () => {
@@ -34,10 +71,10 @@ describe("loadState", () => {
     expect(loadState(path)).toEqual(state);
   });
 
-  it("returns empty object for malformed JSON", () => {
+  it("durably marks malformed JSON fail-closed", () => {
     const path = join(tmpDir, "bad.json");
     writeFileSync(path, "not json");
-    expect(loadState(path)).toEqual({});
+    expect(loadState(path)).toEqual({ __langsmith_fail_closed: true });
   });
 });
 
@@ -115,6 +152,43 @@ describe("atomicUpdateState", () => {
     expect(loadState(path).counter.last_line).toBe(N);
   });
 
+  it.each(["", "legacy-lock"])("recovers an old malformed or legacy lock: %j", async (contents) => {
+    const path = join(tmpDir, "stale.json");
+    const lock = `${path}.lock`;
+    writeFileSync(lock, contents);
+    const old = new Date(Date.now() - 31_000);
+    utimesSync(lock, old, old);
+
+    await atomicUpdateState(path, (state) => ({
+      ...state,
+      s1: { last_line: 1, turn_count: 0, updated: "" },
+    }));
+
+    expect(loadState(path).s1.last_line).toBe(1);
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  it("does not steal a fresh empty lock before its owner writes", async () => {
+    const path = join(tmpDir, "fresh.json");
+    writeFileSync(`${path}.lock`, "");
+    await expect(atomicUpdateState(path, (state) => state)).rejects.toThrow(
+      "Timed out acquiring state lock",
+    );
+    expect(existsSync(`${path}.lock`)).toBe(true);
+  }, 7_000);
+
+  it("releases only the lock it owns", async () => {
+    const path = join(tmpDir, "ownership.json");
+    await atomicUpdateState(path, (state) => {
+      writeFileSync(
+        `${path}.lock`,
+        JSON.stringify({ owner: "replacement", pid: process.pid, created: Date.now() }),
+      );
+      return state;
+    });
+    expect(existsSync(`${path}.lock`)).toBe(true);
+  });
+
   it("releases the lock even when the transform throws", async () => {
     const path = join(tmpDir, "throw.json");
     saveState(path, { s1: { last_line: 0, turn_count: 0, updated: "" } });
@@ -132,12 +206,63 @@ describe("atomicUpdateState", () => {
     }));
     expect(loadState(path).s1.last_line).toBe(99);
   });
+
+  it("fail-closed overrides a stored full preference for ordinary reads", () => {
+    expect(
+      getTracingMode(
+        {
+          __langsmith_fail_closed: true,
+          session: { last_line: 0, turn_count: 0, updated: "", tracing: "full" },
+        } as never,
+        "session",
+      ),
+    ).toBe("metadata");
+  });
+
+  it("explicit recovery quarantines corrupt state and clears fail-closed", async () => {
+    const path = join(tmpDir, "corrupt.json");
+    writeFileSync(path, "not json");
+
+    const recovered = await recoverAndUpdateState(path, (state) => ({
+      ...state,
+      session: { last_line: -1, turn_count: 0, updated: "now", tracing: "full" },
+    }));
+
+    expect(getTracingMode(recovered, "session")).toBe("full");
+    expect(loadState(path)).toEqual(recovered);
+    expect(readdirSync(tmpDir).some((name) => name.startsWith("corrupt.json.corrupt."))).toBe(true);
+  });
+
+  it("explicit recovery persists metadata mode for trace off", async () => {
+    const path = join(tmpDir, "corrupt-off.json");
+    writeFileSync(path, "not json");
+    const recovered = await recoverAndUpdateState(path, (state) => ({
+      ...state,
+      session: { last_line: -1, turn_count: 0, updated: "now", tracing: "metadata" },
+    }));
+    expect(getTracingMode(recovered, "session")).toBe("metadata");
+  });
+
+  it("ordinary updates preserve fail-closed state", async () => {
+    const path = join(tmpDir, "corrupt.json");
+    writeFileSync(path, "not json");
+    await atomicUpdateState(path, (state) => ({ ...state }));
+    expect(loadState(path)).toEqual({ __langsmith_fail_closed: true });
+  });
 });
 
 describe("pruneOldSessions", () => {
   const now = Date.now();
   const twoDaysAgo = new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString();
   const oneHourAgo = new Date(now - 60 * 60 * 1000).toISOString();
+
+  it("preserves muted policy beyond 24 hours", () => {
+    const result = pruneOldSessions(
+      { muted: { last_line: 5, turn_count: 1, updated: twoDaysAgo, tracing: "metadata" } },
+      now,
+    );
+    expect(result.muted.tracing).toBe("metadata");
+  });
 
   it("removes sessions older than 24 hours", () => {
     const state = {

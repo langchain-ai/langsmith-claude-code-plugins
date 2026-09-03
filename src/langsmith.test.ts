@@ -1,5 +1,8 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Turn } from "./types.js";
+import type { SessionState, Turn } from "./types.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 
 const mockCreateRun = vi.fn().mockResolvedValue(undefined);
@@ -28,6 +31,9 @@ vi.mock("langsmith", async (importOriginal) => {
     awaitPendingTraceBatches = mockAwaitPendingTraceBatches;
   }
   class MockRunTree {
+    static getSharedClient() {
+      return new MockClient();
+    }
     client: MockClient | undefined;
     params: Record<string, unknown>;
     _tracker: { params: Record<string, unknown>; ops: string[] };
@@ -74,6 +80,7 @@ import {
   traceTurn,
   completeTurnRun,
   closeAgentToolRun,
+  closeInterruptedTurn,
   generateDottedOrderSegment,
 } from "./langsmith.js";
 
@@ -162,6 +169,7 @@ describe("closeAgentToolRun", () => {
       taskRunInfo,
       project: "test-project",
       wasOpen: true,
+      tracingMode: "full",
     });
 
     // Patches (not creates) the existing Agent tool run.
@@ -193,6 +201,7 @@ describe("closeAgentToolRun", () => {
       taskRunInfo,
       project: "test-project",
       wasOpen: false,
+      tracingMode: "full",
       error: "Subagent killed",
     });
 
@@ -205,6 +214,110 @@ describe("closeAgentToolRun", () => {
     expect(params.end_time).toBeTruthy();
     expect(params.error).toBe("Subagent killed");
   });
+});
+
+// ─── closeInterruptedTurn ───────────────────────────────────────────────────
+
+describe("closeInterruptedTurn", () => {
+  beforeEach(() => {
+    mockCreateRun.mockClear();
+    mockUpdateRun.mockClear();
+    mockAwaitPendingTraceBatches.mockClear();
+    allRunTreeInstances = [];
+    initTracing("test-api-key", "https://test.api.com");
+  });
+
+  it.each(["User interrupt", "Session ended before turn completed"])(
+    "keeps muted interrupted payloads content-free for %s",
+    async (interruptionError) => {
+      const dir = mkdtempSync(join(tmpdir(), "langsmith-interrupted-"));
+      const transcriptPath = join(dir, "transcript.jsonl");
+      const stateFilePath = join(dir, "state.json");
+      const lines = [
+        {
+          type: "user",
+          message: { role: "user", content: "secret prompt" },
+          timestamp: "2025-01-01T00:00:00Z",
+          promptId: "prompt-secret",
+        },
+        {
+          type: "assistant",
+          message: {
+            id: "message-1",
+            role: "assistant",
+            model: "claude-sonnet-4-5-20250929",
+            content: [
+              { type: "text", text: "secret response" },
+              {
+                type: "tool_use",
+                id: "tool-1",
+                name: "Bash",
+                input: { command: "secret command" },
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+            stop_reason: null,
+          },
+          timestamp: "2025-01-01T00:00:01Z",
+        },
+        {
+          type: "user",
+          message: {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "tool-1", content: "secret result" }],
+          },
+          timestamp: "2025-01-01T00:00:02Z",
+        },
+      ];
+      writeFileSync(transcriptPath, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`);
+      writeFileSync(stateFilePath, JSON.stringify({ sessions: {} }));
+      const sessionState: SessionState = {
+        last_line: -1,
+        turn_count: 0,
+        updated: "2025-01-01T00:00:00Z",
+        current_turn_run_id: "turn-run",
+        current_trace_id: "trace-id",
+        current_dotted_order: "root-order",
+        current_turn_start: "2025-01-01T00:00:00Z",
+        current_turn_number: 1,
+        current_turn_tracing: "metadata",
+      };
+
+      try {
+        await closeInterruptedTurn({
+          sessionId: "session-123",
+          sessionState,
+          transcriptPath,
+          project: "test-project",
+          stateFilePath,
+          customMetadata: { private_custom_metadata: "secret metadata" },
+          error: interruptionError,
+        });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+
+      expect(mockCreateRun).toHaveBeenCalled();
+      expect(mockUpdateRun).toHaveBeenCalled();
+      for (const call of [...mockCreateRun.mock.calls, ...mockUpdateRun.mock.calls]) {
+        const payload = call.length === 1 ? call[0] : call[1];
+        expect(payload.inputs).toEqual({});
+        expect(payload.outputs).toEqual({});
+        expect(payload.error).toBeUndefined();
+        const serialized = JSON.stringify(payload);
+        for (const secret of [
+          "secret prompt",
+          "secret response",
+          "secret command",
+          "secret result",
+          "secret metadata",
+          interruptionError,
+        ]) {
+          expect(serialized).not.toContain(secret);
+        }
+      }
+    },
+  );
 });
 
 // ─── generateDottedOrderSegment ─────────────────────────────────────────────
@@ -761,6 +874,53 @@ describe("traceTurn", () => {
     // Check that replicas were passed to RunTree
     expect(lastRunTreeParams).toBeDefined();
     expect(lastRunTreeParams?.replicas).toEqual(replicas);
+  });
+
+  it("serializes metadata-only post and patch without content or replica updates", async () => {
+    const replicas = [
+      {
+        apiUrl: "https://api.smith.langchain.com",
+        apiKey: "ls__key_workspace",
+        projectName: "replica",
+        updates: { metadata: { environment: "private" }, inputs: { secret: true } },
+      },
+    ];
+    initTracing("test-api-key", "https://test.api.com", replicas);
+
+    await traceTurn({
+      turn: {
+        userContent: "secret prompt",
+        userTimestamp: "2025-01-01T00:00:00Z",
+        llmCalls: [
+          {
+            content: [{ type: "text", text: "secret response" }],
+            model: "claude-sonnet-4-5",
+            usage: { input_tokens: 10, output_tokens: 5 },
+            startTime: "2025-01-01T00:00:01Z",
+            endTime: "2025-01-01T00:00:02Z",
+            toolCalls: [],
+          },
+        ],
+        isComplete: true,
+      },
+      sessionId: "session-123",
+      turnNum: 1,
+      project: "test-project",
+      tracingMode: "metadata",
+    });
+
+    for (const [payload] of mockCreateRun.mock.calls) {
+      expect(payload.inputs).toEqual({});
+      expect(payload.outputs).toEqual({});
+      expect(payload.replicas?.[0]).not.toHaveProperty("updates");
+    }
+    for (const [, payload] of mockUpdateRun.mock.calls) {
+      expect(payload.inputs).toEqual({});
+      expect(payload.outputs).toEqual({});
+      expect(payload.replicas?.[0]).not.toHaveProperty("updates");
+    }
+    expect(mockCreateRun).toHaveBeenCalled();
+    expect(mockUpdateRun).toHaveBeenCalled();
   });
 
   it("works with replicas only (no client API key)", async () => {

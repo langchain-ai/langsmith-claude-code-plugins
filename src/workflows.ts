@@ -149,6 +149,7 @@ export async function handleWorkflowSubagentStop(opts: {
       runtimeVersion: launchingTurn?.runtime_version ?? ss.runtime_version,
       turnId: launchingTurn?.turn_id,
       turnNumber: launchingTurn?.turn_number ?? ss.current_turn_number,
+      tracingMode: launchingTurn?.tracing ?? "metadata",
     });
     debug(`Traced workflow stage ${opts.agentId} under Workflow run ${entry.run_id}`);
   } catch (err) {

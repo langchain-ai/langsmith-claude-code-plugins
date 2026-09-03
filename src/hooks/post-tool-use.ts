@@ -7,10 +7,11 @@
  * so SubagentStop can nest the subagent trace under it.
  */
 
-import { RunTree, uuid7FromTime } from "langsmith";
+import { uuid7FromTime } from "langsmith";
+import { createRunTree } from "../privacy.js";
 import { debug, error } from "../logger.js";
 import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
-import { loadState, atomicUpdateState, getSessionState } from "../state.js";
+import { loadState, atomicUpdateState, getSessionState, getTracingMode } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
@@ -55,6 +56,7 @@ async function main(): Promise<void> {
   // Load state to get current turn's run ID (created by UserPromptSubmit)
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
+  const tracingMode = sessionState.current_turn_tracing ?? getTracingMode(state, input.session_id);
 
   const parentRunId = sessionState.current_turn_run_id;
   const traceId = sessionState.current_trace_id;
@@ -97,63 +99,69 @@ async function main(): Promise<void> {
     debug(
       `Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`,
     );
-    const runTree = new RunTree({
-      client,
-      replicas: config.replicas,
-      id: toolRunId,
-      name: "Workflow",
-      run_type: "tool",
-      inputs: { input: input.tool_input },
-      project_name: config.project,
-      start_time: startTimeIso,
-      // No end_time — left open until finalizeNotificationChain closes it.
-      parent_run_id: parentRunId,
-      trace_id: traceId,
-      dotted_order: toolDottedOrder,
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId: input.session_id,
-          base: config.customMetadata,
-          turnNumber: sessionState.current_turn_number,
-          runtimeVersion: sessionState.runtime_version,
-          agentType: "root",
-          toolName: "Workflow",
-          runName: "Workflow",
-        }),
+    const runTree = createRunTree(
+      {
+        client,
+        replicas: config.replicas,
+        id: toolRunId,
+        name: "Workflow",
+        run_type: "tool",
+        inputs: { input: input.tool_input },
+        project_name: config.project,
+        start_time: startTimeIso,
+        // No end_time — left open until finalizeNotificationChain closes it.
+        parent_run_id: parentRunId,
+        trace_id: traceId,
+        dotted_order: toolDottedOrder,
+        extra: {
+          metadata: codingAgentMetadata({
+            sessionId: input.session_id,
+            base: config.customMetadata,
+            turnNumber: sessionState.current_turn_number,
+            runtimeVersion: sessionState.runtime_version,
+            agentType: "root",
+            toolName: "Workflow",
+            runName: "Workflow",
+          }),
+        },
       },
-    });
+      tracingMode,
+    );
     await runTree.postRun();
   } else {
     // Regular tool: create and complete the run immediately.
-    const runTree = new RunTree({
-      client,
-      replicas: config.replicas,
-      id: toolRunId,
-      name: input.tool_name,
-      run_type: "tool",
-      inputs: { input: input.tool_input },
-      outputs: { output: input.tool_response },
-      project_name: config.project,
-      start_time: startTimeIso,
-      end_time: toolEndTimeIso,
-      parent_run_id: parentRunId,
-      trace_id: traceId,
-      dotted_order: toolDottedOrder,
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId: input.session_id,
-          base: config.customMetadata,
-          // turn_id (promptId) isn't in the PostToolUse payload; turn_number is
-          // sufficient (the contract needs at least one of the two).
-          turnNumber: sessionState.current_turn_number,
-          runtimeVersion: sessionState.runtime_version,
-          agentType: "root",
-          toolName: input.tool_name,
-          runName: input.tool_name,
-          skillName: skillNameFromTool(input.tool_name, input.tool_input),
-        }),
+    const runTree = createRunTree(
+      {
+        client,
+        replicas: config.replicas,
+        id: toolRunId,
+        name: input.tool_name,
+        run_type: "tool",
+        inputs: { input: input.tool_input },
+        outputs: { output: input.tool_response },
+        project_name: config.project,
+        start_time: startTimeIso,
+        end_time: toolEndTimeIso,
+        parent_run_id: parentRunId,
+        trace_id: traceId,
+        dotted_order: toolDottedOrder,
+        extra: {
+          metadata: codingAgentMetadata({
+            sessionId: input.session_id,
+            base: config.customMetadata,
+            // turn_id (promptId) isn't in the PostToolUse payload; turn_number is
+            // sufficient (the contract needs at least one of the two).
+            turnNumber: sessionState.current_turn_number,
+            runtimeVersion: sessionState.runtime_version,
+            agentType: "root",
+            toolName: input.tool_name,
+            runName: input.tool_name,
+            skillName: skillNameFromTool(input.tool_name, input.tool_input),
+          }),
+        },
       },
-    });
+      tracingMode,
+    );
     await runTree.postRun();
   }
 
@@ -187,6 +195,7 @@ async function main(): Promise<void> {
         turn_number: sessionState.current_turn_number,
         runtime_version: sessionState.runtime_version,
         approval_policy: sessionState.approval_policy,
+        tracing: sessionState.current_turn_tracing ?? "metadata",
       };
       backgroundUpdate = recordBackgroundRun(
         freshSession,

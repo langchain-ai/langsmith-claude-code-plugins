@@ -109,6 +109,10 @@ async function main(): Promise<void> {
         customMetadata: config.customMetadata,
         runtimeVersion,
         wasOpen: true, // subagent_done ⇒ SubagentStop posted it open
+        tracingMode:
+          openTurns[
+            (taskRunInfo.deferred as Record<string, unknown> | undefined)?.parent_run_id as string
+          ]?.tracing ?? "metadata",
       });
       debug(`Closed open Agent tool run ${agentId} on session end`);
     } catch (err) {

@@ -60,6 +60,7 @@ export function readLocalUsername(): string {
 }
 
 export interface Config {
+  enabled: boolean;
   apiKey: string;
   project: string;
   apiBaseUrl: string;
@@ -170,15 +171,44 @@ export function getGitInfo(cwd: string): { branch?: string; commit?: string } {
   return result;
 }
 
+function readEnabled(path: string): { present: boolean; enabled: boolean } {
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8"));
+    return { present: true, enabled: typeof parsed?.enabled === "boolean" && parsed.enabled };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      return { present: false, enabled: false };
+    return { present: true, enabled: false };
+  }
+}
+
+export function parseExplicitBoolean(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  return undefined;
+}
+
+export function resolveTracingEnabled(cwd: string, homeDir: string): boolean {
+  if (process.env.TRACE_TO_LANGSMITH !== undefined)
+    return parseExplicitBoolean(process.env.TRACE_TO_LANGSMITH) ?? false;
+  const project = readEnabled(join(cwd, ".claude", "langsmith.json"));
+  if (project.present) return project.enabled;
+  const user = readEnabled(join(homeDir, ".claude", "langsmith.json"));
+  return user.present ? user.enabled : false;
+}
+
 export function loadConfig(options?: { cwd?: string }): Config {
   const cwd = options?.cwd ?? process.cwd();
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const enabled = resolveTracingEnabled(cwd, homeDir);
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
 
   const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
 
   const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
 
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
 
   const debug = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
@@ -302,6 +332,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
 
   return {
+    enabled,
     apiKey,
     project,
     apiBaseUrl,

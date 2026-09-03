@@ -16,9 +16,7 @@ export function initHook(cwd?: string): Config | null {
   const config = loadConfig({ cwd });
   initLogger(config.debug);
 
-  if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
-    return null;
-  }
+  if (!config.enabled) return null;
 
   if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
     error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");

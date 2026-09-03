@@ -160,8 +160,12 @@ export interface Turn {
 
 // ─── Tracing State ─────────────────────────────────────────────────────────
 
+export type TracingMode = "full" | "metadata";
+
 export interface SessionState {
   last_line: number;
+  tracing?: TracingMode;
+  current_turn_tracing?: TracingMode;
   turn_count: number;
   updated: string;
   /** Current turn's run ID, set by UserPromptSubmit hook */
@@ -219,6 +223,7 @@ export interface SessionState {
   traced_tool_use_ids?: string[];
   /** Wall-clock time (ms) when the last PreCompact hook fired */
   compaction_start_time?: number;
+  compaction_tracing?: TracingMode;
   /** Pending subagent traces to process (set by SubagentStop, processed by Stop).
    *  Only used for synchronous subagents, whose SubagentStop fires before
    *  PostToolUse has recorded the Agent tool run. */
@@ -259,6 +264,7 @@ export interface SessionState {
  */
 export interface OpenTurn {
   run_id: string;
+  tracing?: TracingMode;
   trace_id?: string;
   dotted_order?: string;
   parent_run_id?: string;

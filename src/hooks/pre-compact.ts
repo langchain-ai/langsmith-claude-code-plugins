@@ -7,7 +7,7 @@
  */
 
 import { debug } from "../logger.js";
-import { atomicUpdateState, getSessionState } from "../state.js";
+import { atomicUpdateState, getSessionState, getTracingMode } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 
@@ -35,6 +35,8 @@ async function main(): Promise<void> {
       [input.session_id]: {
         ...sessionState,
         compaction_start_time: Date.now(),
+        compaction_tracing:
+          sessionState.current_turn_tracing ?? getTracingMode(state, input.session_id),
       },
     };
   });

@@ -38,64 +38,150 @@ function debug(message) {
 }
 
 // dist/state.js
-import { readFileSync, writeFileSync, mkdirSync as mkdirSync2, openSync, closeSync, unlinkSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, mkdirSync as mkdirSync2, openSync, readFileSync, renameSync as renameSync2, statSync as statSync2, unlinkSync, writeFileSync } from "node:fs";
 import { dirname as dirname2 } from "node:path";
+import { randomUUID } from "node:crypto";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
+var LOCK_STALE_MS = 3e4;
+var FAIL_CLOSED_KEY = "__langsmith_fail_closed";
 function lockPath(stateFilePath) {
   return `${stateFilePath}.lock`;
 }
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error2) {
+    return error2.code === "EPERM";
+  }
+}
+function staleLock(path) {
+  try {
+    if (Date.now() - statSync2(path).mtimeMs <= LOCK_STALE_MS)
+      return false;
+    try {
+      const record = JSON.parse(readFileSync(path, "utf-8"));
+      return typeof record.pid !== "number" || !processAlive(record.pid);
+    } catch {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+}
 async function acquireLock(stateFilePath) {
-  const lock = lockPath(stateFilePath);
+  const path = lockPath(stateFilePath);
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  const record = { owner: randomUUID(), pid: process.pid, created: Date.now() };
   mkdirSync2(dirname2(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
-      const fd = openSync(lock, "wx");
+      const fd = openSync(path, "wx", 384);
+      writeFileSync(fd, JSON.stringify(record));
       closeSync(fd);
-      return;
-    } catch {
+      return record;
+    } catch (error2) {
+      if (error2.code !== "EEXIST")
+        throw error2;
+      if (staleLock(path)) {
+        try {
+          unlinkSync(path);
+        } catch {
+        }
+        continue;
+      }
       await sleep(LOCK_RETRY_MS);
     }
   }
-  try {
-    unlinkSync(lock);
-  } catch {
-  }
+  throw new Error(`Timed out acquiring state lock: ${path}`);
 }
-function releaseLock(stateFilePath) {
+function releaseLock(stateFilePath, lock) {
+  const path = lockPath(stateFilePath);
   try {
-    unlinkSync(lockPath(stateFilePath));
+    const current = JSON.parse(readFileSync(path, "utf-8"));
+    if (current.owner === lock.owner && current.pid === lock.pid)
+      unlinkSync(path);
   } catch {
   }
 }
 async function atomicUpdateState(stateFilePath, fn) {
-  await acquireLock(stateFilePath);
+  const lock = await acquireLock(stateFilePath);
   try {
     const state = loadState(stateFilePath);
-    writeFileSync(stateFilePath, JSON.stringify(fn(state), null, 2));
+    writeStateFile(stateFilePath, fn(state));
   } finally {
-    releaseLock(stateFilePath);
+    releaseLock(stateFilePath, lock);
   }
+}
+function validMode(value) {
+  return value === "full" || value === "metadata";
+}
+function validSession(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return false;
+  const session = value;
+  if (typeof session.last_line !== "number" || typeof session.turn_count !== "number" || typeof session.updated !== "string")
+    return false;
+  for (const key of ["tracing", "current_turn_tracing", "compaction_tracing"]) {
+    if (session[key] !== void 0 && !validMode(session[key]))
+      return false;
+  }
+  if (session.open_turns !== void 0) {
+    if (!session.open_turns || typeof session.open_turns !== "object" || Array.isArray(session.open_turns))
+      return false;
+    for (const turn of Object.values(session.open_turns)) {
+      if (!turn || typeof turn !== "object" || Array.isArray(turn))
+        return false;
+      const mode = turn.tracing;
+      if (mode !== void 0 && !validMode(mode))
+        return false;
+    }
+  }
+  return true;
+}
+function failClosedState() {
+  return { [FAIL_CLOSED_KEY]: true };
 }
 function loadState(stateFilePath) {
-  try {
-    const raw = readFileSync(stateFilePath, "utf-8");
-    return JSON.parse(raw);
-  } catch {
+  if (!existsSync(stateFilePath))
     return {};
+  try {
+    const parsed = JSON.parse(readFileSync(stateFilePath, "utf-8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return failClosedState();
+    const quarantined = parsed[FAIL_CLOSED_KEY] === true;
+    for (const [key, value] of Object.entries(parsed)) {
+      if (key !== FAIL_CLOSED_KEY && !validSession(value))
+        return failClosedState();
+    }
+    return quarantined ? parsed : { ...parsed };
+  } catch {
+    return failClosedState();
   }
 }
+function writeStateFile(stateFilePath, state) {
+  mkdirSync2(dirname2(stateFilePath), { recursive: true });
+  const tempPath = `${stateFilePath}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(tempPath, JSON.stringify(state, null, 2), { mode: 384 });
+  renameSync2(tempPath, stateFilePath);
+  chmodSync(stateFilePath, 384);
+}
+function getTracingMode(state, sessionId) {
+  const stored = state;
+  const session = stored[sessionId];
+  if (stored[FAIL_CLOSED_KEY])
+    return "metadata";
+  if (!session)
+    return "full";
+  return session.tracing === "metadata" ? "metadata" : "full";
+}
 function getSessionState(state, sessionId) {
-  return state[sessionId] ?? {
-    last_line: -1,
-    turn_count: 0,
-    updated: "",
-    task_run_map: {}
-  };
+  const session = state[sessionId];
+  return validSession(session) ? session : { last_line: -1, turn_count: 0, updated: "", task_run_map: {} };
 }
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
@@ -104,7 +190,7 @@ import { readFileSync as readFileSync2 } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-var LS_INTEGRATION_VERSION = true ? "0.2.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var LS_INTEGRATION_VERSION = true ? "0.3.0" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var PROVIDER_HOSTS = {
   github: "github.com",
   gitlab: "gitlab.com",
@@ -202,12 +288,42 @@ function getGitInfo(cwd) {
   }
   return result;
 }
+function readEnabled(path) {
+  try {
+    const parsed = JSON.parse(readFileSync2(path, "utf-8"));
+    return { present: true, enabled: typeof parsed?.enabled === "boolean" && parsed.enabled };
+  } catch (error2) {
+    if (error2.code === "ENOENT")
+      return { present: false, enabled: false };
+    return { present: true, enabled: false };
+  }
+}
+function parseExplicitBoolean(value) {
+  if (value === void 0)
+    return void 0;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true")
+    return true;
+  if (normalized === "false")
+    return false;
+  return void 0;
+}
+function resolveTracingEnabled(cwd, homeDir) {
+  if (process.env.TRACE_TO_LANGSMITH !== void 0)
+    return parseExplicitBoolean(process.env.TRACE_TO_LANGSMITH) ?? false;
+  const project = readEnabled(join(cwd, ".claude", "langsmith.json"));
+  if (project.present)
+    return project.enabled;
+  const user = readEnabled(join(homeDir, ".claude", "langsmith.json"));
+  return user.present ? user.enabled : false;
+}
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const enabled = resolveTracingEnabled(cwd, homeDir);
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
   const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
   const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
   let replicas;
@@ -298,6 +414,7 @@ function loadConfig(options) {
     repoMetadata.git_commit_sha = gitInfo.commit;
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
   return {
+    enabled,
     apiKey,
     project,
     apiBaseUrl,
@@ -315,9 +432,8 @@ function loadConfig(options) {
 function initHook(cwd) {
   const config = loadConfig({ cwd });
   initLogger(config.debug);
-  if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
+  if (!config.enabled)
     return null;
-  }
   if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
     error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");
     return null;
@@ -355,7 +471,8 @@ async function main() {
       ...state,
       [input.session_id]: {
         ...sessionState,
-        compaction_start_time: Date.now()
+        compaction_start_time: Date.now(),
+        compaction_tracing: sessionState.current_turn_tracing ?? getTracingMode(state, input.session_id)
       }
     };
   });

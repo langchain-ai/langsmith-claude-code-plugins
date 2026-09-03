@@ -12949,6 +12949,78 @@ var AsyncLocalStorageProviderSingleton = new AsyncLocalStorageProvider();
 // node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/index.js
 var __version__ = "0.8.11";
 
+// dist/privacy.js
+var METADATA_KEYS = /* @__PURE__ */ new Set([
+  "thread_id",
+  "turn_number",
+  "turn_id",
+  "status",
+  "ls_tracing_mode",
+  "ls_agent_purpose",
+  "ls_agent_type",
+  "ls_agent_runtime",
+  "ls_agent_runtime_version",
+  "ls_integration",
+  "ls_integration_version",
+  "ls_trace_schema_version",
+  "ls_model_name",
+  "ls_tool_name",
+  "usage_metadata",
+  "ls_subagent_id",
+  "ls_subagent_type"
+]);
+function metadataForMode(metadata, mode = "full", status) {
+  if (mode === "full")
+    return metadata;
+  const safe = {};
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    if (METADATA_KEYS.has(key))
+      safe[key] = value;
+  }
+  safe.status = status ?? "running";
+  safe.ls_tracing_mode = "metadata";
+  return safe;
+}
+function sanitizeReplica(replica, mode) {
+  if (mode === "full" || !replica || typeof replica !== "object" || Array.isArray(replica)) {
+    return replica;
+  }
+  const { updates: _updates, ...safe } = replica;
+  return safe;
+}
+function runConfigForMode(config, mode = "full") {
+  if (mode === "full")
+    return config;
+  const status = config.error ? "error" : config.end_time ? "completed" : "running";
+  const extra = config.extra;
+  const safe = {};
+  for (const key of [
+    "client",
+    "id",
+    "name",
+    "run_type",
+    "project_name",
+    "start_time",
+    "end_time",
+    "parent_run_id",
+    "trace_id",
+    "dotted_order"
+  ]) {
+    if (key in config && config[key] !== void 0)
+      safe[key] = config[key];
+  }
+  if (Array.isArray(config.replicas)) {
+    safe.replicas = config.replicas.map((replica) => sanitizeReplica(replica, mode));
+  }
+  safe.inputs = {};
+  safe.outputs = {};
+  safe.extra = { metadata: metadataForMode(extra?.metadata, mode, status) };
+  return safe;
+}
+function createRunTree(config, mode = "full") {
+  return new RunTree(runConfigForMode(config, mode));
+}
+
 // node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/anonymizer/index.js
 function extractStringNodes(data, options) {
   const parsedOptions = { ...options, maxDepth: options.maxDepth ?? 10 };
@@ -13421,64 +13493,141 @@ function groupIntoTurns(messages) {
 }
 
 // dist/state.js
-import { readFileSync as readFileSync4, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
+import { chmodSync, closeSync as closeSync2, existsSync as existsSync3, mkdirSync as mkdirSync4, openSync as openSync2, readFileSync as readFileSync4, renameSync as renameSync4, statSync as statSync4, unlinkSync as unlinkSync3, writeFileSync as writeFileSync3 } from "node:fs";
 import { dirname as dirname2 } from "node:path";
+import { randomUUID } from "node:crypto";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
+var LOCK_STALE_MS = 3e4;
+var FAIL_CLOSED_KEY = "__langsmith_fail_closed";
 function lockPath(stateFilePath) {
   return `${stateFilePath}.lock`;
 }
 function sleep3(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error2) {
+    return error2.code === "EPERM";
+  }
+}
+function staleLock(path3) {
+  try {
+    if (Date.now() - statSync4(path3).mtimeMs <= LOCK_STALE_MS)
+      return false;
+    try {
+      const record = JSON.parse(readFileSync4(path3, "utf-8"));
+      return typeof record.pid !== "number" || !processAlive(record.pid);
+    } catch {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+}
 async function acquireLock(stateFilePath) {
-  const lock = lockPath(stateFilePath);
+  const path3 = lockPath(stateFilePath);
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  const record = { owner: randomUUID(), pid: process.pid, created: Date.now() };
   mkdirSync4(dirname2(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
-      const fd = openSync2(lock, "wx");
+      const fd = openSync2(path3, "wx", 384);
+      writeFileSync3(fd, JSON.stringify(record));
       closeSync2(fd);
-      return;
-    } catch {
+      return record;
+    } catch (error2) {
+      if (error2.code !== "EEXIST")
+        throw error2;
+      if (staleLock(path3)) {
+        try {
+          unlinkSync3(path3);
+        } catch {
+        }
+        continue;
+      }
       await sleep3(LOCK_RETRY_MS);
     }
   }
-  try {
-    unlinkSync3(lock);
-  } catch {
-  }
+  throw new Error(`Timed out acquiring state lock: ${path3}`);
 }
-function releaseLock(stateFilePath) {
+function releaseLock(stateFilePath, lock) {
+  const path3 = lockPath(stateFilePath);
   try {
-    unlinkSync3(lockPath(stateFilePath));
+    const current = JSON.parse(readFileSync4(path3, "utf-8"));
+    if (current.owner === lock.owner && current.pid === lock.pid)
+      unlinkSync3(path3);
   } catch {
   }
 }
 async function atomicUpdateState(stateFilePath, fn) {
-  await acquireLock(stateFilePath);
+  const lock = await acquireLock(stateFilePath);
   try {
     const state = loadState(stateFilePath);
-    writeFileSync3(stateFilePath, JSON.stringify(fn(state), null, 2));
+    writeStateFile(stateFilePath, fn(state));
   } finally {
-    releaseLock(stateFilePath);
+    releaseLock(stateFilePath, lock);
   }
+}
+function validMode(value) {
+  return value === "full" || value === "metadata";
+}
+function validSession(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return false;
+  const session = value;
+  if (typeof session.last_line !== "number" || typeof session.turn_count !== "number" || typeof session.updated !== "string")
+    return false;
+  for (const key of ["tracing", "current_turn_tracing", "compaction_tracing"]) {
+    if (session[key] !== void 0 && !validMode(session[key]))
+      return false;
+  }
+  if (session.open_turns !== void 0) {
+    if (!session.open_turns || typeof session.open_turns !== "object" || Array.isArray(session.open_turns))
+      return false;
+    for (const turn of Object.values(session.open_turns)) {
+      if (!turn || typeof turn !== "object" || Array.isArray(turn))
+        return false;
+      const mode = turn.tracing;
+      if (mode !== void 0 && !validMode(mode))
+        return false;
+    }
+  }
+  return true;
+}
+function failClosedState() {
+  return { [FAIL_CLOSED_KEY]: true };
 }
 function loadState(stateFilePath) {
-  try {
-    const raw = readFileSync4(stateFilePath, "utf-8");
-    return JSON.parse(raw);
-  } catch {
+  if (!existsSync3(stateFilePath))
     return {};
+  try {
+    const parsed = JSON.parse(readFileSync4(stateFilePath, "utf-8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return failClosedState();
+    const quarantined = parsed[FAIL_CLOSED_KEY] === true;
+    for (const [key, value] of Object.entries(parsed)) {
+      if (key !== FAIL_CLOSED_KEY && !validSession(value))
+        return failClosedState();
+    }
+    return quarantined ? parsed : { ...parsed };
+  } catch {
+    return failClosedState();
   }
 }
+function writeStateFile(stateFilePath, state) {
+  mkdirSync4(dirname2(stateFilePath), { recursive: true });
+  const tempPath = `${stateFilePath}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync3(tempPath, JSON.stringify(state, null, 2), { mode: 384 });
+  renameSync4(tempPath, stateFilePath);
+  chmodSync(stateFilePath, 384);
+}
 function getSessionState(state, sessionId) {
-  return state[sessionId] ?? {
-    last_line: -1,
-    turn_count: 0,
-    updated: "",
-    task_run_map: {}
-  };
+  const session = state[sessionId];
+  return validSession(session) ? session : { last_line: -1, turn_count: 0, updated: "", task_run_map: {} };
 }
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
@@ -13525,11 +13674,7 @@ function codingAgentMetadata(opts) {
   }
   if (skillName)
     meta.ls_skill_name = skillName;
-  return {
-    ...meta,
-    ...runSpecific,
-    ...base
-  };
+  return { ...meta, ...runSpecific, ...base };
 }
 function skillNameFromTool(toolName, toolInput) {
   if (toolName !== "Skill")
@@ -13597,6 +13742,7 @@ function buildUsageMetadata(usage) {
   };
 }
 async function traceTurn(options) {
+  const tracingMode = options.tracingMode ?? "full";
   const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, agentType = "root" } = options;
   const turnId = turn.promptId;
   let traceId = providedTraceId;
@@ -13619,7 +13765,7 @@ async function traceTurn(options) {
     traceId = turnRunId;
     parentDottedOrder = generateDottedOrderSegment(turn.userTimestamp, turnRunId);
     debug(`Creating new standalone turn run ${turnRunId}`);
-    const runTree = new RunTree({
+    const runTree = createRunTree({
       client,
       replicas,
       id: turnRunId,
@@ -13641,7 +13787,7 @@ async function traceTurn(options) {
           agentType
         })
       }
-    });
+    }, tracingMode);
     await runTree.postRun();
   }
   const accumulatedMessages = [
@@ -13656,7 +13802,7 @@ async function traceTurn(options) {
     const assistantRunId = uuid7FromTime(llmCall.startTime);
     const assistantDottedOrderSegment = generateDottedOrderSegment(llmCall.startTime, assistantRunId);
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
-    const assistantRunTree = new RunTree({
+    const assistantRunTree = createRunTree({
       client,
       replicas,
       id: assistantRunId,
@@ -13667,8 +13813,19 @@ async function traceTurn(options) {
       start_time: llmCall.startTime,
       parent_run_id: turnRunId,
       trace_id: traceId,
-      dotted_order: assistantDottedOrder
-    });
+      dotted_order: assistantDottedOrder,
+      extra: {
+        metadata: codingAgentMetadata({
+          sessionId,
+          base: customMetadata,
+          turnId,
+          turnNumber: turnNum,
+          runtimeVersion,
+          agentType,
+          runSpecific: { ls_model_name: llmCall.model }
+        })
+      }
+    }, tracingMode);
     await assistantRunTree.postRun();
     for (const toolCall of llmCall.toolCalls) {
       if (toolCall.agentId && existingTaskRunMap?.[toolCall.agentId]) {
@@ -13685,7 +13842,7 @@ async function traceTurn(options) {
       const toolRunId = uuid7FromTime(toolStartTime);
       const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTime, toolRunId);
       const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
-      const runTree2 = new RunTree({
+      const runTree2 = createRunTree({
         client,
         replicas,
         id: toolRunId,
@@ -13712,7 +13869,7 @@ async function traceTurn(options) {
             skillName: skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input)
           })
         }
-      });
+      }, tracingMode);
       await runTree2.postRun();
       if (toolCall.agentId) {
         taskRunMap[toolCall.agentId] = {
@@ -13724,7 +13881,7 @@ async function traceTurn(options) {
       lastEndTime = toolEndTime;
     }
     const assistantEndTime = llmCall.toolCalls.length > 0 ? lastEndTime : llmCall.endTime;
-    const runTree = new RunTree({
+    const runTree = createRunTree({
       client,
       replicas,
       id: assistantRunId,
@@ -13758,7 +13915,7 @@ async function traceTurn(options) {
           }
         })
       }
-    });
+    }, tracingMode);
     await runTree.patchRun({ excludeInputs: true });
     accumulatedMessages.push({ role: "assistant", content: assistantContent });
     for (const tc of llmCall.toolCalls) {
@@ -13773,7 +13930,7 @@ async function traceTurn(options) {
   if (shouldCreateTurn) {
     const turnOutputs = accumulatedMessages.filter((m) => m.role !== "user");
     const error2 = turn.isComplete ? void 0 : "Interrupted";
-    const runTree = new RunTree({
+    const runTree = createRunTree({
       client,
       replicas,
       id: turnRunId,
@@ -13797,17 +13954,18 @@ async function traceTurn(options) {
           agentType
         })
       }
-    });
+    }, tracingMode);
     await runTree.patchRun({ excludeInputs: true });
   }
-  const status = turn.isComplete ? "complete" : "interrupted";
+  const status = turn.isComplete ? "completed" : "interrupted";
   log(`Traced turn ${turnNum}: ${turnRunId} with ${turn.llmCalls.length} LLM call(s) [${status}]`);
   return taskRunMap;
 }
 async function patchTurnRun(id, result) {
+  const tracingMode = id.tracingMode ?? "full";
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
-  const runTree = new RunTree({
+  const runTree = createRunTree({
     client,
     replicas,
     name: USER_PROMPT_TURN_NAME,
@@ -13831,7 +13989,7 @@ async function patchTurnRun(id, result) {
         agentType: "root"
       })
     }
-  });
+  }, tracingMode);
   await runTree.patchRun({ excludeInputs: true });
 }
 function turnIdentityFromOpenTurn(turn, ctx) {
@@ -13847,7 +14005,8 @@ function turnIdentityFromOpenTurn(turn, ctx) {
     turnId: turn.turn_id,
     turnNumber: turn.turn_number,
     runtimeVersion: turn.runtime_version,
-    approvalPolicy: turn.approval_policy
+    approvalPolicy: turn.approval_policy,
+    tracingMode: turn.tracing ?? "metadata"
   };
 }
 async function completeTurnRun(options) {
@@ -13857,6 +14016,7 @@ async function closeTurnRun(id, error2) {
   await patchTurnRun(id, { error: error2 });
 }
 async function closeInterruptedTurn(options) {
+  const tracingMode = options.turn?.tracing ?? options.sessionState.current_turn_tracing ?? "metadata";
   const { sessionId, sessionState, transcriptPath, project, stateFilePath, customMetadata, runtimeVersion, approvalPolicy, turn, error: errorMessage = "User interrupt" } = options;
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
@@ -13864,7 +14024,8 @@ async function closeInterruptedTurn(options) {
     await closeTurnRun({
       ...turnIdentityFromOpenTurn(turn, { sessionId, project, customMetadata }),
       runtimeVersion: turn.runtime_version ?? runtimeVersion,
-      approvalPolicy: turn.approval_policy ?? approvalPolicy
+      approvalPolicy: turn.approval_policy ?? approvalPolicy,
+      tracingMode
     }, errorMessage);
     await flushPendingTraces();
     return { lastLine: sessionState.last_line, turnsTraced: 0 };
@@ -13893,7 +14054,8 @@ async function closeInterruptedTurn(options) {
             parentDottedOrder: sessionState.current_dotted_order,
             customMetadata,
             runtimeVersion,
-            approvalPolicy
+            approvalPolicy,
+            tracingMode
           });
           lastLine = newLastLine;
           turnsTraced = 1;
@@ -13917,7 +14079,8 @@ async function closeInterruptedTurn(options) {
         customMetadata,
         runtimeVersion,
         turnId,
-        turnNumber
+        turnNumber,
+        tracingMode
       });
     } catch (err) {
       error(`Failed to trace pending subagents on interrupt: ${err}`);
@@ -13934,13 +14097,14 @@ async function closeInterruptedTurn(options) {
     startTime: sessionState.current_turn_start,
     turnNumber: sessionState.current_turn_number,
     runtimeVersion,
-    approvalPolicy
+    approvalPolicy,
+    tracingMode
   }, errorMessage);
   await flushPendingTraces();
   return { lastLine, turnsTraced };
 }
 async function tracePendingSubagents(options) {
-  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen } = options;
+  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen, tracingMode } = options;
   const openedAgentRunIds = [];
   if (!client && !replicas) {
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
@@ -13971,7 +14135,7 @@ async function tracePendingSubagents(options) {
       const deferredEnd = deferred?.end_time ?? "";
       const subagentEndTime = (lastSubagentActivity > deferredEnd ? lastSubagentActivity : deferredEnd) || (/* @__PURE__ */ new Date()).toISOString();
       if (deferred) {
-        const runTree = new RunTree({
+        const runTree = createRunTree({
           client,
           replicas,
           id: parentToolRunId,
@@ -14006,7 +14170,7 @@ async function tracePendingSubagents(options) {
               }
             })
           }
-        });
+        }, tracingMode);
         await runTree.postRun();
         if (keepAgentToolRunOpen)
           openedAgentRunIds.push(subagent.agent_id);
@@ -14029,7 +14193,8 @@ async function tracePendingSubagents(options) {
           customMetadata,
           runtimeVersion,
           turnId,
-          turnNumber
+          turnNumber,
+          tracingMode
         });
       }
     } catch (err) {
@@ -14041,7 +14206,7 @@ async function tracePendingSubagents(options) {
 async function traceSubagentChain(opts) {
   const subagentChainId = uuid7FromTime(opts.startTime);
   const subagentChainDottedOrder = `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, subagentChainId)}`;
-  const runTree = new RunTree({
+  const runTree = createRunTree({
     client,
     replicas,
     id: subagentChainId,
@@ -14069,7 +14234,7 @@ async function traceSubagentChain(opts) {
         // → ls_subagent_type (+ agent_type alias).
       })
     }
-  });
+  }, opts.tracingMode);
   await runTree.postRun();
   for (let i = 0; i < opts.subagentTurns.length; i++) {
     await traceTurn({
@@ -14083,7 +14248,8 @@ async function traceSubagentChain(opts) {
       parentDottedOrder: subagentChainDottedOrder,
       customMetadata: opts.customMetadata,
       runtimeVersion: opts.runtimeVersion,
-      agentType: "subagent"
+      agentType: "subagent",
+      tracingMode: opts.tracingMode
     });
   }
   log(`Traced subagent ${opts.subagentType} (${opts.subagentId}): ${opts.subagentTurns.length} turn(s)`);
@@ -14096,7 +14262,7 @@ async function closeAgentToolRun(options) {
   const runName = isWorkflow ? "Workflow" : "Agent";
   const nativeToolName = isWorkflow ? "Workflow" : "Task";
   const agentTypeAlias = isWorkflow ? "Workflow" : options.agentType || "Agent";
-  const runTree = new RunTree({
+  const runTree = createRunTree({
     client,
     replicas,
     id: options.taskRunInfo.run_id,
@@ -14129,7 +14295,7 @@ async function closeAgentToolRun(options) {
         }
       })
     }
-  });
+  }, options.tracingMode);
   if (options.wasOpen) {
     await runTree.patchRun({ excludeInputs: true });
   } else {
@@ -14142,7 +14308,7 @@ import { readFileSync as readFileSync5 } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-var LS_INTEGRATION_VERSION = true ? "0.2.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var LS_INTEGRATION_VERSION = true ? "0.3.0" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var PROVIDER_HOSTS = {
   github: "github.com",
   gitlab: "gitlab.com",
@@ -14240,12 +14406,42 @@ function getGitInfo(cwd) {
   }
   return result;
 }
+function readEnabled(path3) {
+  try {
+    const parsed = JSON.parse(readFileSync5(path3, "utf-8"));
+    return { present: true, enabled: typeof parsed?.enabled === "boolean" && parsed.enabled };
+  } catch (error2) {
+    if (error2.code === "ENOENT")
+      return { present: false, enabled: false };
+    return { present: true, enabled: false };
+  }
+}
+function parseExplicitBoolean(value) {
+  if (value === void 0)
+    return void 0;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true")
+    return true;
+  if (normalized === "false")
+    return false;
+  return void 0;
+}
+function resolveTracingEnabled(cwd, homeDir) {
+  if (process.env.TRACE_TO_LANGSMITH !== void 0)
+    return parseExplicitBoolean(process.env.TRACE_TO_LANGSMITH) ?? false;
+  const project = readEnabled(join(cwd, ".claude", "langsmith.json"));
+  if (project.present)
+    return project.enabled;
+  const user = readEnabled(join(homeDir, ".claude", "langsmith.json"));
+  return user.present ? user.enabled : false;
+}
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const enabled = resolveTracingEnabled(cwd, homeDir);
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
   const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
   const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
   let replicas2;
@@ -14336,6 +14532,7 @@ function loadConfig(options) {
     repoMetadata.git_commit_sha = gitInfo.commit;
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
   return {
+    enabled,
     apiKey,
     project,
     apiBaseUrl,
@@ -14353,9 +14550,8 @@ function loadConfig(options) {
 function initHook(cwd) {
   const config = loadConfig({ cwd });
   initLogger(config.debug);
-  if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
+  if (!config.enabled)
     return null;
-  }
   if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
     error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");
     return null;
@@ -14434,8 +14630,9 @@ async function main() {
         project: config.project,
         customMetadata: config.customMetadata,
         runtimeVersion,
-        wasOpen: true
+        wasOpen: true,
         // subagent_done ⇒ SubagentStop posted it open
+        tracingMode: openTurns[taskRunInfo.deferred?.parent_run_id]?.tracing ?? "metadata"
       });
       debug(`Closed open Agent tool run ${agentId} on session end`);
     } catch (err) {

@@ -11,8 +11,10 @@
  * transcript before closing it with "User interrupt".
  */
 
-import { RunTree, uuid7FromTime } from "langsmith";
-import { debug, error } from "../logger.js";
+import { uuid7FromTime } from "langsmith";
+import { createRunTree } from "../privacy.js";
+import { debug, error, initLogger } from "../logger.js";
+import { loadConfig } from "../config.js";
 import {
   initTracing,
   closeInterruptedTurn,
@@ -20,7 +22,15 @@ import {
   parseDottedOrder,
 } from "../langsmith.js";
 import { finalizeNotificationChain } from "../finalize.js";
-import { loadState, atomicUpdateState, getSessionState } from "../state.js";
+import {
+  loadState,
+  atomicUpdateState,
+  recoverAndUpdateState,
+  getSessionState,
+  getTracingMode,
+  parseTraceCommand,
+  traceCommandResponse,
+} from "../state.js";
 import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -52,6 +62,25 @@ async function main(): Promise<void> {
   const hookStartTime = Date.now();
   const input: UserPromptSubmitHookInput = await readStdin();
 
+  const command = parseTraceCommand(input.prompt);
+  if (command) {
+    const config = loadConfig({ cwd: input.cwd });
+    initLogger(config.debug);
+    let mode = getTracingMode(loadState(config.stateFilePath), input.session_id);
+    if (command !== "status") mode = command === "on" ? "full" : "metadata";
+    const recovered = await recoverAndUpdateState(config.stateFilePath, (state) => ({
+      ...state,
+      [input.session_id]: {
+        ...getSessionState(state, input.session_id),
+        ...(command === "status" ? {} : { tracing: mode }),
+        updated: new Date().toISOString(),
+      },
+    }));
+    if (command === "status") mode = getTracingMode(recovered, input.session_id);
+    process.stdout.write(traceCommandResponse(mode, config.enabled));
+    return;
+  }
+
   const config = initHook(input.cwd);
   if (!config) return;
 
@@ -73,6 +102,7 @@ async function main(): Promise<void> {
   );
 
   const state = loadState(config.stateFilePath);
+  const turnMode = getTracingMode(state, input.session_id);
   const sessionState = getSessionState(state, input.session_id);
 
   // CLI version (ls_agent_runtime_version); best-effort, Stop backfills if empty.
@@ -206,30 +236,33 @@ async function main(): Promise<void> {
     dottedOrder = segment;
   }
 
-  const runTree = new RunTree({
-    client,
-    replicas: config.replicas,
-    id: runId,
-    name: USER_PROMPT_TURN_NAME,
-    run_type: "chain",
-    inputs: { messages: [{ role: "user", content: input.prompt }] },
-    project_name: config.project,
-    start_time: startTime,
-    trace_id: traceId,
-    dotted_order: dottedOrder,
-    ...(parentRunId ? { parent_run_id: parentRunId } : {}),
-    extra: {
-      metadata: codingAgentMetadata({
-        sessionId: input.session_id,
-        base: config.customMetadata,
-        // turn_id (promptId) isn't known yet; Stop stamps it on completion.
-        turnNumber: turnNum,
-        runtimeVersion,
-        approvalPolicy,
-        agentType: "root",
-      }),
+  const runTree = createRunTree(
+    {
+      client,
+      replicas: config.replicas,
+      id: runId,
+      name: USER_PROMPT_TURN_NAME,
+      run_type: "chain",
+      inputs: { messages: [{ role: "user", content: input.prompt }] },
+      project_name: config.project,
+      start_time: startTime,
+      trace_id: traceId,
+      dotted_order: dottedOrder,
+      ...(parentRunId ? { parent_run_id: parentRunId } : {}),
+      extra: {
+        metadata: codingAgentMetadata({
+          sessionId: input.session_id,
+          base: config.customMetadata,
+          // turn_id (promptId) isn't known yet; Stop stamps it on completion.
+          turnNumber: turnNum,
+          runtimeVersion,
+          approvalPolicy,
+          agentType: "root",
+        }),
+      },
     },
-  });
+    turnMode,
+  );
 
   await runTree.postRun();
 
@@ -260,6 +293,7 @@ async function main(): Promise<void> {
       [input.session_id]: {
         ...ss,
         current_turn_run_id: runId,
+        current_turn_tracing: turnMode,
         current_trace_id: traceId,
         current_dotted_order: dottedOrder,
         current_parent_run_id: parentRunId,

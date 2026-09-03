@@ -58,6 +58,7 @@ export interface CodingAgentMetadataOptions {
  * Build the metadata for one run. Merge order (later wins): identity → dynamic
  * → runSpecific → base. Unknown values are omitted (never null/empty).
  */
+
 export function codingAgentMetadata(opts: CodingAgentMetadataOptions): Record<string, unknown> {
   const {
     sessionId,
@@ -117,11 +118,7 @@ export function codingAgentMetadata(opts: CodingAgentMetadataOptions): Record<st
   // RunQueryStats (group_by metadata path=ls_skill_name).
   if (skillName) meta.ls_skill_name = skillName;
 
-  return {
-    ...meta,
-    ...runSpecific,
-    ...base,
-  };
+  return { ...meta, ...runSpecific, ...base };
 }
 
 /**

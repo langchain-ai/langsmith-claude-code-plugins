@@ -66,6 +66,9 @@ export async function finalizeNotificationChain(opts: {
         runtimeVersion,
         turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : undefined,
         wasOpen: Boolean(taskRunInfo.subagent_done),
+        tracingMode: launchingTurnId
+          ? (ss.open_turns?.[launchingTurnId]?.tracing ?? "metadata")
+          : "metadata",
         error: interrupted
           ? taskRunInfo.is_workflow
             ? "Workflow killed"

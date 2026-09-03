@@ -164,6 +164,7 @@ async function main(): Promise<void> {
         tracedToolUseIds,
         traceId,
         parentDottedOrder: dottedOrder,
+        tracingMode: isLastTurn ? sessionState.current_turn_tracing : "metadata",
       });
       allTaskRunMaps = { ...allTaskRunMaps, ...taskRunMap };
       tracedTurns++;
@@ -199,6 +200,7 @@ async function main(): Promise<void> {
       runtimeVersion,
       turnId: lastTurnId,
       turnNumber: sessionState.current_turn_number,
+      tracingMode: sessionState.current_turn_tracing ?? "metadata",
     });
     for (const sa of pendingSubagents) processedAgentIds.add(sa.agent_id);
   }
@@ -320,6 +322,7 @@ async function main(): Promise<void> {
     // The main loop is done with this turn regardless; clear so the next
     // UserPromptSubmit doesn't mistake a deferred turn for an interrupted one.
     s.current_turn_run_id = undefined;
+    s.current_turn_tracing = undefined;
     // Consume the notification markers; the finalize below (or the deferred
     // open_turns entry) now owns them.
     s.current_notification_agent_id = undefined;
@@ -347,6 +350,7 @@ async function main(): Promise<void> {
         turnNumber: sessionState.current_turn_number,
         runtimeVersion,
         approvalPolicy,
+        tracingMode: sessionState.current_turn_tracing ?? "metadata",
       });
       debug(`Turn run ${currentRunId} completed`);
     } catch (err) {

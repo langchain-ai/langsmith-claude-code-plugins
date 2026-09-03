@@ -115,6 +115,7 @@ async function main(): Promise<void> {
   const launchingTurn: OpenTurn | undefined = turnRunId
     ? sessionState.open_turns?.[turnRunId]
     : undefined;
+  const tracingMode = launchingTurn?.tracing ?? sessionState.current_turn_tracing ?? "metadata";
 
   if (!turnTraceId) {
     debug(`No trace context for subagent ${input.agent_id}, cannot trace`);
@@ -141,6 +142,7 @@ async function main(): Promise<void> {
       turnNumber: launchingTurn?.turn_number ?? sessionState.current_turn_number,
       // Leave the Agent tool run open — the task-notification turn nests under it.
       keepAgentToolRunOpen: true,
+      tracingMode,
     });
     debug(`Traced background subagent ${input.agent_type} (${input.agent_id})`);
   } catch (err) {

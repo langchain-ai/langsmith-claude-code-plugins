@@ -27,6 +27,7 @@ export interface LaunchingTurn {
   turn_number?: number;
   runtime_version?: string;
   approval_policy?: string;
+  tracing?: "full" | "metadata";
 }
 
 /**
@@ -59,6 +60,7 @@ export function recordBackgroundRun(
         turn_number: turn.turn_number,
         runtime_version: turn.runtime_version,
         approval_policy: turn.approval_policy,
+        tracing: turn.tracing,
         stop_seen: existing?.stop_seen ?? false,
         agent_ids: [
           ...(existing?.agent_ids ?? []).filter((id) => id !== backgroundId),

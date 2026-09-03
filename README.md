@@ -246,7 +246,13 @@ You can trace to multiple LangSmith projects or workspaces simultaneously using 
 
 For more information on replicas, see the [LangSmith documentation](https://docs.langchain.com/langsmith/log-traces-to-project).
 
-### Configuration
+### Per-thread tracing mode
+
+With the master switch enabled, use the exact lowercase commands `/trace on`, `/trace off`, and `/trace status`. `/trace off` keeps allowlisted topology, timing, status, model/tool identity, and usage metadata while replacing inputs and outputs with `{}` and dropping raw errors. The mode is sticky for the thread and snapshotted for asynchronous agents and workflows.
+
+The master switch (`TRACE_TO_LANGSMITH` or `.claude/langsmith.json`) always wins: `/trace on` can persist the thread preference but cannot enable tracing while the master switch is disabled. A malformed project `.claude/langsmith.json` fails disabled; only an absent project file falls back to user configuration.
+
+## Configuration
 
 Set `CC_LANGSMITH_RUNS_ENDPOINTS` to a JSON array of replica configurations. This will override other client settings.
 

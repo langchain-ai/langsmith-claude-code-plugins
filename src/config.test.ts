@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -28,6 +28,7 @@ describe("loadConfig", () => {
     delete process.env.CC_LANGSMITH_METADATA;
     delete process.env.CC_LANGSMITH_REDACT;
     delete process.env.CC_LANGSMITH_REDACT_EXTRA;
+    delete process.env.TRACE_TO_LANGSMITH;
 
     // Point HOME at an empty temp dir so tests don't read the real ~/.claude.json.
     tmpHome = mkdtempSync(join(tmpdir(), "ls-cc-test-"));
@@ -41,6 +42,44 @@ describe("loadConfig", () => {
     if (tmpHome) {
       rmSync(tmpHome, { recursive: true, force: true });
     }
+  });
+
+  describe("master switch", () => {
+    it("defaults off", () => {
+      expect(loadConfig({ cwd }).enabled).toBe(false);
+    });
+
+    it("prefers an explicit environment boolean", () => {
+      process.env.TRACE_TO_LANGSMITH = "false";
+      expect(loadConfig({ cwd }).enabled).toBe(false);
+      process.env.TRACE_TO_LANGSMITH = "true";
+      expect(loadConfig({ cwd }).enabled).toBe(true);
+    });
+
+    it("fails disabled for an invalid environment value instead of inheriting config", () => {
+      mkdirSync(join(tmpHome, ".claude"), { recursive: true });
+      writeFileSync(join(tmpHome, ".claude", "langsmith.json"), JSON.stringify({ enabled: true }));
+      process.env.TRACE_TO_LANGSMITH = "yes";
+      expect(loadConfig({ cwd }).enabled).toBe(false);
+    });
+
+    it("prefers project config over user config", () => {
+      mkdirSync(join(tmpHome, ".claude"), { recursive: true });
+      mkdirSync(join(cwd, ".claude"), { recursive: true });
+      writeFileSync(join(tmpHome, ".claude", "langsmith.json"), JSON.stringify({ enabled: true }));
+      writeFileSync(join(cwd, ".claude", "langsmith.json"), JSON.stringify({ enabled: false }));
+      expect(loadConfig({ cwd }).enabled).toBe(false);
+      rmSync("/tmp/langsmith-claude-code-plugins", { recursive: true, force: true });
+    });
+
+    it("fails disabled for malformed project config instead of inheriting user enabled", () => {
+      mkdirSync(join(tmpHome, ".claude"), { recursive: true });
+      mkdirSync(join(cwd, ".claude"), { recursive: true });
+      writeFileSync(join(tmpHome, ".claude", "langsmith.json"), JSON.stringify({ enabled: true }));
+      writeFileSync(join(cwd, ".claude", "langsmith.json"), "not json");
+      expect(loadConfig({ cwd }).enabled).toBe(false);
+      rmSync("/tmp/langsmith-claude-code-plugins", { recursive: true, force: true });
+    });
   });
 
   it("reads CC_LANGSMITH_API_KEY first", () => {
