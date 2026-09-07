@@ -12949,6 +12949,74 @@ var AsyncLocalStorageProviderSingleton = new AsyncLocalStorageProvider();
 // node_modules/.pnpm/langsmith@0.8.11/node_modules/langsmith/dist/index.js
 var __version__ = "0.8.11";
 
+// dist/metadata.js
+var TRUSTED_INTEGRATION_VERSION = true ? "0.3.0" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var TRUSTED_METADATA = /* @__PURE__ */ Symbol("coding-agent trusted metadata");
+function trustedCodingAgentMetadata(metadata) {
+  return metadata?.[TRUSTED_METADATA];
+}
+var LS_AGENT_PURPOSE = "coding";
+var LS_INTEGRATION = "claude-code";
+var LS_AGENT_RUNTIME = "Claude Code";
+var LS_TRACE_SCHEMA_VERSION = "coding-agent-v1";
+function codingAgentMetadata(opts) {
+  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, agentType, subagentId, subagentType, toolName, runName, skillName, runSpecific } = opts;
+  const meta = {
+    // Identity & grouping — always present.
+    ls_agent_purpose: LS_AGENT_PURPOSE,
+    ls_integration: LS_INTEGRATION,
+    ls_agent_runtime: LS_AGENT_RUNTIME,
+    ls_trace_schema_version: LS_TRACE_SCHEMA_VERSION,
+    thread_id: sessionId
+  };
+  if (turnId)
+    meta.turn_id = turnId;
+  if (typeof turnNumber === "number")
+    meta.turn_number = turnNumber;
+  if (runtimeVersion)
+    meta.ls_agent_runtime_version = runtimeVersion;
+  if (approvalPolicy)
+    meta.approval_policy = approvalPolicy;
+  meta.ls_agent_type = agentType;
+  if (subagentId) {
+    meta.ls_subagent_id = subagentId;
+    meta.agent_id = subagentId;
+  }
+  if (subagentType) {
+    meta.ls_subagent_type = subagentType;
+    meta.agent_type = subagentType;
+  }
+  if (toolName) {
+    meta.tool_name = toolName;
+    if (runName && toolName !== runName)
+      meta.ls_tool_name = toolName;
+  }
+  if (skillName)
+    meta.ls_skill_name = skillName;
+  const trusted = { ...meta };
+  if (TRUSTED_INTEGRATION_VERSION)
+    trusted.ls_integration_version = TRUSTED_INTEGRATION_VERSION;
+  if (opts.modelName !== void 0)
+    trusted.ls_model_name = opts.modelName;
+  if (opts.usageMetadata !== void 0)
+    trusted.usage_metadata = opts.usageMetadata;
+  const result = {
+    ...meta,
+    ...opts.modelName !== void 0 ? { ls_model_name: opts.modelName } : {},
+    ...opts.usageMetadata !== void 0 ? { usage_metadata: opts.usageMetadata } : {},
+    ...runSpecific,
+    ...base
+  };
+  Object.defineProperty(result, TRUSTED_METADATA, { value: trusted });
+  return result;
+}
+function skillNameFromTool(toolName, toolInput) {
+  if (toolName !== "Skill")
+    return void 0;
+  const skill = toolInput?.skill;
+  return typeof skill === "string" ? skill : void 0;
+}
+
 // dist/privacy.js
 var METADATA_KEYS = /* @__PURE__ */ new Set([
   "thread_id",
@@ -12969,17 +13037,60 @@ var METADATA_KEYS = /* @__PURE__ */ new Set([
   "ls_subagent_id",
   "ls_subagent_type"
 ]);
+function numericFields(value, keys) {
+  const safe = {};
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return safe;
+  for (const key of keys) {
+    const count = value[key];
+    if (typeof count === "number" && Number.isFinite(count) && count >= 0)
+      safe[key] = count;
+  }
+  return safe;
+}
+function usageForMetadata(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return void 0;
+  const usage = value;
+  const safe = numericFields(usage, [
+    "input_tokens",
+    "output_tokens",
+    "total_tokens"
+  ]);
+  for (const [key, keys] of [
+    ["input_token_details", ["cache_read", "cache_creation", "audio"]],
+    ["output_token_details", ["reasoning", "audio"]]
+  ]) {
+    const details = numericFields(usage[key], keys);
+    if (Object.keys(details).length)
+      safe[key] = details;
+  }
+  return Object.keys(safe).length ? safe : void 0;
+}
+function projectMetadata(metadata, status) {
+  const safe = {};
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    if (!METADATA_KEYS.has(key))
+      continue;
+    if (key === "usage_metadata") {
+      const usage = usageForMetadata(value);
+      if (usage)
+        safe[key] = usage;
+    } else if (key === "turn_number") {
+      if (typeof value === "number" && Number.isSafeInteger(value) && value >= 1)
+        safe[key] = value;
+    } else if (typeof value === "string" && value.length) {
+      safe[key] = value;
+    }
+  }
+  safe.status = status === "error" || status === "completed" ? status : "running";
+  safe.ls_tracing_mode = "metadata";
+  return safe;
+}
 function metadataForMode(metadata, mode = "full", status) {
   if (mode === "full")
     return metadata;
-  const safe = {};
-  for (const [key, value] of Object.entries(metadata ?? {})) {
-    if (METADATA_KEYS.has(key))
-      safe[key] = value;
-  }
-  safe.status = status ?? "running";
-  safe.ls_tracing_mode = "metadata";
-  return safe;
+  return projectMetadata(trustedCodingAgentMetadata(metadata) ?? metadata, status);
 }
 function sanitizeReplica(replica, mode) {
   if (mode === "full" || !replica || typeof replica !== "object")
@@ -13026,7 +13137,7 @@ function runConfigForMode(config, mode = "full") {
       return {
         // Read the current metadata, not the constructor's copy: the client may
         // have anonymized allowlisted values, which must not be restored here.
-        metadata: metadataForMode(this.metadata, "metadata", typeof this.metadata?.status === "string" ? this.metadata.status : status)
+        metadata: projectMetadata(this.metadata, typeof this.metadata?.status === "string" ? this.metadata.status : status)
       };
     }
   };
@@ -13512,13 +13623,14 @@ function groupIntoTurns(messages) {
 }
 
 // dist/state.js
-import { chmodSync, closeSync as closeSync2, existsSync as existsSync3, mkdirSync as mkdirSync4, openSync as openSync2, readFileSync as readFileSync4, renameSync as renameSync4, statSync as statSync4, unlinkSync as unlinkSync3, writeFileSync as writeFileSync3 } from "node:fs";
+import { chmodSync, closeSync as closeSync2, constants, copyFileSync, mkdirSync as mkdirSync4, openSync as openSync2, readFileSync as readFileSync4, renameSync as renameSync4, statSync as statSync4, unlinkSync as unlinkSync3, writeFileSync as writeFileSync3 } from "node:fs";
 import { dirname as dirname2 } from "node:path";
 import { randomUUID } from "node:crypto";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
 var LOCK_STALE_MS = 3e4;
 var FAIL_CLOSED_KEY = "__langsmith_fail_closed";
+var CONSENT_KEY = "__langsmith_explicit_consent";
 function lockPath(stateFilePath) {
   return `${stateFilePath}.lock`;
 }
@@ -13585,8 +13697,19 @@ function releaseLock(stateFilePath, lock) {
 async function atomicUpdateState(stateFilePath, fn) {
   const lock = await acquireLock(stateFilePath);
   try {
-    const state = loadState(stateFilePath);
-    writeStateFile(stateFilePath, fn(state));
+    const { state } = readStateFile(stateFilePath);
+    const failClosed = state[FAIL_CLOSED_KEY];
+    const consented = new Set(Object.keys(state).filter((id) => getTracingMode(state, id) === "full"));
+    const updated = fn(state);
+    if (failClosed) {
+      updated[FAIL_CLOSED_KEY] = true;
+      for (const [id, session] of Object.entries(updated)) {
+        if (id !== FAIL_CLOSED_KEY && validSession(session) && !consented.has(id)) {
+          delete session[CONSENT_KEY];
+        }
+      }
+    }
+    writeStateFile(stateFilePath, updated);
   } finally {
     releaseLock(stateFilePath, lock);
   }
@@ -13599,6 +13722,8 @@ function validSession(value) {
     return false;
   const session = value;
   if (typeof session.last_line !== "number" || typeof session.turn_count !== "number" || typeof session.updated !== "string")
+    return false;
+  if (session[CONSENT_KEY] !== void 0 && session[CONSENT_KEY] !== true)
     return false;
   for (const key of ["tracing", "current_turn_tracing", "compaction_tracing"]) {
     if (session[key] !== void 0 && !validMode(session[key]))
@@ -13620,19 +13745,60 @@ function validSession(value) {
 function failClosedState() {
   return { [FAIL_CLOSED_KEY]: true };
 }
-function loadState(stateFilePath) {
-  if (!existsSync3(stateFilePath))
-    return {};
+function readStateFile(stateFilePath) {
+  let contents;
   try {
-    const parsed = JSON.parse(readFileSync4(stateFilePath, "utf-8"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      return failClosedState();
-    const quarantined = parsed[FAIL_CLOSED_KEY] === true;
-    for (const [key, value] of Object.entries(parsed)) {
-      if (key !== FAIL_CLOSED_KEY && !validSession(value))
-        return failClosedState();
+    contents = readFileSync4(stateFilePath, "utf-8");
+  } catch (error2) {
+    if (error2.code === "ENOENT")
+      return { state: {}, corrupt: false };
+    throw error2;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(contents);
+  } catch {
+    return { state: failClosedState(), corrupt: true };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { state: failClosedState(), corrupt: true };
+  }
+  let corrupt = parsed[FAIL_CLOSED_KEY] !== void 0 && parsed[FAIL_CLOSED_KEY] !== true;
+  const state = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (key === FAIL_CLOSED_KEY)
+      continue;
+    if (validSession(value)) {
+      Object.defineProperty(state, key, {
+        value: { ...value },
+        enumerable: true,
+        writable: true,
+        configurable: true
+      });
+    } else {
+      corrupt = true;
     }
-    return quarantined ? parsed : { ...parsed };
+  }
+  if (corrupt || parsed[FAIL_CLOSED_KEY] === true) {
+    state[FAIL_CLOSED_KEY] = true;
+  }
+  if (corrupt) {
+    for (const [key, session] of Object.entries(state)) {
+      if (key !== FAIL_CLOSED_KEY)
+        delete session[CONSENT_KEY];
+    }
+  }
+  if (state[FAIL_CLOSED_KEY]) {
+    for (const id of Object.keys(state)) {
+      if (id !== FAIL_CLOSED_KEY)
+        state[id] = getSessionState(state, id);
+    }
+  }
+  return { state, corrupt };
+}
+function loadState(stateFilePath) {
+  try {
+    return readStateFile(stateFilePath).state;
   } catch {
     return failClosedState();
   }
@@ -13640,67 +13806,55 @@ function loadState(stateFilePath) {
 function writeStateFile(stateFilePath, state) {
   mkdirSync4(dirname2(stateFilePath), { recursive: true });
   const tempPath = `${stateFilePath}.${process.pid}.${randomUUID()}.tmp`;
-  writeFileSync3(tempPath, JSON.stringify(state, null, 2), { mode: 384 });
-  renameSync4(tempPath, stateFilePath);
-  chmodSync(stateFilePath, 384);
+  try {
+    writeFileSync3(tempPath, JSON.stringify(state, null, 2), { mode: 384, flag: "wx" });
+    chmodSync(tempPath, 384);
+    renameSync4(tempPath, stateFilePath);
+  } finally {
+    try {
+      unlinkSync3(tempPath);
+    } catch {
+    }
+  }
+}
+function getTracingMode(state, sessionId) {
+  const stored = state;
+  const session = stored[sessionId];
+  if (stored[FAIL_CLOSED_KEY]) {
+    return validSession(session) && session.tracing === "full" && session[CONSENT_KEY] === true ? "full" : "metadata";
+  }
+  if (!session)
+    return "full";
+  return session.tracing === "metadata" ? "metadata" : "full";
+}
+function failClosedSnapshots(session) {
+  const downgrade = (entries) => Object.fromEntries(Object.entries(entries).map(([id, entry]) => [
+    id,
+    entry?.tracing === "full" ? { ...entry, tracing: "metadata" } : entry
+  ]));
+  return {
+    ...session,
+    ...session.current_turn_tracing === "full" && { current_turn_tracing: "metadata" },
+    ...session.compaction_tracing === "full" && { compaction_tracing: "metadata" },
+    ...session.open_turns && { open_turns: downgrade(session.open_turns) },
+    ...session.task_run_map && { task_run_map: downgrade(session.task_run_map) },
+    ...session.tool_launch_contexts && {
+      tool_launch_contexts: downgrade(session.tool_launch_contexts)
+    }
+  };
 }
 function getSessionState(state, sessionId) {
   const session = state[sessionId];
-  return validSession(session) ? session : { last_line: -1, turn_count: 0, updated: "", task_run_map: {} };
+  if (!validSession(session)) {
+    return { last_line: -1, turn_count: 0, updated: "", task_run_map: {} };
+  }
+  return state[FAIL_CLOSED_KEY] && getTracingMode(state, sessionId) !== "full" ? failClosedSnapshots(session) : session;
 }
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
 // dist/constants.js
 var USER_PROMPT_TURN_NAME = "Claude Code Turn";
 var ASSISTANT_RUN_NAME = "Claude";
-
-// dist/metadata.js
-var LS_AGENT_PURPOSE = "coding";
-var LS_INTEGRATION = "claude-code";
-var LS_AGENT_RUNTIME = "Claude Code";
-var LS_TRACE_SCHEMA_VERSION = "coding-agent-v1";
-function codingAgentMetadata(opts) {
-  const { sessionId, base, turnId, turnNumber, runtimeVersion, approvalPolicy, agentType, subagentId, subagentType, toolName, runName, skillName, runSpecific } = opts;
-  const meta = {
-    // Identity & grouping — always present.
-    ls_agent_purpose: LS_AGENT_PURPOSE,
-    ls_integration: LS_INTEGRATION,
-    ls_agent_runtime: LS_AGENT_RUNTIME,
-    ls_trace_schema_version: LS_TRACE_SCHEMA_VERSION,
-    thread_id: sessionId
-  };
-  if (turnId)
-    meta.turn_id = turnId;
-  if (typeof turnNumber === "number")
-    meta.turn_number = turnNumber;
-  if (runtimeVersion)
-    meta.ls_agent_runtime_version = runtimeVersion;
-  if (approvalPolicy)
-    meta.approval_policy = approvalPolicy;
-  meta.ls_agent_type = agentType;
-  if (subagentId) {
-    meta.ls_subagent_id = subagentId;
-    meta.agent_id = subagentId;
-  }
-  if (subagentType) {
-    meta.ls_subagent_type = subagentType;
-    meta.agent_type = subagentType;
-  }
-  if (toolName) {
-    meta.tool_name = toolName;
-    if (runName && toolName !== runName)
-      meta.ls_tool_name = toolName;
-  }
-  if (skillName)
-    meta.ls_skill_name = skillName;
-  return { ...meta, ...runSpecific, ...base };
-}
-function skillNameFromTool(toolName, toolInput) {
-  if (toolName !== "Skill")
-    return void 0;
-  const skill = toolInput?.skill;
-  return typeof skill === "string" ? skill : void 0;
-}
 
 // dist/langsmith.js
 var client = void 0;
@@ -13841,7 +13995,7 @@ async function traceTurn(options) {
           turnNumber: turnNum,
           runtimeVersion,
           agentType,
-          runSpecific: { ls_model_name: llmCall.model }
+          modelName: llmCall.model
         })
       }
     }, tracingMode);
@@ -13925,13 +14079,13 @@ async function traceTurn(options) {
           turnNumber: turnNum,
           runtimeVersion,
           agentType,
+          modelName: llmCall.model,
+          usageMetadata: buildUsageMetadata(llmCall.usage),
           runSpecific: {
             ls_provider: resolveProvider(llmCall.model),
-            ls_model_name: llmCall.model,
             ls_invocation_params: {
               model: llmCall.model
             },
-            usage_metadata: buildUsageMetadata(llmCall.usage),
             ...llmCall.synthetic ? { synthetic: true } : {}
           }
         })

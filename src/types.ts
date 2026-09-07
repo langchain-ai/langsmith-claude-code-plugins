@@ -162,6 +162,27 @@ export interface Turn {
 
 export type TracingMode = "full" | "metadata";
 
+/** Immutable PreToolUse ownership, captured before the tool starts. Never infer
+ * ownership from the current turn when an async PostToolUse eventually runs. */
+export interface ToolLaunchContext {
+  /** Wall-clock tool start (ms), independent of the per-current-turn timing map. */
+  start_time: number;
+  /** Missing launch-time consent always means metadata, not the session preference. */
+  tracing: TracingMode;
+  /** Absent if PreToolUse could not establish a complete launching trace context. */
+  turn?: Pick<
+    OpenTurn,
+    | "run_id"
+    | "trace_id"
+    | "dotted_order"
+    | "parent_run_id"
+    | "start_time"
+    | "turn_number"
+    | "runtime_version"
+    | "approval_policy"
+  >;
+}
+
 export interface SessionState {
   last_line: number;
   tracing?: TracingMode;
@@ -188,6 +209,9 @@ export interface SessionState {
   last_tool_end_time?: number;
   /** Maps tool_use_id -> wall-clock start time (ms), set by PreToolUse */
   tool_start_times?: Record<string, number>;
+  /** tool_use_id -> immutable launch ownership. Preserve across prompt/Stop resets;
+   * PostToolUse consumes its entry only after successfully recording the result. */
+  tool_launch_contexts?: Record<string, ToolLaunchContext>;
   /** Maps agent_id -> parent tool run info for linking subagent traces.
    *  For Agent tools, also stores deferred creation info so the Stop hook
    *  can create the run with the correct subagent name. */

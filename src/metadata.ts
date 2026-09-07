@@ -3,6 +3,28 @@
  * run (children don't inherit parent `extra.metadata`). See validator.json.
  */
 
+// Same build-time source as config.ts, read independently of its custom base.
+// Keep this helper independent of config I/O (and hook configuration mocks).
+declare const __LS_INTEGRATION_VERSION__: string;
+const TRUSTED_INTEGRATION_VERSION =
+  typeof __LS_INTEGRATION_VERSION__ !== "undefined"
+    ? __LS_INTEGRATION_VERSION__
+    : process.env.CC_LANGSMITH_INTEGRATION_VERSION || undefined;
+
+// Private, non-serializable provenance: custom base/runSpecific values never
+// become trusted merely by colliding with an allowed metadata key. Pass the
+// builder result directly to privacy helpers; spreading/JSON-cloning metadata
+// itself loses provenance (spreading the containing run config is fine).
+const TRUSTED_METADATA = Symbol("coding-agent trusted metadata");
+
+export function trustedCodingAgentMetadata(
+  metadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  return (metadata as { [TRUSTED_METADATA]?: Record<string, unknown> } | undefined)?.[
+    TRUSTED_METADATA
+  ];
+}
+
 // ─── Frozen literals (identity block) ────────────────────────────────────────
 
 export const LS_AGENT_PURPOSE = "coding";
@@ -48,7 +70,13 @@ export interface CodingAgentMetadataOptions {
    * Skill tool's `skill` input arg. */
   skillName?: string;
 
-  /** Preserved run-type keys (ls_provider, usage_metadata, …) and compat aliases. */
+  /** Plugin-derived model and token counts, before any custom metadata merge.
+   * Do not populate these from base/runSpecific or CC_LANGSMITH_METADATA.
+   * Values still undergo schema validation in metadata-only mode. */
+  modelName?: string;
+  usageMetadata?: Record<string, unknown>;
+
+  /** Full-mode run-type keys and compat aliases. Not trusted in metadata mode. */
   runSpecific?: Record<string, unknown>;
 }
 
@@ -118,7 +146,24 @@ export function codingAgentMetadata(opts: CodingAgentMetadataOptions): Record<st
   // RunQueryStats (group_by metadata path=ls_skill_name).
   if (skillName) meta.ls_skill_name = skillName;
 
-  return { ...meta, ...runSpecific, ...base };
+  // Integration version is independently sourced, never recovered from the
+  // config's already-merged custom base. Runtime/session/tool identity comes
+  // from explicit plugin context above. Project routing is a separate run
+  // config field, not custom metadata; user/repository attribution is excluded.
+  const trusted = { ...meta };
+  if (TRUSTED_INTEGRATION_VERSION) trusted.ls_integration_version = TRUSTED_INTEGRATION_VERSION;
+  if (opts.modelName !== undefined) trusted.ls_model_name = opts.modelName;
+  if (opts.usageMetadata !== undefined) trusted.usage_metadata = opts.usageMetadata;
+
+  const result = {
+    ...meta,
+    ...(opts.modelName !== undefined ? { ls_model_name: opts.modelName } : {}),
+    ...(opts.usageMetadata !== undefined ? { usage_metadata: opts.usageMetadata } : {}),
+    ...runSpecific,
+    ...base,
+  };
+  Object.defineProperty(result, TRUSTED_METADATA, { value: trusted });
+  return result;
 }
 
 /**

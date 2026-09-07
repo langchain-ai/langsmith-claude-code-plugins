@@ -38,13 +38,14 @@ function debug(message) {
 }
 
 // dist/state.js
-import { chmodSync, closeSync, existsSync, mkdirSync as mkdirSync2, openSync, readFileSync, renameSync as renameSync2, statSync as statSync2, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, constants, copyFileSync, mkdirSync as mkdirSync2, openSync, readFileSync, renameSync as renameSync2, statSync as statSync2, unlinkSync, writeFileSync } from "node:fs";
 import { dirname as dirname2 } from "node:path";
 import { randomUUID } from "node:crypto";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
 var LOCK_STALE_MS = 3e4;
 var FAIL_CLOSED_KEY = "__langsmith_fail_closed";
+var CONSENT_KEY = "__langsmith_explicit_consent";
 function lockPath(stateFilePath) {
   return `${stateFilePath}.lock`;
 }
@@ -111,8 +112,19 @@ function releaseLock(stateFilePath, lock) {
 async function atomicUpdateState(stateFilePath, fn) {
   const lock = await acquireLock(stateFilePath);
   try {
-    const state = loadState(stateFilePath);
-    writeStateFile(stateFilePath, fn(state));
+    const { state } = readStateFile(stateFilePath);
+    const failClosed = state[FAIL_CLOSED_KEY];
+    const consented = new Set(Object.keys(state).filter((id) => getTracingMode(state, id) === "full"));
+    const updated = fn(state);
+    if (failClosed) {
+      updated[FAIL_CLOSED_KEY] = true;
+      for (const [id, session] of Object.entries(updated)) {
+        if (id !== FAIL_CLOSED_KEY && validSession(session) && !consented.has(id)) {
+          delete session[CONSENT_KEY];
+        }
+      }
+    }
+    writeStateFile(stateFilePath, updated);
   } finally {
     releaseLock(stateFilePath, lock);
   }
@@ -125,6 +137,8 @@ function validSession(value) {
     return false;
   const session = value;
   if (typeof session.last_line !== "number" || typeof session.turn_count !== "number" || typeof session.updated !== "string")
+    return false;
+  if (session[CONSENT_KEY] !== void 0 && session[CONSENT_KEY] !== true)
     return false;
   for (const key of ["tracing", "current_turn_tracing", "compaction_tracing"]) {
     if (session[key] !== void 0 && !validMode(session[key]))
@@ -146,42 +160,103 @@ function validSession(value) {
 function failClosedState() {
   return { [FAIL_CLOSED_KEY]: true };
 }
-function loadState(stateFilePath) {
-  if (!existsSync(stateFilePath))
-    return {};
+function readStateFile(stateFilePath) {
+  let contents;
   try {
-    const parsed = JSON.parse(readFileSync(stateFilePath, "utf-8"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      return failClosedState();
-    const quarantined = parsed[FAIL_CLOSED_KEY] === true;
-    for (const [key, value] of Object.entries(parsed)) {
-      if (key !== FAIL_CLOSED_KEY && !validSession(value))
-        return failClosedState();
-    }
-    return quarantined ? parsed : { ...parsed };
-  } catch {
-    return failClosedState();
+    contents = readFileSync(stateFilePath, "utf-8");
+  } catch (error2) {
+    if (error2.code === "ENOENT")
+      return { state: {}, corrupt: false };
+    throw error2;
   }
+  let parsed;
+  try {
+    parsed = JSON.parse(contents);
+  } catch {
+    return { state: failClosedState(), corrupt: true };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { state: failClosedState(), corrupt: true };
+  }
+  let corrupt = parsed[FAIL_CLOSED_KEY] !== void 0 && parsed[FAIL_CLOSED_KEY] !== true;
+  const state = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (key === FAIL_CLOSED_KEY)
+      continue;
+    if (validSession(value)) {
+      Object.defineProperty(state, key, {
+        value: { ...value },
+        enumerable: true,
+        writable: true,
+        configurable: true
+      });
+    } else {
+      corrupt = true;
+    }
+  }
+  if (corrupt || parsed[FAIL_CLOSED_KEY] === true) {
+    state[FAIL_CLOSED_KEY] = true;
+  }
+  if (corrupt) {
+    for (const [key, session] of Object.entries(state)) {
+      if (key !== FAIL_CLOSED_KEY)
+        delete session[CONSENT_KEY];
+    }
+  }
+  if (state[FAIL_CLOSED_KEY]) {
+    for (const id of Object.keys(state)) {
+      if (id !== FAIL_CLOSED_KEY)
+        state[id] = getSessionState(state, id);
+    }
+  }
+  return { state, corrupt };
 }
 function writeStateFile(stateFilePath, state) {
   mkdirSync2(dirname2(stateFilePath), { recursive: true });
   const tempPath = `${stateFilePath}.${process.pid}.${randomUUID()}.tmp`;
-  writeFileSync(tempPath, JSON.stringify(state, null, 2), { mode: 384 });
-  renameSync2(tempPath, stateFilePath);
-  chmodSync(stateFilePath, 384);
+  try {
+    writeFileSync(tempPath, JSON.stringify(state, null, 2), { mode: 384, flag: "wx" });
+    chmodSync(tempPath, 384);
+    renameSync2(tempPath, stateFilePath);
+  } finally {
+    try {
+      unlinkSync(tempPath);
+    } catch {
+    }
+  }
 }
 function getTracingMode(state, sessionId) {
   const stored = state;
   const session = stored[sessionId];
-  if (stored[FAIL_CLOSED_KEY])
-    return "metadata";
+  if (stored[FAIL_CLOSED_KEY]) {
+    return validSession(session) && session.tracing === "full" && session[CONSENT_KEY] === true ? "full" : "metadata";
+  }
   if (!session)
     return "full";
   return session.tracing === "metadata" ? "metadata" : "full";
 }
+function failClosedSnapshots(session) {
+  const downgrade = (entries) => Object.fromEntries(Object.entries(entries).map(([id, entry]) => [
+    id,
+    entry?.tracing === "full" ? { ...entry, tracing: "metadata" } : entry
+  ]));
+  return {
+    ...session,
+    ...session.current_turn_tracing === "full" && { current_turn_tracing: "metadata" },
+    ...session.compaction_tracing === "full" && { compaction_tracing: "metadata" },
+    ...session.open_turns && { open_turns: downgrade(session.open_turns) },
+    ...session.task_run_map && { task_run_map: downgrade(session.task_run_map) },
+    ...session.tool_launch_contexts && {
+      tool_launch_contexts: downgrade(session.tool_launch_contexts)
+    }
+  };
+}
 function getSessionState(state, sessionId) {
   const session = state[sessionId];
-  return validSession(session) ? session : { last_line: -1, turn_count: 0, updated: "", task_run_map: {} };
+  if (!validSession(session)) {
+    return { last_line: -1, turn_count: 0, updated: "", task_run_map: {} };
+  }
+  return state[FAIL_CLOSED_KEY] && getTracingMode(state, sessionId) !== "full" ? failClosedSnapshots(session) : session;
 }
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
@@ -472,7 +547,9 @@ async function main() {
       [input.session_id]: {
         ...sessionState,
         compaction_start_time: Date.now(),
-        compaction_tracing: (sessionState.current_turn_run_id ? sessionState.current_turn_tracing : void 0) ?? getTracingMode(state, input.session_id)
+        // Manual compaction follows the thread preference, even if an interrupted
+        // turn still has an identity. Automatic compaction belongs to that turn.
+        compaction_tracing: (input.trigger === "auto" && sessionState.current_turn_run_id ? sessionState.current_turn_tracing : void 0) ?? getTracingMode(state, input.session_id)
       }
     };
   });

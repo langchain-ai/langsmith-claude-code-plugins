@@ -80,6 +80,50 @@ describe("metadata tracing privacy", () => {
     expect(runConfigForMode({ inputs: { secret: true } }, snapshot).inputs).toEqual({});
   });
 
+  it("validates scalar types and explicitly projects numeric usage details", () => {
+    const metadata = {
+      thread_id: { secret: "private" },
+      turn_number: Infinity,
+      ls_model_name: ["private"],
+      ls_tool_name: null,
+      status: "private",
+      ls_tracing_mode: "private",
+      usage_metadata: {
+        input_tokens: 2,
+        output_tokens: "private",
+        total_tokens: NaN,
+        input_token_details: {
+          cache_read: 1,
+          cache_creation: 0,
+          audio: 2,
+          text: "private",
+          nested: { secret: true },
+        },
+        output_token_details: { reasoning: 3, audio: -1, text: "private" },
+        arbitrary: { total_tokens: 5, secret: "private" },
+      },
+    };
+    expect(metadataForMode(metadata, "metadata")).toEqual({
+      status: "running",
+      ls_tracing_mode: "metadata",
+      usage_metadata: {
+        input_tokens: 2,
+        input_token_details: { cache_read: 1, cache_creation: 0, audio: 2 },
+        output_token_details: { reasoning: 3 },
+      },
+    });
+    expect(metadataForMode(metadata, "full")).toBe(metadata);
+    for (const usage_metadata of [
+      [],
+      "private",
+      null,
+      { total_tokens: {} },
+      { input_token_details: [1] },
+    ]) {
+      expect(metadataForMode({ usage_metadata }, "metadata")?.usage_metadata).toBeUndefined();
+    }
+  });
+
   it("does not alter full tracing", () => {
     const metadata = { cwd: "/repo", custom: "value" };
     expect(metadataForMode(metadata, "full")).toBe(metadata);

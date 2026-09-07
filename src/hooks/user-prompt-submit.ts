@@ -20,6 +20,7 @@ import {
   closeInterruptedTurn,
   generateDottedOrderSegment,
   parseDottedOrder,
+  taskRunTracingMode,
 } from "../langsmith.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import {
@@ -64,25 +65,43 @@ async function main(): Promise<void> {
 
   const command = parseTraceCommand(input.prompt);
   if (command) {
-    const config = loadConfig({ cwd: input.cwd });
-    initLogger(config.debug);
-    // Status must not recover corrupt state or change any thread's preference.
-    // Only an explicit on/off command may clear fail-closed protection.
-    if (command === "status") {
-      const mode = getTracingMode(loadState(config.stateFilePath), input.session_id);
-      process.stdout.write(traceCommandResponse(mode, config.enabled));
-      return;
+    let response: string;
+    try {
+      const config = loadConfig({ cwd: input.cwd });
+      initLogger(config.debug);
+      // Status must not recover corrupt state or change any thread's preference.
+      // Only an explicit on/off command may renew this thread's consent.
+      if (command === "status") {
+        const mode = getTracingMode(loadState(config.stateFilePath), input.session_id);
+        response = traceCommandResponse(mode, config.enabled);
+      } else {
+        const mode = command === "on" ? "full" : "metadata";
+        await recoverAndUpdateState(config.stateFilePath, input.session_id, (state) => ({
+          ...state,
+          [input.session_id]: {
+            ...getSessionState(state, input.session_id),
+            tracing: mode,
+            updated: new Date().toISOString(),
+          },
+        }));
+        response = traceCommandResponse(mode, config.enabled);
+      }
+    } catch (err) {
+      // Recognized commands must never fall through as ordinary prompts. Logging
+      // is best-effort; even logger initialization or logging failure must not
+      // prevent the user-facing blocking response. Keep raw error details out of it.
+      try {
+        error(`LangSmith trace command failed: ${err}`);
+      } catch {}
+      response = JSON.stringify({
+        decision: "block",
+        reason:
+          command === "status"
+            ? "Could not determine the LangSmith tracing status. Tracing may still be enabled. Please retry /ls-trace status."
+            : `Could not save the LangSmith tracing preference. Tracing may still be enabled. Please retry /ls-trace ${command}.`,
+      });
     }
-    const mode = command === "on" ? "full" : "metadata";
-    await recoverAndUpdateState(config.stateFilePath, (state) => ({
-      ...state,
-      [input.session_id]: {
-        ...getSessionState(state, input.session_id),
-        tracing: mode,
-        updated: new Date().toISOString(),
-      },
-    }));
-    process.stdout.write(traceCommandResponse(mode, config.enabled));
+    process.stdout.write(response);
     return;
   }
 
@@ -107,7 +126,7 @@ async function main(): Promise<void> {
   );
 
   const state = loadState(config.stateFilePath);
-  const turnMode = getTracingMode(state, input.session_id);
+  let turnMode = getTracingMode(state, input.session_id);
   const sessionState = getSessionState(state, input.session_id);
 
   // CLI version (ls_agent_runtime_version); best-effort, Stop backfills if empty.
@@ -222,6 +241,9 @@ async function main(): Promise<void> {
   const notificationInterrupted = notificationStatus?.toLowerCase() === KILLED_NOTIFICATION_STATUS;
 
   if (agentToolRun) {
+    // Notifications can contain the task's private result. A newer /ls-trace on
+    // must not promote muted work, nor may an old full task override /ls-trace off.
+    if (taskRunTracingMode(agentToolRun, sessionState) === "metadata") turnMode = "metadata";
     traceId = parseDottedOrder(agentToolRun.dotted_order).traceId;
     parentRunId = agentToolRun.run_id;
     dottedOrder = `${agentToolRun.dotted_order}.${segment}`;
@@ -286,7 +308,13 @@ async function main(): Promise<void> {
       Object.values(ss.open_turns ?? {}).flatMap((t) => t.agent_ids),
     );
     const preservedTaskRunMap = Object.fromEntries(
-      Object.entries(ss.task_run_map ?? {}).filter(([id]) => inflightAgentIds.has(id)),
+      Object.entries(ss.task_run_map ?? {}).filter(
+        ([id, task]) =>
+          inflightAgentIds.has(id) ||
+          // A late tool hook can register a task after its parent was closed.
+          // Keep that correlation until notification finalization removes it.
+          (!!task.launching_turn_run_id && !ss.open_turns?.[task.launching_turn_run_id]),
+      ),
     );
     const preservedOpenTurns = { ...ss.open_turns };
     if (sessionState.current_turn_run_id) {

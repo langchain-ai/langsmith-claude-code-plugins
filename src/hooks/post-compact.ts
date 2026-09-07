@@ -44,7 +44,9 @@ async function main(): Promise<void> {
   const sessionState = getSessionState(state, input.session_id);
   const tracingMode =
     sessionState.compaction_tracing ??
-    (sessionState.current_turn_run_id ? sessionState.current_turn_tracing : undefined) ??
+    (input.trigger === "auto" && sessionState.current_turn_run_id
+      ? sessionState.current_turn_tracing
+      : undefined) ??
     getTracingMode(state, input.session_id);
 
   const endTime = new Date().toISOString();

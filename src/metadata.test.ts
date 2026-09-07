@@ -4,7 +4,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
+import { codingAgentMetadata, skillNameFromTool, trustedCodingAgentMetadata } from "./metadata.js";
+import { metadataForMode } from "./privacy.js";
+import { LS_INTEGRATION_VERSION } from "./config.js";
 import validator from "./fixtures/coding-agent-v1/validator.json" with { type: "json" };
 
 type RunType = "root" | "llm" | "tool" | "subagent" | "interrupted";
@@ -264,6 +266,82 @@ describe("coding-agent-v1 contract", () => {
   });
 
   // ─── User-supplied env metadata wins on collision ────────────────────────────
+
+  it("keeps trusted provenance separate from both custom merge layers", () => {
+    const overrides = {
+      thread_id: "custom-thread",
+      turn_id: "custom-turn",
+      turn_number: 999,
+      ls_agent_purpose: "custom-purpose",
+      ls_agent_type: "custom-role",
+      ls_agent_runtime: "custom-runtime",
+      ls_agent_runtime_version: "custom-version",
+      ls_integration: "custom-integration",
+      ls_integration_version: "custom-version",
+      ls_trace_schema_version: "custom-schema",
+      ls_model_name: "custom-model",
+      ls_tool_name: "custom-tool",
+      ls_subagent_id: "custom-agent",
+      ls_subagent_type: "custom-type",
+      usage_metadata: { total_tokens: 999, text: "secret" },
+    };
+    for (const layer of ["base", "runSpecific"] as const) {
+      const meta = codingAgentMetadata({
+        ...COMMON,
+        base: undefined,
+        [layer]: overrides,
+        modelName: "plugin-model",
+        usageMetadata: { total_tokens: 5 },
+        toolName: "Task",
+        runName: "Agent",
+        subagentId: "plugin-agent",
+        subagentType: "Explore",
+      });
+      expect(meta).toMatchObject(overrides); // full-mode precedence unchanged
+      expect(metadataForMode(meta, "full")).toBe(meta);
+      const safe = metadataForMode(meta, "metadata")!;
+      expect(safe).toMatchObject({
+        thread_id: COMMON.sessionId,
+        turn_id: COMMON.turnId,
+        turn_number: 3,
+        ls_agent_purpose: "coding",
+        ls_agent_type: "root",
+        ls_agent_runtime: "Claude Code",
+        ls_agent_runtime_version: COMMON.runtimeVersion,
+        ls_integration: "claude-code",
+        ls_trace_schema_version: "coding-agent-v1",
+        ls_model_name: "plugin-model",
+        ls_tool_name: "Task",
+        ls_subagent_id: "plugin-agent",
+        ls_subagent_type: "Explore",
+        usage_metadata: { total_tokens: 5 },
+      });
+      expect(safe.ls_integration_version).toBe(LS_INTEGRATION_VERSION);
+      expect(JSON.stringify(safe)).not.toContain("custom-");
+      expect(trustedCodingAgentMetadata(meta)).toBeDefined();
+      expect(trustedCodingAgentMetadata({ ...meta })).toBeUndefined();
+      expect(trustedCodingAgentMetadata(JSON.parse(JSON.stringify(meta)))).toBeUndefined();
+      expect(Object.getOwnPropertySymbols(meta)).toHaveLength(1);
+      expect(
+        Object.getOwnPropertyDescriptor(meta, Object.getOwnPropertySymbols(meta)[0])?.enumerable,
+      ).toBe(false);
+    }
+  });
+
+  it("does not recover missing trusted model/usage/version from custom metadata", () => {
+    const safe = metadataForMode(
+      codingAgentMetadata({
+        sessionId: "s1",
+        agentType: "root",
+        base: { ls_model_name: "secret", usage_metadata: { total_tokens: 12 } },
+        runSpecific: { ls_agent_runtime_version: "secret" },
+      }),
+      "metadata",
+    )!;
+    expect(safe.ls_model_name).toBeUndefined();
+    expect(safe.usage_metadata).toBeUndefined();
+    expect(safe.ls_agent_runtime_version).toBeUndefined();
+  });
 
   it("lets user-supplied base metadata override contract keys", () => {
     const meta = codingAgentMetadata({

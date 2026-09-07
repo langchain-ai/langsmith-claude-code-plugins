@@ -1,5 +1,6 @@
 import { RunTree, type RunTreeConfig } from "langsmith";
 import type { TracingMode } from "./types.js";
+import { trustedCodingAgentMetadata } from "./metadata.js";
 
 const METADATA_KEYS = new Set([
   "thread_id",
@@ -21,19 +22,68 @@ const METADATA_KEYS = new Set([
   "ls_subagent_type",
 ]);
 
+function numericFields(value: unknown, keys: readonly string[]): Record<string, number> {
+  const safe: Record<string, number> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return safe;
+  for (const key of keys) {
+    const count = (value as Record<string, unknown>)[key];
+    if (typeof count === "number" && Number.isFinite(count) && count >= 0) safe[key] = count;
+  }
+  return safe;
+}
+
+/** Explicit token schema, not an arbitrary recursively allowed object. */
+function usageForMetadata(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const usage = value as Record<string, unknown>;
+  const safe: Record<string, unknown> = numericFields(usage, [
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+  ]);
+  for (const [key, keys] of [
+    ["input_token_details", ["cache_read", "cache_creation", "audio"]],
+    ["output_token_details", ["reasoning", "audio"]],
+  ] as const) {
+    const details = numericFields(usage[key], keys);
+    if (Object.keys(details).length) safe[key] = details;
+  }
+  return Object.keys(safe).length ? safe : undefined;
+}
+
+// Also used at the wire boundary, on CURRENT (possibly anonymized) metadata.
+// It must not retrieve provenance there and restore pre-anonymization values.
+function projectMetadata(
+  metadata: Record<string, unknown> | undefined,
+  status?: string,
+): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    if (!METADATA_KEYS.has(key)) continue;
+    if (key === "usage_metadata") {
+      const usage = usageForMetadata(value);
+      if (usage) safe[key] = usage;
+    } else if (key === "turn_number") {
+      if (typeof value === "number" && Number.isSafeInteger(value) && value >= 1) safe[key] = value;
+    } else if (typeof value === "string" && value.length) {
+      safe[key] = value;
+    }
+  }
+  safe.status = status === "error" || status === "completed" ? status : "running";
+  safe.ls_tracing_mode = "metadata";
+  return safe;
+}
+
 export function metadataForMode(
   metadata: Record<string, unknown> | undefined,
   mode: TracingMode = "full",
   status?: string,
 ): Record<string, unknown> | undefined {
   if (mode === "full") return metadata;
-  const safe: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(metadata ?? {})) {
-    if (METADATA_KEYS.has(key)) safe[key] = value;
-  }
-  safe.status = status ?? "running";
-  safe.ls_tracing_mode = "metadata";
-  return safe;
+  // Builder provenance wins over ALL merged fields. Plain direct RunTree
+  // configs remain supported as explicitly supplied metadata, schema-filtered
+  // below; plugin callsites must use the builder, not clone its merged result.
+  return projectMetadata(trustedCodingAgentMetadata(metadata) ?? metadata, status);
 }
 
 function sanitizeReplica(replica: unknown, mode: TracingMode): unknown {
@@ -82,9 +132,8 @@ export function runConfigForMode<T extends Record<string, unknown>>(
       return {
         // Read the current metadata, not the constructor's copy: the client may
         // have anonymized allowlisted values, which must not be restored here.
-        metadata: metadataForMode(
+        metadata: projectMetadata(
           this.metadata,
-          "metadata",
           typeof this.metadata?.status === "string" ? this.metadata.status : status,
         ),
       };

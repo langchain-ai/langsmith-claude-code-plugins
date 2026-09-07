@@ -8,10 +8,10 @@
  */
 
 import { uuid7FromTime } from "langsmith";
-import { createRunTree } from "../privacy.js";
+import { createRunTree, runConfigForMode } from "../privacy.js";
 import { debug, error } from "../logger.js";
 import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
-import { loadState, atomicUpdateState, getSessionState, getTracingMode } from "../state.js";
+import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
@@ -53,24 +53,22 @@ async function main(): Promise<void> {
     config.redactExtraRules,
   );
 
-  // Load state to get current turn's run ID (created by UserPromptSubmit)
+  // PostToolUse is async: current_* may already describe an unrelated prompt.
+  // Only the synchronous PreToolUse snapshot can establish launch ownership.
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
-  const tracingMode = sessionState.current_turn_tracing ?? getTracingMode(state, input.session_id);
+  const launch = sessionState.tool_launch_contexts?.[input.tool_use_id];
+  const turn =
+    launch?.turn?.run_id && launch.turn.trace_id && launch.turn.dotted_order
+      ? launch.turn
+      : undefined;
+  const tracingMode = turn && launch?.tracing === "full" ? "full" : "metadata";
+  const parentRunId = turn?.run_id;
+  const parentDottedOrder = turn?.dotted_order;
 
-  const parentRunId = sessionState.current_turn_run_id;
-  const traceId = sessionState.current_trace_id;
-  const parentDottedOrder = sessionState.current_dotted_order;
-
-  if (!parentRunId || !traceId || !parentDottedOrder) {
-    error("No current_turn_run_id or trace_id in state - UserPromptSubmit hook may not have run");
-    return;
-  }
-
-  // Generate run ID and dotted order for this tool.
-  // Use PreToolUse's recorded start time if available (accurate wall-clock time
-  // from before the tool ran), otherwise fall back to Date.now().
-  const startTime = sessionState.tool_start_times?.[input.tool_use_id] ?? Date.now();
+  // Unknown ownership is a standalone metadata trace, never a child of whichever
+  // full turn happens to be current. The legacy timing map proves no ownership.
+  const startTime = launch?.start_time ?? Date.now();
   const toolRunId = uuid7FromTime(startTime);
   const toolEndTime = Date.now();
   // Convert to ISO for RunTree (avoids internal timestamp mangling)
@@ -79,7 +77,10 @@ async function main(): Promise<void> {
 
   // Generate proper dotted order segment
   const toolDottedOrderSegment = generateDottedOrderSegment(startTime, toolRunId);
-  const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
+  const toolDottedOrder = parentDottedOrder
+    ? `${parentDottedOrder}.${toolDottedOrderSegment}`
+    : toolDottedOrderSegment;
+  const traceId = turn?.trace_id ?? toolRunId;
 
   const agentId = (input.tool_response as { agentId?: string }).agentId;
   // A dynamic Workflow launch also spawns background work, but via the Workflow
@@ -117,8 +118,8 @@ async function main(): Promise<void> {
           metadata: codingAgentMetadata({
             sessionId: input.session_id,
             base: config.customMetadata,
-            turnNumber: sessionState.current_turn_number,
-            runtimeVersion: sessionState.runtime_version,
+            turnNumber: turn?.turn_number,
+            runtimeVersion: turn?.runtime_version,
             agentType: "root",
             toolName: "Workflow",
             runName: "Workflow",
@@ -151,8 +152,8 @@ async function main(): Promise<void> {
             base: config.customMetadata,
             // turn_id (promptId) isn't in the PostToolUse payload; turn_number is
             // sufficient (the contract needs at least one of the two).
-            turnNumber: sessionState.current_turn_number,
-            runtimeVersion: sessionState.runtime_version,
+            turnNumber: turn?.turn_number,
+            runtimeVersion: turn?.runtime_version,
             agentType: "root",
             toolName: input.tool_name,
             runName: input.tool_name,
@@ -168,62 +169,74 @@ async function main(): Promise<void> {
   // Save state atomically so concurrent PostToolUse hooks don't clobber each other.
   await atomicUpdateState(config.stateFilePath, (freshState) => {
     const freshSession = getSessionState(freshState, input.session_id);
+    const ownsCurrentTurn = !!turn && freshSession.current_turn_run_id === turn.run_id;
 
     // Both the Agent and Workflow tools launch work that outlives this turn's
-    // Stop. Register either the same way — under its launching turn in open_turns
-    // (so Stop defers) with a task_run_map entry to nest/close later. The Task
+    // Stop. Register either under its launching turn only while current or still
+    // in open_turns, with a task_run_map entry to nest/close later. The Task
     // Agent run is deferred (created by Stop with its real subagent type); the
     // Workflow run was posted open above (its name is known now), so we mark it
     // subagent_done + is_workflow so finalize patches it closed as "Workflow".
     let backgroundUpdate: Pick<typeof freshSession, "task_run_map" | "open_turns"> | undefined;
     if (agentId || workflow) {
-      const deferred = {
-        trace_id: traceId!,
-        parent_run_id: parentRunId!,
-        start_time: startTimeIso,
-        end_time: toolEndTimeIso,
-        inputs: input.tool_input,
-        outputs: input.tool_response,
-        project_name: config.project,
-      } as Record<string, unknown>;
-      const launchingTurn = {
-        run_id: parentRunId!,
-        trace_id: traceId,
-        dotted_order: parentDottedOrder,
-        parent_run_id: sessionState.current_parent_run_id,
-        start_time: sessionState.current_turn_start,
-        turn_number: sessionState.current_turn_number,
-        runtime_version: sessionState.runtime_version,
-        approval_policy: sessionState.approval_policy,
-        tracing: tracingMode,
-      };
-      backgroundUpdate = recordBackgroundRun(
-        freshSession,
-        launchingTurn,
-        agentId ?? workflow!.taskId,
+      // Never retain raw muted content for a later hook to accidentally promote.
+      const deferred = runConfigForMode(
         {
-          run_id: toolRunId,
-          dotted_order: toolDottedOrder,
-          deferred,
-          ...(workflow
-            ? { workflow_run_id: workflow.runId, is_workflow: true, subagent_done: true }
-            : {}),
+          trace_id: traceId,
+          parent_run_id: parentRunId,
+          start_time: startTimeIso,
+          end_time: toolEndTimeIso,
+          inputs: input.tool_input,
+          outputs: input.tool_response,
+          project_name: config.project,
         },
+        tracingMode,
       );
+      const backgroundId = agentId ?? workflow!.taskId;
+      const entry: NonNullable<typeof freshSession.task_run_map>[string] = {
+        run_id: toolRunId,
+        dotted_order: toolDottedOrder,
+        tracing: tracingMode,
+        launching_turn_run_id: turn?.run_id,
+        // RunTree accepts ISO timestamps at runtime; its stored instance type
+        // models them as numbers. Deferred configs intentionally retain ISO.
+        deferred: deferred as Record<string, unknown>,
+        ...(workflow
+          ? { workflow_run_id: workflow.runId, is_workflow: true, subagent_done: true }
+          : {}),
+      };
+      backgroundUpdate =
+        turn && (ownsCurrentTurn || freshSession.open_turns?.[turn.run_id])
+          ? recordBackgroundRun(
+              freshSession,
+              { ...turn, tracing: tracingMode },
+              backgroundId,
+              entry,
+            )
+          : {
+              // A late snapshot proves ownership, not that its parent is still open.
+              // Keep completion correlation without resurrecting a finished turn.
+              task_run_map: { ...freshSession.task_run_map, [backgroundId]: entry },
+              open_turns: freshSession.open_turns,
+            };
     }
+
+    const remainingLaunches = { ...freshSession.tool_launch_contexts };
+    delete remainingLaunches[input.tool_use_id];
 
     return {
       ...freshState,
       [input.session_id]: {
         ...freshSession,
-        last_tool_end_time: toolEndTime,
+        tool_launch_contexts: remainingLaunches,
+        ...(ownsCurrentTurn ? { last_tool_end_time: toolEndTime } : {}),
         ...backgroundUpdate,
         // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this
         // tool call from the transcript. A deferred Agent tool is skipped there
         // via its agentId link instead, so it's the one case we don't record —
         // but a Workflow tool call has no agentId, so without this it would get a
         // duplicate "Workflow" tool run next to the open one posted above.
-        ...(agentId
+        ...(agentId || !ownsCurrentTurn
           ? {}
           : {
               traced_tool_use_ids: [...(freshSession.traced_tool_use_ids ?? []), input.tool_use_id],

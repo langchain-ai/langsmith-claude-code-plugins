@@ -115,6 +115,7 @@ beforeEach(async () => {
   vi.stubEnv("LANGSMITH_API_KEY", "test-only-key");
   vi.stubEnv("LANGSMITH_TRACING_MODE", "langsmith");
   vi.stubEnv("LANGSMITH_TRACING_SAMPLING_RATE", "1");
+  vi.stubEnv("CC_LANGSMITH_INTEGRATION_VERSION", "plugin-version");
   vi.stubGlobal("fetch", captureFetch);
   clients = new Set();
   requests = [];
@@ -239,6 +240,107 @@ function replicaUpdates(): Payload {
 }
 
 describe.each(transports)("real SDK privacy over %s", (selectedTransport) => {
+  it("projects actual CC_LANGSMITH_METADATA collisions from config through traceTurn to the wire", async () => {
+    transport = selectedTransport;
+    const collisions = Object.fromEntries(
+      Object.keys(allowedMetadata).map((key) => [key, `${FORBIDDEN}_${key}`]),
+    );
+    collisions.usage_metadata = {
+      total_tokens: 999,
+      input_token_details: { cache_read: FORBIDDEN },
+      custom: FORBIDDEN,
+    };
+    vi.stubEnv("CC_LANGSMITH_METADATA", JSON.stringify(collisions));
+    const { loadConfig } = await import("./config.js");
+    const { initTracing, traceTurn } = await import("./langsmith.js");
+    const loaded = loadConfig();
+    expect(loaded.customMetadata).toMatchObject(collisions);
+    const client = initTracing("test-only-key", API, undefined, true, [
+      { pattern: SECRET, replace: REDACTED },
+    ])!;
+    // Exercise all three real transport paths using the actual plugin client.
+    client.autoBatchTracing = transport !== "non-batched";
+    clients.add(client);
+    const turn = {
+      userContent: `${FORBIDDEN}_prompt`,
+      userTimestamp: "2025-01-01T00:00:00Z",
+      promptId: "plugin-turn",
+      isComplete: true,
+      llmCalls: [
+        {
+          model: SECRET,
+          content: [{ type: "text" as const, text: `${FORBIDDEN}_answer` }],
+          usage: {
+            input_tokens: 2,
+            output_tokens: 3,
+            cache_read_input_tokens: 4,
+            cache_creation_input_tokens: 1,
+          },
+          startTime: "2025-01-01T00:00:01Z",
+          endTime: "2025-01-01T00:00:02Z",
+          toolCalls: [
+            {
+              tool_use: {
+                type: "tool_use" as const,
+                id: "tool-id",
+                name: "Bash",
+                input: { command: FORBIDDEN },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    await traceTurn({
+      turn,
+      sessionId: "plugin-session",
+      turnNum: 2,
+      project: "legitimate-project",
+      runtimeVersion: "plugin-runtime",
+      customMetadata: loaded.customMetadata,
+      tracingMode: "metadata",
+    });
+    await flush();
+    const operations = expectTransport(requests.length);
+    expect(operations.length).toBeGreaterThanOrEqual(3);
+    expect(operations.some(({ payload }) => payload.session_name === "legitimate-project")).toBe(
+      true,
+    );
+    for (const { payload } of operations) {
+      expect(payload.extra.metadata).toMatchObject({
+        thread_id: "plugin-session",
+        turn_id: "plugin-turn",
+        turn_number: 2,
+        ls_agent_purpose: "coding",
+        ls_agent_type: "root",
+        ls_agent_runtime: "Claude Code",
+        ls_agent_runtime_version: "plugin-runtime",
+        ls_integration: "claude-code",
+        ls_integration_version: "plugin-version",
+        ls_trace_schema_version: "coding-agent-v1",
+        ls_tracing_mode: "metadata",
+      });
+      expect(JSON.stringify(payload)).not.toContain(FORBIDDEN);
+      expect(JSON.stringify(payload)).not.toContain(SECRET);
+      expect(payload.extra.metadata.ls_subagent_id).toBeUndefined();
+      expect(payload.extra.metadata.ls_tool_name).toBeUndefined();
+    }
+    const llm = operations.filter(
+      ({ payload }) => payload.extra.metadata.ls_model_name === REDACTED,
+    );
+    expect(llm.length).toBeGreaterThan(0);
+    expect(
+      llm.some(({ payload }) => payload.extra.metadata.usage_metadata?.total_tokens === 10),
+    ).toBe(true);
+    const completed = llm.find(({ payload }) => payload.extra.metadata.usage_metadata)!;
+    expect(completed.payload.extra.metadata.usage_metadata).toEqual({
+      input_tokens: 7,
+      output_tokens: 3,
+      total_tokens: 10,
+      input_token_details: { cache_read: 4, cache_creation: 1 },
+    });
+  });
+
   it("mixes metadata and full runs on one client, with separately serialized post and patch", async () => {
     transport = selectedTransport;
     const client = makeClient();

@@ -35,9 +35,12 @@ async function main(): Promise<void> {
       [input.session_id]: {
         ...sessionState,
         compaction_start_time: Date.now(),
+        // Manual compaction follows the thread preference, even if an interrupted
+        // turn still has an identity. Automatic compaction belongs to that turn.
         compaction_tracing:
-          (sessionState.current_turn_run_id ? sessionState.current_turn_tracing : undefined) ??
-          getTracingMode(state, input.session_id),
+          (input.trigger === "auto" && sessionState.current_turn_run_id
+            ? sessionState.current_turn_tracing
+            : undefined) ?? getTracingMode(state, input.session_id),
       },
     };
   });

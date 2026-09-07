@@ -95,24 +95,34 @@ async function runHook(
   await vi.waitFor(done);
 }
 
-async function preCompact(): Promise<void> {
-  await runHook("pre-compact", () => {
-    expect(session().compaction_start_time).toEqual(expect.any(Number));
-  });
+type CompactionTrigger = "manual" | "auto";
+
+async function preCompact(trigger: CompactionTrigger = "manual"): Promise<void> {
+  await runHook(
+    "pre-compact",
+    () => {
+      expect(session().compaction_start_time).toEqual(expect.any(Number));
+    },
+    { trigger },
+  );
 }
 
-async function postCompact(): Promise<void> {
+async function postCompact(trigger: CompactionTrigger = "manual"): Promise<void> {
   const posts = mocks.postRun.mock.calls.length;
-  await runHook("post-compact", () => {
-    expect(mocks.postRun).toHaveBeenCalledTimes(posts + 1);
-    expect(session().compaction_start_time).toBeUndefined();
-    expect(session().compaction_tracing).toBeUndefined();
-  });
+  await runHook(
+    "post-compact",
+    () => {
+      expect(mocks.postRun).toHaveBeenCalledTimes(posts + 1);
+      expect(session().compaction_start_time).toBeUndefined();
+      expect(session().compaction_tracing).toBeUndefined();
+    },
+    { trigger },
+  );
 }
 
-function expectCompactionMode(mode: TracingMode): void {
+function expectCompactionMode(mode: TracingMode, trigger: CompactionTrigger = "manual"): void {
   const payload = mocks.postRun.mock.calls.at(-1)![0];
-  expect(payload.name).toBe("Context Compaction (manual)");
+  expect(payload.name).toBe(`Context Compaction (${trigger})`);
   expect(payload.outputs).toEqual(mode === "full" ? { compact_summary: summary } : {});
   if (mode === "metadata") {
     expect(payload.extra.metadata.ls_tracing_mode).toBe("metadata");
@@ -143,7 +153,7 @@ afterEach(() => {
 });
 
 describe("compaction tracing snapshot privacy", () => {
-  it("full turn failure -> /trace off -> compaction emits metadata only", async () => {
+  it("full turn failure -> /ls-trace off -> compaction emits metadata only", async () => {
     seed({ tracing: "full", current_turn_run_id: "failed-turn", current_turn_tracing: "full" });
     await runHook("stop-failure", () => {
       expect(session().current_turn_run_id).toBeUndefined();
@@ -158,12 +168,50 @@ describe("compaction tracing snapshot privacy", () => {
         expect(stdout).toHaveBeenCalled();
         expect(session().tracing).toBe("metadata");
       },
-      { prompt: "/trace off" },
+      { prompt: "/ls-trace off" },
     );
     await preCompact();
     expect(session().compaction_tracing).toBe("metadata");
     await postCompact();
     expectCompactionMode("metadata");
+  });
+
+  it("interrupted full turn -> /ls-trace off -> manual metadata while automatic stays full", async () => {
+    seed({
+      tracing: "full",
+      current_turn_run_id: "interrupted-turn",
+      current_turn_tracing: "full",
+    });
+    const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    await runHook(
+      "user-prompt-submit",
+      () => {
+        expect(stdout).toHaveBeenCalled();
+        expect(session().tracing).toBe("metadata");
+      },
+      { prompt: "/ls-trace off" },
+    );
+    expect(mocks.closeInterruptedTurn).not.toHaveBeenCalled();
+    expect(session().current_turn_run_id).toBe("interrupted-turn");
+    expect(session().current_turn_tracing).toBe("full");
+
+    // Missing PreCompact must not let the interrupted turn override /ls-trace off.
+    await postCompact();
+    expectCompactionMode("metadata");
+    await preCompact();
+    expect(session().compaction_tracing).toBe("metadata");
+    await postCompact();
+    expectCompactionMode("metadata");
+
+    // Automatic compaction still uses the immutable active-turn snapshot.
+    await postCompact("auto");
+    expectCompactionMode("full", "auto");
+    await preCompact("auto");
+    expect(session().compaction_tracing).toBe("full");
+    await postCompact("auto");
+    expectCompactionMode("full", "auto");
+    expect(session().current_turn_run_id).toBe("interrupted-turn");
+    expect(session().current_turn_tracing).toBe("full");
   });
 
   it("PreCompact ignores a stale full snapshot without an active turn identity", async () => {
@@ -180,39 +228,44 @@ describe("compaction tracing snapshot privacy", () => {
     expectCompactionMode("metadata");
   });
 
-  it.each(["full", "metadata"] as const)(
-    "preserves an active %s turn snapshot over session policy",
-    async (mode) => {
-      seed({
-        tracing: mode === "full" ? "metadata" : "full",
-        current_turn_run_id: "active-turn",
-        current_turn_tracing: mode,
-      });
-      // Exercise the fallback when PreCompact is missing, then the normal pair.
-      await postCompact();
-      expectCompactionMode(mode);
-      await preCompact();
-      expect(session().compaction_tracing).toBe(mode);
-      await postCompact();
-      expectCompactionMode(mode);
-    },
-  );
+  describe.each(["manual", "auto"] as const)("%s compaction", (trigger) => {
+    it.each(["full", "metadata"] as const)(
+      "selects thread policy for manual and active %s turn mode for automatic compaction",
+      async (mode) => {
+        const threadMode = mode === "full" ? "metadata" : "full";
+        const expectedMode = trigger === "manual" ? threadMode : mode;
+        seed({
+          tracing: threadMode,
+          current_turn_run_id: "active-turn",
+          current_turn_tracing: mode,
+        });
+        // Exercise the fallback when PreCompact is missing, then the normal pair.
+        await postCompact(trigger);
+        expectCompactionMode(expectedMode, trigger);
+        await preCompact(trigger);
+        expect(session().compaction_tracing).toBe(expectedMode);
+        await postCompact(trigger);
+        expectCompactionMode(expectedMode, trigger);
+      },
+    );
 
-  it.each(["full", "metadata"] as const)(
-    "preserves the compaction %s snapshot after the active turn ends and policy changes",
-    async (mode) => {
-      seed({ current_turn_run_id: "active-turn", current_turn_tracing: mode });
-      await preCompact();
-      seed({
-        ...session(),
-        tracing: mode === "full" ? "metadata" : "full",
-        current_turn_run_id: undefined,
-        current_turn_tracing: undefined,
-      });
-      await postCompact();
-      expectCompactionMode(mode);
-    },
-  );
+    it.each(["full", "metadata"] as const)(
+      "preserves the compaction %s snapshot after the active turn ends and policy changes",
+      async (mode) => {
+        seed({ tracing: mode, current_turn_run_id: "active-turn", current_turn_tracing: mode });
+        await preCompact(trigger);
+        expect(session().compaction_tracing).toBe(mode);
+        seed({
+          ...session(),
+          tracing: mode === "full" ? "metadata" : "full",
+          current_turn_run_id: undefined,
+          current_turn_tracing: undefined,
+        });
+        await postCompact(trigger);
+        expectCompactionMode(mode, trigger);
+      },
+    );
+  });
 
   it.each([false, true])("SessionEnd clears the turn snapshot (close fails: %s)", async (fails) => {
     seed({ current_turn_run_id: "interrupted-turn", current_turn_tracing: "full" });
