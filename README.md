@@ -113,7 +113,11 @@ Claude Code namespaces plugin commands; neither command accepts `on`, `off`, or 
 Muted runs retain their normal nesting, names, timing, status, model/tool identity, and token usage. Inputs become:
 
 ```json
-{"messages":[{"role":"user","content":"<trace inputs/outputs omitted using /langsmith-tracing:mute>"}]}
+{
+  "messages": [
+    { "role": "user", "content": "<trace inputs/outputs omitted using /langsmith-tracing:mute>" }
+  ]
+}
 ```
 
 Outputs use the same message content with role `assistant`. Raw errors, identity/repository attribution, arbitrary custom metadata, SDK runtime metadata, and replica metadata overrides are excluded in muted mode. Muting is independent of the secret-redaction setting below.
@@ -128,14 +132,14 @@ Commands save only the thread preference, never change run parent selection, and
 
 Claude Code resolves the first applicable setting below; credentials are still required to upload.
 
-| Priority | Setting | Behavior |
-| --- | --- | --- |
-| 1 | `TRACE_TO_LANGSMITH` | When present, case-insensitive `true` enables; any other value disables. Overrides files. |
-| 2 | Project `.claude/langsmith.json` | `{"enabled": true}` enables; `{"enabled": false}` disables. |
-| 3 | User `~/.claude/langsmith.json` | Used only when the project file is absent. Same boolean `enabled` setting. |
-| 4 | No setting | Off. |
+| Priority | Setting                          | Behavior                                                                                           |
+| -------- | -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| 1        | Project `.claude/langsmith.json` | `{"enabled": true}` enables; `{"enabled": false}` disables. Overrides user config and environment. |
+| 2        | User `~/.claude/langsmith.json`  | Used only when the project file is absent. Same boolean `enabled` setting; overrides environment.  |
+| 3        | `TRACE_TO_LANGSMITH`             | Used only when both files are absent. Case-insensitive `true` enables; any other value disables.   |
+| 4        | No setting                       | Off.                                                                                               |
 
-A present malformed or unreadable config file disables tracing rather than falling through to another file. An explicit environment setting still takes precedence. This implements the requested file-plus-environment master control for Claude Code; this repository does not contain the Cursor or Codex plugins.
+A present malformed or unreadable config file disables tracing rather than falling through to another file or the environment. In particular, project `{"enabled": false}` disables tracing even when `TRACE_TO_LANGSMITH=true`. This implements the requested file-plus-environment master control for Claude Code; this repository does not contain the Cursor or Codex plugins.
 
 **Testing from the previous experimental branch:** its preferences lived inside tracing state and are not imported by this clean implementation. Run `/langsmith-tracing:mute` again for threads you want muted.
 
@@ -160,7 +164,7 @@ The plugin respects the following environment variables:
 
 | Variable                           | Required | Default                           | Description                                                                                                    |
 | ---------------------------------- | -------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `TRACE_TO_LANGSMITH`               | No       | File config, then off             | Explicit master override; `"true"` enables, any other value disables. See precedence above.                       |
+| `TRACE_TO_LANGSMITH`               | No       | File config, then off             | Fallback when both config files are absent; `"true"` enables, any other value disables.                        |
 | `CC_LANGSMITH_API_KEY`             | No\*     | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`). \*Required unless `CC_LANGSMITH_RUNS_ENDPOINTS` is set. |
 | `CC_LANGSMITH_PROJECT`             | No       | `"claude-code"`                   | LangSmith project name                                                                                         |
 | `LANGSMITH_ENDPOINT`               | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                                                                         |

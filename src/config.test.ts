@@ -72,8 +72,7 @@ describe("loadConfig", () => {
               env,
               project,
               user,
-              expected:
-                env !== undefined ? env.toLowerCase() === "true" : (project ?? user ?? false),
+              expected: project ?? user ?? (env ?? "").toLowerCase() === "true",
             })),
           ),
       ),
@@ -99,6 +98,7 @@ describe("loadConfig", () => {
         ].map((raw) => ({ scope, raw })),
       ),
     )("fails closed for malformed $scope file: $raw", ({ scope, raw }) => {
+      process.env.TRACE_TO_LANGSMITH = "true";
       if (scope === "project") writeFileSync(userPath, '{"enabled":true}');
       writeFileSync(scope === "project" ? projectPath : userPath, raw);
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
@@ -109,6 +109,7 @@ describe("loadConfig", () => {
         ["EACCES", "EPERM", "EIO", "EISDIR", "ENOTDIR"].map((code) => ({ scope, code })),
       ),
     )("fails closed on $scope read error $code", ({ scope, code }) => {
+      process.env.TRACE_TO_LANGSMITH = "true";
       const path = scope === "project" ? projectPath : userPath;
       writeFileSync(userPath, '{"enabled":true}');
       const read = vi.mocked(readFileSync).getMockImplementation()!;
@@ -119,20 +120,17 @@ describe("loadConfig", () => {
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
     });
 
-    it.each(["true", "false", ""])("env %j bypasses unreadable files", (env) => {
+    it.each(["true", "false", ""])("unreadable project file blocks env %j", (env) => {
       process.env.TRACE_TO_LANGSMITH = env;
       const read = vi.mocked(readFileSync).getMockImplementation()!;
       vi.mocked(readFileSync).mockImplementation((...args: Parameters<typeof readFileSync>) => {
         if (args[0] === projectPath || args[0] === userPath)
-          throw new Error("must not read switch files");
+          throw new Error("unreadable switch file");
         return read(...args);
       });
-      expect(loadConfig({ cwd: projectDir }).enabled).toBe(env === "true");
-      expect(
-        vi
-          .mocked(readFileSync)
-          .mock.calls.some(([path]) => path === projectPath || path === userPath),
-      ).toBe(false);
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
+      expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === projectPath)).toBe(true);
+      expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === userPath)).toBe(false);
     });
 
     it.each([true, false])("project enabled=%s does not read user config", (enabled) => {
@@ -149,15 +147,17 @@ describe("loadConfig", () => {
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
 
       process.env.TRACE_TO_LANGSMITH = "true";
-      expect(loadConfig({ cwd: projectDir }).enabled).toBe(true);
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
     });
 
     it("fails closed when the user config is a dangling symlink", () => {
+      process.env.TRACE_TO_LANGSMITH = "true";
       symlinkSync(join(tmpHome, "nonexistent.json"), userPath);
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
     });
 
     it("fails closed when the project config is a directory", () => {
+      process.env.TRACE_TO_LANGSMITH = "true";
       mkdirSync(projectPath);
       writeFileSync(userPath, '{"enabled":true}');
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);

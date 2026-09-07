@@ -14424,10 +14424,7 @@ function readEnabledFile(path3) {
   }
 }
 function resolveEnabled(cwd, homeDir) {
-  const env = process.env.TRACE_TO_LANGSMITH;
-  if (env !== void 0)
-    return env.toLowerCase() === "true";
-  return readEnabledFile(join(cwd, ".claude", "langsmith.json")) ?? (homeDir ? readEnabledFile(join(homeDir, ".claude", "langsmith.json")) : void 0) ?? false;
+  return readEnabledFile(join(cwd, ".claude", "langsmith.json")) ?? (homeDir ? readEnabledFile(join(homeDir, ".claude", "langsmith.json")) : void 0) ?? (process.env.TRACE_TO_LANGSMITH ?? "").toLowerCase() === "true";
 }
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();

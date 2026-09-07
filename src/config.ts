@@ -60,7 +60,7 @@ export function readLocalUsername(): string {
 }
 
 export interface Config {
-  /** Master tracing switch, resolved from the environment, project, then user config. */
+  /** Master tracing switch, resolved from project config, user config, then environment. */
   enabled: boolean;
   apiKey: string;
   project: string;
@@ -196,14 +196,12 @@ function readEnabledFile(path: string): boolean | undefined {
   }
 }
 
-/** Explicit env (including empty) > project file > user file > disabled. */
+/** Project file > user file > env > disabled. Only absent files fall through. */
 function resolveEnabled(cwd: string, homeDir: string): boolean {
-  const env = process.env.TRACE_TO_LANGSMITH;
-  if (env !== undefined) return env.toLowerCase() === "true";
   return (
     readEnabledFile(join(cwd, ".claude", "langsmith.json")) ??
     (homeDir ? readEnabledFile(join(homeDir, ".claude", "langsmith.json")) : undefined) ??
-    false
+    (process.env.TRACE_TO_LANGSMITH ?? "").toLowerCase() === "true"
   );
 }
 

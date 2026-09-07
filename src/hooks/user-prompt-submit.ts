@@ -67,7 +67,11 @@ async function main(): Promise<void> {
     try {
       const commandConfig = loadConfig({ cwd: input.cwd });
       const mode = command === "mute" ? "metadata" : "full";
-      const result = await setThreadTracingMode(commandConfig.stateFilePath, input.session_id, mode);
+      const result = await setThreadTracingMode(
+        commandConfig.stateFilePath,
+        input.session_id,
+        mode,
+      );
       reason = `Thread tracing ${command === "mute" ? "muted (metadata-only)" : "unmuted (full content)"}. Preference saved for the next turn; the current turn is unchanged.`;
       // Filesystem warnings stay in this local, blocked response, never tracing.
       if (result?.warning) reason += ` Warning: ${result.warning}.`;

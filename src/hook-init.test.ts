@@ -58,7 +58,7 @@ describe("initHook", () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  it("returns null when TRACE_TO_LANGSMITH is not true", () => {
+  it("returns null when no source enables tracing", () => {
     process.env.CC_LANGSMITH_API_KEY = "test-key";
     expect(initHook()).toBeNull();
   });
@@ -91,7 +91,10 @@ describe("initHook", () => {
     expect(config!.replicas).toHaveLength(1);
   });
 
-  it.each(["project", "user"])("enables tracing from the %s file with credentials", (scope) => {
+  it.each(
+    ["project", "user"].flatMap((scope) => [undefined, "false", ""].map((env) => ({ scope, env }))),
+  )("enables tracing from the $scope file with credentials despite env=$env", ({ scope, env }) => {
+    if (env !== undefined) process.env.TRACE_TO_LANGSMITH = env;
     writeFileSync(scope === "project" ? projectPath : userPath, '{"enabled":true}');
     process.env.CC_LANGSMITH_API_KEY = "test-key";
     expect(initHook(cwd)).toMatchObject({ enabled: true, apiKey: "test-key" });
@@ -117,10 +120,12 @@ describe("initHook", () => {
 
   it.each([
     { name: "default off", env: undefined, project: undefined, user: undefined },
-    { name: "explicit false", env: "false", project: true, user: true },
-    { name: "explicit empty", env: "", project: true, user: true },
+    { name: "env false with absent files", env: "false", project: undefined, user: undefined },
+    { name: "env empty with absent files", env: "", project: undefined, user: undefined },
     { name: "project veto", env: undefined, project: false, user: true },
+    { name: "project veto over env true", env: "true", project: false, user: true },
     { name: "user off", env: undefined, project: undefined, user: false },
+    { name: "user veto over env true", env: "true", project: undefined, user: false },
   ])(
     "master off ($name) returns null and hooks never initialize tracing or upload content",
     async ({ env, project, user }) => {
