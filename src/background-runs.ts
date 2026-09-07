@@ -14,11 +14,12 @@
  * This module owns that shaping so PostToolUse doesn't grow a copy per tool kind.
  */
 
-import type { SessionState } from "./types.js";
+import type { SessionState, TracingMode } from "./types.js";
 import type { TaskRunEntry } from "./langsmith.js";
 
 /** Trace context of the turn that launched a background run. */
 export interface LaunchingTurn {
+  tracing?: TracingMode;
   run_id: string;
   trace_id?: string;
   dotted_order?: string;
@@ -51,6 +52,7 @@ export function recordBackgroundRun(
       ...session.open_turns,
       [turn.run_id]: {
         ...existing,
+        tracing: existing?.tracing ?? turn.tracing,
         run_id: turn.run_id,
         trace_id: turn.trace_id,
         dotted_order: turn.dotted_order,

@@ -16,7 +16,7 @@ export function initHook(cwd?: string): Config | null {
   const config = loadConfig({ cwd });
   initLogger(config.debug);
 
-  if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
+  if (!config.enabled) {
     return null;
   }
 

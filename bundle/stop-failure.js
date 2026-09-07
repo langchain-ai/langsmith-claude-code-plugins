@@ -389,14 +389,14 @@ var require_dist = __commonJS({
       _isIntervalPaused() {
         const now = Date.now();
         if (this._intervalId === void 0) {
-          const delay = this._intervalEnd - now;
-          if (delay < 0) {
+          const delay2 = this._intervalEnd - now;
+          if (delay2 < 0) {
             this._intervalCount = this._carryoverConcurrencyCount ? this._pendingCount : 0;
           } else {
             if (this._timeoutId === void 0) {
               this._timeoutId = setTimeout(() => {
                 this._onResumeInterval();
-              }, delay);
+              }, delay2);
             }
             return true;
           }
@@ -594,15 +594,67 @@ var require_dist = __commonJS({
   }
 });
 
+// dist/tracing-policy.js
+import { randomUUID } from "node:crypto";
+import { lstatSync, readFileSync } from "node:fs";
+import { mkdir, open, rename, unlink } from "node:fs/promises";
+import { dirname } from "node:path";
+import { performance as performance2 } from "node:perf_hooks";
+import { setTimeout as delay } from "node:timers/promises";
+function isMode(value) {
+  return value === "full" || value === "metadata";
+}
+function isObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hasCode(error2, code) {
+  return isObject(error2) && error2.code === code;
+}
+function readPolicy(path3) {
+  let raw;
+  try {
+    raw = readFileSync(path3, "utf8");
+  } catch (error2) {
+    if (hasCode(error2, "ENOENT")) {
+      try {
+        lstatSync(path3);
+      } catch (statError) {
+        if (hasCode(statError, "ENOENT"))
+          return { default: "full", threads: {} };
+        throw statError;
+      }
+    }
+    throw error2;
+  }
+  const value = JSON.parse(raw);
+  if (!isObject(value) || !isMode(value.default) || !isObject(value.threads) || Object.values(value.threads).some((mode) => !isMode(mode)) || Object.keys(value).some((key) => key !== "default" && key !== "threads")) {
+    throw new Error("Invalid tracing preference format");
+  }
+  return value;
+}
+function getThreadTracingMode(stateFilePath, sessionId) {
+  try {
+    const policy = readPolicy(`${stateFilePath}.privacy.json`);
+    return Object.hasOwn(policy.threads, sessionId) ? policy.threads[sessionId] : policy.default;
+  } catch {
+    return "metadata";
+  }
+}
+
+// dist/tracing-mode.js
+function resolveTurnTracingMode(stateFilePath, sessionId, ...snapshots) {
+  return snapshots.find((mode) => mode !== void 0) ?? getThreadTracingMode(stateFilePath, sessionId);
+}
+
 // dist/logger.js
 import { appendFileSync, mkdirSync, statSync, renameSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname as dirname2 } from "node:path";
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
 var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
 var debugEnabled = false;
 function initLogger(debug2) {
   debugEnabled = debug2;
-  mkdirSync(dirname(LOG_FILE), { recursive: true });
+  mkdirSync(dirname2(LOG_FILE), { recursive: true });
 }
 function rotateIfNeeded() {
   try {
@@ -5333,7 +5385,7 @@ import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 var path2 = nodePath;
-async function mkdir2(dir) {
+async function mkdir3(dir) {
   await nodeFsPromises.mkdir(dir, { recursive: true });
 }
 async function writeFileAtomic(filePath, content) {
@@ -5365,7 +5417,7 @@ function renameSync3(oldPath, newPath) {
 function unlinkSync2(filePath) {
   nodeFs.unlinkSync(filePath);
 }
-function readFileSync2(filePath) {
+function readFileSync3(filePath) {
   return nodeFs.readFileSync(filePath, "utf-8");
 }
 async function mkdirExclusive(dir) {
@@ -5573,7 +5625,7 @@ var PromptCache = class {
     }
     let entries;
     try {
-      const content = readFileSync2(filePath);
+      const content = readFileSync3(filePath);
       const data = JSON.parse(content);
       entries = data.entries ?? null;
     } catch {
@@ -5693,7 +5745,7 @@ function isEEXIST(err) {
 }
 function lockMetadataLines(lockDir) {
   try {
-    return readFileSync2(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
+    return readFileSync3(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
   } catch {
     return void 0;
   }
@@ -5727,7 +5779,7 @@ async function acquireOAuthRefreshLock(configPath, deadline) {
   const lockDir = `${configPath}.oauth.lock.lock`;
   const parent = path2.dirname(lockDir);
   if (parent) {
-    await mkdir2(parent);
+    await mkdir3(parent);
   }
   const owner = globalThis.crypto.randomUUID();
   for (; ; ) {
@@ -5808,7 +5860,7 @@ function loadProfileState() {
     return void 0;
   }
   try {
-    const config = JSON.parse(readFileSync2(configPath));
+    const config = JSON.parse(readFileSync3(configPath));
     const profileName = resolveProfileName(config);
     const profile = profileName ? config.profiles?.[profileName] : void 0;
     if (!profileName || !profile) {
@@ -6038,7 +6090,7 @@ var ProfileAuth = class {
   }
   reloadProfile() {
     try {
-      const config = JSON.parse(readFileSync2(this.state.configPath));
+      const config = JSON.parse(readFileSync3(this.state.configPath));
       const profile = config.profiles?.[this.state.profileName];
       if (!profile) {
         return void 0;
@@ -7994,7 +8046,7 @@ var Client = class _Client {
       const filename = `trace_${Date.now()}_${v4_default().slice(0, 8)}.json`;
       const filepath = path2.join(directory, filename);
       if (!_Client._fallbackDirsCreated.has(directory)) {
-        await mkdir2(directory);
+        await mkdir3(directory);
         _Client._fallbackDirsCreated.add(directory);
       }
       if (maxBytes !== void 0 && maxBytes > 0) {
@@ -13156,12 +13208,12 @@ function createSecretAnonymizer(options) {
 }
 
 // dist/transcript.js
-import { readFileSync as readFileSync3, statSync as statSync3, fstatSync, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync as readFileSync4, statSync as statSync3, fstatSync, openSync, readSync, closeSync } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 
 // dist/state.js
-import { readFileSync as readFileSync4, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
-import { dirname as dirname2 } from "node:path";
+import { readFileSync as readFileSync5, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
+import { dirname as dirname3 } from "node:path";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
 function lockPath(stateFilePath) {
@@ -13173,7 +13225,7 @@ function sleep3(ms) {
 async function acquireLock(stateFilePath) {
   const lock = lockPath(stateFilePath);
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync4(dirname2(stateFilePath), { recursive: true });
+  mkdirSync4(dirname3(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
       const fd = openSync2(lock, "wx");
@@ -13205,7 +13257,7 @@ async function atomicUpdateState(stateFilePath, fn) {
 }
 function loadState(stateFilePath) {
   try {
-    const raw = readFileSync4(stateFilePath, "utf-8");
+    const raw = readFileSync5(stateFilePath, "utf-8");
     return JSON.parse(raw);
   } catch {
     return {};
@@ -13225,6 +13277,11 @@ var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 var USER_PROMPT_TURN_NAME = "Claude Code Turn";
 
 // dist/metadata.js
+var TRUSTED_INTEGRATION_VERSION = true ? "0.2.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var TRUSTED_METADATA = /* @__PURE__ */ Symbol("coding-agent trusted metadata");
+function trustedCodingAgentMetadata(metadata) {
+  return metadata?.[TRUSTED_METADATA];
+}
 var LS_AGENT_PURPOSE = "coding";
 var LS_INTEGRATION = "claude-code";
 var LS_AGENT_RUNTIME = "Claude Code";
@@ -13263,11 +13320,157 @@ function codingAgentMetadata(opts) {
   }
   if (skillName)
     meta.ls_skill_name = skillName;
-  return {
+  const trusted = { ...meta };
+  if (TRUSTED_INTEGRATION_VERSION)
+    trusted.ls_integration_version = TRUSTED_INTEGRATION_VERSION;
+  if (opts.modelName !== void 0)
+    trusted.ls_model_name = opts.modelName;
+  if (opts.usageMetadata !== void 0)
+    trusted.usage_metadata = opts.usageMetadata;
+  const result = {
     ...meta,
+    ...opts.modelName !== void 0 ? { ls_model_name: opts.modelName } : {},
+    ...opts.usageMetadata !== void 0 ? { usage_metadata: opts.usageMetadata } : {},
     ...runSpecific,
     ...base
   };
+  Object.defineProperty(result, TRUSTED_METADATA, { value: trusted });
+  return result;
+}
+
+// dist/privacy.js
+var MUTED_TRACE_CONTENT = "<trace inputs/outputs omitted using /langsmith-tracing:mute>";
+var METADATA_KEYS = /* @__PURE__ */ new Set([
+  "thread_id",
+  "turn_number",
+  "turn_id",
+  "status",
+  "ls_tracing_mode",
+  "ls_agent_purpose",
+  "ls_agent_type",
+  "ls_agent_runtime",
+  "ls_agent_runtime_version",
+  "ls_integration",
+  "ls_integration_version",
+  "ls_trace_schema_version",
+  "ls_model_name",
+  "ls_tool_name",
+  "usage_metadata",
+  "ls_subagent_id",
+  "ls_subagent_type"
+]);
+function numericFields(value, keys) {
+  const safe = {};
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return safe;
+  for (const key of keys) {
+    const count = value[key];
+    if (typeof count === "number" && Number.isFinite(count) && count >= 0)
+      safe[key] = count;
+  }
+  return safe;
+}
+function usageForMetadata(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return void 0;
+  const usage = value;
+  const safe = numericFields(usage, [
+    "input_tokens",
+    "output_tokens",
+    "total_tokens"
+  ]);
+  for (const [key, keys] of [
+    ["input_token_details", ["cache_read", "cache_creation", "audio"]],
+    ["output_token_details", ["reasoning", "audio"]]
+  ]) {
+    const details = numericFields(usage[key], keys);
+    if (Object.keys(details).length)
+      safe[key] = details;
+  }
+  return Object.keys(safe).length ? safe : void 0;
+}
+function projectMetadata(metadata, status) {
+  const safe = {};
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    if (!METADATA_KEYS.has(key))
+      continue;
+    if (key === "usage_metadata") {
+      const usage = usageForMetadata(value);
+      if (usage)
+        safe[key] = usage;
+    } else if (key === "turn_number") {
+      if (typeof value === "number" && Number.isSafeInteger(value) && value >= 1)
+        safe[key] = value;
+    } else if (typeof value === "string" && value.length) {
+      safe[key] = value;
+    }
+  }
+  safe.status = status === "error" || status === "completed" ? status : "running";
+  safe.ls_tracing_mode = "metadata";
+  return safe;
+}
+function metadataForMode(metadata, mode = "full", status) {
+  if (mode === "full")
+    return metadata;
+  return projectMetadata(trustedCodingAgentMetadata(metadata) ?? metadata, status);
+}
+function sanitizeReplica(replica, mode) {
+  if (mode === "full" || !replica || typeof replica !== "object")
+    return replica;
+  if (Array.isArray(replica))
+    return { projectName: replica[0] };
+  const { updates: _updates, ...safe } = replica;
+  return safe;
+}
+function runConfigForMode(config, mode = "full") {
+  if (mode === "full")
+    return config;
+  const status = config.error ? "error" : config.end_time != null ? "completed" : "running";
+  const extra = config.extra;
+  const safe = {};
+  for (const key of [
+    "client",
+    "id",
+    "name",
+    "run_type",
+    "project_name",
+    "start_time",
+    "end_time",
+    "parent_run_id",
+    "trace_id",
+    "dotted_order"
+  ]) {
+    if (key in config && config[key] !== void 0)
+      safe[key] = config[key];
+  }
+  if (Array.isArray(config.replicas)) {
+    safe.replicas = config.replicas.map((replica) => sanitizeReplica(replica, mode));
+  }
+  safe.inputs = { messages: [{ role: "user", content: MUTED_TRACE_CONTENT }] };
+  safe.outputs = { messages: [{ role: "assistant", content: MUTED_TRACE_CONTENT }] };
+  safe.extra = {
+    metadata: metadataForMode(extra?.metadata, mode, status),
+    // RunTree and Client both enrich extra AFTER construction. A client-level
+    // omitTracedRuntimeInfo flag alone does not suppress RunTree's additions,
+    // and replicas may use their own clients. Keep this method enumerable so it
+    // survives SDK object spreads and filters at the REST serialization boundary
+    // (including multipart .extra parts). Wire-payload tests guard this SDK behavior.
+    toJSON() {
+      return {
+        // Read the current metadata, not the constructor's copy: the client may
+        // have anonymized allowlisted values, which must not be restored here.
+        metadata: projectMetadata(this.metadata, typeof this.metadata?.status === "string" ? this.metadata.status : status)
+      };
+    }
+  };
+  return safe;
+}
+function createRunTree(config, mode = "full") {
+  const run = new RunTree(runConfigForMode(config, mode));
+  if (mode === "metadata" && run.replicas) {
+    run.replicas = run.replicas.map((replica) => sanitizeReplica(replica, mode));
+  }
+  return run;
 }
 
 // dist/langsmith.js
@@ -13293,7 +13496,7 @@ async function flushPendingTraces() {
 }
 
 // dist/config.js
-import { readFileSync as readFileSync5 } from "node:fs";
+import { lstatSync as lstatSync2, readFileSync as readFileSync6 } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
@@ -13310,7 +13513,7 @@ function readAnthropicUserId() {
     return void 0;
   const configPath = join(homeDir, ".claude.json");
   try {
-    const raw = readFileSync5(configPath, "utf-8");
+    const raw = readFileSync6(configPath, "utf-8");
     const parsed = JSON.parse(raw);
     const userId = parsed?.userID;
     if (typeof userId === "string" && userId.length > 0) {
@@ -13394,6 +13597,28 @@ function getGitInfo(cwd) {
   } catch {
   }
   return result;
+}
+function readEnabledFile(path3) {
+  try {
+    const parsed = JSON.parse(readFileSync6(path3, "utf-8"));
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && "enabled" in parsed && parsed.enabled === true;
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      try {
+        lstatSync2(path3);
+      } catch (statError) {
+        if (statError.code === "ENOENT")
+          return void 0;
+      }
+    }
+    return false;
+  }
+}
+function resolveEnabled(cwd, homeDir) {
+  const env = process.env.TRACE_TO_LANGSMITH;
+  if (env !== void 0)
+    return env.toLowerCase() === "true";
+  return readEnabledFile(join(cwd, ".claude", "langsmith.json")) ?? (homeDir ? readEnabledFile(join(homeDir, ".claude", "langsmith.json")) : void 0) ?? false;
 }
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
@@ -13491,6 +13716,7 @@ function loadConfig(options) {
     repoMetadata.git_commit_sha = gitInfo.commit;
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
   return {
+    enabled: resolveEnabled(cwd, homeDir),
     apiKey,
     project,
     apiBaseUrl,
@@ -13508,7 +13734,7 @@ function loadConfig(options) {
 function initHook(cwd) {
   const config = loadConfig({ cwd });
   initLogger(config.debug);
-  if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
+  if (!config.enabled) {
     return null;
   }
   if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
@@ -13551,7 +13777,7 @@ async function main() {
   }
   const errorMessage = input.error_details ? `${input.error}: ${input.error_details}` : input.error;
   try {
-    const runTree = new RunTree({
+    const runTree = createRunTree({
       client: client2,
       replicas: config.replicas,
       name: USER_PROMPT_TURN_NAME,
@@ -13574,7 +13800,7 @@ async function main() {
           agentType: "root"
         })
       }
-    });
+    }, resolveTurnTracingMode(config.stateFilePath, input.session_id, sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0));
     await runTree.patchRun({ excludeInputs: true });
     debug(`Closed turn run ${sessionState.current_turn_run_id} with error: ${errorMessage}`);
   } catch (err) {
@@ -13586,6 +13812,7 @@ async function main() {
       ...s,
       [input.session_id]: {
         ...ss,
+        current_turn_tracing: void 0,
         current_turn_run_id: void 0,
         current_trace_id: void 0,
         current_dotted_order: void 0,

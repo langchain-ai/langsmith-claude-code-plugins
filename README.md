@@ -84,13 +84,13 @@ export CC_LANGSMITH_PROJECT="my-project"
 
 ## What gets traced
 
-Each LLM run includes:
+With full tracing (the default), each LLM run includes:
 
 - **Inputs**: accumulated conversation messages
 - **Outputs**: assistant response content
 - **Metadata**: `ls_provider: "anthropic"`, `ls_model_name`, `ls_invocation_params` (model, stop reason), token usage
 
-All runs (LLM, tool, turn, subagent) automatically include identity metadata so you can attribute traces in LangSmith:
+In full mode, all runs (LLM, tool, turn, subagent) automatically include identity metadata so you can attribute traces in LangSmith:
 
 - `anthropic_user_id` — read from the `userID` field in `~/.claude.json` (the Claude Code installation's stable hashed user ID). Omitted if the file is missing or unreadable.
 - `local_username` — the local OS username from `os.userInfo()`.
@@ -100,6 +100,44 @@ To override either field, supply your own value via `CC_LANGSMITH_METADATA` — 
 Tool runs include the tool name, inputs, and output content. Skill tool runs additionally set `ls_skill_name` — the invoked skill's name, read from the tool's `skill` input — so per-skill usage is queryable in run stats.
 
 Interrupted turns (where the user cancels mid-response) are marked with status `"interrupted"` in LangSmith.
+
+## Muting a thread
+
+Muting is off by default. With tracing enabled, use these argument-free plugin commands:
+
+- `/langsmith-tracing:mute` — omit this thread's input/output content and unsafe metadata.
+- `/langsmith-tracing:unmute` — restore full tracing for subsequent turns.
+
+Claude Code namespaces plugin commands; neither command accepts `on`, `off`, or `status`. Run `/reload-plugins` or restart Claude Code after installing or changing command definitions.
+
+Muted runs retain their normal nesting, names, timing, status, model/tool identity, and token usage. Inputs become:
+
+```json
+{"messages":[{"role":"user","content":"<trace inputs/outputs omitted using /langsmith-tracing:mute>"}]}
+```
+
+Outputs use the same message content with role `assistant`. Raw errors, identity/repository attribution, arbitrary custom metadata, SDK runtime metadata, and replica metadata overrides are excluded in muted mode. Muting is independent of the secret-redaction setting below.
+
+Preferences are sticky per thread and stored separately from transient tracing state in `<state-file>.privacy.json`. Normal state cleanup does not remove them. If this preference file is unreadable or malformed, new turns use metadata-only tracing and commands refuse to overwrite it; repair the file or permissions before retrying. Deleting it resets preferences to the default, unmuted mode.
+
+Both commands apply **from the next turn**; the confirmation explicitly says the current turn is unchanged. A turn's mode is fixed when it starts and inherited by its subagents. In-flight work retains its mode across later commands, so unmuting never backfills full content into a previously muted run. A new turn after unmuting—including a task-notification turn—uses full tracing and may include earlier content in its context. There is no retroactive purge or content-tracking policy across turns.
+
+Commands save only the thread preference, never change run parent selection, and are handled without a model turn. The master switch always wins: when disabled, neither full nor metadata-only runs are uploaded.
+
+### Master tracing configuration
+
+Claude Code resolves the first applicable setting below; credentials are still required to upload.
+
+| Priority | Setting | Behavior |
+| --- | --- | --- |
+| 1 | `TRACE_TO_LANGSMITH` | When present, case-insensitive `true` enables; any other value disables. Overrides files. |
+| 2 | Project `.claude/langsmith.json` | `{"enabled": true}` enables; `{"enabled": false}` disables. |
+| 3 | User `~/.claude/langsmith.json` | Used only when the project file is absent. Same boolean `enabled` setting. |
+| 4 | No setting | Off. |
+
+A present malformed or unreadable config file disables tracing rather than falling through to another file. An explicit environment setting still takes precedence. This implements the requested file-plus-environment master control for Claude Code; this repository does not contain the Cursor or Codex plugins.
+
+**Testing from the previous experimental branch:** its preferences lived inside tracing state and are not imported by this clean implementation. Run `/langsmith-tracing:mute` again for threads you want muted.
 
 ## Secret redaction
 
@@ -122,7 +160,7 @@ The plugin respects the following environment variables:
 
 | Variable                           | Required | Default                           | Description                                                                                                    |
 | ---------------------------------- | -------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `TRACE_TO_LANGSMITH`               | Yes      | —                                 | Set to `"true"` to enable tracing                                                                              |
+| `TRACE_TO_LANGSMITH`               | No       | File config, then off             | Explicit master override; `"true"` enables, any other value disables. See precedence above.                       |
 | `CC_LANGSMITH_API_KEY`             | No\*     | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`). \*Required unless `CC_LANGSMITH_RUNS_ENDPOINTS` is set. |
 | `CC_LANGSMITH_PROJECT`             | No       | `"claude-code"`                   | LangSmith project name                                                                                         |
 | `LANGSMITH_ENDPOINT`               | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                                                                         |

@@ -10,6 +10,7 @@
  * to a higher value if needed.
  */
 
+import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { debug, error } from "../logger.js";
 import {
   initTracing,
@@ -99,8 +100,19 @@ async function main(): Promise<void> {
   // turn never arrived (agent aborted / session ended first). Close these (children)
   // before their launching turns (parents) below.
   for (const [agentId, taskRunInfo] of openAgentRuns) {
+    const launchingTurnId = taskRunInfo.deferred?.parent_run_id as string | undefined;
+    const launchingTurn = launchingTurnId ? openTurns[launchingTurnId] : undefined;
     try {
       await closeAgentToolRun({
+        tracing: resolveTurnTracingMode(
+          config.stateFilePath,
+          input.session_id,
+          taskRunInfo.tracing,
+          launchingTurn?.tracing,
+          launchingTurnId === sessionState.current_turn_run_id
+            ? sessionState.current_turn_tracing
+            : undefined,
+        ),
         sessionId: input.session_id,
         agentId,
         agentType: taskRunInfo.agent_type ?? "",
@@ -134,6 +146,7 @@ async function main(): Promise<void> {
             project: config.project,
             customMetadata: config.customMetadata,
           }),
+          tracing: resolveTurnTracingMode(config.stateFilePath, input.session_id, entry.tracing),
           lastAssistantMessage: entry.last_assistant_message,
         });
         debug(`Completed deferred turn ${turnRunId} on session end`);
@@ -169,6 +182,7 @@ async function main(): Promise<void> {
         ...ss,
         last_line: lastLine,
         turn_count: ss.turn_count + turnsTraced,
+        current_turn_tracing: undefined,
         current_turn_run_id: undefined,
         current_trace_id: undefined,
         current_dotted_order: undefined,

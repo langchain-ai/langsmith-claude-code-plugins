@@ -29,6 +29,7 @@
  *     turn; SessionEnd is the backstop if no notification ever arrives.
  */
 
+import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { debug, error } from "../logger.js";
 import { atomicUpdateState, getSessionState, loadState } from "../state.js";
 import { initTracing, tracePendingSubagents, flushPendingTraces } from "../langsmith.js";
@@ -123,6 +124,15 @@ async function main(): Promise<void> {
 
   try {
     await tracePendingSubagents({
+      tracing: resolveTurnTracingMode(
+        config.stateFilePath,
+        input.session_id,
+        taskRunInfo.tracing,
+        launchingTurn?.tracing,
+        turnRunId === sessionState.current_turn_run_id
+          ? sessionState.current_turn_tracing
+          : undefined,
+      ),
       sessionId: input.session_id,
       pendingSubagents: [
         {

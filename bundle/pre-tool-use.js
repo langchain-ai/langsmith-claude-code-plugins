@@ -1,14 +1,66 @@
 #!/usr/bin/env node
 
+// dist/tracing-policy.js
+import { randomUUID } from "node:crypto";
+import { lstatSync, readFileSync } from "node:fs";
+import { mkdir, open, rename, unlink } from "node:fs/promises";
+import { dirname } from "node:path";
+import { performance } from "node:perf_hooks";
+import { setTimeout as delay } from "node:timers/promises";
+function isMode(value) {
+  return value === "full" || value === "metadata";
+}
+function isObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hasCode(error2, code) {
+  return isObject(error2) && error2.code === code;
+}
+function readPolicy(path) {
+  let raw;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch (error2) {
+    if (hasCode(error2, "ENOENT")) {
+      try {
+        lstatSync(path);
+      } catch (statError) {
+        if (hasCode(statError, "ENOENT"))
+          return { default: "full", threads: {} };
+        throw statError;
+      }
+    }
+    throw error2;
+  }
+  const value = JSON.parse(raw);
+  if (!isObject(value) || !isMode(value.default) || !isObject(value.threads) || Object.values(value.threads).some((mode) => !isMode(mode)) || Object.keys(value).some((key) => key !== "default" && key !== "threads")) {
+    throw new Error("Invalid tracing preference format");
+  }
+  return value;
+}
+function getThreadTracingMode(stateFilePath, sessionId) {
+  try {
+    const policy = readPolicy(`${stateFilePath}.privacy.json`);
+    return Object.hasOwn(policy.threads, sessionId) ? policy.threads[sessionId] : policy.default;
+  } catch {
+    return "metadata";
+  }
+}
+
+// dist/tracing-mode.js
+function resolveTurnTracingMode(stateFilePath, sessionId, ...snapshots) {
+  return snapshots.find((mode) => mode !== void 0) ?? getThreadTracingMode(stateFilePath, sessionId);
+}
+
 // dist/logger.js
 import { appendFileSync, mkdirSync, statSync, renameSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname as dirname2 } from "node:path";
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
 var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
 var debugEnabled = false;
 function initLogger(debug2) {
   debugEnabled = debug2;
-  mkdirSync(dirname(LOG_FILE), { recursive: true });
+  mkdirSync(dirname2(LOG_FILE), { recursive: true });
 }
 function rotateIfNeeded() {
   try {
@@ -38,8 +90,8 @@ function debug(message) {
 }
 
 // dist/state.js
-import { readFileSync, writeFileSync, mkdirSync as mkdirSync2, openSync, closeSync, unlinkSync } from "node:fs";
-import { dirname as dirname2 } from "node:path";
+import { readFileSync as readFileSync2, writeFileSync, mkdirSync as mkdirSync2, openSync, closeSync, unlinkSync } from "node:fs";
+import { dirname as dirname3 } from "node:path";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
 function lockPath(stateFilePath) {
@@ -51,7 +103,7 @@ function sleep(ms) {
 async function acquireLock(stateFilePath) {
   const lock = lockPath(stateFilePath);
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync2(dirname2(stateFilePath), { recursive: true });
+  mkdirSync2(dirname3(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
       const fd = openSync(lock, "wx");
@@ -83,7 +135,7 @@ async function atomicUpdateState(stateFilePath, fn) {
 }
 function loadState(stateFilePath) {
   try {
-    const raw = readFileSync(stateFilePath, "utf-8");
+    const raw = readFileSync2(stateFilePath, "utf-8");
     return JSON.parse(raw);
   } catch {
     return {};
@@ -100,7 +152,7 @@ function getSessionState(state, sessionId) {
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
 // dist/config.js
-import { readFileSync as readFileSync2 } from "node:fs";
+import { lstatSync as lstatSync2, readFileSync as readFileSync3 } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
@@ -117,7 +169,7 @@ function readAnthropicUserId() {
     return void 0;
   const configPath = join(homeDir, ".claude.json");
   try {
-    const raw = readFileSync2(configPath, "utf-8");
+    const raw = readFileSync3(configPath, "utf-8");
     const parsed = JSON.parse(raw);
     const userId = parsed?.userID;
     if (typeof userId === "string" && userId.length > 0) {
@@ -201,6 +253,28 @@ function getGitInfo(cwd) {
   } catch {
   }
   return result;
+}
+function readEnabledFile(path) {
+  try {
+    const parsed = JSON.parse(readFileSync3(path, "utf-8"));
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && "enabled" in parsed && parsed.enabled === true;
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      try {
+        lstatSync2(path);
+      } catch (statError) {
+        if (statError.code === "ENOENT")
+          return void 0;
+      }
+    }
+    return false;
+  }
+}
+function resolveEnabled(cwd, homeDir) {
+  const env = process.env.TRACE_TO_LANGSMITH;
+  if (env !== void 0)
+    return env.toLowerCase() === "true";
+  return readEnabledFile(join(cwd, ".claude", "langsmith.json")) ?? (homeDir ? readEnabledFile(join(homeDir, ".claude", "langsmith.json")) : void 0) ?? false;
 }
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
@@ -298,6 +372,7 @@ function loadConfig(options) {
     repoMetadata.git_commit_sha = gitInfo.commit;
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
   return {
+    enabled: resolveEnabled(cwd, homeDir),
     apiKey,
     project,
     apiBaseUrl,
@@ -315,7 +390,7 @@ function loadConfig(options) {
 function initHook(cwd) {
   const config = loadConfig({ cwd });
   initLogger(config.debug);
-  if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
+  if (!config.enabled) {
     return null;
   }
   if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
@@ -345,7 +420,7 @@ function readStdin() {
 // dist/hooks/pre-tool-use.js
 async function main() {
   const input = await readStdin();
-  const config = initHook();
+  const config = initHook(input.cwd);
   if (!config)
     return;
   const startTime = Date.now();
@@ -356,6 +431,10 @@ async function main() {
       ...state,
       [input.session_id]: {
         ...ss,
+        tool_tracing_modes: {
+          ...ss.tool_tracing_modes,
+          [input.tool_use_id]: resolveTurnTracingMode(config.stateFilePath, input.session_id, ss.tool_tracing_modes?.[input.tool_use_id], ss.current_turn_tracing, ss.current_turn_run_id ? ss.open_turns?.[ss.current_turn_run_id]?.tracing : void 0)
+        },
         tool_start_times: {
           ...ss.tool_start_times,
           [input.tool_use_id]: startTime

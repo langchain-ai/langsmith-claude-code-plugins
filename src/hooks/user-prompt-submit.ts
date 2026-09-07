@@ -11,7 +11,7 @@
  * transcript before closing it with "User interrupt".
  */
 
-import { RunTree, uuid7FromTime } from "langsmith";
+import { uuid7FromTime } from "langsmith";
 import { debug, error } from "../logger.js";
 import {
   initTracing,
@@ -26,6 +26,13 @@ import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
 import { codingAgentMetadata } from "../metadata.js";
+import { createRunTree } from "../privacy.js";
+import { loadConfig } from "../config.js";
+import {
+  parseTracingCommand,
+  setThreadTracingMode,
+  getThreadTracingMode,
+} from "../tracing-policy.js";
 
 interface UserPromptSubmitHookInput {
   session_id: string;
@@ -52,6 +59,38 @@ async function main(): Promise<void> {
   const hookStartTime = Date.now();
   const input: UserPromptSubmitHookInput = await readStdin();
 
+  // Local commands must be handled before the master switch, credentials, or
+  // any tracing/turn-state work. Even failures consume the prompt, not the model.
+  const command = parseTracingCommand(input.prompt);
+  if (command) {
+    let reason: string;
+    try {
+      const commandConfig = loadConfig({ cwd: input.cwd });
+      const mode = command === "mute" ? "metadata" : "full";
+      const result = await setThreadTracingMode(commandConfig.stateFilePath, input.session_id, mode);
+      reason = `Thread tracing ${command === "mute" ? "muted (metadata-only)" : "unmuted (full content)"}. Preference saved for the next turn; the current turn is unchanged.`;
+      // Filesystem warnings stay in this local, blocked response, never tracing.
+      if (result?.warning) reason += ` Warning: ${result.warning}.`;
+      if (!commandConfig.enabled) {
+        reason += " Master tracing is disabled; this preference does not enable it.";
+      } else if (
+        !commandConfig.apiKey &&
+        (!commandConfig.replicas || commandConfig.replicas.length === 0)
+      ) {
+        reason += " Tracing remains inactive until credentials are configured.";
+      }
+    } catch (err) {
+      reason = `Could not ${command} thread tracing: ${err instanceof Error ? err.message : String(err)}. Tracing may still be enabled. Command blocked; no model turn was started.`;
+    }
+    try {
+      console.log(JSON.stringify({ decision: "block", reason }));
+    } catch {
+      // Exit 2 also blocks UserPromptSubmit if writing its JSON response fails.
+      process.exit(2);
+    }
+    return;
+  }
+
   const config = initHook(input.cwd);
   if (!config) return;
 
@@ -74,6 +113,7 @@ async function main(): Promise<void> {
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
+  const turnMode = getThreadTracingMode(config.stateFilePath, input.session_id);
 
   // CLI version (ls_agent_runtime_version); best-effort, Stop backfills if empty.
   const expandedTranscript = expandHome(input.transcript_path);
@@ -206,30 +246,33 @@ async function main(): Promise<void> {
     dottedOrder = segment;
   }
 
-  const runTree = new RunTree({
-    client,
-    replicas: config.replicas,
-    id: runId,
-    name: USER_PROMPT_TURN_NAME,
-    run_type: "chain",
-    inputs: { messages: [{ role: "user", content: input.prompt }] },
-    project_name: config.project,
-    start_time: startTime,
-    trace_id: traceId,
-    dotted_order: dottedOrder,
-    ...(parentRunId ? { parent_run_id: parentRunId } : {}),
-    extra: {
-      metadata: codingAgentMetadata({
-        sessionId: input.session_id,
-        base: config.customMetadata,
-        // turn_id (promptId) isn't known yet; Stop stamps it on completion.
-        turnNumber: turnNum,
-        runtimeVersion,
-        approvalPolicy,
-        agentType: "root",
-      }),
+  const runTree = createRunTree(
+    {
+      client,
+      replicas: config.replicas,
+      id: runId,
+      name: USER_PROMPT_TURN_NAME,
+      run_type: "chain",
+      inputs: { messages: [{ role: "user", content: input.prompt }] },
+      project_name: config.project,
+      start_time: startTime,
+      trace_id: traceId,
+      dotted_order: dottedOrder,
+      ...(parentRunId ? { parent_run_id: parentRunId } : {}),
+      extra: {
+        metadata: codingAgentMetadata({
+          sessionId: input.session_id,
+          base: config.customMetadata,
+          // turn_id (promptId) isn't known yet; Stop stamps it on completion.
+          turnNumber: turnNum,
+          runtimeVersion,
+          approvalPolicy,
+          agentType: "root",
+        }),
+      },
     },
-  });
+    turnMode,
+  );
 
   await runTree.postRun();
 
@@ -259,6 +302,7 @@ async function main(): Promise<void> {
       ...s,
       [input.session_id]: {
         ...ss,
+        current_turn_tracing: turnMode,
         current_turn_run_id: runId,
         current_trace_id: traceId,
         current_dotted_order: dottedOrder,

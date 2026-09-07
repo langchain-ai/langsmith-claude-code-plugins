@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import type { RunTreeConfig } from "langsmith";
@@ -7,7 +7,7 @@ import { debug, error } from "./logger.js";
 import { execSync } from "node:child_process";
 
 /**
- * Configuration — reads from environment variables.
+ * Configuration — reads from environment variables and local master-switch files.
  */
 
 /**
@@ -60,6 +60,8 @@ export function readLocalUsername(): string {
 }
 
 export interface Config {
+  /** Master tracing switch, resolved from the environment, project, then user config. */
+  enabled: boolean;
   apiKey: string;
   project: string;
   apiBaseUrl: string;
@@ -168,6 +170,41 @@ export function getGitInfo(cwd: string): { branch?: string; commit?: string } {
     // Not a git repo / git unavailable — skip.
   }
   return result;
+}
+
+/** Undefined means absent; all other read/parse failures fail closed. */
+function readEnabledFile(path: string): boolean | undefined {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf-8"));
+    return (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed) &&
+      "enabled" in parsed &&
+      parsed.enabled === true
+    );
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      // A dangling symlink is an unreadable config, not an absent preference.
+      try {
+        lstatSync(path);
+      } catch (statError) {
+        if ((statError as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      }
+    }
+    return false;
+  }
+}
+
+/** Explicit env (including empty) > project file > user file > disabled. */
+function resolveEnabled(cwd: string, homeDir: string): boolean {
+  const env = process.env.TRACE_TO_LANGSMITH;
+  if (env !== undefined) return env.toLowerCase() === "true";
+  return (
+    readEnabledFile(join(cwd, ".claude", "langsmith.json")) ??
+    (homeDir ? readEnabledFile(join(homeDir, ".claude", "langsmith.json")) : undefined) ??
+    false
+  );
 }
 
 export function loadConfig(options?: { cwd?: string }): Config {
@@ -302,6 +339,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
 
   return {
+    enabled: resolveEnabled(cwd, homeDir),
     apiKey,
     project,
     apiBaseUrl,

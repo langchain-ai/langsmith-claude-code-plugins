@@ -7,6 +7,7 @@
  * (which fires after the tool completes).
  */
 
+import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { debug, error } from "../logger.js";
 import { atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
@@ -14,6 +15,7 @@ import { readStdin } from "../utils/stdin.js";
 
 interface PreToolUseHookInput {
   session_id: string;
+  cwd: string;
   hook_event_name: "PreToolUse";
   tool_use_id: string;
   tool_name: string;
@@ -22,7 +24,7 @@ interface PreToolUseHookInput {
 async function main(): Promise<void> {
   const input: PreToolUseHookInput = await readStdin();
 
-  const config = initHook();
+  const config = initHook(input.cwd);
   if (!config) return;
 
   const startTime = Date.now();
@@ -35,6 +37,16 @@ async function main(): Promise<void> {
       ...state,
       [input.session_id]: {
         ...ss,
+        tool_tracing_modes: {
+          ...ss.tool_tracing_modes,
+          [input.tool_use_id]: resolveTurnTracingMode(
+            config.stateFilePath,
+            input.session_id,
+            ss.tool_tracing_modes?.[input.tool_use_id],
+            ss.current_turn_tracing,
+            ss.current_turn_run_id ? ss.open_turns?.[ss.current_turn_run_id]?.tracing : undefined,
+          ),
+        },
         tool_start_times: {
           ...ss.tool_start_times,
           [input.tool_use_id]: startTime,

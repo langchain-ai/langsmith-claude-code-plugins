@@ -4,6 +4,8 @@
 
 import type { RunTree } from "langsmith";
 
+export type TracingMode = "full" | "metadata";
+
 // ─── Hook Input Types ───────────────────────────────────────────────────────
 
 /** Common fields present in all hook inputs (delivered via stdin JSON). */
@@ -161,6 +163,12 @@ export interface Turn {
 // ─── Tracing State ─────────────────────────────────────────────────────────
 
 export interface SessionState {
+  /** Captured once at UserPromptSubmit; preference changes apply to the next turn. */
+  current_turn_tracing?: TracingMode;
+  /** Launch privacy only, not ownership; survives turn resets for async PostToolUse. */
+  tool_tracing_modes?: Record<string, TracingMode>;
+  /** Captured by PreCompact for async PostCompact (manual preference or auto turn mode). */
+  compaction_tracing?: TracingMode;
   last_line: number;
   turn_count: number;
   updated: string;
@@ -190,6 +198,7 @@ export interface SessionState {
   task_run_map?: Record<
     string,
     {
+      tracing?: TracingMode;
       run_id: string;
       dotted_order: string;
       /** Deferred Agent tool creation info (set by PostToolUse, used by Stop) */
@@ -258,6 +267,7 @@ export interface SessionState {
  * fields while this turn's subagents are still running.
  */
 export interface OpenTurn {
+  tracing?: TracingMode;
   run_id: string;
   trace_id?: string;
   dotted_order?: string;

@@ -40,6 +40,7 @@
  * `killed-workflow-no-signal` memory.
  */
 
+import { resolveTurnTracingMode } from "./tracing-mode.js";
 import { debug, error } from "./logger.js";
 import { flushPendingTraces, traceWorkflowStage } from "./langsmith.js";
 import type { TaskRunEntry } from "./langsmith.js";
@@ -138,6 +139,13 @@ export async function handleWorkflowSubagentStop(opts: {
 
   try {
     await traceWorkflowStage({
+      tracing: resolveTurnTracingMode(
+        opts.stateFilePath,
+        opts.sessionId,
+        entry.tracing,
+        launchingTurn?.tracing,
+        launchingTurnId === ss.current_turn_run_id ? ss.current_turn_tracing : undefined,
+      ),
       sessionId: opts.sessionId,
       project: opts.project,
       customMetadata: opts.customMetadata,

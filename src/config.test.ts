@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -6,9 +6,12 @@ import { loadConfig, parseRepoName } from "./config.js";
 import { execSync } from "node:child_process";
 
 vi.mock("node:child_process", { spy: true });
+vi.mock("node:fs", { spy: true });
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.mocked(readFileSync).mockReset();
+  vi.mocked(execSync).mockReset();
 });
 
 describe("loadConfig", () => {
@@ -18,6 +21,7 @@ describe("loadConfig", () => {
 
   beforeEach(() => {
     // Clear relevant env vars
+    delete process.env.TRACE_TO_LANGSMITH;
     delete process.env.CC_LANGSMITH_API_KEY;
     delete process.env.LANGSMITH_API_KEY;
     delete process.env.CC_LANGSMITH_PROJECT;
@@ -37,10 +41,163 @@ describe("loadConfig", () => {
 
   afterEach(() => {
     // Restore
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) delete process.env[key];
+    }
     Object.assign(process.env, originalEnv);
     if (tmpHome) {
       rmSync(tmpHome, { recursive: true, force: true });
     }
+  });
+
+  describe("master switch", () => {
+    let projectDir: string;
+    let projectPath: string;
+    let userPath: string;
+
+    beforeEach(() => {
+      projectDir = join(tmpHome, "project");
+      mkdirSync(join(projectDir, ".claude"), { recursive: true });
+      mkdirSync(join(tmpHome, ".claude"));
+      projectPath = join(projectDir, ".claude", "langsmith.json");
+      userPath = join(tmpHome, ".claude", "langsmith.json");
+      vi.mocked(execSync).mockReturnValue("");
+    });
+
+    it.each(
+      [undefined, "true", "TRUE", "TrUe", "false", "FALSE", "", "1", "yes", " true "].flatMap(
+        (env) =>
+          [undefined, true, false].flatMap((project) =>
+            [undefined, true, false].map((user) => ({
+              env,
+              project,
+              user,
+              expected:
+                env !== undefined ? env.toLowerCase() === "true" : (project ?? user ?? false),
+            })),
+          ),
+      ),
+    )("env=$env project=$project user=$user -> $expected", ({ env, project, user, expected }) => {
+      if (env !== undefined) process.env.TRACE_TO_LANGSMITH = env;
+      if (project !== undefined) writeFileSync(projectPath, JSON.stringify({ enabled: project }));
+      if (user !== undefined) writeFileSync(userPath, JSON.stringify({ enabled: user }));
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(expected);
+    });
+
+    it.each(
+      ["project", "user"].flatMap((scope) =>
+        [
+          "",
+          "{",
+          "null",
+          "[]",
+          "true",
+          "{}",
+          '{"enabled":"true"}',
+          '{"enabled":1}',
+          '{"enabled":null}',
+        ].map((raw) => ({ scope, raw })),
+      ),
+    )("fails closed for malformed $scope file: $raw", ({ scope, raw }) => {
+      if (scope === "project") writeFileSync(userPath, '{"enabled":true}');
+      writeFileSync(scope === "project" ? projectPath : userPath, raw);
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
+    });
+
+    it.each(
+      ["project", "user"].flatMap((scope) =>
+        ["EACCES", "EPERM", "EIO", "EISDIR", "ENOTDIR"].map((code) => ({ scope, code })),
+      ),
+    )("fails closed on $scope read error $code", ({ scope, code }) => {
+      const path = scope === "project" ? projectPath : userPath;
+      writeFileSync(userPath, '{"enabled":true}');
+      const read = vi.mocked(readFileSync).getMockImplementation()!;
+      vi.mocked(readFileSync).mockImplementation((...args: Parameters<typeof readFileSync>) => {
+        if (args[0] === path) throw Object.assign(new Error("unreadable"), { code });
+        return read(...args);
+      });
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
+    });
+
+    it.each(["true", "false", ""])("env %j bypasses unreadable files", (env) => {
+      process.env.TRACE_TO_LANGSMITH = env;
+      const read = vi.mocked(readFileSync).getMockImplementation()!;
+      vi.mocked(readFileSync).mockImplementation((...args: Parameters<typeof readFileSync>) => {
+        if (args[0] === projectPath || args[0] === userPath)
+          throw new Error("must not read switch files");
+        return read(...args);
+      });
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(env === "true");
+      expect(
+        vi
+          .mocked(readFileSync)
+          .mock.calls.some(([path]) => path === projectPath || path === userPath),
+      ).toBe(false);
+    });
+
+    it.each([true, false])("project enabled=%s does not read user config", (enabled) => {
+      writeFileSync(projectPath, JSON.stringify({ enabled }));
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(enabled);
+      expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === userPath)).toBe(false);
+    });
+
+    it("uses enabled user config only when the project entry is truly absent", () => {
+      writeFileSync(userPath, '{"enabled":true}');
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(true);
+
+      symlinkSync(join(projectDir, "nonexistent.json"), projectPath);
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
+
+      process.env.TRACE_TO_LANGSMITH = "true";
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(true);
+    });
+
+    it("fails closed when the user config is a dangling symlink", () => {
+      symlinkSync(join(tmpHome, "nonexistent.json"), userPath);
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
+    });
+
+    it("fails closed when the project config is a directory", () => {
+      mkdirSync(projectPath);
+      writeFileSync(userPath, '{"enabled":true}');
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
+    });
+
+    it("does not load credentials or other settings from master-switch files", () => {
+      writeFileSync(
+        projectPath,
+        JSON.stringify({
+          enabled: true,
+          apiKey: "file-key",
+          project: "file-project",
+          replicas: [{ apiKey: "file-replica" }],
+        }),
+      );
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: true,
+        apiKey: "",
+        project: "claude-code",
+        replicas: undefined,
+      });
+    });
+
+    it("uses process.cwd when cwd is omitted", () => {
+      vi.spyOn(process, "cwd").mockReturnValue(projectDir);
+      writeFileSync(projectPath, '{"enabled":true}');
+      expect(loadConfig().enabled).toBe(true);
+    });
+
+    it("uses USERPROFILE when HOME is absent", () => {
+      delete process.env.HOME;
+      process.env.USERPROFILE = tmpHome;
+      writeFileSync(userPath, '{"enabled":true}');
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(true);
+    });
+
+    it("defaults off when no home directory or project config is available", () => {
+      delete process.env.HOME;
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
+    });
   });
 
   it("reads CC_LANGSMITH_API_KEY first", () => {

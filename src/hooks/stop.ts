@@ -7,6 +7,7 @@
  * groups them into turns, and sends traces to LangSmith.
  */
 
+import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { readTranscript, groupIntoTurns, readRuntimeVersion } from "../transcript.js";
 import { log, warn, debug, error } from "../logger.js";
 import {
@@ -26,6 +27,8 @@ import {
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import { finalizeNotificationChain } from "../finalize.js";
+import { MUTED_TRACE_CONTENT } from "../privacy.js";
+import type { TaskRunEntry } from "../langsmith.js";
 import type { StopHookInput } from "../types.js";
 
 async function main(): Promise<void> {
@@ -81,7 +84,14 @@ async function main(): Promise<void> {
     if (sessionState.current_turn_run_id) {
       await atomicUpdateState(config.stateFilePath, (s) => {
         const ss = getSessionState(s, input.session_id);
-        return { ...s, [input.session_id]: { ...ss, current_turn_run_id: undefined } };
+        return {
+          ...s,
+          [input.session_id]: {
+            ...ss,
+            current_turn_run_id: undefined,
+            current_turn_tracing: undefined,
+          },
+        };
       });
     }
     return;
@@ -91,6 +101,14 @@ async function main(): Promise<void> {
 
   // Group into turns and trace each one.
   const turns = groupIntoTurns(messages);
+  const currentTracing = resolveTurnTracingMode(
+    config.stateFilePath,
+    input.session_id,
+    sessionState.current_turn_tracing,
+    sessionState.current_turn_run_id
+      ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing
+      : undefined,
+  );
 
   // The transcript file may not be fully flushed when this hook fires.
   // If the last turn's final LLM call had tool calls but there's no
@@ -123,7 +141,7 @@ async function main(): Promise<void> {
   let tracedTurns = 0;
 
   // Collect task run mappings for subagent linking
-  let allTaskRunMaps: Record<string, { run_id: string; dotted_order: string }> = {};
+  let allTaskRunMaps: Record<string, TaskRunEntry> = {};
 
   // The current_turn_run_id from state is for the LAST turn (the one that just completed)
   // Earlier turns (from interruptions) are traced standalone
@@ -151,6 +169,9 @@ async function main(): Promise<void> {
 
     try {
       const taskRunMap = await traceTurn({
+        // Earlier transcript turns have no original snapshot; never backfill them as full.
+        tracing: isLastTurn ? currentTracing : "metadata",
+        toolTracingModes: sessionState.tool_tracing_modes ?? {},
         turn,
         sessionId: input.session_id,
         turnNum,
@@ -190,6 +211,7 @@ async function main(): Promise<void> {
   if (pendingSubagents.length > 0) {
     debug(`Processing ${pendingSubagents.length} pending subagent trace(s)`);
     await tracePendingSubagents({
+      tracing: currentTracing,
       sessionId: input.session_id,
       pendingSubagents,
       taskRunMap: mergedTaskRunMap,
@@ -293,7 +315,11 @@ async function main(): Promise<void> {
           ...entry,
           agent_ids: remaining,
           stop_seen: true,
-          last_assistant_message: input.last_assistant_message,
+          tracing: entry.tracing ?? currentTracing,
+          last_assistant_message:
+            (entry.tracing ?? currentTracing) === "metadata"
+              ? MUTED_TRACE_CONTENT
+              : input.last_assistant_message,
           turn_id: lastTurnId,
           // If this turn is itself a task-notification turn that spawned its own
           // background subagent, remember the agent to finalize once it drains.
@@ -320,6 +346,7 @@ async function main(): Promise<void> {
     // The main loop is done with this turn regardless; clear so the next
     // UserPromptSubmit doesn't mistake a deferred turn for an interrupted one.
     s.current_turn_run_id = undefined;
+    s.current_turn_tracing = undefined;
     // Consume the notification markers; the finalize below (or the deferred
     // open_turns entry) now owns them.
     s.current_notification_agent_id = undefined;
@@ -334,6 +361,7 @@ async function main(): Promise<void> {
     debug(`Completing Turn run ${currentRunId}`);
     try {
       await completeTurnRun({
+        tracing: currentTracing,
         sessionId: input.session_id,
         runId: currentRunId,
         traceId: currentTraceId,
