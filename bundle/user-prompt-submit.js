@@ -12987,9 +12987,12 @@ function readPolicy(path3) {
   }
   return value;
 }
+function tracingPolicyPath(stateFilePath) {
+  return `${stateFilePath.replace(/\.json$/, "")}.privacy.json`;
+}
 function getThreadTracingMode(stateFilePath, sessionId) {
   try {
-    const policy = readPolicy(`${stateFilePath}.privacy.json`);
+    const policy = readPolicy(tracingPolicyPath(stateFilePath));
     return Object.hasOwn(policy.threads, sessionId) ? policy.threads[sessionId] : policy.default;
   } catch {
     return "metadata";
@@ -13006,7 +13009,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
   if (typeof sessionId !== "string" || !sessionId || !isMode(mode)) {
     throw new Error("A nonempty session ID and a full/metadata tracing mode are required");
   }
-  const path3 = `${stateFilePath}.privacy.json`;
+  const path3 = tracingPolicyPath(stateFilePath);
   const lockPath2 = `${path3}.lock`;
   await mkdir3(dirname2(path3), { recursive: true });
   const deadline = performance2.now() + 2e3;

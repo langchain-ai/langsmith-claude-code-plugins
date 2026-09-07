@@ -1,5 +1,5 @@
 ---
-description: Mute this thread's tracing content starting next turn
+description: Hide this thread's prompts, responses, and tool data from LangSmith next turn; keep only structural and usage metadata
 disable-model-invocation: true
 ---
 

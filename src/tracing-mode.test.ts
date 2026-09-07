@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolveTurnTracingMode } from "./tracing-mode.js";
-import { setThreadTracingMode } from "./tracing-policy.js";
+import { setThreadTracingMode, tracingPolicyPath } from "./tracing-policy.js";
 
 let dir: string;
 let state: string;
@@ -25,7 +25,7 @@ describe("resolveTurnTracingMode", () => {
   });
 
   it("fails closed for corrupt policy without changing an existing snapshot", () => {
-    writeFileSync(`${state}.privacy.json`, "{broken");
+    writeFileSync(tracingPolicyPath(state), "{broken");
     expect(resolveTurnTracingMode(state, "session")).toBe("metadata");
     expect(resolveTurnTracingMode(state, "session", "full")).toBe("full");
   });

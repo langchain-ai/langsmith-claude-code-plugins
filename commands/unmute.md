@@ -1,5 +1,5 @@
 ---
-description: Restore full tracing for this thread starting next turn
+description: Resume sending this thread's prompts, responses, and tool data to LangSmith next turn
 disable-model-invocation: true
 ---
 

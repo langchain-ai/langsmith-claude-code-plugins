@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TracingMode, TracingState, TranscriptMessage } from "../types.js";
+import { tracingPolicyPath } from "../tracing-policy.js";
 
 // Exercise the real hooks, grouping, run builders, background registration and
 // finalization. Only I/O/SDK transport is replaced; privacy projection is real.
@@ -224,7 +225,7 @@ afterEach(() => {
 function savedPolicy(mode: TracingMode | "corrupt") {
   h.policyPath = join(mkdtempSync(join(tmpdir(), "missing-mode-")), "state.json");
   writeFileSync(
-    `${h.policyPath}.privacy.json`,
+    tracingPolicyPath(h.policyPath),
     mode === "corrupt"
       ? "{broken"
       : JSON.stringify({ default: "full", threads: { session: mode } }),

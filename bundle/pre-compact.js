@@ -38,9 +38,12 @@ function readPolicy(path) {
   }
   return value;
 }
+function tracingPolicyPath(stateFilePath) {
+  return `${stateFilePath.replace(/\.json$/, "")}.privacy.json`;
+}
 function getThreadTracingMode(stateFilePath, sessionId) {
   try {
-    const policy = readPolicy(`${stateFilePath}.privacy.json`);
+    const policy = readPolicy(tracingPolicyPath(stateFilePath));
     return Object.hasOwn(policy.threads, sessionId) ? policy.threads[sessionId] : policy.default;
   } catch {
     return "metadata";

@@ -23,6 +23,7 @@ import {
   getThreadTracingMode,
   parseTracingCommand,
   setThreadTracingMode,
+  tracingPolicyPath,
 } from "./tracing-policy.js";
 
 const mocks = vi.hoisted(() => ({
@@ -60,7 +61,7 @@ let policy: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "tracing-policy-"));
   state = join(dir, "state.json");
-  policy = `${state}.privacy.json`;
+  policy = tracingPolicyPath(state);
   vi.clearAllMocks();
 });
 afterEach(() => {
@@ -116,6 +117,25 @@ const postcommitFaults: FsFault[] = [
 ];
 
 describe("standalone tracing preference", () => {
+  it.each([
+    ["langsmith_state.json", "langsmith_state.privacy.json"],
+    ["custom.json", "custom.privacy.json"],
+    ["custom", "custom.privacy.json"],
+    ["custom.txt", "custom.txt.privacy.json"],
+    ["custom.json.backup", "custom.json.backup.privacy.json"],
+  ])("uses the exact preference path for %s", async (stateName, policyName) => {
+    const statePath = join(dir, stateName);
+    const expectedPolicyPath = join(dir, policyName);
+    expect(tracingPolicyPath(statePath)).toBe(expectedPolicyPath);
+    await setThreadTracingMode(statePath, "a", "metadata");
+    expect(readdirSync(dir)).toEqual([policyName]);
+    expect(JSON.parse(readFileSync(expectedPolicyPath, "utf8"))).toEqual({
+      default: "full",
+      threads: { a: "metadata" },
+    });
+    expect(getThreadTracingMode(statePath, "a")).toBe("metadata");
+  });
+
   it("defaults absent/new healthy threads to full and persists only selected threads", async () => {
     expect(getThreadTracingMode(state, "new")).toBe("full");
     await setThreadTracingMode(state, "a", "metadata");
@@ -126,7 +146,7 @@ describe("standalone tracing preference", () => {
     expect(getThreadTracingMode(state, "a")).toBe("full");
     expect(getThreadTracingMode(state, "b")).toBe("metadata");
     expect(statSync(policy).mode & 0o777).toBe(0o600);
-    expect(readdirSync(dir)).toEqual(["state.json.privacy.json"]);
+    expect(readdirSync(dir)).toEqual(["state.privacy.json"]);
   });
 
   it("creates missing parents and leaves existing tracing state untouched", async () => {
@@ -219,7 +239,7 @@ describe("standalone tracing preference", () => {
     vi.spyOn(fsPromises, "rename").mockRejectedValueOnce(new Error("rename failed"));
     await expect(setThreadTracingMode(state, "a", "full")).rejects.toThrow("rename failed");
     expect(readFileSync(policy, "utf8")).toBe(before);
-    expect(readdirSync(dir)).toEqual(["state.json.privacy.json"]);
+    expect(readdirSync(dir)).toEqual(["state.privacy.json"]);
   });
 
   it.each(postcommitFaults)("returns a warning after committed %s failure", async (fault) => {
@@ -254,7 +274,7 @@ describe("standalone tracing preference", () => {
       injectFsFaults(fault);
       await expect(setThreadTracingMode(state, "a", "full")).rejects.toThrow(`${fault} failed`);
       expect(readFileSync(policy, "utf8")).toBe(before);
-      expect(readdirSync(dir)).toEqual(["state.json.privacy.json"]);
+      expect(readdirSync(dir)).toEqual(["state.privacy.json"]);
     },
   );
 

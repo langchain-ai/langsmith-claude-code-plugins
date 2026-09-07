@@ -53,9 +53,13 @@ function readPolicy(path: string): TracingPolicy {
   return value as unknown as TracingPolicy;
 }
 
+export function tracingPolicyPath(stateFilePath: string): string {
+  return `${stateFilePath.replace(/\.json$/, "")}.privacy.json`;
+}
+
 export function getThreadTracingMode(stateFilePath: string, sessionId: string): TracingMode {
   try {
-    const policy = readPolicy(`${stateFilePath}.privacy.json`);
+    const policy = readPolicy(tracingPolicyPath(stateFilePath));
     return Object.hasOwn(policy.threads, sessionId) ? policy.threads[sessionId] : policy.default;
   } catch {
     return "metadata";
@@ -84,7 +88,7 @@ export async function setThreadTracingMode(
   if (typeof sessionId !== "string" || !sessionId || !isMode(mode)) {
     throw new Error("A nonempty session ID and a full/metadata tracing mode are required");
   }
-  const path = `${stateFilePath}.privacy.json`;
+  const path = tracingPolicyPath(stateFilePath);
   const lockPath = `${path}.lock`;
   await mkdir(dirname(path), { recursive: true });
   const deadline = performance.now() + 2000;
