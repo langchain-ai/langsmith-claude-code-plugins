@@ -37,9 +37,9 @@ export function metadataForMode(
 }
 
 function sanitizeReplica(replica: unknown, mode: TracingMode): unknown {
-  if (mode === "full" || !replica || typeof replica !== "object" || Array.isArray(replica)) {
-    return replica;
-  }
+  if (mode === "full" || !replica || typeof replica !== "object") return replica;
+  // The SDK also accepts [projectName, updates] tuples.
+  if (Array.isArray(replica)) return { projectName: replica[0] };
   const { updates: _updates, ...safe } = replica as Record<string, unknown>;
   return safe;
 }
@@ -71,10 +71,38 @@ export function runConfigForMode<T extends Record<string, unknown>>(
   }
   safe.inputs = {};
   safe.outputs = {};
-  safe.extra = { metadata: metadataForMode(extra?.metadata, mode, status) };
+  safe.extra = {
+    metadata: metadataForMode(extra?.metadata, mode, status),
+    // RunTree and Client both enrich extra AFTER construction. A client-level
+    // omitTracedRuntimeInfo flag alone does not suppress RunTree's additions,
+    // and replicas may use their own clients. Keep this method enumerable so it
+    // survives SDK object spreads and filters at the REST serialization boundary
+    // (including multipart .extra parts). Wire-payload tests guard this SDK behavior.
+    toJSON(this: { metadata?: Record<string, unknown> }) {
+      return {
+        // Read the current metadata, not the constructor's copy: the client may
+        // have anonymized allowlisted values, which must not be restored here.
+        metadata: metadataForMode(
+          this.metadata,
+          "metadata",
+          typeof this.metadata?.status === "string" ? this.metadata.status : status,
+        ),
+      };
+    },
+  };
   return safe as T;
 }
 
 export function createRunTree(config: RunTreeConfig, mode: TracingMode = "full"): RunTree {
-  return new RunTree(runConfigForMode(config as RunTreeConfig & Record<string, unknown>, mode));
+  const run = new RunTree(
+    runConfigForMode(config as RunTreeConfig & Record<string, unknown>, mode),
+  );
+  // The constructor can resolve additional replicas from the SDK environment.
+  // Filter their patch overrides too, without changing destination or auth.
+  if (mode === "metadata" && run.replicas) {
+    run.replicas = run.replicas.map((replica) =>
+      sanitizeReplica(replica, mode),
+    ) as typeof run.replicas;
+  }
+  return run;
 }

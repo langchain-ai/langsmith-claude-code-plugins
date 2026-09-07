@@ -12939,9 +12939,10 @@ function metadataForMode(metadata, mode = "full", status) {
   return safe;
 }
 function sanitizeReplica(replica, mode) {
-  if (mode === "full" || !replica || typeof replica !== "object" || Array.isArray(replica)) {
+  if (mode === "full" || !replica || typeof replica !== "object")
     return replica;
-  }
+  if (Array.isArray(replica))
+    return { projectName: replica[0] };
   const { updates: _updates, ...safe } = replica;
   return safe;
 }
@@ -12971,11 +12972,29 @@ function runConfigForMode(config, mode = "full") {
   }
   safe.inputs = {};
   safe.outputs = {};
-  safe.extra = { metadata: metadataForMode(extra?.metadata, mode, status) };
+  safe.extra = {
+    metadata: metadataForMode(extra?.metadata, mode, status),
+    // RunTree and Client both enrich extra AFTER construction. A client-level
+    // omitTracedRuntimeInfo flag alone does not suppress RunTree's additions,
+    // and replicas may use their own clients. Keep this method enumerable so it
+    // survives SDK object spreads and filters at the REST serialization boundary
+    // (including multipart .extra parts). Wire-payload tests guard this SDK behavior.
+    toJSON() {
+      return {
+        // Read the current metadata, not the constructor's copy: the client may
+        // have anonymized allowlisted values, which must not be restored here.
+        metadata: metadataForMode(this.metadata, "metadata", typeof this.metadata?.status === "string" ? this.metadata.status : status)
+      };
+    }
+  };
   return safe;
 }
 function createRunTree(config, mode = "full") {
-  return new RunTree(runConfigForMode(config, mode));
+  const run = new RunTree(runConfigForMode(config, mode));
+  if (mode === "metadata" && run.replicas) {
+    run.replicas = run.replicas.map((replica) => sanitizeReplica(replica, mode));
+  }
+  return run;
 }
 
 // dist/logger.js
