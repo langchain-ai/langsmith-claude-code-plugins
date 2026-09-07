@@ -56,6 +56,14 @@ async function main(): Promise<void> {
 
   if (!sessionState.current_turn_run_id && !hasOpenTurns && !hasOpenAgentRuns) {
     debug("No open turn run — nothing to close");
+    await atomicUpdateState(config.stateFilePath, (s) => {
+      const ss = s[input.session_id];
+      if (!ss) return s;
+      return {
+        ...s,
+        [input.session_id]: { ...ss, tool_tracing_modes: {}, tool_tracing_progress: {} },
+      };
+    });
     return;
   }
 
@@ -190,6 +198,8 @@ async function main(): Promise<void> {
         task_run_map: {},
         traced_tool_use_ids: [],
         tool_start_times: {},
+        tool_tracing_modes: {},
+        tool_tracing_progress: {},
         pending_subagent_traces: [],
         open_turns: {},
         current_notification_agent_id: undefined,

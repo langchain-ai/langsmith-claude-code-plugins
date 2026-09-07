@@ -11,7 +11,12 @@ import { Client, RunTree, RunTreeConfig, uuid7FromTime } from "langsmith";
 import { createSecretAnonymizer } from "langsmith/anonymizer";
 import type { StringNodeRule } from "langsmith/anonymizer";
 import type { Turn, ContentBlock, Usage, OpenTurn, SessionState, TracingMode } from "./types.js";
-import { readTranscript, groupIntoTurns, resolveProvider } from "./transcript.js";
+import {
+  readTranscript,
+  groupIntoTurns,
+  resolveProvider,
+  completedToolUseIds,
+} from "./transcript.js";
 import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
@@ -662,7 +667,7 @@ export async function closeInterruptedTurn(options: {
   turn?: OpenTurn;
   /** Root-run error/status message. Defaults to "User interrupt". */
   error?: string;
-}): Promise<{ lastLine: number; turnsTraced: number }> {
+}): Promise<{ lastLine: number; turnsTraced: number; consumedToolUseIds?: string[] }> {
   const {
     sessionId,
     sessionState,
@@ -704,6 +709,7 @@ export async function closeInterruptedTurn(options: {
   );
   let lastLine = sessionState.last_line;
   let turnsTraced = 0;
+  let consumedToolUseIds: string[] = [];
   let taskRunMap = sessionState.task_run_map ?? {};
   // Parent turn markers to propagate onto subagent runs.
   let turnId: string | undefined;
@@ -738,6 +744,7 @@ export async function closeInterruptedTurn(options: {
           });
           lastLine = newLastLine;
           turnsTraced = 1;
+          consumedToolUseIds = completedToolUseIds(turns);
         }
       }
     } catch (err) {
@@ -792,7 +799,7 @@ export async function closeInterruptedTurn(options: {
 
   await flushPendingTraces();
 
-  return { lastLine, turnsTraced };
+  return { lastLine, turnsTraced, consumedToolUseIds };
 }
 
 // ─── Subagent tracing ────────────────────────────────────────────────────────

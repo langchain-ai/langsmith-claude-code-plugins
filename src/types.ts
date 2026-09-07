@@ -165,8 +165,16 @@ export interface Turn {
 export interface SessionState {
   /** Captured once at UserPromptSubmit; preference changes apply to the next turn. */
   current_turn_tracing?: TracingMode;
-  /** Launch privacy only, not ownership; survives turn resets for async PostToolUse. */
+  /** Tools inherit their launching turn's mode, but async PostToolUse can run after
+   *  a newer turn starts. Reading current_turn_tracing then could upload a muted
+   *  tool's content after unmute. Keep a per-tool privacy snapshot across turn resets
+   *  because the hook does not reliably identify its original turn. This does not
+   *  select parents or change trace ownership/nesting. Reclaim it once PostToolUse
+   *  and transcript processing have both consumed it (or at SessionEnd). */
   tool_tracing_modes?: Record<string, TracingMode>;
+  /** First side of the privacy-snapshot cleanup join; removed when both sides finish.
+   *  Independent of turn-local dedup IDs (Agent PostToolUse doesn't record those). */
+  tool_tracing_progress?: Record<string, "post" | "transcript">;
   /** Captured by PreCompact for async PostCompact (manual preference or auto turn mode). */
   compaction_tracing?: TracingMode;
   last_line: number;

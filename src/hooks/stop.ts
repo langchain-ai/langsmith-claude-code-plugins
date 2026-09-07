@@ -8,7 +8,12 @@
  */
 
 import { resolveTurnTracingMode } from "../tracing-mode.js";
-import { readTranscript, groupIntoTurns, readRuntimeVersion } from "../transcript.js";
+import {
+  readTranscript,
+  groupIntoTurns,
+  readRuntimeVersion,
+  completedToolUseIds,
+} from "../transcript.js";
 import { log, warn, debug, error } from "../logger.js";
 import {
   loadState,
@@ -16,6 +21,7 @@ import {
   getSessionState,
   updateSessionState,
   pruneOldSessions,
+  advanceToolTracingProgress,
 } from "../state.js";
 import {
   initTracing,
@@ -285,6 +291,14 @@ async function main(): Promise<void> {
       { ...latestSession.task_run_map, ...allTaskRunMaps },
     );
     const s = updatedState[input.session_id];
+    // Match cursor semantics: if any turn traced, all parsed messages are consumed,
+    // including failed turns. If none traced, retain modes for the next replay.
+    if (tracedTurns > 0) {
+      Object.assign(
+        s,
+        advanceToolTracingProgress(latestSession, completedToolUseIds(turns), "transcript"),
+      );
+    }
 
     // Read the notification marker inside the lock so claiming + clearing it is
     // atomic with the completion decision.

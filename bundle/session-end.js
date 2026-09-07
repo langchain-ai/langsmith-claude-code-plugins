@@ -13346,6 +13346,9 @@ function resolveProvider(model) {
     return "google_vertex_ai";
   return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
 }
+function completedToolUseIds(turns) {
+  return turns.flatMap((turn) => turn.llmCalls.flatMap((call) => call.toolCalls.filter((tool) => tool.result !== void 0).map((tool) => tool.tool_use.id)));
+}
 function mergeAssistantChunks(chunks) {
   if (chunks.length === 0) {
     throw new Error("Cannot merge zero chunks");
@@ -14096,6 +14099,7 @@ async function closeInterruptedTurn(options) {
   const tracing = resolveTurnTracingMode(stateFilePath, sessionId, sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
   let lastLine = sessionState.last_line;
   let turnsTraced = 0;
+  let consumedToolUseIds = [];
   let taskRunMap = sessionState.task_run_map ?? {};
   let turnId;
   const turnNumber = sessionState.current_turn_number;
@@ -14124,6 +14128,7 @@ async function closeInterruptedTurn(options) {
           });
           lastLine = newLastLine;
           turnsTraced = 1;
+          consumedToolUseIds = completedToolUseIds(turns);
         }
       }
     } catch (err) {
@@ -14166,7 +14171,7 @@ async function closeInterruptedTurn(options) {
     approvalPolicy
   }, errorMessage);
   await flushPendingTraces();
-  return { lastLine, turnsTraced };
+  return { lastLine, turnsTraced, consumedToolUseIds };
 }
 async function tracePendingSubagents(options) {
   const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen } = options;
@@ -14650,6 +14655,15 @@ async function main() {
   const hasOpenAgentRuns = openAgentRuns.length > 0;
   if (!sessionState.current_turn_run_id && !hasOpenTurns && !hasOpenAgentRuns) {
     debug("No open turn run \u2014 nothing to close");
+    await atomicUpdateState(config.stateFilePath, (s) => {
+      const ss = s[input.session_id];
+      if (!ss)
+        return s;
+      return {
+        ...s,
+        [input.session_id]: { ...ss, tool_tracing_modes: {}, tool_tracing_progress: {} }
+      };
+    });
     return;
   }
   initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
@@ -14747,6 +14761,8 @@ async function main() {
         task_run_map: {},
         traced_tool_use_ids: [],
         tool_start_times: {},
+        tool_tracing_modes: {},
+        tool_tracing_progress: {},
         pending_subagent_traces: [],
         open_turns: {},
         current_notification_agent_id: void 0,

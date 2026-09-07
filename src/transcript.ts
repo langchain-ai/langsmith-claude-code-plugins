@@ -237,6 +237,17 @@ export function resolveProvider(model: string): string {
   return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
 }
 
+/** Tool snapshots are no longer needed for replay once these turns' cursor is saved.
+ *  A call without a result is still pending, even if the enclosing turn ended.
+ */
+export function completedToolUseIds(turns: Turn[]): string[] {
+  return turns.flatMap((turn) =>
+    turn.llmCalls.flatMap((call) =>
+      call.toolCalls.filter((tool) => tool.result !== undefined).map((tool) => tool.tool_use.id),
+    ),
+  );
+}
+
 // ─── Streaming merge ────────────────────────────────────────────────────────
 
 /**

@@ -13462,6 +13462,9 @@ function resolveProvider(model) {
     return "google_vertex_ai";
   return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
 }
+function completedToolUseIds(turns) {
+  return turns.flatMap((turn) => turn.llmCalls.flatMap((call) => call.toolCalls.filter((tool) => tool.result !== void 0).map((tool) => tool.tool_use.id)));
+}
 function mergeAssistantChunks(chunks) {
   if (chunks.length === 0) {
     throw new Error("Cannot merge zero chunks");
@@ -13650,6 +13653,21 @@ function getSessionState(state, sessionId) {
     updated: "",
     task_run_map: {}
   };
+}
+function advanceToolTracingProgress(session, ids, phase) {
+  const modes = { ...session.tool_tracing_modes };
+  const progress = { ...session.tool_tracing_progress };
+  for (const id of ids) {
+    if (!Object.hasOwn(modes, id))
+      continue;
+    if (progress[id] && progress[id] !== phase) {
+      delete modes[id];
+      delete progress[id];
+    } else {
+      progress[id] = phase;
+    }
+  }
+  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
 }
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
@@ -14222,6 +14240,7 @@ async function closeInterruptedTurn(options) {
   const tracing = resolveTurnTracingMode(stateFilePath, sessionId, sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
   let lastLine = sessionState.last_line;
   let turnsTraced = 0;
+  let consumedToolUseIds = [];
   let taskRunMap = sessionState.task_run_map ?? {};
   let turnId;
   const turnNumber = sessionState.current_turn_number;
@@ -14250,6 +14269,7 @@ async function closeInterruptedTurn(options) {
           });
           lastLine = newLastLine;
           turnsTraced = 1;
+          consumedToolUseIds = completedToolUseIds(turns);
         }
       }
     } catch (err) {
@@ -14292,7 +14312,7 @@ async function closeInterruptedTurn(options) {
     approvalPolicy
   }, errorMessage);
   await flushPendingTraces();
-  return { lastLine, turnsTraced };
+  return { lastLine, turnsTraced, consumedToolUseIds };
 }
 async function tracePendingSubagents(options) {
   const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen } = options;
@@ -14895,11 +14915,12 @@ async function main() {
     }
   }
   let interruptedTurnsTraced = 0;
+  let consumedToolUseIds = [];
   if (sessionState.current_turn_run_id) {
     const supersededNotificationAgentId = sessionState.current_notification_agent_id;
     debug(`Closing stale turn ${sessionState.current_turn_run_id}` + (supersededNotificationAgentId ? " (superseded task-notification)" : " (interrupted)"));
     try {
-      const { lastLine, turnsTraced } = await closeInterruptedTurn({
+      const { lastLine, turnsTraced, consumedToolUseIds: consumed } = await closeInterruptedTurn({
         sessionId: input.session_id,
         sessionState,
         transcriptPath: expandHome(input.transcript_path),
@@ -14912,6 +14933,7 @@ async function main() {
       });
       interruptedLastLine = lastLine;
       interruptedTurnsTraced = turnsTraced;
+      consumedToolUseIds = consumed ?? [];
       if (supersededNotificationAgentId) {
         await finalizeNotificationChain({
           stateFilePath: config.stateFilePath,
@@ -15011,6 +15033,7 @@ async function main() {
         ...runtimeVersion ? { runtime_version: runtimeVersion } : {},
         // Advance past the interrupted turn's messages so Stop doesn't re-trace them
         last_line: interruptedLastLine,
+        ...advanceToolTracingProgress(ss, consumedToolUseIds, "transcript"),
         turn_count: ss.turn_count + interruptedTurnsTraced,
         // Clear this turn's stale data, but keep still-running background subagents
         // and any Agent tool runs left open awaiting their task-notification.

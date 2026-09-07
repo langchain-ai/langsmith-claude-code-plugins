@@ -13274,6 +13274,21 @@ function getSessionState(state, sessionId) {
     task_run_map: {}
   };
 }
+function advanceToolTracingProgress(session, ids, phase) {
+  const modes = { ...session.tool_tracing_modes };
+  const progress = { ...session.tool_tracing_progress };
+  for (const id of ids) {
+    if (!Object.hasOwn(modes, id))
+      continue;
+    if (progress[id] && progress[id] !== phase) {
+      delete modes[id];
+      delete progress[id];
+    } else {
+      progress[id] = phase;
+    }
+  }
+  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
+}
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
 // dist/metadata.js
@@ -13940,10 +13955,15 @@ async function main() {
       ...freshState,
       [input.session_id]: {
         ...freshSession,
-        tool_tracing_modes: {
-          ...freshSession.tool_tracing_modes,
-          [input.tool_use_id]: tracing
-        },
+        // Don't resurrect a snapshot reclaimed while this hook awaited the SDK
+        // (notably by definitive SessionEnd). The local mode still protects this post.
+        ...sessionState.tool_tracing_modes?.[input.tool_use_id] !== void 0 && freshSession.tool_tracing_modes?.[input.tool_use_id] === void 0 ? {} : advanceToolTracingProgress({
+          ...freshSession,
+          tool_tracing_modes: {
+            ...freshSession.tool_tracing_modes,
+            [input.tool_use_id]: tracing
+          }
+        }, [input.tool_use_id], "post"),
         last_tool_end_time: toolEndTime,
         ...backgroundUpdate,
         // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this

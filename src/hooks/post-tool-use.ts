@@ -11,7 +11,12 @@ import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { uuid7FromTime } from "langsmith";
 import { debug, error } from "../logger.js";
 import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
-import { loadState, atomicUpdateState, getSessionState } from "../state.js";
+import {
+  loadState,
+  atomicUpdateState,
+  getSessionState,
+  advanceToolTracingProgress,
+} from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
@@ -236,10 +241,22 @@ async function main(): Promise<void> {
       ...freshState,
       [input.session_id]: {
         ...freshSession,
-        tool_tracing_modes: {
-          ...freshSession.tool_tracing_modes,
-          [input.tool_use_id]: tracing,
-        },
+        // Don't resurrect a snapshot reclaimed while this hook awaited the SDK
+        // (notably by definitive SessionEnd). The local mode still protects this post.
+        ...(sessionState.tool_tracing_modes?.[input.tool_use_id] !== undefined &&
+        freshSession.tool_tracing_modes?.[input.tool_use_id] === undefined
+          ? {}
+          : advanceToolTracingProgress(
+              {
+                ...freshSession,
+                tool_tracing_modes: {
+                  ...freshSession.tool_tracing_modes,
+                  [input.tool_use_id]: tracing,
+                },
+              },
+              [input.tool_use_id],
+              "post",
+            )),
         last_tool_end_time: toolEndTime,
         ...backgroundUpdate,
         // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this

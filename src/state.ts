@@ -94,6 +94,32 @@ export function getSessionState(state: TracingState, sessionId: string): Session
   );
 }
 
+/** Join PostToolUse's committed write with cursor consumption of tool results.
+ *  Call inside the state lock, after tracing has used the original modes. Keeping
+ *  the first side lets a delayed Post reclaim immediately, without transcript
+ *  rereads or retaining a history of completed IDs. Unfinished tools keep their
+ *  snapshots across turn resets; SessionEnd is the definitive cleanup boundary.
+ */
+export function advanceToolTracingProgress(
+  session: SessionState,
+  ids: Iterable<string>,
+  phase: "post" | "transcript",
+): Pick<SessionState, "tool_tracing_modes" | "tool_tracing_progress"> {
+  const modes = { ...session.tool_tracing_modes };
+  const progress = { ...session.tool_tracing_progress };
+  for (const id of ids) {
+    // Transcript-only tools need no lifecycle bookkeeping.
+    if (!Object.hasOwn(modes, id)) continue;
+    if (progress[id] && progress[id] !== phase) {
+      delete modes[id];
+      delete progress[id];
+    } else {
+      progress[id] = phase;
+    }
+  }
+  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
+}
+
 // ─── Session pruning ───────────────────────────────────────────────────────
 
 const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours

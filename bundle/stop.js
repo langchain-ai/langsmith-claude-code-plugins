@@ -779,6 +779,9 @@ function resolveProvider(model) {
     return "google_vertex_ai";
   return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
 }
+function completedToolUseIds(turns) {
+  return turns.flatMap((turn) => turn.llmCalls.flatMap((call) => call.toolCalls.filter((tool) => tool.result !== void 0).map((tool) => tool.tool_use.id)));
+}
 function mergeAssistantChunks(chunks) {
   if (chunks.length === 0) {
     throw new Error("Cannot merge zero chunks");
@@ -1010,6 +1013,21 @@ function getSessionState(state, sessionId) {
     updated: "",
     task_run_map: {}
   };
+}
+function advanceToolTracingProgress(session, ids, phase) {
+  const modes = { ...session.tool_tracing_modes };
+  const progress = { ...session.tool_tracing_progress };
+  for (const id of ids) {
+    if (!Object.hasOwn(modes, id))
+      continue;
+    if (progress[id] && progress[id] !== phase) {
+      delete modes[id];
+      delete progress[id];
+    } else {
+      progress[id] = phase;
+    }
+  }
+  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
 }
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 function pruneOldSessions(state, now = Date.now()) {
@@ -14805,6 +14823,9 @@ async function main() {
       { ...latestSession.task_run_map, ...allTaskRunMaps }
     );
     const s = updatedState[input.session_id];
+    if (tracedTurns > 0) {
+      Object.assign(s, advanceToolTracingProgress(latestSession, completedToolUseIds(turns), "transcript"));
+    }
     const notifAgentId = latestSession.current_notification_agent_id;
     const notifInterrupted = latestSession.current_notification_interrupted ?? false;
     s.pending_subagent_traces = (latestSession.pending_subagent_traces ?? []).filter((sa) => !processedAgentIds.has(sa.agent_id));

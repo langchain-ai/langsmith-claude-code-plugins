@@ -20,7 +20,12 @@ import {
   parseDottedOrder,
 } from "../langsmith.js";
 import { finalizeNotificationChain } from "../finalize.js";
-import { loadState, atomicUpdateState, getSessionState } from "../state.js";
+import {
+  loadState,
+  atomicUpdateState,
+  getSessionState,
+  advanceToolTracingProgress,
+} from "../state.js";
 import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -143,6 +148,7 @@ async function main(): Promise<void> {
   // If there's a stale turn run, the previous turn was interrupted (Stop never fired).
   // Trace the interrupted turn's content then close the parent run.
   let interruptedTurnsTraced = 0;
+  let consumedToolUseIds: string[] = [];
 
   if (sessionState.current_turn_run_id) {
     // A stale current_turn_run_id means the previous turn's Stop never fired. The
@@ -157,7 +163,11 @@ async function main(): Promise<void> {
         (supersededNotificationAgentId ? " (superseded task-notification)" : " (interrupted)"),
     );
     try {
-      const { lastLine, turnsTraced } = await closeInterruptedTurn({
+      const {
+        lastLine,
+        turnsTraced,
+        consumedToolUseIds: consumed,
+      } = await closeInterruptedTurn({
         sessionId: input.session_id,
         sessionState,
         transcriptPath: expandHome(input.transcript_path),
@@ -172,6 +182,7 @@ async function main(): Promise<void> {
       });
       interruptedLastLine = lastLine;
       interruptedTurnsTraced = turnsTraced;
+      consumedToolUseIds = consumed ?? [];
       if (supersededNotificationAgentId) {
         await finalizeNotificationChain({
           stateFilePath: config.stateFilePath,
@@ -322,6 +333,7 @@ async function main(): Promise<void> {
         ...(runtimeVersion ? { runtime_version: runtimeVersion } : {}),
         // Advance past the interrupted turn's messages so Stop doesn't re-trace them
         last_line: interruptedLastLine,
+        ...advanceToolTracingProgress(ss, consumedToolUseIds, "transcript"),
         turn_count: ss.turn_count + interruptedTurnsTraced,
         // Clear this turn's stale data, but keep still-running background subagents
         // and any Agent tool runs left open awaiting their task-notification.

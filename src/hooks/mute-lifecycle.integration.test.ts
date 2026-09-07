@@ -245,6 +245,187 @@ function legacyParent() {
   };
 }
 
+describe("tool privacy snapshot reclamation", () => {
+  it.each(["Bash", "Agent", "Workflow"])(
+    "reclaims completed %s IDs after Stop, not Post",
+    async (name) => {
+      reset("metadata");
+      await hook("prompt");
+      await hook("pre", { tool_use_id: "pending" });
+      await hook("pre");
+      await hook("post", {
+        tool_name: name,
+        ...(name === "Agent" ? { tool_response: { agentId: "background" } } : {}),
+        ...(name === "Workflow"
+          ? {
+              tool_response: {
+                status: "async_launched",
+                taskId: "workflow-task",
+                runId: "wf_test",
+              },
+            }
+          : {}),
+      });
+      expect(h.state.session.tool_tracing_modes?.tool).toBe("metadata");
+      expect(h.state.session.tool_tracing_progress).toEqual({ tool: "post" });
+      if (name === "Agent") expect(h.state.session.traced_tool_use_ids).not.toContain("tool");
+      h.messages = transcript({
+        id: "tool",
+        name,
+        ...(name === "Agent" ? { agentId: "background" } : {}),
+      });
+      await hook("stop");
+      expect(h.state.session.tool_tracing_modes).toEqual({ pending: "metadata" });
+      expect(h.state.session.tool_tracing_progress).toEqual({});
+      if (name === "Agent")
+        expect(h.state.session.task_run_map?.background.tracing).toBe("metadata");
+      if (name === "Workflow")
+        expect(h.state.session.task_run_map?.["workflow-task"].tracing).toBe("metadata");
+      expectPrivate();
+      expect(h.errors).toEqual([]);
+    },
+  );
+
+  it.each(["stop", "prompt"])(
+    "joins a delayed Post after %s consumes the result and policy becomes full",
+    async (consumer) => {
+      reset("metadata");
+      await hook("prompt");
+      await hook("pre");
+      h.messages = transcript({ id: "tool", name: "Bash" });
+      h.policy = "full";
+      await hook(consumer);
+      expect(h.state.session.tool_tracing_modes).toEqual({ tool: "metadata" });
+      expect(h.state.session.tool_tracing_progress).toEqual({ tool: "transcript" });
+      h.messages = []; // The consumed prefix will never be replayed by another Stop.
+      if (consumer === "stop") await hook("prompt");
+      expect(h.state.session.current_turn_tracing).toBe("full");
+      const parent = h.state.session.current_turn_run_id;
+      await hook("post");
+      expectPrivate([h.operations.at(-1)!]);
+      expect(h.operations.at(-1)!.config.parent_run_id).toBe(parent);
+      expect(h.state.session.tool_tracing_modes).toEqual({});
+      expect(h.state.session.tool_tracing_progress).toEqual({});
+      await hook("pre", { tool_use_id: "new" });
+      await hook("post", { tool_use_id: "new" });
+      expect(h.operations.at(-1)!.config.extra.metadata.ls_tracing_mode).toBeUndefined();
+      expect(h.errors).toEqual([]);
+    },
+  );
+
+  it("retains completed IDs until a result is consumed, including empty Stop and prompt resets", async () => {
+    reset("metadata");
+    await hook("prompt");
+    await hook("pre");
+    await hook("post");
+    await hook("stop"); // Empty transcript: no consumption.
+    expect(h.state.session.tool_tracing_progress).toEqual({ tool: "post" });
+    h.policy = "full";
+    await hook("prompt");
+    h.messages = transcript({ id: "tool", name: "Bash" }).slice(0, 2); // No result yet.
+    await hook("stop");
+    expect(h.state.session.tool_tracing_modes).toEqual({ tool: "metadata" });
+    expect(h.state.session.tool_tracing_progress).toEqual({ tool: "post" });
+    h.messages = [];
+    await hook("prompt");
+    h.messages = transcript({ id: "tool", name: "Bash" });
+    const from = h.operations.length;
+    await hook("stop");
+    expectPrivate(h.operations.slice(from).filter((op) => op.config.run_type === "tool"));
+    expect(h.state.session.tool_tracing_modes).toEqual({});
+    expect(h.state.session.tool_tracing_progress).toEqual({});
+    expect(h.errors).toEqual([]);
+  });
+
+  it("joins a Post committed while Stop is tracing using fresh locked state", async () => {
+    reset("metadata");
+    await hook("prompt");
+    await hook("pre");
+    h.messages = transcript({ id: "tool", name: "Bash" });
+    h.beforePost = async () => {
+      h.beforePost = undefined;
+      await hook("post");
+      expect(h.state.session.tool_tracing_progress).toEqual({ tool: "post" });
+    };
+    await hook("stop");
+    expect(h.state.session.tool_tracing_modes).toEqual({});
+    expect(h.state.session.tool_tracing_progress).toEqual({});
+    expectPrivate();
+    expect(h.errors).toEqual([]);
+  });
+
+  it("reclaims interrupted completed IDs at the same write that advances the cursor", async () => {
+    reset("metadata");
+    await hook("prompt");
+    await hook("pre", { tool_use_id: "pending" });
+    await hook("post"); // No PreToolUse is required for completion evidence.
+    h.messages = transcript({ id: "tool", name: "Bash" });
+    h.policy = "full";
+    await hook("prompt");
+    expect(h.state.session.last_line).toBe(10);
+    expect(h.state.session.tool_tracing_modes).toEqual({ pending: "metadata" });
+    expect(h.state.session.tool_tracing_progress).toEqual({});
+    expect(h.errors).toEqual([]);
+  });
+
+  it("keeps both maps when all traces fail and the cursor stays put", async () => {
+    reset("metadata");
+    await hook("prompt");
+    await hook("post");
+    h.messages = transcript({ id: "tool", name: "Bash" });
+    h.beforePost = () => {
+      throw new Error("test trace failure");
+    };
+    await hook("stop");
+    expect(h.state.session.last_line).toBe(-1);
+    expect(h.state.session.tool_tracing_modes).toEqual({ tool: "metadata" });
+    expect(h.state.session.tool_tracing_progress).toEqual({ tool: "post" });
+    expect(h.errors.length).toBeGreaterThan(0);
+    h.beforePost = undefined;
+    await hook("stop");
+    expect(h.state.session.tool_tracing_modes).toEqual({});
+    expect(h.state.session.tool_tracing_progress).toEqual({});
+  });
+
+  it.each([true, false])(
+    "SessionEnd clears pending and completed evidence with open runs=%s",
+    async (open) => {
+      reset("metadata");
+      await hook("prompt");
+      await hook("pre", { tool_use_id: "pending" });
+      await hook("post");
+      h.messages = transcript();
+      if (!open) await hook("stop");
+      h.policy = "full";
+      const from = h.operations.length;
+      await hook("end");
+      expect(h.state.session.tool_tracing_modes).toEqual({});
+      expect(h.state.session.tool_tracing_progress).toEqual({});
+      if (!open) expect(h.operations).toHaveLength(from);
+      else expectPrivate(h.operations.slice(from));
+      const ended = structuredClone(h.state);
+      await hook("post"); // No current parent: no resurrection after definitive end.
+      expect(h.state).toEqual(ended);
+    },
+  );
+
+  it("does not resurrect a cleared launch snapshot when Post commits after SessionEnd", async () => {
+    reset("metadata");
+    await hook("prompt");
+    await hook("pre");
+    h.beforePost = async () => {
+      h.beforePost = undefined;
+      await hook("end");
+    };
+    await hook("post");
+    await vi.waitFor(() => expect(h.state.session.traced_tool_use_ids).toContain("tool"));
+    expect(h.state.session.tool_tracing_modes).toEqual({});
+    expect(h.state.session.tool_tracing_progress).toEqual({});
+    expectPrivate();
+    expect(h.errors).toEqual([]);
+  });
+});
+
 describe("privacy propagation without lifecycle changes", () => {
   it.each(["metadata", "corrupt"] as const)(
     "Stop without UserPromptSubmit honors %s persistent policy",
