@@ -13734,7 +13734,11 @@ function recordBackgroundRun(session, turn, backgroundId, entry) {
   return {
     task_run_map: {
       ...session.task_run_map,
-      [backgroundId]: entry
+      [backgroundId]: {
+        ...entry,
+        launching_turn_run_id: turn.run_id,
+        tracing: entry.tracing ?? turn.tracing ?? "metadata"
+      }
     },
     open_turns: {
       ...session.open_turns,
@@ -13884,7 +13888,7 @@ async function main() {
         turn_number: sessionState.current_turn_number,
         runtime_version: sessionState.runtime_version,
         approval_policy: sessionState.approval_policy,
-        tracing: sessionState.current_turn_tracing ?? "metadata"
+        tracing: tracingMode
       };
       backgroundUpdate = recordBackgroundRun(freshSession, launchingTurn, agentId ?? workflow.taskId, {
         run_id: toolRunId,

@@ -31,7 +31,13 @@
 
 import { debug, error } from "../logger.js";
 import { atomicUpdateState, getSessionState, loadState } from "../state.js";
-import { initTracing, tracePendingSubagents, flushPendingTraces } from "../langsmith.js";
+import {
+  initTracing,
+  tracePendingSubagents,
+  flushPendingTraces,
+  taskRunTracingMode,
+  parseDottedOrder,
+} from "../langsmith.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { WORKFLOW_SUBAGENT_TYPE, handleWorkflowSubagentStop } from "../workflows.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
@@ -110,12 +116,17 @@ async function main(): Promise<void> {
   // correct turn even if a newer turn is now active.
   const deferred = taskRunInfo.deferred as Record<string, unknown> | undefined;
   const turnRunId =
-    (deferred?.parent_run_id as string | undefined) ?? sessionState.current_turn_run_id;
-  const turnTraceId = (deferred?.trace_id as string | undefined) ?? sessionState.current_trace_id;
+    taskRunInfo.launching_turn_run_id ?? (deferred?.parent_run_id as string | undefined);
+  const turnTraceId =
+    (deferred?.trace_id as string | undefined) ??
+    (taskRunInfo.dotted_order ? parseDottedOrder(taskRunInfo.dotted_order).traceId : undefined) ??
+    (turnRunId && turnRunId === sessionState.current_turn_run_id
+      ? sessionState.current_trace_id
+      : undefined);
   const launchingTurn: OpenTurn | undefined = turnRunId
     ? sessionState.open_turns?.[turnRunId]
     : undefined;
-  const tracingMode = launchingTurn?.tracing ?? sessionState.current_turn_tracing ?? "metadata";
+  const tracingMode = taskRunTracingMode(taskRunInfo, sessionState);
 
   if (!turnTraceId) {
     debug(`No trace context for subagent ${input.agent_id}, cannot trace`);

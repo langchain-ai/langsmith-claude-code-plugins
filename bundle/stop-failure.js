@@ -13772,6 +13772,7 @@ async function main() {
       [input.session_id]: {
         ...ss,
         current_turn_run_id: void 0,
+        current_turn_tracing: void 0,
         current_trace_id: void 0,
         current_dotted_order: void 0,
         current_parent_run_id: void 0

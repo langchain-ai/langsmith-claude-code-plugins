@@ -13902,7 +13902,9 @@ async function traceTurn(options) {
       if (toolCall.agentId) {
         taskRunMap[toolCall.agentId] = {
           run_id: toolRunId,
-          dotted_order: toolDottedOrder
+          dotted_order: toolDottedOrder,
+          tracing: tracingMode,
+          launching_turn_run_id: turnRunId
         };
         debug(`Task tool ${toolCall.tool_use.id} \u2192 agentId=${toolCall.agentId}, runId=${toolRunId}`);
       }
@@ -14040,8 +14042,12 @@ function turnIdentityFromOpenTurn(turn, ctx) {
 async function completeTurnRun(options) {
   await patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
 }
+function taskRunTracingMode(entry, session) {
+  const launchingTurnId = entry.launching_turn_run_id ?? entry.deferred?.parent_run_id;
+  return entry.tracing ?? (launchingTurnId ? session.open_turns?.[launchingTurnId]?.tracing : void 0) ?? (launchingTurnId && launchingTurnId === session.current_turn_run_id ? session.current_turn_tracing : void 0) ?? "metadata";
+}
 async function tracePendingSubagents(options) {
-  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen, tracingMode } = options;
+  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen } = options;
   const openedAgentRunIds = [];
   if (!client && !replicas) {
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
@@ -14057,6 +14063,7 @@ async function tracePendingSubagents(options) {
         error(`No Agent tool run found for ${subagent.agent_id} - cannot trace subagent`);
         continue;
       }
+      const tracingMode = taskRunInfo.tracing ?? options.tracingMode ?? "metadata";
       const parentToolRunId = taskRunInfo.run_id;
       const agentToolDottedOrder = taskRunInfo.dotted_order;
       const toolName = subagent.agent_type || "Agent";
@@ -14232,7 +14239,7 @@ async function closeAgentToolRun(options) {
         }
       })
     }
-  }, options.tracingMode);
+  }, options.taskRunInfo.tracing ?? options.tracingMode ?? "metadata");
   if (options.wasOpen) {
     await runTree.patchRun({ excludeInputs: true });
   } else {
@@ -14528,7 +14535,7 @@ async function finalizeNotificationChain(opts) {
       debug(`finalizeNotificationChain: no task run for ${agentId}, stopping`);
       break;
     }
-    const launchingTurnId = taskRunInfo.deferred?.parent_run_id;
+    const launchingTurnId = taskRunInfo.launching_turn_run_id ?? taskRunInfo.deferred?.parent_run_id;
     const agentType = taskRunInfo.agent_type ?? "";
     try {
       await closeAgentToolRun({
@@ -14541,7 +14548,7 @@ async function finalizeNotificationChain(opts) {
         runtimeVersion,
         turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0,
         wasOpen: Boolean(taskRunInfo.subagent_done),
-        tracingMode: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.tracing ?? "metadata" : "metadata",
+        tracingMode: taskRunTracingMode(taskRunInfo, ss),
         error: interrupted ? taskRunInfo.is_workflow ? "Workflow killed" : "Subagent killed" : void 0
       });
     } catch (err) {
@@ -14620,10 +14627,17 @@ async function main() {
   const { messages, lastLine } = readTranscript(transcriptPath, sessionState.last_line);
   if (messages.length === 0) {
     debug("No new messages");
-    if (sessionState.current_turn_run_id) {
+    if (sessionState.current_turn_run_id || sessionState.current_turn_tracing) {
       await atomicUpdateState(config.stateFilePath, (s) => {
         const ss = getSessionState(s, input.session_id);
-        return { ...s, [input.session_id]: { ...ss, current_turn_run_id: void 0 } };
+        return {
+          ...s,
+          [input.session_id]: {
+            ...ss,
+            current_turn_run_id: void 0,
+            current_turn_tracing: void 0
+          }
+        };
       });
     }
     return;
@@ -14677,7 +14691,8 @@ async function main() {
         tracedToolUseIds,
         traceId,
         parentDottedOrder: dottedOrder,
-        tracingMode: isLastTurn ? sessionState.current_turn_tracing : "metadata"
+        // Missing/corrupt state cannot establish consent for transcript content.
+        tracingMode: isLastTurn ? sessionState.current_turn_tracing ?? "metadata" : "metadata"
       });
       allTaskRunMaps = { ...allTaskRunMaps, ...taskRunMap };
       tracedTurns++;

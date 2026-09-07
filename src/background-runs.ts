@@ -46,7 +46,11 @@ export function recordBackgroundRun(
   return {
     task_run_map: {
       ...session.task_run_map,
-      [backgroundId]: entry,
+      [backgroundId]: {
+        ...entry,
+        launching_turn_run_id: turn.run_id,
+        tracing: entry.tracing ?? turn.tracing ?? "metadata",
+      },
     },
     open_turns: {
       ...session.open_turns,

@@ -472,7 +472,7 @@ async function main() {
       [input.session_id]: {
         ...sessionState,
         compaction_start_time: Date.now(),
-        compaction_tracing: sessionState.current_turn_tracing ?? getTracingMode(state, input.session_id)
+        compaction_tracing: (sessionState.current_turn_run_id ? sessionState.current_turn_tracing : void 0) ?? getTracingMode(state, input.session_id)
       }
     };
   });

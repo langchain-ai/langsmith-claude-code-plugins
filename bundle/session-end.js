@@ -13874,7 +13874,9 @@ async function traceTurn(options) {
       if (toolCall.agentId) {
         taskRunMap[toolCall.agentId] = {
           run_id: toolRunId,
-          dotted_order: toolDottedOrder
+          dotted_order: toolDottedOrder,
+          tracing: tracingMode,
+          launching_turn_run_id: turnRunId
         };
         debug(`Task tool ${toolCall.tool_use.id} \u2192 agentId=${toolCall.agentId}, runId=${toolRunId}`);
       }
@@ -14104,7 +14106,7 @@ async function closeInterruptedTurn(options) {
   return { lastLine, turnsTraced };
 }
 async function tracePendingSubagents(options) {
-  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen, tracingMode } = options;
+  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen } = options;
   const openedAgentRunIds = [];
   if (!client && !replicas) {
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
@@ -14120,6 +14122,7 @@ async function tracePendingSubagents(options) {
         error(`No Agent tool run found for ${subagent.agent_id} - cannot trace subagent`);
         continue;
       }
+      const tracingMode = taskRunInfo.tracing ?? options.tracingMode ?? "metadata";
       const parentToolRunId = taskRunInfo.run_id;
       const agentToolDottedOrder = taskRunInfo.dotted_order;
       const toolName = subagent.agent_type || "Agent";
@@ -14295,7 +14298,7 @@ async function closeAgentToolRun(options) {
         }
       })
     }
-  }, options.tracingMode);
+  }, options.taskRunInfo.tracing ?? options.tracingMode ?? "metadata");
   if (options.wasOpen) {
     await runTree.patchRun({ excludeInputs: true });
   } else {
@@ -14681,6 +14684,7 @@ async function main() {
         last_line: lastLine,
         turn_count: ss.turn_count + turnsTraced,
         current_turn_run_id: void 0,
+        current_turn_tracing: void 0,
         current_trace_id: void 0,
         current_dotted_order: void 0,
         current_parent_run_id: void 0,

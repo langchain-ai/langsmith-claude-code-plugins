@@ -66,17 +66,22 @@ async function main(): Promise<void> {
   if (command) {
     const config = loadConfig({ cwd: input.cwd });
     initLogger(config.debug);
-    let mode = getTracingMode(loadState(config.stateFilePath), input.session_id);
-    if (command !== "status") mode = command === "on" ? "full" : "metadata";
-    const recovered = await recoverAndUpdateState(config.stateFilePath, (state) => ({
+    // Status must not recover corrupt state or change any thread's preference.
+    // Only an explicit on/off command may clear fail-closed protection.
+    if (command === "status") {
+      const mode = getTracingMode(loadState(config.stateFilePath), input.session_id);
+      process.stdout.write(traceCommandResponse(mode, config.enabled));
+      return;
+    }
+    const mode = command === "on" ? "full" : "metadata";
+    await recoverAndUpdateState(config.stateFilePath, (state) => ({
       ...state,
       [input.session_id]: {
         ...getSessionState(state, input.session_id),
-        ...(command === "status" ? {} : { tracing: mode }),
+        tracing: mode,
         updated: new Date().toISOString(),
       },
     }));
-    if (command === "status") mode = getTracingMode(recovered, input.session_id);
     process.stdout.write(traceCommandResponse(mode, config.enabled));
     return;
   }

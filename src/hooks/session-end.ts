@@ -174,6 +174,7 @@ async function main(): Promise<void> {
         last_line: lastLine,
         turn_count: ss.turn_count + turnsTraced,
         current_turn_run_id: undefined,
+        current_turn_tracing: undefined,
         current_trace_id: undefined,
         current_dotted_order: undefined,
         current_parent_run_id: undefined,

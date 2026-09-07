@@ -195,7 +195,7 @@ async function main(): Promise<void> {
         turn_number: sessionState.current_turn_number,
         runtime_version: sessionState.runtime_version,
         approval_policy: sessionState.approval_policy,
-        tracing: sessionState.current_turn_tracing ?? "metadata",
+        tracing: tracingMode,
       };
       backgroundUpdate = recordBackgroundRun(
         freshSession,

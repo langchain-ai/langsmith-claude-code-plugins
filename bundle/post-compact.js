@@ -13732,7 +13732,7 @@ async function main() {
   const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
-  const tracingMode = sessionState.compaction_tracing ?? sessionState.current_turn_tracing ?? getTracingMode(state, input.session_id);
+  const tracingMode = sessionState.compaction_tracing ?? (sessionState.current_turn_run_id ? sessionState.current_turn_tracing : void 0) ?? getTracingMode(state, input.session_id);
   const endTime = (/* @__PURE__ */ new Date()).toISOString();
   const startTime = sessionState.compaction_start_time ? new Date(sessionState.compaction_start_time).toISOString() : endTime;
   const runId = uuid7FromTime(startTime);

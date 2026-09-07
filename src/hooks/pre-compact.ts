@@ -36,7 +36,8 @@ async function main(): Promise<void> {
         ...sessionState,
         compaction_start_time: Date.now(),
         compaction_tracing:
-          sessionState.current_turn_tracing ?? getTracingMode(state, input.session_id),
+          (sessionState.current_turn_run_id ? sessionState.current_turn_tracing : undefined) ??
+          getTracingMode(state, input.session_id),
       },
     };
   });

@@ -41,7 +41,7 @@
  */
 
 import { debug, error } from "./logger.js";
-import { flushPendingTraces, traceWorkflowStage } from "./langsmith.js";
+import { flushPendingTraces, traceWorkflowStage, taskRunTracingMode } from "./langsmith.js";
 import type { TaskRunEntry } from "./langsmith.js";
 import { getSessionState, loadState } from "./state.js";
 import type { SessionState } from "./types.js";
@@ -132,7 +132,8 @@ export async function handleWorkflowSubagentStop(opts: {
 
   const [, entry] = found;
   const deferred = entry.deferred as Record<string, unknown> | undefined;
-  const launchingTurnId = deferred?.parent_run_id as string | undefined;
+  const launchingTurnId =
+    entry.launching_turn_run_id ?? (deferred?.parent_run_id as string | undefined);
   const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : undefined;
   const parentTraceId = (deferred?.trace_id as string | undefined) ?? ss.current_trace_id;
 
@@ -149,7 +150,7 @@ export async function handleWorkflowSubagentStop(opts: {
       runtimeVersion: launchingTurn?.runtime_version ?? ss.runtime_version,
       turnId: launchingTurn?.turn_id,
       turnNumber: launchingTurn?.turn_number ?? ss.current_turn_number,
-      tracingMode: launchingTurn?.tracing ?? "metadata",
+      tracingMode: taskRunTracingMode(entry, ss),
     });
     debug(`Traced workflow stage ${opts.agentId} under Workflow run ${entry.run_id}`);
   } catch (err) {

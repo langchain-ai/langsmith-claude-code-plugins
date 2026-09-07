@@ -96,6 +96,7 @@ async function main(): Promise<void> {
       [input.session_id]: {
         ...ss,
         current_turn_run_id: undefined,
+        current_turn_tracing: undefined,
         current_trace_id: undefined,
         current_dotted_order: undefined,
         current_parent_run_id: undefined,

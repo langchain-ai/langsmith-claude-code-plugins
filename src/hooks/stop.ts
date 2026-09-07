@@ -77,11 +77,18 @@ async function main(): Promise<void> {
   const { messages, lastLine } = readTranscript(transcriptPath, sessionState.last_line);
   if (messages.length === 0) {
     debug("No new messages");
-    // Clear stale current_turn_run_id so the next invocation doesn't try to complete it.
-    if (sessionState.current_turn_run_id) {
+    // Clear the stale turn identity and its privacy snapshot together.
+    if (sessionState.current_turn_run_id || sessionState.current_turn_tracing) {
       await atomicUpdateState(config.stateFilePath, (s) => {
         const ss = getSessionState(s, input.session_id);
-        return { ...s, [input.session_id]: { ...ss, current_turn_run_id: undefined } };
+        return {
+          ...s,
+          [input.session_id]: {
+            ...ss,
+            current_turn_run_id: undefined,
+            current_turn_tracing: undefined,
+          },
+        };
       });
     }
     return;
@@ -164,7 +171,8 @@ async function main(): Promise<void> {
         tracedToolUseIds,
         traceId,
         parentDottedOrder: dottedOrder,
-        tracingMode: isLastTurn ? sessionState.current_turn_tracing : "metadata",
+        // Missing/corrupt state cannot establish consent for transcript content.
+        tracingMode: isLastTurn ? (sessionState.current_turn_tracing ?? "metadata") : "metadata",
       });
       allTaskRunMaps = { ...allTaskRunMaps, ...taskRunMap };
       tracedTurns++;

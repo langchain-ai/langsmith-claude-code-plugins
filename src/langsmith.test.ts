@@ -82,7 +82,12 @@ import {
   closeAgentToolRun,
   closeInterruptedTurn,
   generateDottedOrderSegment,
+  taskRunTracingMode,
+  tracePendingSubagents,
 } from "./langsmith.js";
+
+import { recordBackgroundRun } from "./background-runs.js";
+import { finalizeNotificationChain } from "./finalize.js";
 
 // ─── completeTurnRun ────────────────────────────────────────────────────────
 
@@ -1597,4 +1602,215 @@ describe("traceTurn", () => {
     });
     expect(turnMeta.ls_subagent_type).toBeUndefined(); // never on root
   });
+});
+
+describe("background launch privacy snapshots", () => {
+  const base: SessionState = { last_line: -1, turn_count: 1, updated: "" };
+  const entry = {
+    run_id: "agent-run",
+    dotted_order: "20250101T000000000000Zlaunch.20250101T000001000000Zagent-run",
+    deferred: {
+      parent_run_id: "launch",
+      trace_id: "launch",
+      start_time: "2025-01-01T00:00:00Z",
+      inputs: { prompt: "secret launch prompt" },
+      outputs: { text: "secret launch output" },
+    },
+  };
+
+  beforeEach(() => {
+    mockCreateRun.mockClear();
+    mockUpdateRun.mockClear();
+    allRunTreeInstances = [];
+    initTracing("test-api-key", "https://test.api.com");
+  });
+
+  it.each(["full", "metadata"] as const)(
+    "persists %s for both Task and Workflow launches",
+    (tracing) => {
+      for (const is_workflow of [false, true]) {
+        const update = recordBackgroundRun(base, { run_id: "launch", tracing }, "agent", {
+          ...entry,
+          is_workflow,
+        });
+        const stored = JSON.parse(JSON.stringify(update.task_run_map!.agent));
+        expect(stored).toMatchObject({ tracing, launching_turn_run_id: "launch" });
+        expect(
+          taskRunTracingMode(stored, {
+            ...base,
+            open_turns: {},
+            current_turn_run_id: "new-turn",
+            current_turn_tracing: tracing === "metadata" ? "full" : "metadata",
+          }),
+        ).toBe(tracing);
+      }
+    },
+  );
+
+  it("uses legacy snapshots only when the launching turn matches, otherwise metadata", () => {
+    const current: SessionState = {
+      ...base,
+      current_turn_run_id: "new-turn",
+      current_turn_tracing: "full",
+    };
+    expect(taskRunTracingMode(entry, current)).toBe("metadata");
+    expect(taskRunTracingMode({ run_id: "unknown", dotted_order: "unknown" }, current)).toBe(
+      "metadata",
+    );
+    expect(taskRunTracingMode(entry, { ...current, current_turn_run_id: "launch" })).toBe("full");
+    expect(
+      taskRunTracingMode(entry, {
+        ...current,
+        open_turns: {
+          launch: { run_id: "launch", tracing: "full", stop_seen: true, agent_ids: ["agent"] },
+        },
+      }),
+    ).toBe("full");
+    expect(
+      taskRunTracingMode(
+        { ...entry, tracing: "metadata" },
+        {
+          ...current,
+          current_turn_run_id: "launch",
+        },
+      ),
+    ).toBe("metadata");
+  });
+
+  it.each(["metadata", "full"] as const)(
+    "traceTurn retains %s on transcript-produced task entries",
+    async (tracingMode) => {
+      const result = await traceTurn({
+        sessionId: "session",
+        project: "test",
+        turnNum: 1,
+        tracingMode,
+        parentRunId: "launch",
+        traceId: "launch",
+        parentDottedOrder: "20250101T000000000000Zlaunch",
+        turn: {
+          userContent: "secret prompt",
+          userTimestamp: "2025-01-01T00:00:00Z",
+          isComplete: true,
+          llmCalls: [
+            {
+              content: [],
+              model: "claude-sonnet-4-5",
+              usage: { input_tokens: 1, output_tokens: 1 },
+              startTime: "2025-01-01T00:00:01Z",
+              endTime: "2025-01-01T00:00:02Z",
+              toolCalls: [
+                {
+                  agentId: "agent",
+                  tool_use: {
+                    type: "tool_use",
+                    id: "tool",
+                    name: "Task",
+                    input: { prompt: "secret task" },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      expect(result.agent).toMatchObject({ tracing: tracingMode, launching_turn_run_id: "launch" });
+    },
+  );
+
+  it.each(["metadata", "full"] as const)(
+    "traces and finalizes %s background work after its interrupted launch is removed",
+    async (tracing) => {
+      const dir = mkdtempSync(join(tmpdir(), "background-privacy-"));
+      try {
+        const transcriptPath = join(dir, "agent.jsonl");
+        const stateFilePath = join(dir, "state.json");
+        writeFileSync(
+          transcriptPath,
+          [
+            {
+              type: "user",
+              timestamp: "2025-01-01T00:00:00Z",
+              message: { role: "user", content: "secret subagent prompt" },
+            },
+            {
+              type: "assistant",
+              timestamp: "2025-01-01T00:00:01Z",
+              message: {
+                id: "msg",
+                role: "assistant",
+                model: "claude-sonnet-4-5",
+                stop_reason: "end_turn",
+                content: [{ type: "text", text: "secret subagent answer" }],
+                usage: { input_tokens: 1, output_tokens: 1 },
+              },
+            },
+          ]
+            .map((line) => JSON.stringify(line))
+            .join("\n"),
+        );
+        const taskRunInfo = { ...entry, tracing, subagent_done: true };
+        const session: SessionState = {
+          ...base,
+          task_run_map: { agent: taskRunInfo },
+          open_turns: {},
+          current_turn_run_id: "new-turn",
+          current_turn_tracing: tracing === "metadata" ? "full" : "metadata",
+        };
+        writeFileSync(stateFilePath, JSON.stringify({ session }));
+        await tracePendingSubagents({
+          sessionId: "session",
+          project: "test",
+          taskRunMap: session.task_run_map!,
+          parentTraceId: "launch",
+          keepAgentToolRunOpen: true,
+          // A batch caller's mode must not override the individual launch snapshot.
+          tracingMode: session.current_turn_tracing!,
+          pendingSubagents: [
+            {
+              agent_id: "agent",
+              agent_type: "Explore",
+              agent_transcript_path: transcriptPath,
+              session_id: "session",
+            },
+          ],
+        });
+        await finalizeNotificationChain({
+          sessionId: "session",
+          project: "test",
+          agentId: "agent",
+          stateFilePath,
+        });
+        expect(allRunTreeInstances.length).toBeGreaterThanOrEqual(5);
+        expect(allRunTreeInstances.some((run) => run.params.name === "Explore Subagent")).toBe(
+          true,
+        );
+        expect(mockUpdateRun).toHaveBeenCalled();
+        if (tracing === "metadata") {
+          expect(JSON.stringify(allRunTreeInstances)).not.toContain("secret");
+        } else {
+          expect(JSON.stringify(allRunTreeInstances)).toContain("secret subagent answer");
+          expect(lastRunTreeParams!.outputs).toEqual({ output: entry.deferred.outputs });
+        }
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each([true, false])(
+    "closing a muted task ignores a full caller mode (wasOpen=%s)",
+    async (wasOpen) => {
+      await closeAgentToolRun({
+        sessionId: "session",
+        project: "test",
+        agentId: "agent",
+        agentType: "Explore",
+        taskRunInfo: { ...entry, tracing: "metadata" },
+        wasOpen,
+        tracingMode: "full",
+      });
+      expect(JSON.stringify(allRunTreeInstances)).not.toContain("secret");
+    },
+  );
 });

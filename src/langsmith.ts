@@ -164,7 +164,7 @@ export interface TraceTurnOptions {
   turnNum: number;
   project: string;
   parentRunId?: string;
-  existingTaskRunMap?: Record<string, { run_id: string; dotted_order: string }>;
+  existingTaskRunMap?: Record<string, TaskRunEntry>;
   /** tool_use_ids already traced by PostToolUse — skip creating runs for these */
   tracedToolUseIds?: Set<string>;
   traceId?: string;
@@ -184,9 +184,7 @@ export interface TraceTurnOptions {
  * Trace a turn to LangSmith.
  * @returns A map of agent_id -> tool run info (ID and dotted_order) for Task tools (used to link subagent traces)
  */
-export async function traceTurn(
-  options: TraceTurnOptions,
-): Promise<Record<string, { run_id: string; dotted_order: string }>> {
+export async function traceTurn(options: TraceTurnOptions): Promise<Record<string, TaskRunEntry>> {
   const tracingMode = options.tracingMode ?? "full";
   const {
     turn,
@@ -279,7 +277,7 @@ export async function traceTurn(
   ];
 
   // Track Task tool runs for subagent linking (merge with existing)
-  const taskRunMap: Record<string, { run_id: string; dotted_order: string }> = {
+  const taskRunMap: Record<string, TaskRunEntry> = {
     ...existingTaskRunMap,
   };
 
@@ -392,6 +390,8 @@ export async function traceTurn(
         taskRunMap[toolCall.agentId] = {
           run_id: toolRunId,
           dotted_order: toolDottedOrder,
+          tracing: tracingMode,
+          launching_turn_run_id: turnRunId,
         };
         logger.debug(
           `Task tool ${toolCall.tool_use.id} → agentId=${toolCall.agentId}, runId=${toolRunId}`,
@@ -792,6 +792,9 @@ export interface PendingSubagent {
 export interface TaskRunEntry {
   run_id: string;
   dotted_order: string;
+  /** Launch-time privacy snapshot, independent of open_turns. */
+  tracing?: TracingMode;
+  launching_turn_run_id?: string;
   deferred?: Record<string, unknown>;
   /** Subagent type, recorded by SubagentStop; used when closing the Agent run. */
   agent_type?: string;
@@ -803,6 +806,20 @@ export interface TaskRunEntry {
   workflow_run_id?: string;
   /** True when this entry is a Workflow tool run — names the run "Workflow". */
   is_workflow?: boolean;
+}
+
+/** Resolve privacy only from the launching task/turn, never a newer current turn. */
+export function taskRunTracingMode(entry: TaskRunEntry, session: SessionState): TracingMode {
+  const launchingTurnId =
+    entry.launching_turn_run_id ?? (entry.deferred?.parent_run_id as string | undefined);
+  return (
+    entry.tracing ??
+    (launchingTurnId ? session.open_turns?.[launchingTurnId]?.tracing : undefined) ??
+    (launchingTurnId && launchingTurnId === session.current_turn_run_id
+      ? session.current_turn_tracing
+      : undefined) ??
+    "metadata"
+  );
 }
 
 /**
@@ -841,7 +858,6 @@ export async function tracePendingSubagents(options: {
     turnId,
     turnNumber,
     keepAgentToolRunOpen,
-    tracingMode,
   } = options;
 
   // agent_ids whose Agent tool run we posted *open* (keepAgentToolRunOpen), so
@@ -865,6 +881,7 @@ export async function tracePendingSubagents(options: {
         continue;
       }
 
+      const tracingMode = taskRunInfo.tracing ?? options.tracingMode ?? "metadata";
       const parentToolRunId = taskRunInfo.run_id;
       const agentToolDottedOrder = taskRunInfo.dotted_order;
       const toolName = subagent.agent_type || "Agent";
@@ -1199,7 +1216,7 @@ export async function closeAgentToolRun(options: {
         }),
       },
     },
-    options.tracingMode,
+    options.taskRunInfo.tracing ?? options.tracingMode ?? "metadata",
   );
   // Open run → patch it closed. Never posted (killed subagent) → create it
   // already-closed so the trace still shows the launched-then-killed agent.

@@ -14207,7 +14207,9 @@ async function traceTurn(options) {
       if (toolCall.agentId) {
         taskRunMap[toolCall.agentId] = {
           run_id: toolRunId,
-          dotted_order: toolDottedOrder
+          dotted_order: toolDottedOrder,
+          tracing: tracingMode,
+          launching_turn_run_id: turnRunId
         };
         debug(`Task tool ${toolCall.tool_use.id} \u2192 agentId=${toolCall.agentId}, runId=${toolRunId}`);
       }
@@ -14436,8 +14438,12 @@ async function closeInterruptedTurn(options) {
   await flushPendingTraces();
   return { lastLine, turnsTraced };
 }
+function taskRunTracingMode(entry, session) {
+  const launchingTurnId = entry.launching_turn_run_id ?? entry.deferred?.parent_run_id;
+  return entry.tracing ?? (launchingTurnId ? session.open_turns?.[launchingTurnId]?.tracing : void 0) ?? (launchingTurnId && launchingTurnId === session.current_turn_run_id ? session.current_turn_tracing : void 0) ?? "metadata";
+}
 async function tracePendingSubagents(options) {
-  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen, tracingMode } = options;
+  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen } = options;
   const openedAgentRunIds = [];
   if (!client && !replicas) {
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
@@ -14453,6 +14459,7 @@ async function tracePendingSubagents(options) {
         error(`No Agent tool run found for ${subagent.agent_id} - cannot trace subagent`);
         continue;
       }
+      const tracingMode = taskRunInfo.tracing ?? options.tracingMode ?? "metadata";
       const parentToolRunId = taskRunInfo.run_id;
       const agentToolDottedOrder = taskRunInfo.dotted_order;
       const toolName = subagent.agent_type || "Agent";
@@ -14628,7 +14635,7 @@ async function closeAgentToolRun(options) {
         }
       })
     }
-  }, options.tracingMode);
+  }, options.taskRunInfo.tracing ?? options.tracingMode ?? "metadata");
   if (options.wasOpen) {
     await runTree.patchRun({ excludeInputs: true });
   } else {
@@ -14648,7 +14655,7 @@ async function finalizeNotificationChain(opts) {
       debug(`finalizeNotificationChain: no task run for ${agentId}, stopping`);
       break;
     }
-    const launchingTurnId = taskRunInfo.deferred?.parent_run_id;
+    const launchingTurnId = taskRunInfo.launching_turn_run_id ?? taskRunInfo.deferred?.parent_run_id;
     const agentType = taskRunInfo.agent_type ?? "";
     try {
       await closeAgentToolRun({
@@ -14661,7 +14668,7 @@ async function finalizeNotificationChain(opts) {
         runtimeVersion,
         turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0,
         wasOpen: Boolean(taskRunInfo.subagent_done),
-        tracingMode: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.tracing ?? "metadata" : "metadata",
+        tracingMode: taskRunTracingMode(taskRunInfo, ss),
         error: interrupted ? taskRunInfo.is_workflow ? "Workflow killed" : "Subagent killed" : void 0
       });
     } catch (err) {
@@ -14755,19 +14762,20 @@ async function main() {
   if (command) {
     const config2 = loadConfig({ cwd: input.cwd });
     initLogger(config2.debug);
-    let mode = getTracingMode(loadState(config2.stateFilePath), input.session_id);
-    if (command !== "status")
-      mode = command === "on" ? "full" : "metadata";
-    const recovered = await recoverAndUpdateState(config2.stateFilePath, (state2) => ({
+    if (command === "status") {
+      const mode2 = getTracingMode(loadState(config2.stateFilePath), input.session_id);
+      process.stdout.write(traceCommandResponse(mode2, config2.enabled));
+      return;
+    }
+    const mode = command === "on" ? "full" : "metadata";
+    await recoverAndUpdateState(config2.stateFilePath, (state2) => ({
       ...state2,
       [input.session_id]: {
         ...getSessionState(state2, input.session_id),
-        ...command === "status" ? {} : { tracing: mode },
+        tracing: mode,
         updated: (/* @__PURE__ */ new Date()).toISOString()
       }
     }));
-    if (command === "status")
-      mode = getTracingMode(recovered, input.session_id);
     process.stdout.write(traceCommandResponse(mode, config2.enabled));
     return;
   }

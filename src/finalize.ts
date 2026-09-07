@@ -17,6 +17,7 @@ import {
   completeTurnRun,
   flushPendingTraces,
   turnIdentityFromOpenTurn,
+  taskRunTracingMode,
 } from "./langsmith.js";
 import { atomicUpdateState, getSessionState, loadState } from "./state.js";
 import * as logger from "./logger.js";
@@ -48,8 +49,11 @@ export async function finalizeNotificationChain(opts: {
       break;
     }
 
-    const launchingTurnId = (taskRunInfo.deferred as Record<string, unknown> | undefined)
-      ?.parent_run_id as string | undefined;
+    const launchingTurnId =
+      taskRunInfo.launching_turn_run_id ??
+      ((taskRunInfo.deferred as Record<string, unknown> | undefined)?.parent_run_id as
+        | string
+        | undefined);
     const agentType = taskRunInfo.agent_type ?? "";
 
     // 1) Close the Agent tool run for this agent. If SubagentStop posted it open
@@ -66,9 +70,7 @@ export async function finalizeNotificationChain(opts: {
         runtimeVersion,
         turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : undefined,
         wasOpen: Boolean(taskRunInfo.subagent_done),
-        tracingMode: launchingTurnId
-          ? (ss.open_turns?.[launchingTurnId]?.tracing ?? "metadata")
-          : "metadata",
+        tracingMode: taskRunTracingMode(taskRunInfo, ss),
         error: interrupted
           ? taskRunInfo.is_workflow
             ? "Workflow killed"

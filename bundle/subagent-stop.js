@@ -13680,6 +13680,16 @@ function generateDottedOrderSegment(time, runId) {
   const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
   return stripped + runId;
 }
+function runIdFromSegment(segment) {
+  const zIdx = segment.indexOf("Z");
+  return zIdx >= 0 ? segment.slice(zIdx + 1) : segment;
+}
+function parseDottedOrder(dottedOrder) {
+  const segments = dottedOrder.split(".");
+  const traceId = runIdFromSegment(segments[0]);
+  const runId = runIdFromSegment(segments[segments.length - 1]);
+  return { traceId, runId };
+}
 function formatContent(blocks) {
   return blocks.map((block) => {
     switch (block.type) {
@@ -13844,7 +13854,9 @@ async function traceTurn(options) {
       if (toolCall.agentId) {
         taskRunMap[toolCall.agentId] = {
           run_id: toolRunId,
-          dotted_order: toolDottedOrder
+          dotted_order: toolDottedOrder,
+          tracing: tracingMode,
+          launching_turn_run_id: turnRunId
         };
         debug(`Task tool ${toolCall.tool_use.id} \u2192 agentId=${toolCall.agentId}, runId=${toolRunId}`);
       }
@@ -13982,8 +13994,12 @@ function turnIdentityFromOpenTurn(turn, ctx) {
 async function completeTurnRun(options) {
   await patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
 }
+function taskRunTracingMode(entry, session) {
+  const launchingTurnId = entry.launching_turn_run_id ?? entry.deferred?.parent_run_id;
+  return entry.tracing ?? (launchingTurnId ? session.open_turns?.[launchingTurnId]?.tracing : void 0) ?? (launchingTurnId && launchingTurnId === session.current_turn_run_id ? session.current_turn_tracing : void 0) ?? "metadata";
+}
 async function tracePendingSubagents(options) {
-  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen, tracingMode } = options;
+  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen } = options;
   const openedAgentRunIds = [];
   if (!client && !replicas) {
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
@@ -13999,6 +14015,7 @@ async function tracePendingSubagents(options) {
         error(`No Agent tool run found for ${subagent.agent_id} - cannot trace subagent`);
         continue;
       }
+      const tracingMode = taskRunInfo.tracing ?? options.tracingMode ?? "metadata";
       const parentToolRunId = taskRunInfo.run_id;
       const agentToolDottedOrder = taskRunInfo.dotted_order;
       const toolName = subagent.agent_type || "Agent";
@@ -14209,7 +14226,7 @@ async function closeAgentToolRun(options) {
         }
       })
     }
-  }, options.tracingMode);
+  }, options.taskRunInfo.tracing ?? options.tracingMode ?? "metadata");
   if (options.wasOpen) {
     await runTree.patchRun({ excludeInputs: true });
   } else {
@@ -14229,7 +14246,7 @@ async function finalizeNotificationChain(opts) {
       debug(`finalizeNotificationChain: no task run for ${agentId}, stopping`);
       break;
     }
-    const launchingTurnId = taskRunInfo.deferred?.parent_run_id;
+    const launchingTurnId = taskRunInfo.launching_turn_run_id ?? taskRunInfo.deferred?.parent_run_id;
     const agentType = taskRunInfo.agent_type ?? "";
     try {
       await closeAgentToolRun({
@@ -14242,7 +14259,7 @@ async function finalizeNotificationChain(opts) {
         runtimeVersion,
         turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0,
         wasOpen: Boolean(taskRunInfo.subagent_done),
-        tracingMode: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.tracing ?? "metadata" : "metadata",
+        tracingMode: taskRunTracingMode(taskRunInfo, ss),
         error: interrupted ? taskRunInfo.is_workflow ? "Workflow killed" : "Subagent killed" : void 0
       });
     } catch (err) {
@@ -14320,7 +14337,7 @@ async function handleWorkflowSubagentStop(opts) {
   }
   const [, entry] = found;
   const deferred = entry.deferred;
-  const launchingTurnId = deferred?.parent_run_id;
+  const launchingTurnId = entry.launching_turn_run_id ?? deferred?.parent_run_id;
   const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : void 0;
   const parentTraceId = deferred?.trace_id ?? ss.current_trace_id;
   try {
@@ -14336,7 +14353,7 @@ async function handleWorkflowSubagentStop(opts) {
       runtimeVersion: launchingTurn?.runtime_version ?? ss.runtime_version,
       turnId: launchingTurn?.turn_id,
       turnNumber: launchingTurn?.turn_number ?? ss.current_turn_number,
-      tracingMode: launchingTurn?.tracing ?? "metadata"
+      tracingMode: taskRunTracingMode(entry, ss)
     });
     debug(`Traced workflow stage ${opts.agentId} under Workflow run ${entry.run_id}`);
   } catch (err) {
@@ -14672,10 +14689,10 @@ async function main() {
     return;
   }
   const deferred = taskRunInfo.deferred;
-  const turnRunId = deferred?.parent_run_id ?? sessionState.current_turn_run_id;
-  const turnTraceId = deferred?.trace_id ?? sessionState.current_trace_id;
+  const turnRunId = taskRunInfo.launching_turn_run_id ?? deferred?.parent_run_id;
+  const turnTraceId = deferred?.trace_id ?? (taskRunInfo.dotted_order ? parseDottedOrder(taskRunInfo.dotted_order).traceId : void 0) ?? (turnRunId && turnRunId === sessionState.current_turn_run_id ? sessionState.current_trace_id : void 0);
   const launchingTurn = turnRunId ? sessionState.open_turns?.[turnRunId] : void 0;
-  const tracingMode = launchingTurn?.tracing ?? sessionState.current_turn_tracing ?? "metadata";
+  const tracingMode = taskRunTracingMode(taskRunInfo, sessionState);
   if (!turnTraceId) {
     debug(`No trace context for subagent ${input.agent_id}, cannot trace`);
     return;

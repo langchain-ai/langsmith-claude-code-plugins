@@ -196,6 +196,10 @@ export interface SessionState {
     {
       run_id: string;
       dotted_order: string;
+      /** Launch-time privacy snapshot, retained even after open_turns is drained. */
+      tracing?: TracingMode;
+      /** Launching turn identity (also present on transcript-produced entries). */
+      launching_turn_run_id?: string;
       /** Deferred Agent tool creation info (set by PostToolUse, used by Stop) */
       deferred?: Partial<RunTree>;
       /** Subagent type (e.g. "Explore"), recorded by SubagentStop. Used when
