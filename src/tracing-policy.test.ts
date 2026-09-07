@@ -369,6 +369,27 @@ describe("actual UserPromptSubmit command prefix", () => {
     },
   );
 
+  it.each(["mute", "unmute"] as const)(
+    "handles the actual %s command definition body without a model turn",
+    async (command) => {
+      const definition = readFileSync(new URL(`../commands/${command}.md`, import.meta.url), "utf8");
+      const frontmatter = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(definition);
+      expect(frontmatter).not.toBeNull();
+      expect(frontmatter![0]).toContain("disable-model-invocation: true");
+      // Feed the complete Markdown body, not a hardcoded prompt. Strip only
+      // surrounding Markdown whitespace; explanatory prose must fail this test.
+      // This tests our definition/hook contract, not Claude Code's expansion order.
+      const prompt = definition.slice(frontmatter![0].length).trim();
+      expect(prompt).toBe(`/langsmith-tracing:${command}`);
+      await setThreadTracingMode(state, "session", command === "mute" ? "full" : "metadata");
+      writeFileSync(state, "existing turn");
+      const reason = await submit(prompt);
+      expect(reason).toContain("for the next turn; the current turn is unchanged");
+      expect(getThreadTracingMode(state, "session")).toBe(command === "mute" ? "metadata" : "full");
+      expect(readFileSync(state, "utf8")).toBe("existing turn");
+    },
+  );
+
   it.each(postcommitFaults)("reports saved, not failed, after %s failure", async (fault) => {
     await setThreadTracingMode(state, "session", "metadata");
     injectFsFaults(fault);
