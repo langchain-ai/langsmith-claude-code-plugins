@@ -13869,7 +13869,7 @@ function loadConfig(options) {
     harness: readCommonConfigFile(join(cwd, ".claude", "langsmith.json")).common,
     root: readCommonConfigFile(join(cwd, "langsmith-plugins.json")).common,
     user: homeDir ? readCommonConfigFile(join(homeDir, ".claude", "langsmith.json")).common : void 0,
-    userRoot: homeDir ? readCommonConfigFile(join(homeDir, "langsmith-plugins.json")).common : void 0,
+    userRoot: homeDir ? readCommonConfigFile(join(homeDir, ".langsmith-plugins.json")).common : void 0,
     env: {
       enabled: envBoolean("enabled"),
       defaultMuted: envBoolean("defaultMuted"),

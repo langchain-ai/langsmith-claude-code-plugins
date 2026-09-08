@@ -289,7 +289,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
         ? readCommonConfigFile(join(homeDir, ".claude", "langsmith.json")).common
         : undefined,
       userRoot: homeDir
-        ? readCommonConfigFile(join(homeDir, "langsmith-plugins.json")).common
+        ? readCommonConfigFile(join(homeDir, ".langsmith-plugins.json")).common
         : undefined,
       env: {
         enabled: envBoolean("enabled"),

@@ -38,7 +38,7 @@ describe("initHook", () => {
     projectPath = join(cwd, ".claude", "langsmith.json");
     rootPath = join(cwd, "langsmith-plugins.json");
     userPath = join(home, ".claude", "langsmith.json");
-    userRootPath = join(home, "langsmith-plugins.json");
+    userRootPath = join(home, ".langsmith-plugins.json");
     process.env.HOME = home;
     delete process.env.USERPROFILE;
     vi.spyOn(process, "cwd").mockReturnValue(cwd);
@@ -98,6 +98,22 @@ describe("initHook", () => {
       );
       writeFileSync(projectPath, '{"enabled":false}');
       expect(initHook(cwd)).toBeNull();
+    },
+  );
+
+  it.each(['{"enabled":true,"api_key":"old-key"}', '{"enabled":false}', "{"])(
+    "ignores old home config and initializes from hidden home credentials: %s",
+    (raw) => {
+      writeFileSync(join(home, "langsmith-plugins.json"), raw);
+      expect(initHook(cwd)).toBeNull();
+      expect(initTracing).not.toHaveBeenCalled();
+      writeFileSync(userRootPath, '{"enabled":true,"api_key":"hidden-key","defaultMuted":true}');
+      expect(initHook(cwd)).toMatchObject({
+        enabled: true,
+        apiKey: "hidden-key",
+        defaultMuted: true,
+      });
+      expect(error).not.toHaveBeenCalled();
     },
   );
 
