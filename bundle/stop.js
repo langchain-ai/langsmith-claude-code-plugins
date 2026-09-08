@@ -597,7 +597,7 @@ var require_dist = __commonJS({
 // dist/tracing-policy.js
 import { randomUUID } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
-import { mkdir, open, rename, unlink } from "node:fs/promises";
+import { mkdir, open, rename, rmdir, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 import { performance as performance2 } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
@@ -13922,18 +13922,16 @@ async function traceTurn(options) {
       parent_run_id: turnRunId,
       trace_id: traceId,
       dotted_order: assistantDottedOrder,
-      ...tracing === "metadata" ? {
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId,
-            base: customMetadata,
-            turnId,
-            turnNumber: turnNum,
-            runtimeVersion,
-            agentType
-          })
-        }
-      } : {}
+      extra: {
+        metadata: codingAgentMetadata({
+          sessionId,
+          base: customMetadata,
+          turnId,
+          turnNumber: turnNum,
+          runtimeVersion,
+          agentType
+        })
+      }
     }, tracing);
     await assistantRunTree.postRun();
     for (const toolCall of llmCall.toolCalls) {
@@ -14327,7 +14325,7 @@ async function closeAgentToolRun(options) {
 
 // dist/config.js
 import { lstatSync as lstatSync2, readFileSync as readFileSync6 } from "node:fs";
-import { userInfo } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 var LS_INTEGRATION_VERSION = true ? "0.2.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
@@ -14452,7 +14450,7 @@ function loadConfig(options) {
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
   const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
   const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const homeDir = homedir();
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
   let replicas2;

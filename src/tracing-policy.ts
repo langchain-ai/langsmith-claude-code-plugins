@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
-import { mkdir, open, rename, unlink } from "node:fs/promises";
+import { mkdir, open, rename, rmdir, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
@@ -75,7 +75,8 @@ export function parseTracingCommand(prompt: string): "mute" | "unmute" | undefin
 
 /**
  * Independent of tracing state and its pruning. Writers serialize through an
- * exclusive lock; no age/PID-based stealing (even a slow live writer is safe).
+ * exclusive directory lock (mkdir avoids O_EXCL's network-filesystem caveats).
+ * No age/PID-based stealing: even a slow live writer is safe.
  * A crashed writer's lock requires explicit removal after confirming it is idle.
  * Rename commits the effective preference. Later durability/cleanup failures are
  * returned as local warnings, not thrown as if the preference were unchanged.
@@ -92,10 +93,12 @@ export async function setThreadTracingMode(
   const lockPath = `${path}.lock`;
   await mkdir(dirname(path), { recursive: true });
   const deadline = performance.now() + 2000;
-  let lock;
-  while (!lock) {
+  let locked = false;
+  while (!locked) {
     try {
-      lock = await open(lockPath, "wx", 0o600);
+      // Must not be recursive: an existing directory means another writer owns it.
+      await mkdir(lockPath, { mode: 0o700 });
+      locked = true;
     } catch (error) {
       if (!hasCode(error, "EEXIST")) throw error;
       if (performance.now() >= deadline) {
@@ -103,7 +106,8 @@ export async function setThreadTracingMode(
           `Timed out waiting for tracing preference lock ${lockPath}. Retry; if it persists, remove the lock only after confirming no preference writer is running.`,
         );
       }
-      await delay(20);
+      // Jitter keeps competing writers from retrying in lockstep.
+      await delay(10 + Math.random() * 20);
     }
   }
 
@@ -120,8 +124,6 @@ export async function setThreadTracingMode(
 
   let tempPath: string | undefined;
   try {
-    // For manual diagnosis only; never used to decide to steal a lock.
-    await lock.writeFile(`${process.pid}\n`);
     let policy: TracingPolicy;
     try {
       policy = readPolicy(path);
@@ -158,9 +160,8 @@ export async function setThreadTracingMode(
     if (tempPath) {
       await bestEffort(() => unlink(tempPath!), "Temporary file cleanup failed");
     }
-    await bestEffort(() => lock.close(), "Preference lock close cleanup failed");
     await bestEffort(
-      () => unlink(lockPath),
+      () => rmdir(lockPath),
       `Preference lock cleanup failed at ${lockPath}. Before retrying, remove the lock only after confirming no preference writer is running`,
     );
   }

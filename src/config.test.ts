@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { loadConfig, parseRepoName } from "./config.js";
@@ -7,6 +7,7 @@ import { execSync } from "node:child_process";
 
 vi.mock("node:child_process", { spy: true });
 vi.mock("node:fs", { spy: true });
+vi.mock("node:os", { spy: true });
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -33,8 +34,9 @@ describe("loadConfig", () => {
     delete process.env.CC_LANGSMITH_REDACT;
     delete process.env.CC_LANGSMITH_REDACT_EXTRA;
 
-    // Point HOME at an empty temp dir so tests don't read the real ~/.claude.json.
+    // Isolate home-directory reads on every platform.
     tmpHome = mkdtempSync(join(tmpdir(), "ls-cc-test-"));
+    vi.mocked(homedir).mockReturnValue(tmpHome);
     process.env.HOME = tmpHome;
     delete process.env.USERPROFILE;
   });
@@ -187,15 +189,20 @@ describe("loadConfig", () => {
       expect(loadConfig().enabled).toBe(true);
     });
 
-    it("uses USERPROFILE when HOME is absent", () => {
+    it("uses os.homedir when home environment variables are absent", () => {
       delete process.env.HOME;
-      process.env.USERPROFILE = tmpHome;
+      delete process.env.USERPROFILE;
       writeFileSync(userPath, '{"enabled":true}');
-      expect(loadConfig({ cwd: projectDir }).enabled).toBe(true);
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: true,
+        stateFilePath: `${tmpHome}/.claude/state/langsmith_state.json`,
+      });
+      expect(homedir).toHaveBeenCalled();
     });
 
-    it("defaults off when no home directory or project config is available", () => {
+    it("defaults off when the resolved home and project have no config", () => {
       delete process.env.HOME;
+      delete process.env.USERPROFILE;
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
     });
   });

@@ -316,20 +316,16 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
         parent_run_id: turnRunId,
         trace_id: traceId,
         dotted_order: assistantDottedOrder,
-        ...(tracing === "metadata"
-          ? {
-              extra: {
-                metadata: codingAgentMetadata({
-                  sessionId,
-                  base: customMetadata,
-                  turnId,
-                  turnNumber: turnNum,
-                  runtimeVersion,
-                  agentType,
-                }),
-              },
-            }
-          : {}),
+        extra: {
+          metadata: codingAgentMetadata({
+            sessionId,
+            base: customMetadata,
+            turnId,
+            turnNumber: turnNum,
+            runtimeVersion,
+            agentType,
+          }),
+        },
       },
       tracing,
     );

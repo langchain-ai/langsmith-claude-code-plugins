@@ -12952,7 +12952,7 @@ function debug(message) {
 // dist/tracing-policy.js
 import { randomUUID } from "node:crypto";
 import { lstatSync, readFileSync as readFileSync3 } from "node:fs";
-import { mkdir as mkdir3, open, rename as rename2, unlink as unlink2 } from "node:fs/promises";
+import { mkdir as mkdir3, open, rename as rename2, rmdir, unlink as unlink2 } from "node:fs/promises";
 import { dirname as dirname2 } from "node:path";
 import { performance as performance2 } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
@@ -13013,17 +13013,18 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
   const lockPath2 = `${path3}.lock`;
   await mkdir3(dirname2(path3), { recursive: true });
   const deadline = performance2.now() + 2e3;
-  let lock;
-  while (!lock) {
+  let locked = false;
+  while (!locked) {
     try {
-      lock = await open(lockPath2, "wx", 384);
+      await mkdir3(lockPath2, { mode: 448 });
+      locked = true;
     } catch (error2) {
       if (!hasCode(error2, "EEXIST"))
         throw error2;
       if (performance2.now() >= deadline) {
         throw new Error(`Timed out waiting for tracing preference lock ${lockPath2}. Retry; if it persists, remove the lock only after confirming no preference writer is running.`);
       }
-      await delay(20);
+      await delay(10 + Math.random() * 20);
     }
   }
   const warnings = [];
@@ -13036,8 +13037,6 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
   }
   let tempPath;
   try {
-    await lock.writeFile(`${process.pid}
-`);
     let policy;
     try {
       policy = readPolicy(path3);
@@ -13070,8 +13069,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     if (tempPath) {
       await bestEffort(() => unlink2(tempPath), "Temporary file cleanup failed");
     }
-    await bestEffort(() => lock.close(), "Preference lock close cleanup failed");
-    await bestEffort(() => unlink2(lockPath2), `Preference lock cleanup failed at ${lockPath2}. Before retrying, remove the lock only after confirming no preference writer is running`);
+    await bestEffort(() => rmdir(lockPath2), `Preference lock cleanup failed at ${lockPath2}. Before retrying, remove the lock only after confirming no preference writer is running`);
   }
   return warnings.length ? { warning: warnings.join("; ") } : {};
 }
@@ -14018,18 +14016,16 @@ async function traceTurn(options) {
       parent_run_id: turnRunId,
       trace_id: traceId,
       dotted_order: assistantDottedOrder,
-      ...tracing === "metadata" ? {
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId,
-            base: customMetadata,
-            turnId,
-            turnNumber: turnNum,
-            runtimeVersion,
-            agentType
-          })
-        }
-      } : {}
+      extra: {
+        metadata: codingAgentMetadata({
+          sessionId,
+          base: customMetadata,
+          turnId,
+          turnNumber: turnNum,
+          runtimeVersion,
+          agentType
+        })
+      }
     }, tracing);
     await assistantRunTree.postRun();
     for (const toolCall of llmCall.toolCalls) {
@@ -14596,7 +14592,7 @@ async function finalizeNotificationChain(opts) {
 
 // dist/config.js
 import { lstatSync as lstatSync2, readFileSync as readFileSync6 } from "node:fs";
-import { userInfo } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 var LS_INTEGRATION_VERSION = true ? "0.2.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
@@ -14721,7 +14717,7 @@ function loadConfig(options) {
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
   const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
   const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const homeDir = homedir();
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
   let replicas2;

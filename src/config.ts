@@ -1,5 +1,5 @@
 import { lstatSync, readFileSync } from "node:fs";
-import { userInfo } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import type { RunTreeConfig } from "langsmith";
 import type { StringNodeRule } from "langsmith/anonymizer";
@@ -213,7 +213,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
 
   const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
 
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const homeDir = homedir();
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
 
   const debug = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
