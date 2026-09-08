@@ -183,6 +183,14 @@ export function readCommonConfigFile(path: string): CommonConfigResult {
   }
 }
 
+/** Resolve the first supplied value from sources ordered highest priority first. */
+function resolveField<K extends keyof CommonConfig>(
+  sources: readonly CommonConfig[],
+  field: K,
+): CommonConfig[K] {
+  return sources.find((source) => source[field] !== undefined)?.[field];
+}
+
 /**
  * Metadata shallow-merges per key. envFirst opts into uniform environment-first
  * precedence; by default switches retain the legacy file-first precedence.
@@ -193,68 +201,26 @@ export function mergeCommonConfig(
 ): MergedCommonConfig {
   const { harness = {}, root = {}, user = {}, userRoot = {}, env = {}, defaults = {} } = sources;
   const files = [harness, root, user, userRoot];
-  const switches = options.envFirst ? [env, ...files, defaults] : [...files, env, defaults];
+  const precedence = [env, ...files, defaults];
+  const switches = options.envFirst ? precedence : [...files, env, defaults];
   const merged: MergedCommonConfig = { enabled: false, defaultMuted: false, redact: true };
   for (const field of ["enabled", "defaultMuted"] as const) {
-    merged[field] =
-      switches.find((source) => source[field] !== undefined)?.[field] ??
-      COMMON_BOOLEAN_SETTINGS[field].default;
+    merged[field] = resolveField(switches, field) ?? COMMON_BOOLEAN_SETTINGS[field].default;
   }
-  merged.api_key =
-    env.api_key ??
-    harness.api_key ??
-    root.api_key ??
-    user.api_key ??
-    userRoot.api_key ??
-    defaults.api_key;
-  merged.api_url =
-    env.api_url ??
-    harness.api_url ??
-    root.api_url ??
-    user.api_url ??
-    userRoot.api_url ??
-    defaults.api_url;
-  merged.project =
-    env.project ??
-    harness.project ??
-    root.project ??
-    user.project ??
-    userRoot.project ??
-    defaults.project;
-  merged.replicas =
-    env.replicas ??
-    harness.replicas ??
-    root.replicas ??
-    user.replicas ??
-    userRoot.replicas ??
-    defaults.replicas;
-  merged.redact =
-    env.redact ??
-    harness.redact ??
-    root.redact ??
-    user.redact ??
-    userRoot.redact ??
-    defaults.redact ??
-    true;
-  merged.redact_extra_rules =
-    env.redact_extra_rules ??
-    harness.redact_extra_rules ??
-    root.redact_extra_rules ??
-    user.redact_extra_rules ??
-    userRoot.redact_extra_rules ??
-    defaults.redact_extra_rules;
-  if (
-    [defaults, userRoot, user, root, harness, env].some((source) => source.metadata !== undefined)
-  ) {
+  merged.api_key = resolveField(precedence, "api_key");
+  merged.api_url = resolveField(precedence, "api_url");
+  merged.project = resolveField(precedence, "project");
+  merged.replicas = resolveField(precedence, "replicas");
+  merged.redact = resolveField(precedence, "redact") ?? true;
+  merged.redact_extra_rules = resolveField(precedence, "redact_extra_rules");
+  if (precedence.some((source) => source.metadata !== undefined)) {
     // Spread defines own properties (including __proto__), unlike assignment into a target.
-    merged.metadata = {
-      ...defaults.metadata,
-      ...userRoot.metadata,
-      ...user.metadata,
-      ...root.metadata,
-      ...harness.metadata,
-      ...env.metadata,
-    };
+    merged.metadata = [...precedence]
+      .reverse()
+      .reduce<Record<string, unknown>>(
+        (metadata, source) => ({ ...metadata, ...source.metadata }),
+        {},
+      );
   }
   return merged;
 }

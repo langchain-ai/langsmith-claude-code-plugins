@@ -161,14 +161,14 @@ The privacy file stores only explicit thread overrides, using the strict schema 
 
 Claude Code resolves the first applicable setting below; credentials are still required to upload.
 
-| Priority | Setting | Behavior |
-| -------- | ------- | -------- |
-| 1 | `TRACE_TO_LANGSMITH` | When present, case-insensitive `true` enables; any other value (including empty or whitespace-padded values) disables. Overrides every file. |
-| 2 | Project `cwd/.claude/langsmith.json` | `enabled` overrides lower file sources. |
-| 3 | Project-root `cwd/langsmith-plugins.json` | Used when project `.claude` omits `enabled`. |
-| 4 | User `~/.claude/langsmith.json` | Used when both project files omit `enabled`. |
-| 5 | Home-root `~/langsmith-plugins.json` | Baseline when higher sources omit `enabled`. |
-| 6 | No setting | Off. |
+| Priority | Setting                                   | Behavior                                                                                                                                     |
+| -------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1        | `TRACE_TO_LANGSMITH`                      | When present, case-insensitive `true` enables; any other value (including empty or whitespace-padded values) disables. Overrides every file. |
+| 2        | Project `cwd/.claude/langsmith.json`      | `enabled` overrides lower file sources.                                                                                                      |
+| 3        | Project-root `cwd/langsmith-plugins.json` | Used when project `.claude` omits `enabled`.                                                                                                 |
+| 4        | User `~/.claude/langsmith.json`           | Used when both project files omit `enabled`.                                                                                                 |
+| 5        | Home-root `~/langsmith-plugins.json`      | Baseline when higher sources omit `enabled`.                                                                                                 |
+| 6        | No setting                                | Off.                                                                                                                                         |
 
 At each priority, a missing file or field falls through; an invalid present `enabled` contributes `false`. Malformed/non-object JSON or unreadable config restricts that source to `enabled:false, defaultMuted:true`; it is not a global veto. Higher-priority fields, including environment values, still win independently. **`TRACE_TO_LANGSMITH=true` now overrides file `enabled:false`, intentionally reversing the previous file-first behavior.** To disable tracing regardless of files, set `TRACE_TO_LANGSMITH=false`. A thread unmute override never enables tracing when the resolved master switch is off. This change applies only to Claude Code, not Cursor or Codex.
 
@@ -233,19 +233,19 @@ By default, the plugin strips common secrets — provider API keys, JWTs, PEM bl
 
 The plugin respects the following environment variables:
 
-| Variable                           | Required | Default                           | Description                                                                                                        |
-| ---------------------------------- | -------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `TRACE_TO_LANGSMITH`               | No       | File config, then off             | Overrides every file when present; `"true"` enables, any other value disables.                           |
+| Variable                           | Required | Default                           | Description                                                                                                                                      |
+| ---------------------------------- | -------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TRACE_TO_LANGSMITH`               | No       | File config, then off             | Overrides every file when present; `"true"` enables, any other value disables.                                                                   |
 | `CC_LANGSMITH_DEFAULT_MUTED`       | No       | File config, then `false`         | Overrides file defaults when present; metadata-only tracing for threads without overrides. Case-insensitive `true`/`false`; invalid values mute. |
-| `CC_LANGSMITH_API_KEY`             | No\*     | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`). \*Required unless `CC_LANGSMITH_RUNS_ENDPOINTS` is set.     |
-| `CC_LANGSMITH_PROJECT`             | No       | `"claude-code"`                   | LangSmith project name                                                                                             |
-| `LANGSMITH_ENDPOINT`               | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                                                                             |
-| `CC_LANGSMITH_DEBUG`               | No       | `"false"`                         | Enable debug logging                                                                                               |
-| `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | —                                 | Dotted-order of an existing run to nest all Claude Code traces under                                               |
-| `CC_LANGSMITH_METADATA`            | No       | —                                 | JSON object of custom metadata to attach to all runs (e.g. PR URL, author)                                         |
-| `CC_LANGSMITH_RUNS_ENDPOINTS`      | No       | —                                 | JSON array of replica destinations for multi-project tracing                                                       |
-| `CC_LANGSMITH_REDACT`              | No       | `"true"`                          | Set to a falsy value (`false`/`0`/`no`/`off`) to disable client-side secret redaction before upload                |
-| `CC_LANGSMITH_REDACT_EXTRA`        | No       | —                                 | JSON array of `{ pattern, replace }` custom redaction rules, applied alongside the built-in secret patterns        |
+| `CC_LANGSMITH_API_KEY`             | No\*     | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`). \*Required unless `CC_LANGSMITH_RUNS_ENDPOINTS` is set.                                   |
+| `CC_LANGSMITH_PROJECT`             | No       | `"claude-code"`                   | LangSmith project name                                                                                                                           |
+| `LANGSMITH_ENDPOINT`               | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                                                                                                           |
+| `CC_LANGSMITH_DEBUG`               | No       | `"false"`                         | Enable debug logging                                                                                                                             |
+| `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | —                                 | Dotted-order of an existing run to nest all Claude Code traces under                                                                             |
+| `CC_LANGSMITH_METADATA`            | No       | —                                 | JSON object of custom metadata to attach to all runs (e.g. PR URL, author)                                                                       |
+| `CC_LANGSMITH_RUNS_ENDPOINTS`      | No       | —                                 | JSON array of replica destinations for multi-project tracing                                                                                     |
+| `CC_LANGSMITH_REDACT`              | No       | `"true"`                          | Set to a falsy value (`false`/`0`/`no`/`off`) to disable client-side secret redaction before upload                                              |
+| `CC_LANGSMITH_REDACT_EXTRA`        | No       | —                                 | JSON array of `{ pattern, replace }` custom redaction rules, applied alongside the built-in secret patterns                                      |
 
 ## Usage with GitHub Actions
 

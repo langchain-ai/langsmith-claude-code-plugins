@@ -292,29 +292,26 @@ function readCommonConfigFile(path) {
     return invalid();
   }
 }
+function resolveField(sources, field) {
+  return sources.find((source) => source[field] !== void 0)?.[field];
+}
 function mergeCommonConfig(sources, options = {}) {
   const { harness = {}, root = {}, user = {}, userRoot = {}, env = {}, defaults = {} } = sources;
   const files = [harness, root, user, userRoot];
-  const switches = options.envFirst ? [env, ...files, defaults] : [...files, env, defaults];
+  const precedence = [env, ...files, defaults];
+  const switches = options.envFirst ? precedence : [...files, env, defaults];
   const merged = { enabled: false, defaultMuted: false, redact: true };
   for (const field of ["enabled", "defaultMuted"]) {
-    merged[field] = switches.find((source) => source[field] !== void 0)?.[field] ?? COMMON_BOOLEAN_SETTINGS[field].default;
+    merged[field] = resolveField(switches, field) ?? COMMON_BOOLEAN_SETTINGS[field].default;
   }
-  merged.api_key = env.api_key ?? harness.api_key ?? root.api_key ?? user.api_key ?? userRoot.api_key ?? defaults.api_key;
-  merged.api_url = env.api_url ?? harness.api_url ?? root.api_url ?? user.api_url ?? userRoot.api_url ?? defaults.api_url;
-  merged.project = env.project ?? harness.project ?? root.project ?? user.project ?? userRoot.project ?? defaults.project;
-  merged.replicas = env.replicas ?? harness.replicas ?? root.replicas ?? user.replicas ?? userRoot.replicas ?? defaults.replicas;
-  merged.redact = env.redact ?? harness.redact ?? root.redact ?? user.redact ?? userRoot.redact ?? defaults.redact ?? true;
-  merged.redact_extra_rules = env.redact_extra_rules ?? harness.redact_extra_rules ?? root.redact_extra_rules ?? user.redact_extra_rules ?? userRoot.redact_extra_rules ?? defaults.redact_extra_rules;
-  if ([defaults, userRoot, user, root, harness, env].some((source) => source.metadata !== void 0)) {
-    merged.metadata = {
-      ...defaults.metadata,
-      ...userRoot.metadata,
-      ...user.metadata,
-      ...root.metadata,
-      ...harness.metadata,
-      ...env.metadata
-    };
+  merged.api_key = resolveField(precedence, "api_key");
+  merged.api_url = resolveField(precedence, "api_url");
+  merged.project = resolveField(precedence, "project");
+  merged.replicas = resolveField(precedence, "replicas");
+  merged.redact = resolveField(precedence, "redact") ?? true;
+  merged.redact_extra_rules = resolveField(precedence, "redact_extra_rules");
+  if (precedence.some((source) => source.metadata !== void 0)) {
+    merged.metadata = [...precedence].reverse().reduce((metadata, source) => ({ ...metadata, ...source.metadata }), {});
   }
   return merged;
 }
