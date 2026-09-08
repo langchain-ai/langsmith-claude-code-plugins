@@ -13515,7 +13515,7 @@ var USER_PROMPT_TURN_NAME = "Claude Code Turn";
 var ASSISTANT_RUN_NAME = "Claude";
 
 // dist/metadata.js
-var TRUSTED_INTEGRATION_VERSION = true ? "0.2.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var TRUSTED_INTEGRATION_VERSION = true ? "0.2.4" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var TRUSTED_METADATA = /* @__PURE__ */ Symbol("coding-agent trusted metadata");
 function trustedCodingAgentMetadata(metadata) {
   return metadata?.[TRUSTED_METADATA];
@@ -14418,7 +14418,7 @@ import { lstatSync as lstatSync2, readFileSync as readFileSync6 } from "node:fs"
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-var LS_INTEGRATION_VERSION = true ? "0.2.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var LS_INTEGRATION_VERSION = true ? "0.2.4" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var PROVIDER_HOSTS = {
   github: "github.com",
   gitlab: "gitlab.com",
