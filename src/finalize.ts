@@ -25,6 +25,7 @@ import type { OpenTurn } from "./types.js";
 
 export async function finalizeNotificationChain(opts: {
   stateFilePath: string;
+  defaultMuted?: boolean;
   sessionId: string;
   project: string;
   customMetadata?: Record<string, unknown>;
@@ -60,7 +61,7 @@ export async function finalizeNotificationChain(opts: {
     try {
       await closeAgentToolRun({
         tracing: resolveTurnTracingMode(
-          stateFilePath,
+          opts,
           sessionId,
           taskRunInfo.tracing,
           launchingTurn?.tracing,
@@ -132,7 +133,7 @@ export async function finalizeNotificationChain(opts: {
       try {
         await completeTurnRun({
           ...turnIdentityFromOpenTurn(toComplete, { sessionId, project, customMetadata }),
-          tracing: resolveTurnTracingMode(stateFilePath, sessionId, toComplete.tracing),
+          tracing: resolveTurnTracingMode(opts, sessionId, toComplete.tracing),
           lastAssistantMessage: toComplete.last_assistant_message,
         });
         logger.debug(`Completed launching turn ${toComplete.run_id} after notification chain`);

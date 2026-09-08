@@ -117,6 +117,40 @@ const postcommitFaults: FsFault[] = [
   "lock rmdir",
 ];
 
+describe("configured default and thread overrides", () => {
+  it.each([true, false])("uses defaultMuted=%s without creating a missing policy", (defaultMuted) => {
+    expect(getThreadTracingMode(state, "new", defaultMuted)).toBe(defaultMuted ? "metadata" : "full");
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it("uses the current configured default for threads without overrides", async () => {
+    await setThreadTracingMode(state, "other", "full");
+    const raw = readFileSync(policy, "utf8");
+    expect(JSON.parse(raw)).toEqual({ threads: { other: "full" } });
+    for (const defaultMuted of [true, false, true]) {
+      expect(getThreadTracingMode(state, "new", defaultMuted)).toBe(defaultMuted ? "metadata" : "full");
+      expect(readFileSync(policy, "utf8")).toBe(raw);
+    }
+  });
+
+  it("explicit unmute wins configured mute; explicit mute survives configured unmute", async () => {
+    await setThreadTracingMode(state, "unmuted", "full");
+    await setThreadTracingMode(state, "muted", "metadata");
+    for (const defaultMuted of [true, false]) {
+      expect(getThreadTracingMode(state, "unmuted", defaultMuted)).toBe("full");
+      expect(getThreadTracingMode(state, "muted", defaultMuted)).toBe("metadata");
+    }
+  });
+
+  it("uses only configuration when the override map is empty", () => {
+    const raw = JSON.stringify({ threads: {} });
+    writeFileSync(policy, raw);
+    expect(getThreadTracingMode(state, "new", true)).toBe("metadata");
+    expect(getThreadTracingMode(state, "new", false)).toBe("full");
+    expect(readFileSync(policy, "utf8")).toBe(raw);
+  });
+});
+
 describe("standalone tracing preference", () => {
   it.each([
     ["langsmith_state.json", "langsmith_state.privacy.json"],
@@ -131,7 +165,6 @@ describe("standalone tracing preference", () => {
     await setThreadTracingMode(statePath, "a", "metadata");
     expect(readdirSync(dir)).toEqual([policyName]);
     expect(JSON.parse(readFileSync(expectedPolicyPath, "utf8"))).toEqual({
-      default: "full",
       threads: { a: "metadata" },
     });
     expect(getThreadTracingMode(statePath, "a")).toBe("metadata");
@@ -168,12 +201,16 @@ describe("standalone tracing preference", () => {
     expect(getThreadTracingMode(state, id)).toBe("metadata");
   });
 
-  it("honors a metadata default without losing other explicit preferences", async () => {
-    writeFileSync(policy, JSON.stringify({ default: "metadata", threads: { a: "metadata" } }));
+  it("saves an override without losing other explicit preferences", async () => {
+    writeFileSync(policy, JSON.stringify({ threads: { a: "metadata" } }));
     await setThreadTracingMode(state, "b", "full");
-    expect(getThreadTracingMode(state, "unknown")).toBe("metadata");
-    expect(getThreadTracingMode(state, "a")).toBe("metadata");
-    expect(getThreadTracingMode(state, "b")).toBe("full");
+    expect(JSON.parse(readFileSync(policy, "utf8"))).toEqual({
+      threads: { a: "metadata", b: "full" },
+    });
+    expect(getThreadTracingMode(state, "unknown", true)).toBe("metadata");
+    expect(getThreadTracingMode(state, "unknown", false)).toBe("full");
+    expect(getThreadTracingMode(state, "a", false)).toBe("metadata");
+    expect(getThreadTracingMode(state, "b", true)).toBe("full");
   });
 
   it.each([
@@ -181,13 +218,19 @@ describe("standalone tracing preference", () => {
     "null",
     "[]",
     "{}",
-    '{"default":"full","threads":[]}',
-    '{"default":"full","threads":{"a":"metadata","b":"invalid"}}',
-    '{"default":"invalid","threads":{}}',
-    '{"default":"full","threads":{},"future":true}',
+    '{"threads":[]}',
+    '{"threads":null}',
+    '{"threads":"invalid"}',
+    '{"threads":{"a":"metadata","b":"invalid"}}',
+    '{"threads":{"a":null}}',
+    '{"threads":{},"future":true}',
+    '{"threads":{"new":"full"},"default":"full"}',
+    '{"threads":{"new":"full"},"default":"metadata"}',
   ])("fails closed and refuses to overwrite malformed policy %s", async (raw) => {
     writeFileSync(policy, raw);
-    expect(getThreadTracingMode(state, "new")).toBe("metadata");
+    for (const defaultMuted of [false, true]) {
+      expect(getThreadTracingMode(state, "new", defaultMuted)).toBe("metadata");
+    }
     await expect(setThreadTracingMode(state, "new", "full")).rejects.toThrow("repair the file");
     expect(readFileSync(policy, "utf8")).toBe(raw);
     expect(existsSync(`${policy}.lock`)).toBe(false);

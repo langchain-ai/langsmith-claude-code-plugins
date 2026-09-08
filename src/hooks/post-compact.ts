@@ -87,7 +87,7 @@ async function main(): Promise<void> {
         },
       },
       resolveTurnTracingMode(
-        config.stateFilePath,
+        config,
         input.session_id,
         sessionState.compaction_tracing,
         sessionState.current_turn_tracing,

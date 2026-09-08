@@ -620,14 +620,14 @@ function readPolicy(path3) {
         lstatSync(path3);
       } catch (statError) {
         if (hasCode(statError, "ENOENT"))
-          return { default: "full", threads: {} };
+          return { threads: {} };
         throw statError;
       }
     }
     throw error2;
   }
   const value = JSON.parse(raw);
-  if (!isObject(value) || !isMode(value.default) || !isObject(value.threads) || Object.values(value.threads).some((mode) => !isMode(mode)) || Object.keys(value).some((key) => key !== "default" && key !== "threads")) {
+  if (!isObject(value) || !isObject(value.threads) || Object.values(value.threads).some((mode) => !isMode(mode)) || Object.keys(value).some((key) => key !== "threads")) {
     throw new Error("Invalid tracing preference format");
   }
   return value;
@@ -635,18 +635,21 @@ function readPolicy(path3) {
 function tracingPolicyPath(stateFilePath) {
   return `${stateFilePath.replace(/\.json$/, "")}.privacy.json`;
 }
-function getThreadTracingMode(stateFilePath, sessionId) {
+function getThreadTracingMode(stateFilePath, sessionId, defaultMuted = false) {
   try {
     const policy = readPolicy(tracingPolicyPath(stateFilePath));
-    return Object.hasOwn(policy.threads, sessionId) ? policy.threads[sessionId] : policy.default;
+    if (Object.hasOwn(policy.threads, sessionId))
+      return policy.threads[sessionId];
+    return defaultMuted ? "metadata" : "full";
   } catch {
     return "metadata";
   }
 }
 
 // dist/tracing-mode.js
-function resolveTurnTracingMode(stateFilePath, sessionId, ...snapshots) {
-  return snapshots.find((mode) => mode !== void 0) ?? getThreadTracingMode(stateFilePath, sessionId);
+function resolveTurnTracingMode(config, sessionId, ...snapshots) {
+  const { stateFilePath, defaultMuted } = typeof config === "string" ? { stateFilePath: config } : config;
+  return snapshots.find((mode) => mode !== void 0) ?? getThreadTracingMode(stateFilePath, sessionId, defaultMuted);
 }
 
 // dist/logger.js
@@ -14087,14 +14090,14 @@ async function closeInterruptedTurn(options) {
   if (turn) {
     await closeTurnRun({
       ...turnIdentityFromOpenTurn(turn, { sessionId, project, customMetadata }),
-      tracing: resolveTurnTracingMode(stateFilePath, sessionId, turn.tracing),
+      tracing: resolveTurnTracingMode(options, sessionId, turn.tracing),
       runtimeVersion: turn.runtime_version ?? runtimeVersion,
       approvalPolicy: turn.approval_policy ?? approvalPolicy
     }, errorMessage);
     await flushPendingTraces();
     return { lastLine: sessionState.last_line, turnsTraced: 0 };
   }
-  const tracing = resolveTurnTracingMode(stateFilePath, sessionId, sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
+  const tracing = resolveTurnTracingMode(options, sessionId, sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
   let lastLine = sessionState.last_line;
   let turnsTraced = 0;
   let consumedToolUseIds = [];
@@ -14475,10 +14478,21 @@ function getGitInfo(cwd) {
   }
   return result;
 }
-function readEnabledFile(path3) {
+var BOOLEAN_SETTINGS = {
+  enabled: { env: "TRACE_TO_LANGSMITH", default: false, restrictive: false },
+  defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", default: false, restrictive: true }
+};
+function readBooleanFile(path3, field) {
+  const { restrictive } = BOOLEAN_SETTINGS[field];
   try {
     const parsed = JSON.parse(readFileSync6(path3, "utf-8"));
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && "enabled" in parsed && parsed.enabled === true;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return restrictive;
+    }
+    if (!Object.hasOwn(parsed, field))
+      return void 0;
+    const value = parsed[field];
+    return typeof value === "boolean" ? value : restrictive;
   } catch (err) {
     if (err.code === "ENOENT") {
       try {
@@ -14488,11 +14502,22 @@ function readEnabledFile(path3) {
           return void 0;
       }
     }
-    return false;
+    return restrictive;
   }
 }
-function resolveEnabled(cwd, homeDir) {
-  return readEnabledFile(join(cwd, ".claude", "langsmith.json")) ?? (homeDir ? readEnabledFile(join(homeDir, ".claude", "langsmith.json")) : void 0) ?? (process.env.TRACE_TO_LANGSMITH ?? "").toLowerCase() === "true";
+function resolveBoolean(cwd, homeDir, field) {
+  const fromFile = readBooleanFile(join(cwd, ".claude", "langsmith.json"), field) ?? (homeDir ? readBooleanFile(join(homeDir, ".claude", "langsmith.json"), field) : void 0);
+  if (fromFile !== void 0)
+    return fromFile;
+  const setting = BOOLEAN_SETTINGS[field];
+  const env = process.env[setting.env]?.toLowerCase();
+  if (env === void 0)
+    return setting.default;
+  if (env === "true")
+    return true;
+  if (env === "false")
+    return false;
+  return setting.restrictive;
 }
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
@@ -14590,7 +14615,8 @@ function loadConfig(options) {
     repoMetadata.git_commit_sha = gitInfo.commit;
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
   return {
-    enabled: resolveEnabled(cwd, homeDir),
+    enabled: resolveBoolean(cwd, homeDir, "enabled"),
+    defaultMuted: resolveBoolean(cwd, homeDir, "defaultMuted"),
     apiKey,
     project,
     apiBaseUrl,
@@ -14673,6 +14699,7 @@ async function main() {
     debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
     try {
       const res = await closeInterruptedTurn({
+        defaultMuted: config.defaultMuted,
         sessionId: input.session_id,
         sessionState,
         transcriptPath: expandedTranscript,
@@ -14693,7 +14720,7 @@ async function main() {
     const launchingTurn = launchingTurnId ? openTurns[launchingTurnId] : void 0;
     try {
       await closeAgentToolRun({
-        tracing: resolveTurnTracingMode(config.stateFilePath, input.session_id, taskRunInfo.tracing, launchingTurn?.tracing, launchingTurnId === sessionState.current_turn_run_id ? sessionState.current_turn_tracing : void 0),
+        tracing: resolveTurnTracingMode(config, input.session_id, taskRunInfo.tracing, launchingTurn?.tracing, launchingTurnId === sessionState.current_turn_run_id ? sessionState.current_turn_tracing : void 0),
         sessionId: input.session_id,
         agentId,
         agentType: taskRunInfo.agent_type ?? "",
@@ -14720,12 +14747,13 @@ async function main() {
             project: config.project,
             customMetadata: config.customMetadata
           }),
-          tracing: resolveTurnTracingMode(config.stateFilePath, input.session_id, entry.tracing),
+          tracing: resolveTurnTracingMode(config, input.session_id, entry.tracing),
           lastAssistantMessage: entry.last_assistant_message
         });
         debug(`Completed deferred turn ${turnRunId} on session end`);
       } else {
         await closeInterruptedTurn({
+          defaultMuted: config.defaultMuted,
           sessionId: input.session_id,
           sessionState,
           transcriptPath: expandedTranscript,

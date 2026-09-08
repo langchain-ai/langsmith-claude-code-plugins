@@ -88,6 +88,7 @@ async function main(): Promise<void> {
     debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
     try {
       const res = await closeInterruptedTurn({
+        defaultMuted: config.defaultMuted,
         sessionId: input.session_id,
         sessionState,
         transcriptPath: expandedTranscript,
@@ -113,7 +114,7 @@ async function main(): Promise<void> {
     try {
       await closeAgentToolRun({
         tracing: resolveTurnTracingMode(
-          config.stateFilePath,
+          config,
           input.session_id,
           taskRunInfo.tracing,
           launchingTurn?.tracing,
@@ -154,12 +155,13 @@ async function main(): Promise<void> {
             project: config.project,
             customMetadata: config.customMetadata,
           }),
-          tracing: resolveTurnTracingMode(config.stateFilePath, input.session_id, entry.tracing),
+          tracing: resolveTurnTracingMode(config, input.session_id, entry.tracing),
           lastAssistantMessage: entry.last_assistant_message,
         });
         debug(`Completed deferred turn ${turnRunId} on session end`);
       } else {
         await closeInterruptedTurn({
+          defaultMuted: config.defaultMuted,
           sessionId: input.session_id,
           sessionState,
           transcriptPath: expandedTranscript,

@@ -41,6 +41,7 @@ describe("initHook", () => {
     delete process.env.CC_LANGSMITH_API_KEY;
     delete process.env.LANGSMITH_API_KEY;
     delete process.env.TRACE_TO_LANGSMITH;
+    delete process.env.CC_LANGSMITH_DEFAULT_MUTED;
     delete process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
     delete process.env.CC_LANGSMITH_DEBUG;
     delete process.env.CC_LANGSMITH_PROJECT;
@@ -129,6 +130,7 @@ describe("initHook", () => {
   ])(
     "master off ($name) returns null and hooks never initialize tracing or upload content",
     async ({ env, project, user }) => {
+      process.env.CC_LANGSMITH_DEFAULT_MUTED = "true";
       if (env !== undefined) process.env.TRACE_TO_LANGSMITH = env;
       if (project !== undefined) writeFileSync(projectPath, JSON.stringify({ enabled: project }));
       if (user !== undefined) writeFileSync(userPath, JSON.stringify({ enabled: user }));

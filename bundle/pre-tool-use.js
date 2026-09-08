@@ -26,14 +26,14 @@ function readPolicy(path) {
         lstatSync(path);
       } catch (statError) {
         if (hasCode(statError, "ENOENT"))
-          return { default: "full", threads: {} };
+          return { threads: {} };
         throw statError;
       }
     }
     throw error2;
   }
   const value = JSON.parse(raw);
-  if (!isObject(value) || !isMode(value.default) || !isObject(value.threads) || Object.values(value.threads).some((mode) => !isMode(mode)) || Object.keys(value).some((key) => key !== "default" && key !== "threads")) {
+  if (!isObject(value) || !isObject(value.threads) || Object.values(value.threads).some((mode) => !isMode(mode)) || Object.keys(value).some((key) => key !== "threads")) {
     throw new Error("Invalid tracing preference format");
   }
   return value;
@@ -41,18 +41,21 @@ function readPolicy(path) {
 function tracingPolicyPath(stateFilePath) {
   return `${stateFilePath.replace(/\.json$/, "")}.privacy.json`;
 }
-function getThreadTracingMode(stateFilePath, sessionId) {
+function getThreadTracingMode(stateFilePath, sessionId, defaultMuted = false) {
   try {
     const policy = readPolicy(tracingPolicyPath(stateFilePath));
-    return Object.hasOwn(policy.threads, sessionId) ? policy.threads[sessionId] : policy.default;
+    if (Object.hasOwn(policy.threads, sessionId))
+      return policy.threads[sessionId];
+    return defaultMuted ? "metadata" : "full";
   } catch {
     return "metadata";
   }
 }
 
 // dist/tracing-mode.js
-function resolveTurnTracingMode(stateFilePath, sessionId, ...snapshots) {
-  return snapshots.find((mode) => mode !== void 0) ?? getThreadTracingMode(stateFilePath, sessionId);
+function resolveTurnTracingMode(config, sessionId, ...snapshots) {
+  const { stateFilePath, defaultMuted } = typeof config === "string" ? { stateFilePath: config } : config;
+  return snapshots.find((mode) => mode !== void 0) ?? getThreadTracingMode(stateFilePath, sessionId, defaultMuted);
 }
 
 // dist/logger.js
@@ -257,10 +260,21 @@ function getGitInfo(cwd) {
   }
   return result;
 }
-function readEnabledFile(path) {
+var BOOLEAN_SETTINGS = {
+  enabled: { env: "TRACE_TO_LANGSMITH", default: false, restrictive: false },
+  defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", default: false, restrictive: true }
+};
+function readBooleanFile(path, field) {
+  const { restrictive } = BOOLEAN_SETTINGS[field];
   try {
     const parsed = JSON.parse(readFileSync3(path, "utf-8"));
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && "enabled" in parsed && parsed.enabled === true;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return restrictive;
+    }
+    if (!Object.hasOwn(parsed, field))
+      return void 0;
+    const value = parsed[field];
+    return typeof value === "boolean" ? value : restrictive;
   } catch (err) {
     if (err.code === "ENOENT") {
       try {
@@ -270,11 +284,22 @@ function readEnabledFile(path) {
           return void 0;
       }
     }
-    return false;
+    return restrictive;
   }
 }
-function resolveEnabled(cwd, homeDir) {
-  return readEnabledFile(join(cwd, ".claude", "langsmith.json")) ?? (homeDir ? readEnabledFile(join(homeDir, ".claude", "langsmith.json")) : void 0) ?? (process.env.TRACE_TO_LANGSMITH ?? "").toLowerCase() === "true";
+function resolveBoolean(cwd, homeDir, field) {
+  const fromFile = readBooleanFile(join(cwd, ".claude", "langsmith.json"), field) ?? (homeDir ? readBooleanFile(join(homeDir, ".claude", "langsmith.json"), field) : void 0);
+  if (fromFile !== void 0)
+    return fromFile;
+  const setting = BOOLEAN_SETTINGS[field];
+  const env = process.env[setting.env]?.toLowerCase();
+  if (env === void 0)
+    return setting.default;
+  if (env === "true")
+    return true;
+  if (env === "false")
+    return false;
+  return setting.restrictive;
 }
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
@@ -372,7 +397,8 @@ function loadConfig(options) {
     repoMetadata.git_commit_sha = gitInfo.commit;
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
   return {
-    enabled: resolveEnabled(cwd, homeDir),
+    enabled: resolveBoolean(cwd, homeDir, "enabled"),
+    defaultMuted: resolveBoolean(cwd, homeDir, "defaultMuted"),
     apiKey,
     project,
     apiBaseUrl,
@@ -433,7 +459,7 @@ async function main() {
         ...ss,
         tool_tracing_modes: {
           ...ss.tool_tracing_modes,
-          [input.tool_use_id]: resolveTurnTracingMode(config.stateFilePath, input.session_id, ss.tool_tracing_modes?.[input.tool_use_id], ss.current_turn_tracing, ss.current_turn_run_id ? ss.open_turns?.[ss.current_turn_run_id]?.tracing : void 0)
+          [input.tool_use_id]: resolveTurnTracingMode(config, input.session_id, ss.tool_tracing_modes?.[input.tool_use_id], ss.current_turn_tracing, ss.current_turn_run_id ? ss.open_turns?.[ss.current_turn_run_id]?.tracing : void 0)
         },
         tool_start_times: {
           ...ss.tool_start_times,

@@ -122,7 +122,11 @@ async function main(): Promise<void> {
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
-  const turnMode = getThreadTracingMode(config.stateFilePath, input.session_id);
+  const turnMode = getThreadTracingMode(
+    config.stateFilePath,
+    input.session_id,
+    config.defaultMuted,
+  );
 
   // CLI version (ls_agent_runtime_version); best-effort, Stop backfills if empty.
   const expandedTranscript = expandHome(input.transcript_path);
@@ -168,6 +172,7 @@ async function main(): Promise<void> {
         turnsTraced,
         consumedToolUseIds: consumed,
       } = await closeInterruptedTurn({
+        defaultMuted: config.defaultMuted,
         sessionId: input.session_id,
         sessionState,
         transcriptPath: expandHome(input.transcript_path),
@@ -185,6 +190,7 @@ async function main(): Promise<void> {
       consumedToolUseIds = consumed ?? [];
       if (supersededNotificationAgentId) {
         await finalizeNotificationChain({
+          defaultMuted: config.defaultMuted,
           stateFilePath: config.stateFilePath,
           sessionId: input.session_id,
           project: config.project,

@@ -62,6 +62,8 @@ export function readLocalUsername(): string {
 export interface Config {
   /** Master tracing switch, resolved from project config, user config, then environment. */
   enabled: boolean;
+  /** Default for threads without an explicit preference; independent of the master switch. */
+  defaultMuted: boolean;
   apiKey: string;
   project: string;
   apiBaseUrl: string;
@@ -172,17 +174,23 @@ export function getGitInfo(cwd: string): { branch?: string; commit?: string } {
   return result;
 }
 
-/** Undefined means absent; all other read/parse failures fail closed. */
-function readEnabledFile(path: string): boolean | undefined {
+const BOOLEAN_SETTINGS = {
+  enabled: { env: "TRACE_TO_LANGSMITH", default: false, restrictive: false },
+  defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", default: false, restrictive: true },
+} as const;
+type BooleanSetting = keyof typeof BOOLEAN_SETTINGS;
+
+/** Undefined means an absent file/field; invalid present values fail closed per field. */
+function readBooleanFile(path: string, field: BooleanSetting): boolean | undefined {
+  const { restrictive } = BOOLEAN_SETTINGS[field];
   try {
     const parsed: unknown = JSON.parse(readFileSync(path, "utf-8"));
-    return (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      !Array.isArray(parsed) &&
-      "enabled" in parsed &&
-      parsed.enabled === true
-    );
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return restrictive;
+    }
+    if (!Object.hasOwn(parsed, field)) return undefined;
+    const value = (parsed as Record<string, unknown>)[field];
+    return typeof value === "boolean" ? value : restrictive;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       // A dangling symlink is an unreadable config, not an absent preference.
@@ -192,17 +200,22 @@ function readEnabledFile(path: string): boolean | undefined {
         if ((statError as NodeJS.ErrnoException).code === "ENOENT") return undefined;
       }
     }
-    return false;
+    return restrictive;
   }
 }
 
-/** Project file > user file > env > disabled. Only absent files fall through. */
-function resolveEnabled(cwd: string, homeDir: string): boolean {
-  return (
-    readEnabledFile(join(cwd, ".claude", "langsmith.json")) ??
-    (homeDir ? readEnabledFile(join(homeDir, ".claude", "langsmith.json")) : undefined) ??
-    (process.env.TRACE_TO_LANGSMITH ?? "").toLowerCase() === "true"
-  );
+/** Project > user > env, independently for each field. */
+function resolveBoolean(cwd: string, homeDir: string, field: BooleanSetting): boolean {
+  const fromFile =
+    readBooleanFile(join(cwd, ".claude", "langsmith.json"), field) ??
+    (homeDir ? readBooleanFile(join(homeDir, ".claude", "langsmith.json"), field) : undefined);
+  if (fromFile !== undefined) return fromFile;
+  const setting = BOOLEAN_SETTINGS[field];
+  const env = process.env[setting.env]?.toLowerCase();
+  if (env === undefined) return setting.default;
+  if (env === "true") return true;
+  if (env === "false") return false;
+  return setting.restrictive;
 }
 
 export function loadConfig(options?: { cwd?: string }): Config {
@@ -337,7 +350,8 @@ export function loadConfig(options?: { cwd?: string }): Config {
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
 
   return {
-    enabled: resolveEnabled(cwd, homeDir),
+    enabled: resolveBoolean(cwd, homeDir, "enabled"),
+    defaultMuted: resolveBoolean(cwd, homeDir, "defaultMuted"),
     apiKey,
     project,
     apiBaseUrl,

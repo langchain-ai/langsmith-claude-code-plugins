@@ -651,6 +651,7 @@ export async function closeInterruptedTurn(options: {
   transcriptPath: string | undefined;
   project: string;
   stateFilePath: string;
+  defaultMuted?: boolean;
   customMetadata?: Record<string, unknown>;
   /** Claude Code CLI version → `ls_agent_runtime_version`. */
   runtimeVersion?: string;
@@ -685,7 +686,7 @@ export async function closeInterruptedTurn(options: {
     await closeTurnRun(
       {
         ...turnIdentityFromOpenTurn(turn, { sessionId, project, customMetadata }),
-        tracing: resolveTurnTracingMode(stateFilePath, sessionId, turn.tracing),
+        tracing: resolveTurnTracingMode(options, sessionId, turn.tracing),
         runtimeVersion: turn.runtime_version ?? runtimeVersion,
         approvalPolicy: turn.approval_policy ?? approvalPolicy,
       },
@@ -696,7 +697,7 @@ export async function closeInterruptedTurn(options: {
   }
 
   const tracing = resolveTurnTracingMode(
-    stateFilePath,
+    options,
     sessionId,
     sessionState.current_turn_tracing,
     sessionState.current_turn_run_id

@@ -64,7 +64,7 @@ async function main(): Promise<void> {
   const sessionState = getSessionState(state, input.session_id);
 
   const tracing = resolveTurnTracingMode(
-    config.stateFilePath,
+    config,
     input.session_id,
     sessionState.tool_tracing_modes?.[input.tool_use_id],
     sessionState.current_turn_tracing,
@@ -205,7 +205,7 @@ async function main(): Promise<void> {
       ) as Record<string, unknown>;
       const launchingTurn = {
         tracing: resolveTurnTracingMode(
-          config.stateFilePath,
+          config,
           input.session_id,
           sessionState.current_turn_tracing,
           sessionState.current_turn_run_id

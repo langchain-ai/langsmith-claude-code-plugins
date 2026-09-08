@@ -14,6 +14,22 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("resolveTurnTracingMode", () => {
+  it("consults configured default only after all snapshots and explicit preferences", async () => {
+    const config = { stateFilePath: state, defaultMuted: true };
+    expect(resolveTurnTracingMode(config, "new", undefined)).toBe("metadata");
+    expect(resolveTurnTracingMode(config, "new", undefined, "full", "metadata")).toBe("full");
+    await setThreadTracingMode(state, "new", "full");
+    expect(resolveTurnTracingMode(config, "new")).toBe("full");
+    expect(resolveTurnTracingMode(config, "new", "metadata")).toBe("metadata");
+    config.defaultMuted = false;
+    expect(resolveTurnTracingMode(config, "other", undefined, "metadata")).toBe("metadata");
+    await setThreadTracingMode(state, "new", "metadata");
+    expect(resolveTurnTracingMode(config, "new")).toBe("metadata");
+    writeFileSync(tracingPolicyPath(state), "{broken");
+    expect(resolveTurnTracingMode(config, "new")).toBe("metadata");
+    expect(resolveTurnTracingMode(config, "new", "full")).toBe("full");
+  });
+
   it("uses sticky policy only when no snapshot exists, with full for a healthy new thread", async () => {
     expect(resolveTurnTracingMode(state, "session", undefined)).toBe("full");
     await setThreadTracingMode(state, "session", "metadata");

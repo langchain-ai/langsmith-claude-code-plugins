@@ -23,6 +23,7 @@ describe("loadConfig", () => {
   beforeEach(() => {
     // Clear relevant env vars
     delete process.env.TRACE_TO_LANGSMITH;
+    delete process.env.CC_LANGSMITH_DEFAULT_MUTED;
     delete process.env.CC_LANGSMITH_API_KEY;
     delete process.env.LANGSMITH_API_KEY;
     delete process.env.CC_LANGSMITH_PROJECT;
@@ -50,6 +51,128 @@ describe("loadConfig", () => {
     if (tmpHome) {
       rmSync(tmpHome, { recursive: true, force: true });
     }
+  });
+
+  describe("default mute config", () => {
+    let projectDir: string;
+    let projectPath: string;
+    let userPath: string;
+    beforeEach(() => {
+      projectDir = join(tmpHome, "project");
+      mkdirSync(join(projectDir, ".claude"), { recursive: true });
+      mkdirSync(join(tmpHome, ".claude"));
+      projectPath = join(projectDir, ".claude", "langsmith.json");
+      userPath = join(tmpHome, ".claude", "langsmith.json");
+      vi.mocked(execSync).mockReturnValue("");
+    });
+
+    it.each(
+      [
+        undefined,
+        "true",
+        "TRUE",
+        "TrUe",
+        "false",
+        "FALSE",
+        "FaLsE",
+        "",
+        "1",
+        "0",
+        "yes",
+        "no",
+        " false ",
+      ].flatMap((env) =>
+        [undefined, true, false].flatMap((project) =>
+          [undefined, true, false].map((user) => ({ env, project, user })),
+        ),
+      ),
+    )("env=$env project=$project user=$user", ({ env, project, user }) => {
+      if (env !== undefined) process.env.CC_LANGSMITH_DEFAULT_MUTED = env;
+      // Present enabled-only files must not mask fallback for defaultMuted.
+      writeFileSync(projectPath, JSON.stringify({ enabled: true, defaultMuted: project }));
+      writeFileSync(userPath, JSON.stringify({ enabled: false, defaultMuted: user }));
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: true,
+        defaultMuted: project ?? user ?? (env !== undefined && env.toLowerCase() !== "false"),
+      });
+    });
+
+    it.each([true, false])("resolves enabled independently of defaultMuted=%s", (defaultMuted) => {
+      process.env.TRACE_TO_LANGSMITH = "true";
+      writeFileSync(projectPath, JSON.stringify({ defaultMuted }));
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({ enabled: true, defaultMuted });
+      writeFileSync(userPath, '{"enabled":false}');
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({ enabled: false, defaultMuted });
+      writeFileSync(projectPath, JSON.stringify({ enabled: false, defaultMuted }));
+      writeFileSync(userPath, '{"enabled":true}');
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({ enabled: false, defaultMuted });
+    });
+
+    it.each(
+      ["project", "user"].flatMap((scope) =>
+        [
+          "",
+          "{",
+          "null",
+          "[]",
+          "true",
+          '{"defaultMuted":"false"}',
+          '{"defaultMuted":0}',
+          '{"defaultMuted":null}',
+        ].map((raw) => ({ scope, raw })),
+      ),
+    )("fails closed for $scope: $raw", ({ scope, raw }) => {
+      process.env.CC_LANGSMITH_DEFAULT_MUTED = "false";
+      if (scope === "project") writeFileSync(userPath, '{"defaultMuted":false}');
+      writeFileSync(scope === "project" ? projectPath : userPath, raw);
+      expect(loadConfig({ cwd: projectDir }).defaultMuted).toBe(true);
+    });
+
+    it.each(
+      ["project", "user"].flatMap((scope) =>
+        ["EACCES", "EPERM", "EIO", "EISDIR", "ENOTDIR"].map((code) => ({ scope, code })),
+      ),
+    )("fails closed on $scope read error $code", ({ scope, code }) => {
+      process.env.CC_LANGSMITH_DEFAULT_MUTED = "false";
+      const path = scope === "project" ? projectPath : userPath;
+      writeFileSync(userPath, '{"defaultMuted":false}');
+      const read = vi.mocked(readFileSync).getMockImplementation()!;
+      vi.mocked(readFileSync).mockImplementation((...args: Parameters<typeof readFileSync>) => {
+        if (args[0] === path) throw Object.assign(new Error("unreadable"), { code });
+        return read(...args);
+      });
+      expect(loadConfig({ cwd: projectDir }).defaultMuted).toBe(true);
+    });
+
+    it.each(["project", "user"])("treats a dangling %s symlink as unreadable", (scope) => {
+      process.env.CC_LANGSMITH_DEFAULT_MUTED = "false";
+      symlinkSync(join(tmpHome, "missing.json"), scope === "project" ? projectPath : userPath);
+      expect(loadConfig({ cwd: projectDir }).defaultMuted).toBe(true);
+    });
+
+    it("uses the supplied cwd, or process.cwd when omitted, and homedir for user defaults", () => {
+      writeFileSync(projectPath, '{"defaultMuted":true}');
+      writeFileSync(userPath, '{"defaultMuted":false}');
+      vi.spyOn(process, "cwd").mockReturnValue(tmpHome);
+      expect(loadConfig().defaultMuted).toBe(false);
+      expect(loadConfig({ cwd: projectDir }).defaultMuted).toBe(true);
+      vi.spyOn(process, "cwd").mockReturnValue(projectDir);
+      expect(loadConfig().defaultMuted).toBe(true);
+      rmSync(projectPath);
+      delete process.env.HOME;
+      delete process.env.USERPROFILE;
+      writeFileSync(userPath, '{"defaultMuted":true}');
+      expect(loadConfig({ cwd: projectDir }).defaultMuted).toBe(true);
+    });
+
+    it("defaults unmuted with absent files and falls through empty objects", () => {
+      expect(loadConfig({ cwd: projectDir }).defaultMuted).toBe(false);
+      process.env.CC_LANGSMITH_DEFAULT_MUTED = "true";
+      process.env.TRACE_TO_LANGSMITH = "true";
+      writeFileSync(projectPath, "{}");
+      writeFileSync(userPath, "{}");
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({ enabled: true, defaultMuted: true });
+    });
   });
 
   describe("master switch", () => {
@@ -93,7 +216,6 @@ describe("loadConfig", () => {
           "null",
           "[]",
           "true",
-          "{}",
           '{"enabled":"true"}',
           '{"enabled":1}',
           '{"enabled":null}',
@@ -135,11 +257,14 @@ describe("loadConfig", () => {
       expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === userPath)).toBe(false);
     });
 
-    it.each([true, false])("project enabled=%s does not read user config", (enabled) => {
-      writeFileSync(projectPath, JSON.stringify({ enabled }));
-      expect(loadConfig({ cwd: projectDir }).enabled).toBe(enabled);
-      expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === userPath)).toBe(false);
-    });
+    it.each([true, false])(
+      "complete project config enabled=%s does not read user config",
+      (enabled) => {
+        writeFileSync(projectPath, JSON.stringify({ enabled, defaultMuted: false }));
+        expect(loadConfig({ cwd: projectDir }).enabled).toBe(enabled);
+        expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === userPath)).toBe(false);
+      },
+    );
 
     it("uses enabled user config only when the project entry is truly absent", () => {
       writeFileSync(userPath, '{"enabled":true}');

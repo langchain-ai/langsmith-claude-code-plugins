@@ -40,7 +40,7 @@ async function main(): Promise<void> {
         tool_tracing_modes: {
           ...ss.tool_tracing_modes,
           [input.tool_use_id]: resolveTurnTracingMode(
-            config.stateFilePath,
+            config,
             input.session_id,
             ss.tool_tracing_modes?.[input.tool_use_id],
             ss.current_turn_tracing,

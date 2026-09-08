@@ -7,7 +7,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { TracingMode } from "./types.js";
 
 interface TracingPolicy {
-  default: TracingMode;
   threads: Record<string, TracingMode>;
 }
 
@@ -23,7 +22,7 @@ function hasCode(error: unknown, code: string): boolean {
   return isObject(error) && error.code === code;
 }
 
-/** Missing policy is opt-out (full); every other read failure is fail-closed. */
+/** Missing policy has no overrides; every other read failure is fail-closed. */
 function readPolicy(path: string): TracingPolicy {
   let raw: string;
   try {
@@ -34,7 +33,7 @@ function readPolicy(path: string): TracingPolicy {
       try {
         lstatSync(path);
       } catch (statError) {
-        if (hasCode(statError, "ENOENT")) return { default: "full", threads: {} };
+        if (hasCode(statError, "ENOENT")) return { threads: {} };
         throw statError;
       }
     }
@@ -43,10 +42,9 @@ function readPolicy(path: string): TracingPolicy {
   const value: unknown = JSON.parse(raw);
   if (
     !isObject(value) ||
-    !isMode(value.default) ||
     !isObject(value.threads) ||
     Object.values(value.threads).some((mode) => !isMode(mode)) ||
-    Object.keys(value).some((key) => key !== "default" && key !== "threads")
+    Object.keys(value).some((key) => key !== "threads")
   ) {
     throw new Error("Invalid tracing preference format");
   }
@@ -57,10 +55,15 @@ export function tracingPolicyPath(stateFilePath: string): string {
   return `${stateFilePath.replace(/\.json$/, "")}.privacy.json`;
 }
 
-export function getThreadTracingMode(stateFilePath: string, sessionId: string): TracingMode {
+export function getThreadTracingMode(
+  stateFilePath: string,
+  sessionId: string,
+  defaultMuted = false,
+): TracingMode {
   try {
     const policy = readPolicy(tracingPolicyPath(stateFilePath));
-    return Object.hasOwn(policy.threads, sessionId) ? policy.threads[sessionId] : policy.default;
+    if (Object.hasOwn(policy.threads, sessionId)) return policy.threads[sessionId];
+    return defaultMuted ? "metadata" : "full";
   } catch {
     return "metadata";
   }

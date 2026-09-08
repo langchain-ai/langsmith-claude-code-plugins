@@ -113,6 +113,7 @@ export async function handleWorkflowSubagentStop(opts: {
   agentType: string;
   agentTranscriptPath: string;
   stateFilePath: string;
+  defaultMuted?: boolean;
   project: string;
   customMetadata?: Record<string, unknown>;
 }): Promise<void> {
@@ -140,7 +141,7 @@ export async function handleWorkflowSubagentStop(opts: {
   try {
     await traceWorkflowStage({
       tracing: resolveTurnTracingMode(
-        opts.stateFilePath,
+        opts,
         opts.sessionId,
         entry.tracing,
         launchingTurn?.tracing,

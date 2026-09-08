@@ -37,7 +37,7 @@ async function main(): Promise<void> {
         ...sessionState,
         compaction_start_time: Date.now(),
         compaction_tracing: resolveTurnTracingMode(
-          config.stateFilePath,
+          config,
           input.session_id,
           input.trigger === "manual" ? undefined : sessionState.current_turn_tracing,
           input.trigger !== "manual" && sessionState.current_turn_run_id

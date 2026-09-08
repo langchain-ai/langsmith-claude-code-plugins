@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   state: {} as TracingState,
   policy: "full" as TracingMode,
   policyPath: undefined as string | undefined,
+  defaultMuted: false,
   input: {} as Record<string, unknown>,
   messages: [] as TranscriptMessage[],
   agentMessages: [] as TranscriptMessage[],
@@ -44,6 +45,7 @@ vi.mock("../utils/hook-init.js", () => ({
     apiKey: "test",
     project: "test",
     stateFilePath: "/unused",
+    defaultMuted: h.defaultMuted,
     redact: false,
     customMetadata: { custom: "PRIVATE_MARKER", ls_model_name: "PRIVATE_MARKER" },
   }),
@@ -56,8 +58,8 @@ vi.mock("../tracing-policy.js", async (original) => {
   const policy = await original<typeof import("../tracing-policy.js")>();
   return {
     ...policy,
-    getThreadTracingMode: (_: string, sessionId: string) =>
-      h.policyPath ? policy.getThreadTracingMode(h.policyPath, sessionId) : h.policy,
+    getThreadTracingMode: (_: string, sessionId: string, defaultMuted?: boolean) =>
+      h.policyPath ? policy.getThreadTracingMode(h.policyPath, sessionId, defaultMuted) : h.policy,
     setThreadTracingMode: async (_: string, __: string, mode: TracingMode) => {
       h.policy = mode;
     },
@@ -139,6 +141,7 @@ function transcript(
 function reset(mode: TracingMode) {
   h.state = {};
   h.policy = mode;
+  h.defaultMuted = false;
   h.ids = 0;
   h.operations = [];
   h.messages = [];
@@ -222,13 +225,17 @@ afterEach(() => {
   h.policyPath = undefined;
 });
 
-function savedPolicy(mode: TracingMode | "corrupt") {
+function savedPolicy(mode: TracingMode | "corrupt" | "default") {
   h.policyPath = join(mkdtempSync(join(tmpdir(), "missing-mode-")), "state.json");
+  if (mode === "default") {
+    h.defaultMuted = true;
+    return;
+  }
   writeFileSync(
     tracingPolicyPath(h.policyPath),
     mode === "corrupt"
       ? "{broken"
-      : JSON.stringify({ default: "full", threads: { session: mode } }),
+      : JSON.stringify({ threads: { session: mode } }),
   );
 }
 
@@ -244,6 +251,118 @@ function legacyParent() {
     current_turn_start: now,
   };
 }
+
+describe("configured default lifecycle", () => {
+  function configuredDefault() {
+    reset("full");
+    h.defaultMuted = true;
+    h.policyPath = join(mkdtempSync(join(tmpdir(), "default-mode-")), "state.json");
+  }
+
+  it("snapshots the default, leaves policy absent, and changes only the next turn", async () => {
+    configuredDefault();
+    await hook("prompt");
+    expect(h.state.session.current_turn_tracing).toBe("metadata");
+    h.defaultMuted = false;
+    await hook("pre");
+    await hook("post");
+    await hook("precompact", { trigger: "auto" });
+    await hook("postcompact", { trigger: "auto", compact_summary: privateText });
+    h.messages = transcript({ id: "tool", name: "Bash" });
+    await hook("stop");
+    expectPrivate();
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(tracingPolicyPath(h.policyPath!))).toBe(false);
+    const from = h.operations.length;
+    await hook("prompt");
+    expect(h.state.session.current_turn_tracing).toBe("full");
+    expect(JSON.stringify(h.operations.slice(from))).toContain(privateText);
+    expect(h.errors).toEqual([]);
+  });
+
+  it("does not mute an existing full snapshot when the configured default changes", async () => {
+    configuredDefault();
+    h.defaultMuted = false;
+    await hook("prompt");
+    h.defaultMuted = true;
+    await hook("post");
+    h.messages = transcript();
+    await hook("stop");
+    expect(h.operations.every((op) => !op.config.extra?.metadata?.ls_tracing_mode)).toBe(true);
+    await hook("prompt");
+    expect(h.state.session.current_turn_tracing).toBe("metadata");
+    expect(h.errors).toEqual([]);
+  });
+
+  it.each(["prompt", "stop", "failure", "end", "post", "postcompact", "pre"])(
+    "unsnapshotted %s honors configured default with an empty override map",
+    async (name) => {
+      configuredDefault();
+      writeFileSync(
+        tracingPolicyPath(h.policyPath!),
+        JSON.stringify({ threads: {} }),
+      );
+      legacyParent();
+      h.messages = transcript({ id: "tool", name: "Bash" });
+      await hook(name, { error: privateText, compact_summary: privateText });
+      if (name === "pre") expect(h.state.session.tool_tracing_modes?.tool).toBe("metadata");
+      else {
+        expect(h.operations.length).toBeGreaterThan(0);
+        expectPrivate();
+      }
+      expect(h.errors).toEqual([]);
+    },
+  );
+
+  it.each(["Agent", "Workflow"])(
+    "%s descendants retain the default launch snapshot",
+    async (name) => {
+      configuredDefault();
+      await hook("prompt");
+      await hook("post", {
+        tool_name: name,
+        tool_response:
+          name === "Agent"
+            ? { agentId: "background" }
+            : {
+                status: "async_launched",
+                taskId: "background",
+                runId: "wf_test",
+              },
+      });
+      expect(h.state.session.task_run_map?.background.tracing).toBe("metadata");
+      h.defaultMuted = false;
+      await hook("agent", {
+        agent_id: "background",
+        agent_type: name === "Workflow" ? "workflow-subagent" : "Explore",
+        agent_transcript_path:
+          name === "Workflow" ? "/workflows/wf_test/agent-stage" : "/agent-background",
+      });
+      await hook("end");
+      expectPrivate();
+      expect(h.errors).toEqual([]);
+    },
+  );
+
+  it.each(["full", "metadata"] as const)(
+    "explicit saved %s wins the opposite default in hooks",
+    async (mode) => {
+      configuredDefault();
+      h.defaultMuted = mode === "full";
+      writeFileSync(
+        tracingPolicyPath(h.policyPath!),
+        JSON.stringify({ threads: { session: mode } }),
+      );
+      await hook("prompt");
+      expect(h.state.session.current_turn_tracing).toBe(mode);
+      h.messages = transcript();
+      await hook("stop");
+      if (mode === "metadata") expectPrivate();
+      else expect(JSON.stringify(h.operations)).toContain(privateText);
+      expect(h.errors).toEqual([]);
+    },
+  );
+});
 
 describe("tool privacy snapshot reclamation", () => {
   it.each(["Bash", "Agent", "Workflow"])(
@@ -427,7 +546,7 @@ describe("tool privacy snapshot reclamation", () => {
 });
 
 describe("privacy propagation without lifecycle changes", () => {
-  it.each(["metadata", "corrupt"] as const)(
+  it.each(["metadata", "corrupt", "default"] as const)(
     "Stop without UserPromptSubmit honors %s persistent policy",
     async (policy) => {
       reset("full");
@@ -444,7 +563,7 @@ describe("privacy propagation without lifecycle changes", () => {
     },
   );
 
-  it.each(["metadata", "corrupt"] as const)(
+  it.each(["metadata", "corrupt", "default"] as const)(
     "unsnapshotted tools and compaction honor %s persistent policy without a prompt hook",
     async (policy) => {
       reset("full");
@@ -493,11 +612,15 @@ describe("privacy propagation without lifecycle changes", () => {
     expect(h.errors).toEqual([]);
   });
 
-  it.each(["agent", "workflow", "finalize", "end"])(
-    "unsnapshotted background %s uses saved mute, not an unrelated full current turn",
-    async (path) => {
+  it.each(
+    ["agent", "workflow", "finalize", "end"].flatMap((path) =>
+      ["metadata", "default"].map((policy) => ({ path, policy })),
+    ),
+  )(
+    "unsnapshotted background $path uses $policy mute, not an unrelated full current turn",
+    async ({ path, policy }) => {
       reset("full");
-      savedPolicy("metadata");
+      savedPolicy(policy as "metadata" | "default");
       legacyParent();
       h.state.session.current_turn_tracing = "full";
       h.state.session.open_turns = {
@@ -532,6 +655,7 @@ describe("privacy propagation without lifecycle changes", () => {
         initTracing("test", undefined, undefined, false);
         await finalizeNotificationChain({
           stateFilePath: "/unused",
+          defaultMuted: h.defaultMuted,
           sessionId: "session",
           project: "test",
           agentId: "background",
@@ -594,20 +718,29 @@ describe("privacy propagation without lifecycle changes", () => {
     expect(h.errors).toEqual([]);
   });
 
-  it.each(["full", "metadata"] as const)(
-    "commands affect only the next turn from %s",
-    async (mode) => {
-      reset(mode);
-      const next = mode === "full" ? "metadata" : "full";
-      await hook("prompt");
-      await hook("pre", { tool_use_id: "task" });
-      await hook("post", {
-        tool_use_id: "task",
-        tool_name: "Task",
-        tool_response: { agentId: "background", content: privateText },
-      });
-      const before = structuredClone(h.state);
-      const posts = h.operations.length;
+  it.each(
+    (["full", "metadata"] as const).flatMap((mode) =>
+      ["command", "config"].map((source) => ({ mode, source })),
+    ),
+  )("$source changes affect only the next turn from $mode", async ({ mode, source }) => {
+    reset(mode);
+    if (source === "config") {
+      h.policyPath = join(mkdtempSync(join(tmpdir(), "default-next-turn-")), "state.json");
+      h.defaultMuted = mode === "metadata";
+    }
+    const next = mode === "full" ? "metadata" : "full";
+    await hook("prompt");
+    await hook("pre", { tool_use_id: "task" });
+    await hook("post", {
+      tool_use_id: "task",
+      tool_name: "Task",
+      tool_response: { agentId: "background", content: privateText },
+    });
+    const before = structuredClone(h.state);
+    const posts = h.operations.length;
+    if (source === "config") {
+      h.defaultMuted = next === "metadata";
+    } else {
       const output = vi.spyOn(console, "log").mockImplementation(() => {});
       await hook("prompt", { prompt: `/langsmith-tracing:${mode === "full" ? "mute" : "unmute"}` });
       expect(h.state).toEqual(before);
@@ -617,55 +750,53 @@ describe("privacy propagation without lifecycle changes", () => {
       );
       output.mockRestore();
       expect(h.policy).toBe(next);
-      await hook("pre");
-      expect(h.state.session.tool_tracing_modes?.tool).toBe(mode);
-      await hook("post");
-      h.messages = transcript({ id: "task", name: "Task", agentId: "background" });
-      await hook("stop");
-      const oldRoot = before.session.current_turn_run_id!;
-      expect(h.state.session.open_turns?.[oldRoot].tracing).toBe(mode);
-      const from = h.operations.length;
-      await hook("prompt", { prompt: "notification background " + privateText });
-      expect(h.state.session.current_turn_tracing).toBe(next);
-      expect(h.operations[from].config.parent_run_id).toBe(
-        before.session.task_run_map!.background.run_id,
-      );
-      const agentFrom = h.operations.length;
-      await hook("agent", {
-        agent_id: "background",
-        agent_type: "Explore",
-        agent_transcript_path: "/agent-background",
-      });
-      if (mode === "metadata") expectPrivate(h.operations.slice(agentFrom));
-      else
-        expect(
-          h.operations.slice(agentFrom).every((op) => !op.config.extra?.metadata?.ls_tracing_mode),
-        ).toBe(true);
-      expect(h.state.session.task_run_map!.background.tracing).toBe(mode);
-      // Duplicate PreToolUse retains its original privacy snapshot even in a new turn.
-      await hook("pre");
-      expect(h.state.session.tool_tracing_modes?.tool).toBe(mode);
-      const stopFrom = h.operations.length;
-      h.messages = transcript(undefined, "notification background " + privateText);
-      await hook("stop");
-      const notificationOps = [
-        h.operations[from],
-        ...h.operations
-          .slice(stopFrom)
-          .filter(
-            (op) =>
-              op.config.id !== oldRoot &&
-              op.config.id !== before.session.task_run_map!.background.run_id,
-          ),
-      ];
-      if (next === "metadata") expectPrivate(notificationOps);
-      else
-        expect(notificationOps.every((op) => !op.config.extra?.metadata?.ls_tracing_mode)).toBe(
-          true,
-        );
-      expect(h.errors).toEqual([]);
-    },
-  );
+    }
+    await hook("pre");
+    expect(h.state.session.tool_tracing_modes?.tool).toBe(mode);
+    await hook("post");
+    h.messages = transcript({ id: "task", name: "Task", agentId: "background" });
+    await hook("stop");
+    const oldRoot = before.session.current_turn_run_id!;
+    expect(h.state.session.open_turns?.[oldRoot].tracing).toBe(mode);
+    const from = h.operations.length;
+    await hook("prompt", { prompt: "notification background " + privateText });
+    expect(h.state.session.current_turn_tracing).toBe(next);
+    expect(h.operations[from].config.parent_run_id).toBe(
+      before.session.task_run_map!.background.run_id,
+    );
+    const agentFrom = h.operations.length;
+    await hook("agent", {
+      agent_id: "background",
+      agent_type: "Explore",
+      agent_transcript_path: "/agent-background",
+    });
+    if (mode === "metadata") expectPrivate(h.operations.slice(agentFrom));
+    else
+      expect(
+        h.operations.slice(agentFrom).every((op) => !op.config.extra?.metadata?.ls_tracing_mode),
+      ).toBe(true);
+    expect(h.state.session.task_run_map!.background.tracing).toBe(mode);
+    // Duplicate PreToolUse retains its original privacy snapshot even in a new turn.
+    await hook("pre");
+    expect(h.state.session.tool_tracing_modes?.tool).toBe(mode);
+    const stopFrom = h.operations.length;
+    h.messages = transcript(undefined, "notification background " + privateText);
+    await hook("stop");
+    const notificationOps = [
+      h.operations[from],
+      ...h.operations
+        .slice(stopFrom)
+        .filter(
+          (op) =>
+            op.config.id !== oldRoot &&
+            op.config.id !== before.session.task_run_map!.background.run_id,
+        ),
+    ];
+    if (next === "metadata") expectPrivate(notificationOps);
+    else
+      expect(notificationOps.every((op) => !op.config.extra?.metadata?.ls_tracing_mode)).toBe(true);
+    expect(h.errors).toEqual([]);
+  });
 
   it.each(["full", "metadata"] as const)(
     "transcript-only tools use the %s turn snapshot, not missing-map muting",

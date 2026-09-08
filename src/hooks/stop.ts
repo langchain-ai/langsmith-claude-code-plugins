@@ -108,7 +108,7 @@ async function main(): Promise<void> {
   // Group into turns and trace each one.
   const turns = groupIntoTurns(messages);
   const currentTracing = resolveTurnTracingMode(
-    config.stateFilePath,
+    config,
     input.session_id,
     sessionState.current_turn_tracing,
     sessionState.current_turn_run_id
@@ -403,6 +403,7 @@ async function main(): Promise<void> {
   for (const doneAgentId of doneAgentsToFinalize) {
     debug(`Finalizing subagent ${doneAgentId} that finished within its launching turn`);
     await finalizeNotificationChain({
+      defaultMuted: config.defaultMuted,
       stateFilePath: config.stateFilePath,
       sessionId: input.session_id,
       project: config.project,
@@ -424,6 +425,7 @@ async function main(): Promise<void> {
     // there's no join to wait on — finalize now, marking its tool run interrupted,
     // rather than leaving the launching turn open until SessionEnd.
     await finalizeNotificationChain({
+      defaultMuted: config.defaultMuted,
       stateFilePath: config.stateFilePath,
       sessionId: input.session_id,
       project: config.project,
@@ -453,6 +455,7 @@ async function main(): Promise<void> {
     });
     if (finalizeNow) {
       await finalizeNotificationChain({
+        defaultMuted: config.defaultMuted,
         stateFilePath: config.stateFilePath,
         sessionId: input.session_id,
         project: config.project,
