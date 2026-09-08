@@ -170,9 +170,7 @@ Claude Code resolves the first applicable setting below; credentials are still r
 | 5        | Home-root `~/.langsmith-plugins.json`     | Baseline when higher sources omit `enabled`.                                                                                                 |
 | 6        | No setting                                | Off.                                                                                                                                         |
 
-At each priority, a missing file or field falls through; an invalid present `enabled` contributes `false`. Malformed/non-object JSON or unreadable config restricts that source to `enabled:false, defaultMuted:true`; it is not a global veto. Higher-priority fields, including environment values, still win independently. **`TRACE_TO_LANGSMITH=true` now overrides file `enabled:false`, intentionally reversing the previous file-first behavior.** To disable tracing regardless of files, set `TRACE_TO_LANGSMITH=false`. A thread unmute override never enables tracing when the resolved master switch is off. This change applies only to Claude Code, not Cursor or Codex.
-
-**Testing from the previous experimental branch:** its preferences lived inside tracing state and are not imported by this clean implementation. Run `/langsmith-tracing:mute` again for threads you want muted.
+At each priority, a missing file or field falls through; an invalid present `enabled` contributes `false`. Malformed/non-object JSON or unreadable config restricts that source to `enabled:false, defaultMuted:true`; it is not a global veto. Higher-priority fields, including environment values, still win independently. **`TRACE_TO_LANGSMITH=true` overrides file `enabled:false`.** To disable tracing regardless of files, set `TRACE_TO_LANGSMITH=false`. A thread unmute override never enables tracing when the resolved master switch is off.
 
 ## Shared `langsmith-plugins.json` contract
 
@@ -182,7 +180,7 @@ Use `langsmith-plugins.json` in the project root and `~/.langsmith-plugins.json`
 
 All four paths use the same dependency-free parser (`src/shared-config.ts`). Files are read only at `cwd/.claude/langsmith.json`, `cwd/langsmith-plugins.json`, `~/.claude/langsmith.json`, and `~/.langsmith-plugins.json`; there is no ancestor search. Readable symlinks to regular files are supported. Directories, devices, FIFOs, dangling symlinks, unreadable files, malformed JSON, and non-object JSON restrict that source to `enabled:false, defaultMuted:true`. Only a truly absent entry is ignored.
 
-| Exact JSON field     | Type / default                                        | Existing environment source                      |
+| Exact JSON field     | Type / default                                        | Environment source                               |
 | -------------------- | ----------------------------------------------------- | ------------------------------------------------ |
 | `enabled`            | boolean / `false`                                     | `TRACE_TO_LANGSMITH`                             |
 | `defaultMuted`       | boolean / `false`                                     | `CC_LANGSMITH_DEFAULT_MUTED`                     |
@@ -194,11 +192,11 @@ All four paths use the same dependency-free parser (`src/shared-config.ts`). Fil
 | `redact`             | boolean / `true`                                      | `CC_LANGSMITH_REDACT`                            |
 | `redact_extra_rules` | array of `{pattern:string, replace?:string}` / absent | `CC_LANGSMITH_REDACT_EXTRA`                      |
 
-**All shared fields use environment > `cwd/.claude/langsmith.json` > `cwd/langsmith-plugins.json` > `~/.claude/langsmith.json` > `~/.langsmith-plugins.json` > defaults**, independently for each field. Strings, including empty strings and whitespace, are accepted unchanged. Arrays replace rather than concatenate; `[]` explicitly selects no replicas/rules. Metadata shallow-merges per key from defaults → home root → user `.claude` → cwd root → project `.claude` → env: nested values replace, and `{}` does not clear inherited keys. `__proto__` is treated as own data, not a prototype mutation. File metadata remains untrusted user metadata in the existing privacy builder.
+**All shared fields use environment > `cwd/.claude/langsmith.json` > `cwd/langsmith-plugins.json` > `~/.claude/langsmith.json` > `~/.langsmith-plugins.json` > defaults**, independently for each field. Strings, including empty strings and whitespace, are accepted unchanged. Arrays replace rather than concatenate; `[]` explicitly selects no replicas/rules. Metadata shallow-merges per key from defaults → home root → user `.claude` → cwd root → project `.claude` → env: nested values replace, and `{}` does not clear inherited keys. `__proto__` is treated as own data, not a prototype mutation. File metadata is treated as untrusted user metadata by privacy filtering.
 
 An invalid present `enabled` restricts only that field to `false`; an invalid present `defaultMuted` restricts only that field to `true`. **Any other recognized field with an invalid value invalidates the entire common file:** discard all its ordinary fields and restrict both switches. Ordinary values can still fall back to lower sources; higher-priority switch fields still override the restrictions (e.g. environment can override either switch from any invalid file without overriding the other switch). Unknown keys are ignored, including malformed harness extensions; adapters can access the decoded raw object separately. Diagnostics never include file contents.
 
-Replica file entries use `api_url`, `api_key`, `project` (optional strings) and `updates` (optional JSON object, preserved). SDK aliases `apiUrl`, `apiKey`, `projectName` are accepted **only inside replica objects**. An own canonical key always wins, even if empty or invalid: `api_key:null` invalidates the common file even alongside a valid `apiKey`. Unknown replica/rule keys are stripped; `{}` is a valid replica. File tuple entries are invalid. Claude's existing environment replica parser still supports SDK objects and legacy tuples without canonical conversion. Rule patterns must compile as global regular expressions; any invalid file rule invalidates the common file. Existing tolerant environment parsers remain in place, including skipping malformed environment rules; an explicit environment `[]` overrides file rules.
+Replica file entries use `api_url`, `api_key`, `project` (optional strings) and `updates` (optional JSON object, preserved). SDK aliases `apiUrl`, `apiKey`, `projectName` are accepted **only inside replica objects**. An own canonical key always wins, even if empty or invalid: `api_key:null` invalidates the common file even alongside a valid `apiKey`. Unknown replica/rule keys are stripped; `{}` is a valid replica. File tuple entries are invalid. `CC_LANGSMITH_RUNS_ENDPOINTS` supports SDK replica objects and the supported SDK tuple format. Rule patterns must compile as global regular expressions; any invalid file rule invalidates the common file. Malformed environment rules are skipped; an explicit environment `[]` overrides file rules.
 
 ```json
 {
@@ -214,7 +212,7 @@ Replica file entries use `api_url`, `api_key`, `project` (optional strings) and 
 }
 ```
 
-Credentials may come from files, including replica-only credentials, but never enable tracing by themselves: `initHook` still gates all uploads on the master switch. `redact:false` never bypasses muted content/provenance filtering. Keep credential-bearing files out of version control. No new environment aliases are introduced.
+Credentials may come from files, including replica-only credentials, but never enable tracing by themselves: all uploads require the master switch to be enabled. `redact:false` never bypasses muted content/provenance filtering. Keep credential-bearing files out of version control.
 
 ## Secret redaction
 
