@@ -1,4 +1,10 @@
-import { lstatSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import {
+  COMMON_BOOLEAN_SETTINGS,
+  mergeCommonConfig,
+  readCommonConfigFile,
+  toSdkReplicas,
+} from "./shared-config.js";
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import type { RunTreeConfig } from "langsmith";
@@ -7,7 +13,7 @@ import { debug, error } from "./logger.js";
 import { execSync } from "node:child_process";
 
 /**
- * Configuration — reads from environment variables and local master-switch files.
+ * Configuration — existing Claude environment discovery plus the shared langsmith-plugins.json contract.
  */
 
 /**
@@ -60,7 +66,7 @@ export function readLocalUsername(): string {
 }
 
 export interface Config {
-  /** Master tracing switch, resolved from project config, user config, then environment. */
+  /** Master tracing switch, resolved from environment, project config, then user config. */
   enabled: boolean;
   /** Default for threads without an explicit preference; independent of the master switch. */
   defaultMuted: boolean;
@@ -76,7 +82,7 @@ export interface Config {
   customMetadata?: Record<string, unknown>;
   /** Whether to redact detected secrets from traced data before upload. */
   redact: boolean;
-  /** Extra user-supplied redaction rules (parsed from CC_LANGSMITH_REDACT_EXTRA). */
+  /** Extra user-supplied rules from CC_LANGSMITH_REDACT_EXTRA or common file config. */
   redactExtraRules?: StringNodeRule[];
 }
 
@@ -175,44 +181,16 @@ export function getGitInfo(cwd: string): { branch?: string; commit?: string } {
 }
 
 const BOOLEAN_SETTINGS = {
-  enabled: { env: "TRACE_TO_LANGSMITH", default: false, restrictive: false },
-  defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", default: false, restrictive: true },
+  enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
+  defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
 } as const;
 type BooleanSetting = keyof typeof BOOLEAN_SETTINGS;
 
-/** Undefined means an absent file/field; invalid present values fail closed per field. */
-function readBooleanFile(path: string, field: BooleanSetting): boolean | undefined {
-  const { restrictive } = BOOLEAN_SETTINGS[field];
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf-8"));
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return restrictive;
-    }
-    if (!Object.hasOwn(parsed, field)) return undefined;
-    const value = (parsed as Record<string, unknown>)[field];
-    return typeof value === "boolean" ? value : restrictive;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      // A dangling symlink is an unreadable config, not an absent preference.
-      try {
-        lstatSync(path);
-      } catch (statError) {
-        if ((statError as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      }
-    }
-    return restrictive;
-  }
-}
-
-/** Project > user > env, independently for each field. */
-function resolveBoolean(cwd: string, homeDir: string, field: BooleanSetting): boolean {
-  const fromFile =
-    readBooleanFile(join(cwd, ".claude", "langsmith.json"), field) ??
-    (homeDir ? readBooleanFile(join(homeDir, ".claude", "langsmith.json"), field) : undefined);
-  if (fromFile !== undefined) return fromFile;
+/** Preserve Claude environment boolean parsing; the shared helper receives parsed values. */
+function envBoolean(field: BooleanSetting): boolean | undefined {
   const setting = BOOLEAN_SETTINGS[field];
   const env = process.env[setting.env]?.toLowerCase();
-  if (env === undefined) return setting.default;
+  if (env === undefined) return undefined;
   if (env === "true") return true;
   if (env === "false") return false;
   return setting.restrictive;
@@ -220,18 +198,12 @@ function resolveBoolean(cwd: string, homeDir: string, field: BooleanSetting): bo
 
 export function loadConfig(options?: { cwd?: string }): Config {
   const cwd = options?.cwd ?? process.cwd();
-  const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
-
-  const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
-
-  const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
-
   const homeDir = homedir();
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
 
   const debug = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
 
-  let replicas;
+  let replicas: RunTreeConfig["replicas"];
   const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
   if (providedReplicas !== undefined) {
     try {
@@ -302,12 +274,41 @@ export function loadConfig(options?: { cwd?: string }): Config {
           }
           validRules.push(rule);
         }
-        if (validRules.length > 0) redactExtraRules = validRules;
+        if (validRules.length > 0 || parsed.length === 0) redactExtraRules = validRules;
       }
     } catch {
       error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");
     }
   }
+
+  const common = mergeCommonConfig(
+    {
+      harness: readCommonConfigFile(join(cwd, ".claude", "langsmith.json")).common,
+      root: readCommonConfigFile(join(cwd, "langsmith-plugins.json")).common,
+      user: homeDir
+        ? readCommonConfigFile(join(homeDir, ".claude", "langsmith.json")).common
+        : undefined,
+      userRoot: homeDir
+        ? readCommonConfigFile(join(homeDir, "langsmith-plugins.json")).common
+        : undefined,
+      env: {
+        enabled: envBoolean("enabled"),
+        defaultMuted: envBoolean("defaultMuted"),
+        api_key: process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY,
+        api_url: process.env.LANGSMITH_ENDPOINT,
+        project: process.env.CC_LANGSMITH_PROJECT,
+        metadata: customMetadata,
+        redact: process.env.CC_LANGSMITH_REDACT === undefined ? undefined : redact,
+        // Environment rules retain the existing tolerant parser.
+      },
+      defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" },
+    },
+    { envFirst: true },
+  );
+  // Environment replicas retain their SDK format, including legacy tuples.
+  if (replicas === undefined) replicas = toSdkReplicas(common.replicas);
+  redactExtraRules ??= common.redact_extra_rules;
+  customMetadata = common.metadata;
 
   // Attach identity metadata so every traced run can be attributed to a
   // specific Claude Code installation and local OS user. User-supplied
@@ -350,17 +351,17 @@ export function loadConfig(options?: { cwd?: string }): Config {
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
 
   return {
-    enabled: resolveBoolean(cwd, homeDir, "enabled"),
-    defaultMuted: resolveBoolean(cwd, homeDir, "defaultMuted"),
-    apiKey,
-    project,
-    apiBaseUrl,
+    enabled: common.enabled,
+    defaultMuted: common.defaultMuted,
+    apiKey: common.api_key!,
+    project: common.project!,
+    apiBaseUrl: common.api_url!,
     stateFilePath,
     debug,
     parentDottedOrder,
     replicas,
     customMetadata,
-    redact,
+    redact: common.redact,
     redactExtraRules,
   };
 }

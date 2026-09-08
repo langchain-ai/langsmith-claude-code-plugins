@@ -38,6 +38,8 @@ describe("loadConfig", () => {
     // Isolate home-directory reads on every platform.
     tmpHome = mkdtempSync(join(tmpdir(), "ls-cc-test-"));
     vi.mocked(homedir).mockReturnValue(tmpHome);
+    // Omitted-cwd calls must not read config from the developer's checkout.
+    vi.spyOn(process, "cwd").mockReturnValue(tmpHome);
     process.env.HOME = tmpHome;
     delete process.env.USERPROFILE;
   });
@@ -51,6 +53,386 @@ describe("loadConfig", () => {
     if (tmpHome) {
       rmSync(tmpHome, { recursive: true, force: true });
     }
+  });
+
+  describe("project-root boolean config", () => {
+    let projectDir: string;
+    let paths: string[];
+
+    beforeEach(() => {
+      projectDir = join(tmpHome, "project");
+      mkdirSync(join(projectDir, ".claude"), { recursive: true });
+      mkdirSync(join(tmpHome, ".claude"));
+      paths = [
+        join(projectDir, ".claude", "langsmith.json"),
+        join(projectDir, "langsmith-plugins.json"),
+        join(tmpHome, ".claude", "langsmith.json"),
+        join(tmpHome, "langsmith-plugins.json"),
+      ];
+      vi.mocked(execSync).mockReturnValue("");
+    });
+
+    const settings = [
+      {
+        field: "enabled",
+        other: "defaultMuted",
+        envName: "TRACE_TO_LANGSMITH",
+        restrictive: false,
+      },
+      {
+        field: "defaultMuted",
+        other: "enabled",
+        envName: "CC_LANGSMITH_DEFAULT_MUTED",
+        restrictive: true,
+      },
+    ] as const;
+    const values = [undefined, false, true];
+
+    it.each(
+      settings.flatMap((setting) =>
+        values.flatMap((claude) =>
+          values.flatMap((root) =>
+            values.flatMap((user) =>
+              values.flatMap((userRoot) =>
+                values.map((env) => ({ ...setting, claude, root, user, userRoot, env })),
+              ),
+            ),
+          ),
+        ),
+      ),
+    )(
+      "$field: .claude=$claude root=$root user=$user userRoot=$userRoot env=$env",
+      ({ field, other, envName, claude, root, user, userRoot, env }) => {
+        if (env !== undefined) process.env[envName] = String(env);
+        // Missing fields fall through independently of the other field.
+        [claude, root, user, userRoot].forEach((value, i) => {
+          writeFileSync(paths[i], JSON.stringify({ [field]: value, [other]: i === 0 }));
+        });
+        expect(loadConfig({ cwd: projectDir })).toMatchObject({
+          [field]: env ?? claude ?? root ?? user ?? userRoot ?? false,
+          [other]: true,
+        });
+      },
+    );
+
+    it.each(
+      settings.flatMap((setting) =>
+        [0, 1, 2, 3].flatMap((scope) =>
+          [
+            "",
+            "{",
+            "null",
+            "[]",
+            "true",
+            '"text"',
+            ...["true", "false", 0, 1, null, [], {}].map((value) =>
+              JSON.stringify({ [setting.field]: value }),
+            ),
+          ].map((raw) => ({ ...setting, scope, raw })),
+        ),
+      ),
+    )(
+      "$field fails closed at scope $scope: $raw",
+      ({ field, envName, restrictive, scope, raw }) => {
+        paths.forEach((path, i) =>
+          writeFileSync(path, i < scope ? "{}" : JSON.stringify({ [field]: !restrictive })),
+        );
+        writeFileSync(paths[scope], raw);
+        expect(loadConfig({ cwd: projectDir })[field]).toBe(restrictive);
+        process.env[envName] = String(!restrictive);
+        expect(loadConfig({ cwd: projectDir })[field]).toBe(!restrictive);
+      },
+    );
+
+    it.each(
+      [0, 1, 2, 3].flatMap((scope) =>
+        ["EACCES", "EPERM", "EIO", "EISDIR", "ENOTDIR", "dangling"].map((code) => ({
+          scope,
+          code,
+        })),
+      ),
+    )(
+      "unreadable scope $scope ($code) blocks lower files but permits per-field env overrides",
+      ({ scope, code }) => {
+        paths.forEach((path, i) => {
+          if (i !== scope)
+            writeFileSync(path, i < scope ? "{}" : '{"enabled":true,"defaultMuted":false}');
+        });
+        if (code === "dangling") {
+          symlinkSync(join(tmpHome, "missing.json"), paths[scope]);
+        } else {
+          writeFileSync(paths[scope], "{}");
+          const read = vi.mocked(readFileSync).getMockImplementation()!;
+          vi.mocked(readFileSync).mockImplementation((...args: Parameters<typeof readFileSync>) => {
+            if (args[0] === paths[scope]) throw Object.assign(new Error("unreadable"), { code });
+            return read(...args);
+          });
+        }
+        expect(loadConfig({ cwd: projectDir })).toMatchObject({
+          enabled: false,
+          defaultMuted: true,
+        });
+        process.env.TRACE_TO_LANGSMITH = "true";
+        expect(loadConfig({ cwd: projectDir })).toMatchObject({
+          enabled: true,
+          defaultMuted: true,
+        });
+        process.env.CC_LANGSMITH_DEFAULT_MUTED = "false";
+        expect(loadConfig({ cwd: projectDir })).toMatchObject({
+          enabled: true,
+          defaultMuted: false,
+        });
+      },
+    );
+
+    it.each(['{"enabled":false,"defaultMuted":true}', "{", '{"enabled":true}'])(
+      "ignores old root langsmith.json entirely: %s",
+      (raw) => {
+        const oldRoot = join(projectDir, "langsmith.json");
+        writeFileSync(oldRoot, raw);
+        expect(loadConfig({ cwd: projectDir })).toMatchObject({
+          enabled: false,
+          defaultMuted: false,
+        });
+
+        process.env.TRACE_TO_LANGSMITH = "true";
+        expect(loadConfig({ cwd: projectDir })).toMatchObject({
+          enabled: true,
+          defaultMuted: false,
+        });
+
+        writeFileSync(paths[1], '{"enabled":true,"defaultMuted":true,"project":"new-root"}');
+        expect(loadConfig({ cwd: projectDir })).toMatchObject({
+          enabled: true,
+          defaultMuted: true,
+          project: "new-root",
+        });
+
+        delete process.env.TRACE_TO_LANGSMITH;
+        writeFileSync(paths[0], '{"enabled":false,"defaultMuted":false,"project":"claude"}');
+        expect(loadConfig({ cwd: projectDir })).toMatchObject({
+          enabled: false,
+          defaultMuted: false,
+          project: "claude",
+        });
+        expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === oldRoot)).toBe(false);
+      },
+    );
+
+    it("higher switches win even though lower sources are read for ordinary fields", () => {
+      writeFileSync(paths[0], '{"enabled":true,"defaultMuted":false}');
+      writeFileSync(paths[1], "{");
+      writeFileSync(paths[2], "{");
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({ enabled: true, defaultMuted: false });
+      expect(
+        vi.mocked(readFileSync).mock.calls.some(([p]) => p === paths[1] || p === paths[2]),
+      ).toBe(true);
+    });
+
+    it("uses only resolved cwd, without ancestor traversal, and defaults false/false", () => {
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: false,
+        defaultMuted: false,
+      });
+      writeFileSync(paths[1], '{"enabled":true,"defaultMuted":true}');
+      vi.spyOn(process, "cwd").mockReturnValue(projectDir);
+      expect(loadConfig()).toMatchObject({ enabled: true, defaultMuted: true });
+      const child = join(projectDir, "child");
+      mkdirSync(child);
+      expect(loadConfig({ cwd: child })).toMatchObject({ enabled: false, defaultMuted: false });
+      writeFileSync(paths[0], '{"enabled":true,"defaultMuted":true}');
+      expect(loadConfig({ cwd: child })).toMatchObject({ enabled: false, defaultMuted: false });
+    });
+
+    it("loads live file fields, merges metadata, and preserves original env overrides and SDK tuples", () => {
+      writeFileSync(
+        paths[2],
+        JSON.stringify({
+          api_key: "user-key",
+          api_url: "user-url",
+          project: "user-project",
+          metadata: { user: true, nested: { user: true } },
+        }),
+      );
+      writeFileSync(
+        paths[1],
+        JSON.stringify({ api_url: "root-url", metadata: { root: true, nested: { root: true } } }),
+      );
+      writeFileSync(
+        paths[0],
+        JSON.stringify({
+          enabled: true,
+          defaultMuted: true,
+          project: "file-project",
+          replicas: [{ api_url: "file-url", api_key: "replica-key", project: "replica" }],
+          metadata: { harness: true },
+          redact: false,
+          redact_extra_rules: [{ pattern: "private", replace: "hidden" }],
+          claude: null,
+        }),
+      );
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: true,
+        defaultMuted: true,
+        apiKey: "user-key",
+        apiBaseUrl: "root-url",
+        project: "file-project",
+        replicas: [{ apiUrl: "file-url", apiKey: "replica-key", projectName: "replica" }],
+        customMetadata: { user: true, root: true, harness: true, nested: { root: true } },
+        redact: false,
+        redactExtraRules: [{ pattern: "private", replace: "hidden" }],
+      });
+      process.env.CC_LANGSMITH_API_KEY = "";
+      process.env.LANGSMITH_API_KEY = "ignored";
+      process.env.LANGSMITH_ENDPOINT = "";
+      process.env.CC_LANGSMITH_PROJECT = "";
+      process.env.CC_LANGSMITH_REDACT = "true";
+      process.env.CC_LANGSMITH_REDACT_EXTRA = "[]";
+      process.env.CC_LANGSMITH_METADATA = '{"nested":{"env":true}}';
+      const tuples = [["legacy-project", { extra: { metadata: { legacy: true } } }]];
+      process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify(tuples);
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        apiKey: "",
+        apiBaseUrl: "",
+        project: "",
+        replicas: tuples,
+        redact: true,
+        redactExtraRules: [],
+        customMetadata: { user: true, root: true, harness: true, nested: { env: true } },
+      });
+      process.env.CC_LANGSMITH_RUNS_ENDPOINTS = "[]";
+      expect(loadConfig({ cwd: projectDir }).replicas).toEqual([]);
+      // Invalid env JSON keeps existing parser behavior and permits file fallback.
+      process.env.CC_LANGSMITH_RUNS_ENDPOINTS = "{";
+      expect(loadConfig({ cwd: projectDir }).replicas).toEqual([
+        { apiUrl: "file-url", apiKey: "replica-key", projectName: "replica" },
+      ]);
+      writeFileSync(paths[0], '{"enabled":true,"api_key":"discard","metadata":null}');
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: false,
+        defaultMuted: true,
+        apiKey: "",
+        apiBaseUrl: "",
+      });
+      delete process.env.CC_LANGSMITH_API_KEY;
+      delete process.env.LANGSMITH_API_KEY;
+      expect(loadConfig({ cwd: projectDir }).apiKey).toBe("user-key");
+    });
+
+    it("layers all home-root common fields, per-field overrides, metadata and replacing arrays", () => {
+      const baseline = {
+        enabled: true,
+        defaultMuted: true,
+        api_key: "home-key",
+        api_url: "home-url",
+        project: "home-project",
+        replicas: [{ api_key: "home-replica" }],
+        metadata: { home: true, nested: { home: true }, winner: "home" },
+        redact: false,
+        redact_extra_rules: [{ pattern: "home", replace: "hidden" }],
+        unknown: { ignored: true },
+      };
+      const target = join(tmpHome, "baseline.json");
+      writeFileSync(target, JSON.stringify(baseline));
+      symlinkSync(target, paths[3]);
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: true,
+        defaultMuted: true,
+        apiKey: "home-key",
+        apiBaseUrl: "home-url",
+        project: "home-project",
+        replicas: [{ apiKey: "home-replica" }],
+        customMetadata: baseline.metadata,
+        redact: false,
+        redactExtraRules: baseline.redact_extra_rules,
+      });
+      for (const [i, scope] of [
+        [2, "user"],
+        [1, "root"],
+        [0, "claude"],
+      ] as const) {
+        writeFileSync(
+          paths[i],
+          JSON.stringify({
+            project: scope,
+            metadata: { [scope]: true, winner: scope, nested: { [scope]: true } },
+            replicas: [],
+            redact_extra_rules: [],
+          }),
+        );
+        expect(loadConfig({ cwd: projectDir })).toMatchObject({
+          apiKey: "home-key",
+          apiBaseUrl: "home-url",
+          project: scope,
+          replicas: [],
+          redactExtraRules: [],
+          redact: false,
+          customMetadata: { home: true, winner: scope, nested: { [scope]: true } },
+        });
+      }
+      process.env.CC_LANGSMITH_METADATA = '{"winner":"env","nested":{"env":true}}';
+      process.env.CC_LANGSMITH_PROJECT = "env";
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        project: "env",
+        customMetadata: {
+          home: true,
+          user: true,
+          root: true,
+          claude: true,
+          winner: "env",
+          nested: { env: true },
+        },
+      });
+      // Home-root uses the same validator, not a permissive alternate schema.
+      writeFileSync(
+        target,
+        JSON.stringify({ ...baseline, redact_extra_rules: [{ pattern: "[" }] }),
+      );
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: false,
+        defaultMuted: true,
+        apiKey: "",
+        apiBaseUrl: "https://api.smith.langchain.com",
+      });
+    });
+
+    it.each(['{"enabled":true,"defaultMuted":true}', "{"])(
+      "ignores the old home langsmith.json alias: %s",
+      (raw) => {
+        const oldHome = join(tmpHome, "langsmith.json");
+        writeFileSync(oldHome, raw);
+        expect(loadConfig({ cwd: projectDir })).toMatchObject({
+          enabled: false,
+          defaultMuted: false,
+        });
+        expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === oldHome)).toBe(false);
+      },
+    );
+
+    it("accepts common fields and ignores noncanonical top-level aliases", () => {
+      writeFileSync(
+        paths[1],
+        JSON.stringify({
+          enabled: true,
+          defaultMuted: true,
+          apiKey: "file-key",
+          project: "file-project",
+          replicas: [{ apiKey: "file-replica" }],
+          customMetadata: { rootOnly: "secret" },
+          redact: false,
+        }),
+      );
+      const config = loadConfig({ cwd: projectDir });
+      expect(config).toMatchObject({
+        enabled: true,
+        defaultMuted: true,
+        apiKey: "",
+        project: "file-project",
+        replicas: [{ apiKey: "file-replica" }],
+        redact: false,
+      });
+      expect(config.customMetadata).not.toHaveProperty("rootOnly");
+    });
   });
 
   describe("default mute config", () => {
@@ -93,7 +475,8 @@ describe("loadConfig", () => {
       writeFileSync(userPath, JSON.stringify({ enabled: false, defaultMuted: user }));
       expect(loadConfig({ cwd: projectDir })).toMatchObject({
         enabled: true,
-        defaultMuted: project ?? user ?? (env !== undefined && env.toLowerCase() !== "false"),
+        defaultMuted:
+          env !== undefined ? env.toLowerCase() !== "false" : (project ?? user ?? false),
       });
     });
 
@@ -102,10 +485,10 @@ describe("loadConfig", () => {
       writeFileSync(projectPath, JSON.stringify({ defaultMuted }));
       expect(loadConfig({ cwd: projectDir })).toMatchObject({ enabled: true, defaultMuted });
       writeFileSync(userPath, '{"enabled":false}');
-      expect(loadConfig({ cwd: projectDir })).toMatchObject({ enabled: false, defaultMuted });
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({ enabled: true, defaultMuted });
       writeFileSync(projectPath, JSON.stringify({ enabled: false, defaultMuted }));
       writeFileSync(userPath, '{"enabled":true}');
-      expect(loadConfig({ cwd: projectDir })).toMatchObject({ enabled: false, defaultMuted });
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({ enabled: true, defaultMuted });
     });
 
     it.each(
@@ -122,7 +505,6 @@ describe("loadConfig", () => {
         ].map((raw) => ({ scope, raw })),
       ),
     )("fails closed for $scope: $raw", ({ scope, raw }) => {
-      process.env.CC_LANGSMITH_DEFAULT_MUTED = "false";
       if (scope === "project") writeFileSync(userPath, '{"defaultMuted":false}');
       writeFileSync(scope === "project" ? projectPath : userPath, raw);
       expect(loadConfig({ cwd: projectDir }).defaultMuted).toBe(true);
@@ -133,7 +515,6 @@ describe("loadConfig", () => {
         ["EACCES", "EPERM", "EIO", "EISDIR", "ENOTDIR"].map((code) => ({ scope, code })),
       ),
     )("fails closed on $scope read error $code", ({ scope, code }) => {
-      process.env.CC_LANGSMITH_DEFAULT_MUTED = "false";
       const path = scope === "project" ? projectPath : userPath;
       writeFileSync(userPath, '{"defaultMuted":false}');
       const read = vi.mocked(readFileSync).getMockImplementation()!;
@@ -145,7 +526,6 @@ describe("loadConfig", () => {
     });
 
     it.each(["project", "user"])("treats a dangling %s symlink as unreadable", (scope) => {
-      process.env.CC_LANGSMITH_DEFAULT_MUTED = "false";
       symlinkSync(join(tmpHome, "missing.json"), scope === "project" ? projectPath : userPath);
       expect(loadConfig({ cwd: projectDir }).defaultMuted).toBe(true);
     });
@@ -197,7 +577,8 @@ describe("loadConfig", () => {
               env,
               project,
               user,
-              expected: project ?? user ?? (env ?? "").toLowerCase() === "true",
+              expected:
+                env !== undefined ? env.toLowerCase() === "true" : (project ?? user ?? false),
             })),
           ),
       ),
@@ -222,7 +603,6 @@ describe("loadConfig", () => {
         ].map((raw) => ({ scope, raw })),
       ),
     )("fails closed for malformed $scope file: $raw", ({ scope, raw }) => {
-      process.env.TRACE_TO_LANGSMITH = "true";
       if (scope === "project") writeFileSync(userPath, '{"enabled":true}');
       writeFileSync(scope === "project" ? projectPath : userPath, raw);
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
@@ -233,9 +613,9 @@ describe("loadConfig", () => {
         ["EACCES", "EPERM", "EIO", "EISDIR", "ENOTDIR"].map((code) => ({ scope, code })),
       ),
     )("fails closed on $scope read error $code", ({ scope, code }) => {
-      process.env.TRACE_TO_LANGSMITH = "true";
       const path = scope === "project" ? projectPath : userPath;
       writeFileSync(userPath, '{"enabled":true}');
+      if (scope === "project") writeFileSync(projectPath, "{}");
       const read = vi.mocked(readFileSync).getMockImplementation()!;
       vi.mocked(readFileSync).mockImplementation((...args: Parameters<typeof readFileSync>) => {
         if (args[0] === path) throw Object.assign(new Error("unreadable"), { code });
@@ -244,21 +624,22 @@ describe("loadConfig", () => {
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
     });
 
-    it.each(["true", "false", ""])("unreadable project file blocks env %j", (env) => {
+    it.each(["true", "false", ""])("env %j overrides unreadable project file", (env) => {
       process.env.TRACE_TO_LANGSMITH = env;
+      writeFileSync(projectPath, "{}");
       const read = vi.mocked(readFileSync).getMockImplementation()!;
       vi.mocked(readFileSync).mockImplementation((...args: Parameters<typeof readFileSync>) => {
         if (args[0] === projectPath || args[0] === userPath)
           throw new Error("unreadable switch file");
         return read(...args);
       });
-      expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(env === "true");
       expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === projectPath)).toBe(true);
       expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === userPath)).toBe(false);
     });
 
     it.each([true, false])(
-      "complete project config enabled=%s does not read user config",
+      "complete project config enabled=%s skips reading an absent user file",
       (enabled) => {
         writeFileSync(projectPath, JSON.stringify({ enabled, defaultMuted: false }));
         expect(loadConfig({ cwd: projectDir }).enabled).toBe(enabled);
@@ -274,23 +655,21 @@ describe("loadConfig", () => {
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
 
       process.env.TRACE_TO_LANGSMITH = "true";
-      expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
+      expect(loadConfig({ cwd: projectDir }).enabled).toBe(true);
     });
 
     it("fails closed when the user config is a dangling symlink", () => {
-      process.env.TRACE_TO_LANGSMITH = "true";
       symlinkSync(join(tmpHome, "nonexistent.json"), userPath);
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
     });
 
     it("fails closed when the project config is a directory", () => {
-      process.env.TRACE_TO_LANGSMITH = "true";
       mkdirSync(projectPath);
       writeFileSync(userPath, '{"enabled":true}');
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
     });
 
-    it("does not load credentials or other settings from master-switch files", () => {
+    it("loads common project and replicas but not top-level camelCase credentials", () => {
       writeFileSync(
         projectPath,
         JSON.stringify({
@@ -303,8 +682,8 @@ describe("loadConfig", () => {
       expect(loadConfig({ cwd: projectDir })).toMatchObject({
         enabled: true,
         apiKey: "",
-        project: "claude-code",
-        replicas: undefined,
+        project: "file-project",
+        replicas: [{ apiKey: "file-replica" }],
       });
     });
 

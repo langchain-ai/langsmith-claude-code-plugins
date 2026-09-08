@@ -44,15 +44,10 @@ export function initTracing(
     ? createSecretAnonymizer(extraRedactionRules ? { extraRules: extraRedactionRules } : undefined)
     : undefined;
 
-  // Construct a client whenever tracing is active. With redaction on we build
-  // one even without an apiKey when replicas are present (each replica carries
-  // its own auth), so replica posts can't fall back to the shared client —
-  // which would not have the anonymizer configured.
-  if (apiKey || (anonymizer && providedReplicas)) {
-    client = new Client({ apiKey: apiKey || undefined, apiUrl, anonymizer });
-  } else {
-    client = undefined;
-  }
+  // Always retain the configured endpoint, even without a primary API key or
+  // redaction. Replicas can carry their own auth and inherit this client's URL;
+  // falling back to the shared client would silently use the SDK's default URL.
+  client = new Client({ apiKey: apiKey || undefined, apiUrl, anonymizer });
   replicas = providedReplicas;
   return client;
 }
