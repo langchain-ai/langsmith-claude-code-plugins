@@ -13616,7 +13616,7 @@ function skillNameFromTool(toolName, toolInput) {
 }
 
 // dist/privacy.js
-var MUTED_TRACE_CONTENT = "<trace inputs/outputs omitted using /langsmith-tracing:mute>";
+var MUTED_TRACE_CONTENT = "[LangSmith system notice: content omitted because tracing is muted.]";
 var METADATA_KEYS = /* @__PURE__ */ new Set([
   "thread_id",
   "turn_number",

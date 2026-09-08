@@ -67,14 +67,17 @@ describe("metadata tracing privacy", () => {
     );
     expect(config.inputs).toEqual({
       messages: [
-        { role: "user", content: "<trace inputs/outputs omitted using /langsmith-tracing:mute>" },
+        {
+          role: "user",
+          content: "[LangSmith system notice: content omitted because tracing is muted.]",
+        },
       ],
     });
     expect(config.outputs).toEqual({
       messages: [
         {
           role: "assistant",
-          content: "<trace inputs/outputs omitted using /langsmith-tracing:mute>",
+          content: "[LangSmith system notice: content omitted because tracing is muted.]",
         },
       ],
     });
@@ -127,7 +130,7 @@ describe("metadata tracing privacy", () => {
 
   it("exports the exact user-facing placeholder", () => {
     expect(MUTED_TRACE_CONTENT).toBe(
-      "<trace inputs/outputs omitted using /langsmith-tracing:mute>",
+      "[LangSmith system notice: content omitted because tracing is muted.]",
     );
   });
 
@@ -244,7 +247,7 @@ describe("metadata tracing privacy", () => {
         messages: [
           {
             role: field === "inputs" ? "user" : "assistant",
-            content: "<trace inputs/outputs omitted using /langsmith-tracing:mute>",
+            content: "[LangSmith system notice: content omitted because tracing is muted.]",
           },
         ],
       });

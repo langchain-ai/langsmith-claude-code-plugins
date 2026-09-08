@@ -214,7 +214,10 @@ function expectMutedContent(payload: Payload, excludeInputs = false): void {
   } else {
     expect.soft(payload.inputs).toEqual({
       messages: [
-        { role: "user", content: "<trace inputs/outputs omitted using /langsmith-tracing:mute>" },
+        {
+          role: "user",
+          content: "[LangSmith system notice: content omitted because tracing is muted.]",
+        },
       ],
     });
   }
@@ -222,7 +225,7 @@ function expectMutedContent(payload: Payload, excludeInputs = false): void {
     messages: [
       {
         role: "assistant",
-        content: "<trace inputs/outputs omitted using /langsmith-tracing:mute>",
+        content: "[LangSmith system notice: content omitted because tracing is muted.]",
       },
     ],
   });

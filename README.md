@@ -115,7 +115,7 @@ Muted runs retain their normal nesting, names, timing, status, model/tool identi
 ```json
 {
   "messages": [
-    { "role": "user", "content": "<trace inputs/outputs omitted using /langsmith-tracing:mute>" }
+    { "role": "user", "content": "[LangSmith system notice: content omitted because tracing is muted.]" }
   ]
 }
 ```
