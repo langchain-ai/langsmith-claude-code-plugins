@@ -67,7 +67,7 @@ describe("loadConfig", () => {
         join(projectDir, ".claude", "langsmith.json"),
         join(projectDir, "langsmith-plugins.json"),
         join(tmpHome, ".claude", "langsmith.json"),
-        join(tmpHome, "langsmith-plugins.json"),
+        join(tmpHome, ".langsmith-plugins.json"),
       ];
       vi.mocked(execSync).mockReturnValue("");
     });
@@ -218,6 +218,64 @@ describe("loadConfig", () => {
         expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === oldRoot)).toBe(false);
       },
     );
+
+    it.each([
+      '{"enabled":false,"defaultMuted":true}',
+      "{",
+      '{"enabled":true,"api_key":"old-key","project":"old-home"}',
+    ])(
+      "ignores nonhidden home config without fallback and honors hidden home config: %s",
+      (raw) => {
+        const oldHome = join(tmpHome, "langsmith-plugins.json");
+        writeFileSync(oldHome, raw);
+        expect(loadConfig({ cwd: projectDir })).toMatchObject({
+          enabled: false,
+          defaultMuted: false,
+          apiKey: "",
+          project: "claude-code",
+        });
+
+        writeFileSync(
+          paths[3],
+          '{"enabled":true,"defaultMuted":false,"api_key":"hidden-key","project":"hidden-home"}',
+        );
+        expect(loadConfig({ cwd: projectDir })).toMatchObject({
+          enabled: true,
+          defaultMuted: false,
+          apiKey: "hidden-key",
+          project: "hidden-home",
+        });
+        expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === oldHome)).toBe(false);
+      },
+    );
+
+    it("keeps visible project and hidden home config distinct when cwd equals home", () => {
+      writeFileSync(
+        paths[3],
+        '{"enabled":true,"defaultMuted":true,"api_key":"hidden-key","project":"hidden-home"}',
+      );
+      const visibleRoot = join(tmpHome, "langsmith-plugins.json");
+      writeFileSync(visibleRoot, '{"enabled":false,"project":"visible-project"}');
+      // Omitted cwd resolves to tmpHome, so the visible file is a project source.
+      expect(loadConfig()).toMatchObject({
+        enabled: false,
+        defaultMuted: true,
+        apiKey: "hidden-key",
+        project: "visible-project",
+      });
+      expect(loadConfig({ cwd: tmpHome })).toMatchObject({
+        enabled: false,
+        defaultMuted: true,
+        apiKey: "hidden-key",
+        project: "visible-project",
+      });
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: true,
+        defaultMuted: true,
+        apiKey: "hidden-key",
+        project: "hidden-home",
+      });
+    });
 
     it("higher switches win even though lower sources are read for ordinary fields", () => {
       writeFileSync(paths[0], '{"enabled":true,"defaultMuted":false}');

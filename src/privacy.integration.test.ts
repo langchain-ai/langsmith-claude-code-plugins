@@ -519,7 +519,7 @@ describe("file-fed privacy and routing", () => {
           vi.stubEnv("LANGSMITH_ENDPOINT", undefined);
           vi.stubEnv("STATE_FILE", join(home, "state.json"));
           writeFileSync(
-            join(home, "langsmith-plugins.json"),
+            join(home, ".langsmith-plugins.json"),
             JSON.stringify({
               enabled: true,
               defaultMuted,
@@ -645,7 +645,7 @@ describe("file-fed privacy and routing", () => {
         vi.stubEnv("LANGSMITH_ENDPOINT", undefined);
         mkdirSync(join(home, ".claude"));
         writeFileSync(
-          join(home, "langsmith-plugins.json"),
+          join(home, ".langsmith-plugins.json"),
           JSON.stringify({
             enabled: true,
             defaultMuted: true,
