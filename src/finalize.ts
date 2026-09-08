@@ -12,6 +12,7 @@
  * that spawned its own background subagent), it loops up the chain.
  */
 
+import { resolveTurnTracingMode } from "./tracing-mode.js";
 import {
   closeAgentToolRun,
   completeTurnRun,
@@ -24,6 +25,7 @@ import type { OpenTurn } from "./types.js";
 
 export async function finalizeNotificationChain(opts: {
   stateFilePath: string;
+  defaultMuted?: boolean;
   sessionId: string;
   project: string;
   customMetadata?: Record<string, unknown>;
@@ -50,6 +52,7 @@ export async function finalizeNotificationChain(opts: {
 
     const launchingTurnId = (taskRunInfo.deferred as Record<string, unknown> | undefined)
       ?.parent_run_id as string | undefined;
+    const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : undefined;
     const agentType = taskRunInfo.agent_type ?? "";
 
     // 1) Close the Agent tool run for this agent. If SubagentStop posted it open
@@ -57,6 +60,13 @@ export async function finalizeNotificationChain(opts: {
     //    ever fired, we create it already-closed (with an error).
     try {
       await closeAgentToolRun({
+        tracing: resolveTurnTracingMode(
+          opts,
+          sessionId,
+          taskRunInfo.tracing,
+          launchingTurn?.tracing,
+          launchingTurnId === ss.current_turn_run_id ? ss.current_turn_tracing : undefined,
+        ),
         sessionId,
         agentId,
         agentType,
@@ -123,6 +133,7 @@ export async function finalizeNotificationChain(opts: {
       try {
         await completeTurnRun({
           ...turnIdentityFromOpenTurn(toComplete, { sessionId, project, customMetadata }),
+          tracing: resolveTurnTracingMode(opts, sessionId, toComplete.tracing),
           lastAssistantMessage: toComplete.last_assistant_message,
         });
         logger.debug(`Completed launching turn ${toComplete.run_id} after notification chain`);

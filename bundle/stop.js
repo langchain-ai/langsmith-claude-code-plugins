@@ -389,14 +389,14 @@ var require_dist = __commonJS({
       _isIntervalPaused() {
         const now = Date.now();
         if (this._intervalId === void 0) {
-          const delay = this._intervalEnd - now;
-          if (delay < 0) {
+          const delay2 = this._intervalEnd - now;
+          if (delay2 < 0) {
             this._intervalCount = this._carryoverConcurrencyCount ? this._pendingCount : 0;
           } else {
             if (this._timeoutId === void 0) {
               this._timeoutId = setTimeout(() => {
                 this._onResumeInterval();
-              }, delay);
+              }, delay2);
             }
             return true;
           }
@@ -594,8 +594,66 @@ var require_dist = __commonJS({
   }
 });
 
+// dist/tracing-policy.js
+import { randomUUID } from "node:crypto";
+import { lstatSync, readFileSync } from "node:fs";
+import { mkdir, open, rename, rmdir, unlink } from "node:fs/promises";
+import { dirname } from "node:path";
+import { performance as performance2 } from "node:perf_hooks";
+import { setTimeout as delay } from "node:timers/promises";
+function isMode(value) {
+  return value === "full" || value === "metadata";
+}
+function isObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hasCode(error2, code) {
+  return isObject(error2) && error2.code === code;
+}
+function readPolicy(path3) {
+  let raw;
+  try {
+    raw = readFileSync(path3, "utf8");
+  } catch (error2) {
+    if (hasCode(error2, "ENOENT")) {
+      try {
+        lstatSync(path3);
+      } catch (statError) {
+        if (hasCode(statError, "ENOENT"))
+          return { threads: {} };
+        throw statError;
+      }
+    }
+    throw error2;
+  }
+  const value = JSON.parse(raw);
+  if (!isObject(value) || !isObject(value.threads) || Object.values(value.threads).some((mode) => !isMode(mode)) || Object.keys(value).some((key) => key !== "threads")) {
+    throw new Error("Invalid tracing preference format");
+  }
+  return value;
+}
+function tracingPolicyPath(stateFilePath) {
+  return `${stateFilePath.replace(/\.json$/, "")}.privacy.json`;
+}
+function getThreadTracingMode(stateFilePath, sessionId, defaultMuted = false) {
+  try {
+    const policy = readPolicy(tracingPolicyPath(stateFilePath));
+    if (Object.hasOwn(policy.threads, sessionId))
+      return policy.threads[sessionId];
+    return defaultMuted ? "metadata" : "full";
+  } catch {
+    return "metadata";
+  }
+}
+
+// dist/tracing-mode.js
+function resolveTurnTracingMode(config, sessionId, ...snapshots) {
+  const { stateFilePath, defaultMuted } = typeof config === "string" ? { stateFilePath: config } : config;
+  return snapshots.find((mode) => mode !== void 0) ?? getThreadTracingMode(stateFilePath, sessionId, defaultMuted);
+}
+
 // dist/transcript.js
-import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync as readFileSync2, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
   let size;
@@ -605,7 +663,7 @@ function readTranscript(filePath, afterLine = -1) {
     return { messages: [], lastLine: afterLine };
   }
   if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync(filePath, "utf-8");
+    const raw = readFileSync2(filePath, "utf-8");
     const lines = raw.split("\n").filter((l) => l.trim() !== "");
     const messages = [];
     let lastLine = afterLine;
@@ -723,6 +781,9 @@ function resolveProvider(model) {
   if (flag("CLAUDE_CODE_USE_VERTEX"))
     return "google_vertex_ai";
   return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
+}
+function completedToolUseIds(turns) {
+  return turns.flatMap((turn) => turn.llmCalls.flatMap((call) => call.toolCalls.filter((tool) => tool.result !== void 0).map((tool) => tool.tool_use.id)));
 }
 function mergeAssistantChunks(chunks) {
   if (chunks.length === 0) {
@@ -855,13 +916,13 @@ function groupIntoTurns(messages) {
 
 // dist/logger.js
 import { appendFileSync, mkdirSync, statSync as statSync2, renameSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname as dirname2 } from "node:path";
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
 var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
 var debugEnabled = false;
 function initLogger(debug2) {
   debugEnabled = debug2;
-  mkdirSync(dirname(LOG_FILE), { recursive: true });
+  mkdirSync(dirname2(LOG_FILE), { recursive: true });
 }
 function rotateIfNeeded() {
   try {
@@ -897,8 +958,8 @@ function debug(message) {
 }
 
 // dist/state.js
-import { readFileSync as readFileSync2, writeFileSync, mkdirSync as mkdirSync2, openSync as openSync2, closeSync as closeSync2, unlinkSync } from "node:fs";
-import { dirname as dirname2 } from "node:path";
+import { readFileSync as readFileSync3, writeFileSync, mkdirSync as mkdirSync2, openSync as openSync2, closeSync as closeSync2, unlinkSync } from "node:fs";
+import { dirname as dirname3 } from "node:path";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
 function lockPath(stateFilePath) {
@@ -910,7 +971,7 @@ function sleep(ms) {
 async function acquireLock(stateFilePath) {
   const lock = lockPath(stateFilePath);
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync2(dirname2(stateFilePath), { recursive: true });
+  mkdirSync2(dirname3(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
       const fd = openSync2(lock, "wx");
@@ -942,7 +1003,7 @@ async function atomicUpdateState(stateFilePath, fn) {
 }
 function loadState(stateFilePath) {
   try {
-    const raw = readFileSync2(stateFilePath, "utf-8");
+    const raw = readFileSync3(stateFilePath, "utf-8");
     return JSON.parse(raw);
   } catch {
     return {};
@@ -955,6 +1016,21 @@ function getSessionState(state, sessionId) {
     updated: "",
     task_run_map: {}
   };
+}
+function advanceToolTracingProgress(session, ids, phase) {
+  const modes = { ...session.tool_tracing_modes };
+  const progress = { ...session.tool_tracing_progress };
+  for (const id of ids) {
+    if (!Object.hasOwn(modes, id))
+      continue;
+    if (progress[id] && progress[id] !== phase) {
+      delete modes[id];
+      delete progress[id];
+    } else {
+      progress[id] = phase;
+    }
+  }
+  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
 }
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 function pruneOldSessions(state, now = Date.now()) {
@@ -5690,7 +5766,7 @@ import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 var path2 = nodePath;
-async function mkdir2(dir) {
+async function mkdir3(dir) {
   await nodeFsPromises.mkdir(dir, { recursive: true });
 }
 async function writeFileAtomic(filePath, content) {
@@ -5722,7 +5798,7 @@ function renameSync3(oldPath, newPath) {
 function unlinkSync3(filePath) {
   nodeFs.unlinkSync(filePath);
 }
-function readFileSync4(filePath) {
+function readFileSync5(filePath) {
   return nodeFs.readFileSync(filePath, "utf-8");
 }
 async function mkdirExclusive(dir) {
@@ -5930,7 +6006,7 @@ var PromptCache = class {
     }
     let entries;
     try {
-      const content = readFileSync4(filePath);
+      const content = readFileSync5(filePath);
       const data = JSON.parse(content);
       entries = data.entries ?? null;
     } catch {
@@ -6050,7 +6126,7 @@ function isEEXIST(err) {
 }
 function lockMetadataLines(lockDir) {
   try {
-    return readFileSync4(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
+    return readFileSync5(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
   } catch {
     return void 0;
   }
@@ -6084,7 +6160,7 @@ async function acquireOAuthRefreshLock(configPath, deadline) {
   const lockDir = `${configPath}.oauth.lock.lock`;
   const parent = path2.dirname(lockDir);
   if (parent) {
-    await mkdir2(parent);
+    await mkdir3(parent);
   }
   const owner = globalThis.crypto.randomUUID();
   for (; ; ) {
@@ -6165,7 +6241,7 @@ function loadProfileState() {
     return void 0;
   }
   try {
-    const config = JSON.parse(readFileSync4(configPath));
+    const config = JSON.parse(readFileSync5(configPath));
     const profileName = resolveProfileName(config);
     const profile = profileName ? config.profiles?.[profileName] : void 0;
     if (!profileName || !profile) {
@@ -6395,7 +6471,7 @@ var ProfileAuth = class {
   }
   reloadProfile() {
     try {
-      const config = JSON.parse(readFileSync4(this.state.configPath));
+      const config = JSON.parse(readFileSync5(this.state.configPath));
       const profile = config.profiles?.[this.state.profileName];
       if (!profile) {
         return void 0;
@@ -8351,7 +8427,7 @@ var Client = class _Client {
       const filename = `trace_${Date.now()}_${v4_default().slice(0, 8)}.json`;
       const filepath = path2.join(directory, filename);
       if (!_Client._fallbackDirsCreated.has(directory)) {
-        await mkdir2(directory);
+        await mkdir3(directory);
         _Client._fallbackDirsCreated.add(directory);
       }
       if (maxBytes !== void 0 && maxBytes > 0) {
@@ -13517,6 +13593,11 @@ var USER_PROMPT_TURN_NAME = "Claude Code Turn";
 var ASSISTANT_RUN_NAME = "Claude";
 
 // dist/metadata.js
+var TRUSTED_INTEGRATION_VERSION = true ? "0.2.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var TRUSTED_METADATA = /* @__PURE__ */ Symbol("coding-agent trusted metadata");
+function trustedCodingAgentMetadata(metadata) {
+  return metadata?.[TRUSTED_METADATA];
+}
 var LS_AGENT_PURPOSE = "coding";
 var LS_INTEGRATION = "claude-code";
 var LS_AGENT_RUNTIME = "Claude Code";
@@ -13555,17 +13636,163 @@ function codingAgentMetadata(opts) {
   }
   if (skillName)
     meta.ls_skill_name = skillName;
-  return {
+  const trusted = { ...meta };
+  if (TRUSTED_INTEGRATION_VERSION)
+    trusted.ls_integration_version = TRUSTED_INTEGRATION_VERSION;
+  if (opts.modelName !== void 0)
+    trusted.ls_model_name = opts.modelName;
+  if (opts.usageMetadata !== void 0)
+    trusted.usage_metadata = opts.usageMetadata;
+  const result = {
     ...meta,
+    ...opts.modelName !== void 0 ? { ls_model_name: opts.modelName } : {},
+    ...opts.usageMetadata !== void 0 ? { usage_metadata: opts.usageMetadata } : {},
     ...runSpecific,
     ...base
   };
+  Object.defineProperty(result, TRUSTED_METADATA, { value: trusted });
+  return result;
 }
 function skillNameFromTool(toolName, toolInput) {
   if (toolName !== "Skill")
     return void 0;
   const skill = toolInput?.skill;
   return typeof skill === "string" ? skill : void 0;
+}
+
+// dist/privacy.js
+var MUTED_TRACE_CONTENT = "[LangSmith system notice: content omitted because tracing is muted.]";
+var METADATA_KEYS = /* @__PURE__ */ new Set([
+  "thread_id",
+  "turn_number",
+  "turn_id",
+  "status",
+  "ls_tracing_mode",
+  "ls_agent_purpose",
+  "ls_agent_type",
+  "ls_agent_runtime",
+  "ls_agent_runtime_version",
+  "ls_integration",
+  "ls_integration_version",
+  "ls_trace_schema_version",
+  "ls_model_name",
+  "ls_tool_name",
+  "usage_metadata",
+  "ls_subagent_id",
+  "ls_subagent_type"
+]);
+function numericFields(value, keys) {
+  const safe = {};
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return safe;
+  for (const key of keys) {
+    const count = value[key];
+    if (typeof count === "number" && Number.isFinite(count) && count >= 0)
+      safe[key] = count;
+  }
+  return safe;
+}
+function usageForMetadata(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return void 0;
+  const usage = value;
+  const safe = numericFields(usage, [
+    "input_tokens",
+    "output_tokens",
+    "total_tokens"
+  ]);
+  for (const [key, keys] of [
+    ["input_token_details", ["cache_read", "cache_creation", "audio"]],
+    ["output_token_details", ["reasoning", "audio"]]
+  ]) {
+    const details = numericFields(usage[key], keys);
+    if (Object.keys(details).length)
+      safe[key] = details;
+  }
+  return Object.keys(safe).length ? safe : void 0;
+}
+function projectMetadata(metadata, status) {
+  const safe = {};
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    if (!METADATA_KEYS.has(key))
+      continue;
+    if (key === "usage_metadata") {
+      const usage = usageForMetadata(value);
+      if (usage)
+        safe[key] = usage;
+    } else if (key === "turn_number") {
+      if (typeof value === "number" && Number.isSafeInteger(value) && value >= 1)
+        safe[key] = value;
+    } else if (typeof value === "string" && value.length) {
+      safe[key] = value;
+    }
+  }
+  safe.status = status === "error" || status === "completed" ? status : "running";
+  safe.ls_tracing_mode = "metadata";
+  return safe;
+}
+function metadataForMode(metadata, mode = "full", status) {
+  if (mode === "full")
+    return metadata;
+  return projectMetadata(trustedCodingAgentMetadata(metadata) ?? metadata, status);
+}
+function sanitizeReplica(replica, mode) {
+  if (mode === "full" || !replica || typeof replica !== "object")
+    return replica;
+  if (Array.isArray(replica))
+    return { projectName: replica[0] };
+  const { updates: _updates, ...safe } = replica;
+  return safe;
+}
+function runConfigForMode(config, mode = "full") {
+  if (mode === "full")
+    return config;
+  const status = config.error ? "error" : config.end_time != null ? "completed" : "running";
+  const extra = config.extra;
+  const safe = {};
+  for (const key of [
+    "client",
+    "id",
+    "name",
+    "run_type",
+    "project_name",
+    "start_time",
+    "end_time",
+    "parent_run_id",
+    "trace_id",
+    "dotted_order"
+  ]) {
+    if (key in config && config[key] !== void 0)
+      safe[key] = config[key];
+  }
+  if (Array.isArray(config.replicas)) {
+    safe.replicas = config.replicas.map((replica) => sanitizeReplica(replica, mode));
+  }
+  safe.inputs = { messages: [{ role: "user", content: MUTED_TRACE_CONTENT }] };
+  safe.outputs = { messages: [{ role: "assistant", content: MUTED_TRACE_CONTENT }] };
+  safe.extra = {
+    metadata: metadataForMode(extra?.metadata, mode, status),
+    // RunTree and Client both enrich extra AFTER construction. A client-level
+    // omitTracedRuntimeInfo flag alone does not suppress RunTree's additions,
+    // and replicas may use their own clients. Keep this method enumerable so it
+    // survives SDK object spreads and filters at the REST serialization boundary
+    // (including multipart .extra parts). Wire-payload tests guard this SDK behavior.
+    toJSON() {
+      return {
+        // Read the current metadata, not the constructor's copy: the client may
+        // have anonymized allowlisted values, which must not be restored here.
+        metadata: projectMetadata(this.metadata, typeof this.metadata?.status === "string" ? this.metadata.status : status)
+      };
+    }
+  };
+  return safe;
+}
+function createRunTree(config, mode = "full") {
+  const run = new RunTree(runConfigForMode(config, mode));
+  if (mode === "metadata" && run.replicas) {
+    run.replicas = run.replicas.map((replica) => sanitizeReplica(replica, mode));
+  }
+  return run;
 }
 
 // dist/langsmith.js
@@ -13627,7 +13854,7 @@ function buildUsageMetadata(usage) {
   };
 }
 async function traceTurn(options) {
-  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, agentType = "root" } = options;
+  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, agentType = "root", tracing = "full", toolTracingModes } = options;
   const turnId = turn.promptId;
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
@@ -13649,7 +13876,7 @@ async function traceTurn(options) {
     traceId = turnRunId;
     parentDottedOrder = generateDottedOrderSegment(turn.userTimestamp, turnRunId);
     debug(`Creating new standalone turn run ${turnRunId}`);
-    const runTree = new RunTree({
+    const runTree = createRunTree({
       client,
       replicas,
       id: turnRunId,
@@ -13671,7 +13898,7 @@ async function traceTurn(options) {
           agentType
         })
       }
-    });
+    }, tracing);
     await runTree.postRun();
   }
   const accumulatedMessages = [
@@ -13686,7 +13913,7 @@ async function traceTurn(options) {
     const assistantRunId = uuid7FromTime(llmCall.startTime);
     const assistantDottedOrderSegment = generateDottedOrderSegment(llmCall.startTime, assistantRunId);
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
-    const assistantRunTree = new RunTree({
+    const assistantRunTree = createRunTree({
       client,
       replicas,
       id: assistantRunId,
@@ -13697,10 +13924,21 @@ async function traceTurn(options) {
       start_time: llmCall.startTime,
       parent_run_id: turnRunId,
       trace_id: traceId,
-      dotted_order: assistantDottedOrder
-    });
+      dotted_order: assistantDottedOrder,
+      extra: {
+        metadata: codingAgentMetadata({
+          sessionId,
+          base: customMetadata,
+          turnId,
+          turnNumber: turnNum,
+          runtimeVersion,
+          agentType
+        })
+      }
+    }, tracing);
     await assistantRunTree.postRun();
     for (const toolCall of llmCall.toolCalls) {
+      const toolMode = tracing === "metadata" ? "metadata" : toolTracingModes?.[toolCall.tool_use.id] ?? tracing;
       if (toolCall.agentId && existingTaskRunMap?.[toolCall.agentId]) {
         debug(`Skipping Task tool for agent ${toolCall.agentId} - already traced by PostToolUse`);
         lastEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
@@ -13715,7 +13953,7 @@ async function traceTurn(options) {
       const toolRunId = uuid7FromTime(toolStartTime);
       const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTime, toolRunId);
       const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
-      const runTree2 = new RunTree({
+      const runTree2 = createRunTree({
         client,
         replicas,
         id: toolRunId,
@@ -13742,10 +13980,11 @@ async function traceTurn(options) {
             skillName: skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input)
           })
         }
-      });
+      }, toolMode);
       await runTree2.postRun();
       if (toolCall.agentId) {
         taskRunMap[toolCall.agentId] = {
+          tracing: toolMode,
           run_id: toolRunId,
           dotted_order: toolDottedOrder
         };
@@ -13754,7 +13993,7 @@ async function traceTurn(options) {
       lastEndTime = toolEndTime;
     }
     const assistantEndTime = llmCall.toolCalls.length > 0 ? lastEndTime : llmCall.endTime;
-    const runTree = new RunTree({
+    const runTree = createRunTree({
       client,
       replicas,
       id: assistantRunId,
@@ -13777,6 +14016,8 @@ async function traceTurn(options) {
           turnNumber: turnNum,
           runtimeVersion,
           agentType,
+          modelName: llmCall.model,
+          usageMetadata: buildUsageMetadata(llmCall.usage),
           runSpecific: {
             ls_provider: resolveProvider(llmCall.model),
             ls_model_name: llmCall.model,
@@ -13788,7 +14029,7 @@ async function traceTurn(options) {
           }
         })
       }
-    });
+    }, tracing);
     await runTree.patchRun({ excludeInputs: true });
     accumulatedMessages.push({ role: "assistant", content: assistantContent });
     for (const tc of llmCall.toolCalls) {
@@ -13803,7 +14044,7 @@ async function traceTurn(options) {
   if (shouldCreateTurn) {
     const turnOutputs = accumulatedMessages.filter((m) => m.role !== "user");
     const error2 = turn.isComplete ? void 0 : "Interrupted";
-    const runTree = new RunTree({
+    const runTree = createRunTree({
       client,
       replicas,
       id: turnRunId,
@@ -13827,7 +14068,7 @@ async function traceTurn(options) {
           agentType
         })
       }
-    });
+    }, tracing);
     await runTree.patchRun({ excludeInputs: true });
   }
   const status = turn.isComplete ? "complete" : "interrupted";
@@ -13837,7 +14078,7 @@ async function traceTurn(options) {
 async function patchTurnRun(id, result) {
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
-  const runTree = new RunTree({
+  const runTree = createRunTree({
     client,
     replicas,
     name: USER_PROMPT_TURN_NAME,
@@ -13861,7 +14102,7 @@ async function patchTurnRun(id, result) {
         agentType: "root"
       })
     }
-  });
+  }, id.tracing);
   await runTree.patchRun({ excludeInputs: true });
 }
 function turnIdentityFromOpenTurn(turn, ctx) {
@@ -13869,6 +14110,7 @@ function turnIdentityFromOpenTurn(turn, ctx) {
     sessionId: ctx.sessionId,
     project: ctx.project,
     customMetadata: ctx.customMetadata,
+    tracing: turn.tracing ?? "full",
     runId: turn.run_id,
     traceId: turn.trace_id,
     dottedOrder: turn.dotted_order,
@@ -13900,6 +14142,7 @@ async function tracePendingSubagents(options) {
         error(`No Agent tool run found for ${subagent.agent_id} - cannot trace subagent`);
         continue;
       }
+      const tracing = taskRunInfo.tracing ?? options.tracing ?? "full";
       const parentToolRunId = taskRunInfo.run_id;
       const agentToolDottedOrder = taskRunInfo.dotted_order;
       const toolName = subagent.agent_type || "Agent";
@@ -13915,7 +14158,7 @@ async function tracePendingSubagents(options) {
       const deferredEnd = deferred?.end_time ?? "";
       const subagentEndTime = (lastSubagentActivity > deferredEnd ? lastSubagentActivity : deferredEnd) || (/* @__PURE__ */ new Date()).toISOString();
       if (deferred) {
-        const runTree = new RunTree({
+        const runTree = createRunTree({
           client,
           replicas,
           id: parentToolRunId,
@@ -13950,13 +14193,14 @@ async function tracePendingSubagents(options) {
               }
             })
           }
-        });
+        }, tracing);
         await runTree.postRun();
         if (keepAgentToolRunOpen)
           openedAgentRunIds.push(subagent.agent_id);
       }
       if (subagentTurns.length > 0) {
         await traceSubagentChain({
+          tracing,
           sessionId,
           project,
           parentRunId: parentToolRunId,
@@ -13985,7 +14229,7 @@ async function tracePendingSubagents(options) {
 async function traceSubagentChain(opts) {
   const subagentChainId = uuid7FromTime(opts.startTime);
   const subagentChainDottedOrder = `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, subagentChainId)}`;
-  const runTree = new RunTree({
+  const runTree = createRunTree({
     client,
     replicas,
     id: subagentChainId,
@@ -14013,10 +14257,11 @@ async function traceSubagentChain(opts) {
         // → ls_subagent_type (+ agent_type alias).
       })
     }
-  });
+  }, opts.tracing);
   await runTree.postRun();
   for (let i = 0; i < opts.subagentTurns.length; i++) {
     await traceTurn({
+      tracing: opts.tracing,
       turn: opts.subagentTurns[i],
       sessionId: opts.sessionId,
       turnNum: i + 1,
@@ -14040,7 +14285,7 @@ async function closeAgentToolRun(options) {
   const runName = isWorkflow ? "Workflow" : "Agent";
   const nativeToolName = isWorkflow ? "Workflow" : "Task";
   const agentTypeAlias = isWorkflow ? "Workflow" : options.agentType || "Agent";
-  const runTree = new RunTree({
+  const runTree = createRunTree({
     client,
     replicas,
     id: options.taskRunInfo.run_id,
@@ -14073,7 +14318,7 @@ async function closeAgentToolRun(options) {
         }
       })
     }
-  });
+  }, options.taskRunInfo.tracing ?? options.tracing);
   if (options.wasOpen) {
     await runTree.patchRun({ excludeInputs: true });
   } else {
@@ -14082,8 +14327,8 @@ async function closeAgentToolRun(options) {
 }
 
 // dist/config.js
-import { readFileSync as readFileSync5 } from "node:fs";
-import { userInfo } from "node:os";
+import { lstatSync as lstatSync2, readFileSync as readFileSync6 } from "node:fs";
+import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 var LS_INTEGRATION_VERSION = true ? "0.2.3" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
@@ -14099,7 +14344,7 @@ function readAnthropicUserId() {
     return void 0;
   const configPath = join(homeDir, ".claude.json");
   try {
-    const raw = readFileSync5(configPath, "utf-8");
+    const raw = readFileSync6(configPath, "utf-8");
     const parsed = JSON.parse(raw);
     const userId = parsed?.userID;
     if (typeof userId === "string" && userId.length > 0) {
@@ -14184,12 +14429,53 @@ function getGitInfo(cwd) {
   }
   return result;
 }
+var BOOLEAN_SETTINGS = {
+  enabled: { env: "TRACE_TO_LANGSMITH", default: false, restrictive: false },
+  defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", default: false, restrictive: true }
+};
+function readBooleanFile(path3, field) {
+  const { restrictive } = BOOLEAN_SETTINGS[field];
+  try {
+    const parsed = JSON.parse(readFileSync6(path3, "utf-8"));
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return restrictive;
+    }
+    if (!Object.hasOwn(parsed, field))
+      return void 0;
+    const value = parsed[field];
+    return typeof value === "boolean" ? value : restrictive;
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      try {
+        lstatSync2(path3);
+      } catch (statError) {
+        if (statError.code === "ENOENT")
+          return void 0;
+      }
+    }
+    return restrictive;
+  }
+}
+function resolveBoolean(cwd, homeDir, field) {
+  const fromFile = readBooleanFile(join(cwd, ".claude", "langsmith.json"), field) ?? (homeDir ? readBooleanFile(join(homeDir, ".claude", "langsmith.json"), field) : void 0);
+  if (fromFile !== void 0)
+    return fromFile;
+  const setting = BOOLEAN_SETTINGS[field];
+  const env = process.env[setting.env]?.toLowerCase();
+  if (env === void 0)
+    return setting.default;
+  if (env === "true")
+    return true;
+  if (env === "false")
+    return false;
+  return setting.restrictive;
+}
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
   const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
   const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
   const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const homeDir = homedir();
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
   let replicas2;
@@ -14280,6 +14566,8 @@ function loadConfig(options) {
     repoMetadata.git_commit_sha = gitInfo.commit;
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
   return {
+    enabled: resolveBoolean(cwd, homeDir, "enabled"),
+    defaultMuted: resolveBoolean(cwd, homeDir, "defaultMuted"),
     apiKey,
     project,
     apiBaseUrl,
@@ -14297,7 +14585,7 @@ function loadConfig(options) {
 function initHook(cwd) {
   const config = loadConfig({ cwd });
   initLogger(config.debug);
-  if (process.env.TRACE_TO_LANGSMITH?.toLowerCase() !== "true") {
+  if (!config.enabled) {
     return null;
   }
   if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
@@ -14340,9 +14628,11 @@ async function finalizeNotificationChain(opts) {
       break;
     }
     const launchingTurnId = taskRunInfo.deferred?.parent_run_id;
+    const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : void 0;
     const agentType = taskRunInfo.agent_type ?? "";
     try {
       await closeAgentToolRun({
+        tracing: resolveTurnTracingMode(opts, sessionId, taskRunInfo.tracing, launchingTurn?.tracing, launchingTurnId === ss.current_turn_run_id ? ss.current_turn_tracing : void 0),
         sessionId,
         agentId,
         agentType,
@@ -14390,6 +14680,7 @@ async function finalizeNotificationChain(opts) {
       try {
         await completeTurnRun({
           ...turnIdentityFromOpenTurn(toComplete, { sessionId, project, customMetadata }),
+          tracing: resolveTurnTracingMode(opts, sessionId, toComplete.tracing),
           lastAssistantMessage: toComplete.last_assistant_message
         });
         debug(`Completed launching turn ${toComplete.run_id} after notification chain`);
@@ -14433,13 +14724,21 @@ async function main() {
     if (sessionState.current_turn_run_id) {
       await atomicUpdateState(config.stateFilePath, (s) => {
         const ss = getSessionState(s, input.session_id);
-        return { ...s, [input.session_id]: { ...ss, current_turn_run_id: void 0 } };
+        return {
+          ...s,
+          [input.session_id]: {
+            ...ss,
+            current_turn_run_id: void 0,
+            current_turn_tracing: void 0
+          }
+        };
       });
     }
     return;
   }
   log(`Found ${messages.length} new messages`);
   const turns = groupIntoTurns(messages);
+  const currentTracing = resolveTurnTracingMode(config, input.session_id, sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
   if (turns.length > 0 && input.last_assistant_message) {
     const lastTurn = turns[turns.length - 1];
     const lastLlm = lastTurn.llmCalls[lastTurn.llmCalls.length - 1];
@@ -14475,6 +14774,9 @@ async function main() {
     const tracedToolUseIds = isLastTurn ? new Set(sessionState.traced_tool_use_ids ?? []) : void 0;
     try {
       const taskRunMap = await traceTurn({
+        // Earlier transcript turns have no original snapshot; never backfill them as full.
+        tracing: isLastTurn ? currentTracing : "metadata",
+        toolTracingModes: sessionState.tool_tracing_modes ?? {},
         turn,
         sessionId: input.session_id,
         turnNum,
@@ -14503,6 +14805,7 @@ async function main() {
   if (pendingSubagents.length > 0) {
     debug(`Processing ${pendingSubagents.length} pending subagent trace(s)`);
     await tracePendingSubagents({
+      tracing: currentTracing,
       sessionId: input.session_id,
       pendingSubagents,
       taskRunMap: mergedTaskRunMap,
@@ -14544,6 +14847,9 @@ async function main() {
       { ...latestSession.task_run_map, ...allTaskRunMaps }
     );
     const s = updatedState[input.session_id];
+    if (tracedTurns > 0) {
+      Object.assign(s, advanceToolTracingProgress(latestSession, completedToolUseIds(turns), "transcript"));
+    }
     const notifAgentId = latestSession.current_notification_agent_id;
     const notifInterrupted = latestSession.current_notification_interrupted ?? false;
     s.pending_subagent_traces = (latestSession.pending_subagent_traces ?? []).filter((sa) => !processedAgentIds.has(sa.agent_id));
@@ -14557,7 +14863,8 @@ async function main() {
           ...entry,
           agent_ids: remaining,
           stop_seen: true,
-          last_assistant_message: input.last_assistant_message,
+          tracing: entry.tracing ?? currentTracing,
+          last_assistant_message: (entry.tracing ?? currentTracing) === "metadata" ? MUTED_TRACE_CONTENT : input.last_assistant_message,
           turn_id: lastTurnId,
           // If this turn is itself a task-notification turn that spawned its own
           // background subagent, remember the agent to finalize once it drains.
@@ -14579,6 +14886,7 @@ async function main() {
     }
     s.open_turns = openTurns;
     s.current_turn_run_id = void 0;
+    s.current_turn_tracing = void 0;
     s.current_notification_agent_id = void 0;
     s.current_notification_interrupted = void 0;
     s.traced_tool_use_ids = [];
@@ -14589,6 +14897,7 @@ async function main() {
     debug(`Completing Turn run ${currentRunId}`);
     try {
       await completeTurnRun({
+        tracing: currentTracing,
         sessionId: input.session_id,
         runId: currentRunId,
         traceId: currentTraceId,
@@ -14611,6 +14920,7 @@ async function main() {
   for (const doneAgentId of doneAgentsToFinalize) {
     debug(`Finalizing subagent ${doneAgentId} that finished within its launching turn`);
     await finalizeNotificationChain({
+      defaultMuted: config.defaultMuted,
       stateFilePath: config.stateFilePath,
       sessionId: input.session_id,
       project: config.project,
@@ -14621,6 +14931,7 @@ async function main() {
   }
   if (notificationToFinalize && notificationInterrupted) {
     await finalizeNotificationChain({
+      defaultMuted: config.defaultMuted,
       stateFilePath: config.stateFilePath,
       sessionId: input.session_id,
       project: config.project,
@@ -14650,6 +14961,7 @@ async function main() {
     });
     if (finalizeNow) {
       await finalizeNotificationChain({
+        defaultMuted: config.defaultMuted,
         stateFilePath: config.stateFilePath,
         sessionId: input.session_id,
         project: config.project,

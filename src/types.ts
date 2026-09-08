@@ -4,6 +4,8 @@
 
 import type { RunTree } from "langsmith";
 
+export type TracingMode = "full" | "metadata";
+
 // ─── Hook Input Types ───────────────────────────────────────────────────────
 
 /** Common fields present in all hook inputs (delivered via stdin JSON). */
@@ -161,6 +163,20 @@ export interface Turn {
 // ─── Tracing State ─────────────────────────────────────────────────────────
 
 export interface SessionState {
+  /** Captured once at UserPromptSubmit; preference changes apply to the next turn. */
+  current_turn_tracing?: TracingMode;
+  /** Tools inherit their launching turn's mode, but async PostToolUse can run after
+   *  a newer turn starts. Reading current_turn_tracing then could upload a muted
+   *  tool's content after unmute. Keep a per-tool privacy snapshot across turn resets
+   *  because the hook does not reliably identify its original turn. This does not
+   *  select parents or change trace ownership/nesting. Reclaim it once PostToolUse
+   *  and transcript processing have both consumed it (or at SessionEnd). */
+  tool_tracing_modes?: Record<string, TracingMode>;
+  /** First side of the privacy-snapshot cleanup join; removed when both sides finish.
+   *  Independent of turn-local dedup IDs (Agent PostToolUse doesn't record those). */
+  tool_tracing_progress?: Record<string, "post" | "transcript">;
+  /** Captured by PreCompact for async PostCompact (manual preference or auto turn mode). */
+  compaction_tracing?: TracingMode;
   last_line: number;
   turn_count: number;
   updated: string;
@@ -190,6 +206,7 @@ export interface SessionState {
   task_run_map?: Record<
     string,
     {
+      tracing?: TracingMode;
       run_id: string;
       dotted_order: string;
       /** Deferred Agent tool creation info (set by PostToolUse, used by Stop) */
@@ -258,6 +275,7 @@ export interface SessionState {
  * fields while this turn's subagents are still running.
  */
 export interface OpenTurn {
+  tracing?: TracingMode;
   run_id: string;
   trace_id?: string;
   dotted_order?: string;

@@ -21,3 +21,6 @@ Thumbs.db
 # Project specific
 cc_transcript.jsonl
 *.log
+
+.claude/state/*
+.claude/langsmith.json

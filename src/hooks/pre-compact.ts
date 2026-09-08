@@ -6,6 +6,7 @@
  * Records the start time so PostCompact can compute compaction duration.
  */
 
+import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { debug } from "../logger.js";
 import { atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
@@ -35,6 +36,14 @@ async function main(): Promise<void> {
       [input.session_id]: {
         ...sessionState,
         compaction_start_time: Date.now(),
+        compaction_tracing: resolveTurnTracingMode(
+          config,
+          input.session_id,
+          input.trigger === "manual" ? undefined : sessionState.current_turn_tracing,
+          input.trigger !== "manual" && sessionState.current_turn_run_id
+            ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing
+            : undefined,
+        ),
       },
     };
   });

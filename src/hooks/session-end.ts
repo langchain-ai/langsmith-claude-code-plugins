@@ -10,6 +10,7 @@
  * to a higher value if needed.
  */
 
+import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { debug, error } from "../logger.js";
 import {
   initTracing,
@@ -55,6 +56,14 @@ async function main(): Promise<void> {
 
   if (!sessionState.current_turn_run_id && !hasOpenTurns && !hasOpenAgentRuns) {
     debug("No open turn run — nothing to close");
+    await atomicUpdateState(config.stateFilePath, (s) => {
+      const ss = s[input.session_id];
+      if (!ss) return s;
+      return {
+        ...s,
+        [input.session_id]: { ...ss, tool_tracing_modes: {}, tool_tracing_progress: {} },
+      };
+    });
     return;
   }
 
@@ -79,6 +88,7 @@ async function main(): Promise<void> {
     debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
     try {
       const res = await closeInterruptedTurn({
+        defaultMuted: config.defaultMuted,
         sessionId: input.session_id,
         sessionState,
         transcriptPath: expandedTranscript,
@@ -99,8 +109,19 @@ async function main(): Promise<void> {
   // turn never arrived (agent aborted / session ended first). Close these (children)
   // before their launching turns (parents) below.
   for (const [agentId, taskRunInfo] of openAgentRuns) {
+    const launchingTurnId = taskRunInfo.deferred?.parent_run_id as string | undefined;
+    const launchingTurn = launchingTurnId ? openTurns[launchingTurnId] : undefined;
     try {
       await closeAgentToolRun({
+        tracing: resolveTurnTracingMode(
+          config,
+          input.session_id,
+          taskRunInfo.tracing,
+          launchingTurn?.tracing,
+          launchingTurnId === sessionState.current_turn_run_id
+            ? sessionState.current_turn_tracing
+            : undefined,
+        ),
         sessionId: input.session_id,
         agentId,
         agentType: taskRunInfo.agent_type ?? "",
@@ -134,11 +155,13 @@ async function main(): Promise<void> {
             project: config.project,
             customMetadata: config.customMetadata,
           }),
+          tracing: resolveTurnTracingMode(config, input.session_id, entry.tracing),
           lastAssistantMessage: entry.last_assistant_message,
         });
         debug(`Completed deferred turn ${turnRunId} on session end`);
       } else {
         await closeInterruptedTurn({
+          defaultMuted: config.defaultMuted,
           sessionId: input.session_id,
           sessionState,
           transcriptPath: expandedTranscript,
@@ -169,6 +192,7 @@ async function main(): Promise<void> {
         ...ss,
         last_line: lastLine,
         turn_count: ss.turn_count + turnsTraced,
+        current_turn_tracing: undefined,
         current_turn_run_id: undefined,
         current_trace_id: undefined,
         current_dotted_order: undefined,
@@ -176,6 +200,8 @@ async function main(): Promise<void> {
         task_run_map: {},
         traced_tool_use_ids: [],
         tool_start_times: {},
+        tool_tracing_modes: {},
+        tool_tracing_progress: {},
         pending_subagent_traces: [],
         open_turns: {},
         current_notification_agent_id: undefined,

@@ -6,12 +6,14 @@
  * Creates a LangSmith run capturing the compaction event and summary.
  */
 
-import { RunTree, uuid7FromTime } from "langsmith";
+import { resolveTurnTracingMode } from "../tracing-mode.js";
+import { uuid7FromTime } from "langsmith";
 import { debug, error } from "../logger.js";
 import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { createRunTree } from "../privacy.js";
 import { codingAgentMetadata } from "../metadata.js";
 
 interface PostCompactHookInput {
@@ -58,31 +60,42 @@ async function main(): Promise<void> {
     : segment;
 
   try {
-    const runTree = new RunTree({
-      client,
-      replicas: config.replicas,
-      id: runId,
-      name: `Context Compaction (${input.trigger})`,
-      run_type: "chain",
-      inputs: {},
-      outputs: { compact_summary: input.compact_summary },
-      project_name: config.project,
-      start_time: startTime,
-      end_time: endTime,
-      trace_id: traceId,
-      dotted_order: dottedOrder,
-      ...(parentRunId ? { parent_run_id: parentRunId } : {}),
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId: input.session_id,
-          base: config.customMetadata,
-          turnNumber: sessionState.current_turn_number,
-          runtimeVersion: sessionState.runtime_version,
-          agentType: "compaction",
-          runSpecific: { trigger: input.trigger },
-        }),
+    const runTree = createRunTree(
+      {
+        client,
+        replicas: config.replicas,
+        id: runId,
+        name: `Context Compaction (${input.trigger})`,
+        run_type: "chain",
+        inputs: {},
+        outputs: { compact_summary: input.compact_summary },
+        project_name: config.project,
+        start_time: startTime,
+        end_time: endTime,
+        trace_id: traceId,
+        dotted_order: dottedOrder,
+        ...(parentRunId ? { parent_run_id: parentRunId } : {}),
+        extra: {
+          metadata: codingAgentMetadata({
+            sessionId: input.session_id,
+            base: config.customMetadata,
+            turnNumber: sessionState.current_turn_number,
+            runtimeVersion: sessionState.runtime_version,
+            agentType: "compaction",
+            runSpecific: { trigger: input.trigger },
+          }),
+        },
       },
-    });
+      resolveTurnTracingMode(
+        config,
+        input.session_id,
+        sessionState.compaction_tracing,
+        sessionState.current_turn_tracing,
+        sessionState.current_turn_run_id
+          ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing
+          : undefined,
+      ),
+    );
     await runTree.postRun();
 
     debug(`Created compaction run ${runId} (${input.trigger})`);
@@ -99,7 +112,11 @@ async function main(): Promise<void> {
     const ss = getSessionState(s, input.session_id);
     return {
       ...s,
-      [input.session_id]: { ...ss, compaction_start_time: undefined },
+      [input.session_id]: {
+        ...ss,
+        compaction_start_time: undefined,
+        compaction_tracing: undefined,
+      },
     };
   });
 }

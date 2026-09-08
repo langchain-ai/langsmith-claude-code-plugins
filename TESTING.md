@@ -26,6 +26,17 @@ Useful while debugging:
 
 ---
 
+## Default mute configuration
+
+- Enable tracing with test credentials. Set `CC_LANGSMITH_DEFAULT_MUTED=true` and use a thread with no saved override: prompt, tools, compaction, and subagents should upload metadata-only traces. No privacy preference file should be created by configuration alone.
+- Set user `~/.claude/langsmith.json` to `{"defaultMuted":true}`, then project `.claude/langsmith.json` to `{"defaultMuted":false}`: the next unspecialized thread/turn should use full content. Check project > user > env precedence in both directions. An enabled-only file must not mask the default below it; a default-only file must not mask `enabled` below it.
+- Run explicit unmute under default mute: subsequent turns stay full even after changing defaults. Explicit mute must likewise survive default unmute. Commands must not edit either config file; the privacy file must contain only `threads` with explicit `full`/`metadata` overrides.
+- Change default while a turn/background Agent or Workflow is in flight: its saved mode remains unchanged, including finalization. The next turn (including a task notification) without an explicit override takes the new default.
+- With test/legacy state lacking mode snapshots, check Stop, tool/compaction hooks, interruption/failure/session-end recovery, and background finalization use configured mute.
+- With an empty privacy file override map (`{"threads":{}}`), changing configured default changes the next turn's mode without modifying the privacy file. Unknown top-level fields or invalid thread modes make the entire privacy file invalid: new turns stay metadata-only and commands refuse to overwrite it.
+- Malformed/unreadable config disables uploads and resolves default muted; invalid present `defaultMuted` or an invalid environment value resolves muted. Corrupt privacy files remain metadata-only and commands refuse to overwrite them.
+- Set project `enabled:false` with default mute and explicit unmute: no uploads to primary or replica destinations. Restore your settings after testing.
+
 ## Checklist
 
 ### 1. Normal message + response

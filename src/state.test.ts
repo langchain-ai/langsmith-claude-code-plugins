@@ -9,6 +9,7 @@ import {
   updateSessionState,
   atomicUpdateState,
   pruneOldSessions,
+  advanceToolTracingProgress,
 } from "./state.js";
 
 let tmpDir: string;
@@ -20,6 +21,46 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe("advanceToolTracingProgress", () => {
+  it.each(["post", "transcript"] as const)(
+    "joins %s first without retaining completed history",
+    (first) => {
+      const original = {
+        last_line: -1,
+        turn_count: 0,
+        updated: "",
+        tool_tracing_modes: { tool: "metadata" as const, pending: "full" as const },
+      };
+      const once = advanceToolTracingProgress(original, ["tool", "untracked"], first);
+      expect(once.tool_tracing_progress).toEqual({ tool: first });
+      const twice = advanceToolTracingProgress({ ...original, ...once }, ["tool"], first);
+      expect(twice).toEqual(once);
+      const joined = advanceToolTracingProgress(
+        { ...original, ...twice },
+        ["tool", "tool"],
+        first === "post" ? "transcript" : "post",
+      );
+      expect(joined).toEqual({
+        tool_tracing_modes: { pending: "full" },
+        tool_tracing_progress: {},
+      });
+      expect(original.tool_tracing_modes).toEqual({ tool: "metadata", pending: "full" });
+    },
+  );
+
+  it("does not accumulate completed IDs over many turns", () => {
+    let session = getSessionState({}, "session");
+    for (let i = 0; i < 1000; i++) {
+      const id = `tool-${i}`;
+      session.tool_tracing_modes = { ...session.tool_tracing_modes, [id]: "metadata" };
+      session = { ...session, ...advanceToolTracingProgress(session, [id], "post") };
+      session = { ...session, ...advanceToolTracingProgress(session, [id], "transcript") };
+    }
+    expect(session.tool_tracing_modes).toEqual({});
+    expect(session.tool_tracing_progress).toEqual({});
+  });
 });
 
 describe("loadState", () => {

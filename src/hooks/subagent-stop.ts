@@ -29,6 +29,7 @@
  *     turn; SessionEnd is the backstop if no notification ever arrives.
  */
 
+import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { debug, error } from "../logger.js";
 import { atomicUpdateState, getSessionState, loadState } from "../state.js";
 import { initTracing, tracePendingSubagents, flushPendingTraces } from "../langsmith.js";
@@ -65,6 +66,7 @@ async function main(): Promise<void> {
   // separately; the workflow's own task-notification finalizes the run.
   if (input.agent_type === WORKFLOW_SUBAGENT_TYPE) {
     await handleWorkflowSubagentStop({
+      defaultMuted: config.defaultMuted,
       sessionId: input.session_id,
       agentId: input.agent_id,
       agentType: input.agent_type,
@@ -123,6 +125,15 @@ async function main(): Promise<void> {
 
   try {
     await tracePendingSubagents({
+      tracing: resolveTurnTracingMode(
+        config,
+        input.session_id,
+        taskRunInfo.tracing,
+        launchingTurn?.tracing,
+        turnRunId === sessionState.current_turn_run_id
+          ? sessionState.current_turn_tracing
+          : undefined,
+      ),
       sessionId: input.session_id,
       pendingSubagents: [
         {
@@ -185,6 +196,7 @@ async function main(): Promise<void> {
   if (finalizeNow) {
     debug(`Notification already done for ${input.agent_id}; finalizing from SubagentStop`);
     await finalizeNotificationChain({
+      defaultMuted: config.defaultMuted,
       stateFilePath: config.stateFilePath,
       sessionId: input.session_id,
       project: config.project,

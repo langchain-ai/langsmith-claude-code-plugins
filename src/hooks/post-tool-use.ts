@@ -7,13 +7,20 @@
  * so SubagentStop can nest the subagent trace under it.
  */
 
-import { RunTree, uuid7FromTime } from "langsmith";
+import { resolveTurnTracingMode } from "../tracing-mode.js";
+import { uuid7FromTime } from "langsmith";
 import { debug, error } from "../logger.js";
 import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
-import { loadState, atomicUpdateState, getSessionState } from "../state.js";
+import {
+  loadState,
+  atomicUpdateState,
+  getSessionState,
+  advanceToolTracingProgress,
+} from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
+import { createRunTree, runConfigForMode } from "../privacy.js";
 import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
 
@@ -56,6 +63,15 @@ async function main(): Promise<void> {
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
 
+  const tracing = resolveTurnTracingMode(
+    config,
+    input.session_id,
+    sessionState.tool_tracing_modes?.[input.tool_use_id],
+    sessionState.current_turn_tracing,
+    sessionState.current_turn_run_id
+      ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing
+      : undefined,
+  );
   const parentRunId = sessionState.current_turn_run_id;
   const traceId = sessionState.current_trace_id;
   const parentDottedOrder = sessionState.current_dotted_order;
@@ -97,63 +113,69 @@ async function main(): Promise<void> {
     debug(
       `Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`,
     );
-    const runTree = new RunTree({
-      client,
-      replicas: config.replicas,
-      id: toolRunId,
-      name: "Workflow",
-      run_type: "tool",
-      inputs: { input: input.tool_input },
-      project_name: config.project,
-      start_time: startTimeIso,
-      // No end_time — left open until finalizeNotificationChain closes it.
-      parent_run_id: parentRunId,
-      trace_id: traceId,
-      dotted_order: toolDottedOrder,
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId: input.session_id,
-          base: config.customMetadata,
-          turnNumber: sessionState.current_turn_number,
-          runtimeVersion: sessionState.runtime_version,
-          agentType: "root",
-          toolName: "Workflow",
-          runName: "Workflow",
-        }),
+    const runTree = createRunTree(
+      {
+        client,
+        replicas: config.replicas,
+        id: toolRunId,
+        name: "Workflow",
+        run_type: "tool",
+        inputs: { input: input.tool_input },
+        project_name: config.project,
+        start_time: startTimeIso,
+        // No end_time — left open until finalizeNotificationChain closes it.
+        parent_run_id: parentRunId,
+        trace_id: traceId,
+        dotted_order: toolDottedOrder,
+        extra: {
+          metadata: codingAgentMetadata({
+            sessionId: input.session_id,
+            base: config.customMetadata,
+            turnNumber: sessionState.current_turn_number,
+            runtimeVersion: sessionState.runtime_version,
+            agentType: "root",
+            toolName: "Workflow",
+            runName: "Workflow",
+          }),
+        },
       },
-    });
+      tracing,
+    );
     await runTree.postRun();
   } else {
     // Regular tool: create and complete the run immediately.
-    const runTree = new RunTree({
-      client,
-      replicas: config.replicas,
-      id: toolRunId,
-      name: input.tool_name,
-      run_type: "tool",
-      inputs: { input: input.tool_input },
-      outputs: { output: input.tool_response },
-      project_name: config.project,
-      start_time: startTimeIso,
-      end_time: toolEndTimeIso,
-      parent_run_id: parentRunId,
-      trace_id: traceId,
-      dotted_order: toolDottedOrder,
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId: input.session_id,
-          base: config.customMetadata,
-          // turn_id (promptId) isn't in the PostToolUse payload; turn_number is
-          // sufficient (the contract needs at least one of the two).
-          turnNumber: sessionState.current_turn_number,
-          runtimeVersion: sessionState.runtime_version,
-          agentType: "root",
-          toolName: input.tool_name,
-          runName: input.tool_name,
-          skillName: skillNameFromTool(input.tool_name, input.tool_input),
-        }),
+    const runTree = createRunTree(
+      {
+        client,
+        replicas: config.replicas,
+        id: toolRunId,
+        name: input.tool_name,
+        run_type: "tool",
+        inputs: { input: input.tool_input },
+        outputs: { output: input.tool_response },
+        project_name: config.project,
+        start_time: startTimeIso,
+        end_time: toolEndTimeIso,
+        parent_run_id: parentRunId,
+        trace_id: traceId,
+        dotted_order: toolDottedOrder,
+        extra: {
+          metadata: codingAgentMetadata({
+            sessionId: input.session_id,
+            base: config.customMetadata,
+            // turn_id (promptId) isn't in the PostToolUse payload; turn_number is
+            // sufficient (the contract needs at least one of the two).
+            turnNumber: sessionState.current_turn_number,
+            runtimeVersion: sessionState.runtime_version,
+            agentType: "root",
+            toolName: input.tool_name,
+            runName: input.tool_name,
+            skillName: skillNameFromTool(input.tool_name, input.tool_input),
+          }),
+        },
       },
-    });
+      tracing,
+    );
     await runTree.postRun();
   }
 
@@ -169,16 +191,27 @@ async function main(): Promise<void> {
     // subagent_done + is_workflow so finalize patches it closed as "Workflow".
     let backgroundUpdate: Pick<typeof freshSession, "task_run_map" | "open_turns"> | undefined;
     if (agentId || workflow) {
-      const deferred = {
-        trace_id: traceId!,
-        parent_run_id: parentRunId!,
-        start_time: startTimeIso,
-        end_time: toolEndTimeIso,
-        inputs: input.tool_input,
-        outputs: input.tool_response,
-        project_name: config.project,
-      } as Record<string, unknown>;
+      const deferred = runConfigForMode(
+        {
+          trace_id: traceId!,
+          parent_run_id: parentRunId!,
+          start_time: startTimeIso,
+          end_time: toolEndTimeIso,
+          inputs: input.tool_input,
+          outputs: input.tool_response,
+          project_name: config.project,
+        },
+        tracing,
+      ) as Record<string, unknown>;
       const launchingTurn = {
+        tracing: resolveTurnTracingMode(
+          config,
+          input.session_id,
+          sessionState.current_turn_tracing,
+          sessionState.current_turn_run_id
+            ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing
+            : undefined,
+        ),
         run_id: parentRunId!,
         trace_id: traceId,
         dotted_order: parentDottedOrder,
@@ -193,6 +226,7 @@ async function main(): Promise<void> {
         launchingTurn,
         agentId ?? workflow!.taskId,
         {
+          tracing,
           run_id: toolRunId,
           dotted_order: toolDottedOrder,
           deferred,
@@ -207,6 +241,22 @@ async function main(): Promise<void> {
       ...freshState,
       [input.session_id]: {
         ...freshSession,
+        // Don't resurrect a snapshot reclaimed while this hook awaited the SDK
+        // (notably by definitive SessionEnd). The local mode still protects this post.
+        ...(sessionState.tool_tracing_modes?.[input.tool_use_id] !== undefined &&
+        freshSession.tool_tracing_modes?.[input.tool_use_id] === undefined
+          ? {}
+          : advanceToolTracingProgress(
+              {
+                ...freshSession,
+                tool_tracing_modes: {
+                  ...freshSession.tool_tracing_modes,
+                  [input.tool_use_id]: tracing,
+                },
+              },
+              [input.tool_use_id],
+              "post",
+            )),
         last_tool_end_time: toolEndTime,
         ...backgroundUpdate,
         // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this
