@@ -14724,21 +14724,24 @@ function readCommonConfigFile(path3) {
     return invalid();
   }
 }
-function mergeCommonConfig(sources) {
-  const { harness = {}, root = {}, user = {}, env = {}, defaults: defaults2 = {} } = sources;
+function mergeCommonConfig(sources, options = {}) {
+  const { harness = {}, root = {}, user = {}, userRoot = {}, env = {}, defaults: defaults2 = {} } = sources;
+  const files = [harness, root, user, userRoot];
+  const switches = options.envFirst ? [env, ...files, defaults2] : [...files, env, defaults2];
   const merged = { enabled: false, defaultMuted: false, redact: true };
   for (const field of ["enabled", "defaultMuted"]) {
-    merged[field] = harness[field] ?? root[field] ?? user[field] ?? env[field] ?? defaults2[field] ?? COMMON_BOOLEAN_SETTINGS[field].default;
+    merged[field] = switches.find((source) => source[field] !== void 0)?.[field] ?? COMMON_BOOLEAN_SETTINGS[field].default;
   }
-  merged.api_key = env.api_key ?? harness.api_key ?? root.api_key ?? user.api_key ?? defaults2.api_key;
-  merged.api_url = env.api_url ?? harness.api_url ?? root.api_url ?? user.api_url ?? defaults2.api_url;
-  merged.project = env.project ?? harness.project ?? root.project ?? user.project ?? defaults2.project;
-  merged.replicas = env.replicas ?? harness.replicas ?? root.replicas ?? user.replicas ?? defaults2.replicas;
-  merged.redact = env.redact ?? harness.redact ?? root.redact ?? user.redact ?? defaults2.redact ?? true;
-  merged.redact_extra_rules = env.redact_extra_rules ?? harness.redact_extra_rules ?? root.redact_extra_rules ?? user.redact_extra_rules ?? defaults2.redact_extra_rules;
-  if ([defaults2, user, root, harness, env].some((source) => source.metadata !== void 0)) {
+  merged.api_key = env.api_key ?? harness.api_key ?? root.api_key ?? user.api_key ?? userRoot.api_key ?? defaults2.api_key;
+  merged.api_url = env.api_url ?? harness.api_url ?? root.api_url ?? user.api_url ?? userRoot.api_url ?? defaults2.api_url;
+  merged.project = env.project ?? harness.project ?? root.project ?? user.project ?? userRoot.project ?? defaults2.project;
+  merged.replicas = env.replicas ?? harness.replicas ?? root.replicas ?? user.replicas ?? userRoot.replicas ?? defaults2.replicas;
+  merged.redact = env.redact ?? harness.redact ?? root.redact ?? user.redact ?? userRoot.redact ?? defaults2.redact ?? true;
+  merged.redact_extra_rules = env.redact_extra_rules ?? harness.redact_extra_rules ?? root.redact_extra_rules ?? user.redact_extra_rules ?? userRoot.redact_extra_rules ?? defaults2.redact_extra_rules;
+  if ([defaults2, userRoot, user, root, harness, env].some((source) => source.metadata !== void 0)) {
     merged.metadata = {
       ...defaults2.metadata,
+      ...userRoot.metadata,
       ...user.metadata,
       ...root.metadata,
       ...harness.metadata,
@@ -14935,8 +14938,9 @@ function loadConfig(options) {
   }
   const common = mergeCommonConfig({
     harness: readCommonConfigFile(join(cwd, ".claude", "langsmith.json")).common,
-    root: readCommonConfigFile(join(cwd, "langsmith.json")).common,
+    root: readCommonConfigFile(join(cwd, "langsmith-plugins.json")).common,
     user: homeDir ? readCommonConfigFile(join(homeDir, ".claude", "langsmith.json")).common : void 0,
+    userRoot: homeDir ? readCommonConfigFile(join(homeDir, "langsmith-plugins.json")).common : void 0,
     env: {
       enabled: envBoolean("enabled"),
       defaultMuted: envBoolean("defaultMuted"),
@@ -14948,7 +14952,7 @@ function loadConfig(options) {
       // Environment rules retain the existing tolerant parser.
     },
     defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" }
-  });
+  }, { envFirst: true });
   if (replicas2 === void 0)
     replicas2 = toSdkReplicas(common.replicas);
   redactExtraRules ??= common.redact_extra_rules;

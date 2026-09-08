@@ -40,10 +40,12 @@ export const COMMON_BOOLEAN_SETTINGS = {
 } as const;
 
 export interface CommonConfigSources {
-  /** Adapter supplies exactly its project, cwd-root, and user sources; no ancestor search. */
+  /** Adapter supplies exact project and user sources; no ancestor search. */
   harness?: CommonConfig;
   root?: CommonConfig;
   user?: CommonConfig;
+  /** Optional home-root baseline, below the adapter-specific user config. */
+  userRoot?: CommonConfig;
   /** Already parsed by the adapter's existing environment discovery/parsers. */
   env?: CommonConfig;
   defaults?: CommonConfig;
@@ -181,39 +183,73 @@ export function readCommonConfigFile(path: string): CommonConfigResult {
   }
 }
 
-/** Ordinary fields env-first; switches independently file-first; metadata shallow-merges per key. */
-export function mergeCommonConfig(sources: CommonConfigSources): MergedCommonConfig {
-  const { harness = {}, root = {}, user = {}, env = {}, defaults = {} } = sources;
+/**
+ * Metadata shallow-merges per key. envFirst opts into uniform environment-first
+ * precedence; by default switches retain the legacy file-first precedence.
+ */
+export function mergeCommonConfig(
+  sources: CommonConfigSources,
+  options: { envFirst?: boolean } = {},
+): MergedCommonConfig {
+  const { harness = {}, root = {}, user = {}, userRoot = {}, env = {}, defaults = {} } = sources;
+  const files = [harness, root, user, userRoot];
+  const switches = options.envFirst ? [env, ...files, defaults] : [...files, env, defaults];
   const merged: MergedCommonConfig = { enabled: false, defaultMuted: false, redact: true };
   for (const field of ["enabled", "defaultMuted"] as const) {
     merged[field] =
-      harness[field] ??
-      root[field] ??
-      user[field] ??
-      env[field] ??
-      defaults[field] ??
+      switches.find((source) => source[field] !== undefined)?.[field] ??
       COMMON_BOOLEAN_SETTINGS[field].default;
   }
   merged.api_key =
-    env.api_key ?? harness.api_key ?? root.api_key ?? user.api_key ?? defaults.api_key;
+    env.api_key ??
+    harness.api_key ??
+    root.api_key ??
+    user.api_key ??
+    userRoot.api_key ??
+    defaults.api_key;
   merged.api_url =
-    env.api_url ?? harness.api_url ?? root.api_url ?? user.api_url ?? defaults.api_url;
+    env.api_url ??
+    harness.api_url ??
+    root.api_url ??
+    user.api_url ??
+    userRoot.api_url ??
+    defaults.api_url;
   merged.project =
-    env.project ?? harness.project ?? root.project ?? user.project ?? defaults.project;
+    env.project ??
+    harness.project ??
+    root.project ??
+    user.project ??
+    userRoot.project ??
+    defaults.project;
   merged.replicas =
-    env.replicas ?? harness.replicas ?? root.replicas ?? user.replicas ?? defaults.replicas;
+    env.replicas ??
+    harness.replicas ??
+    root.replicas ??
+    user.replicas ??
+    userRoot.replicas ??
+    defaults.replicas;
   merged.redact =
-    env.redact ?? harness.redact ?? root.redact ?? user.redact ?? defaults.redact ?? true;
+    env.redact ??
+    harness.redact ??
+    root.redact ??
+    user.redact ??
+    userRoot.redact ??
+    defaults.redact ??
+    true;
   merged.redact_extra_rules =
     env.redact_extra_rules ??
     harness.redact_extra_rules ??
     root.redact_extra_rules ??
     user.redact_extra_rules ??
+    userRoot.redact_extra_rules ??
     defaults.redact_extra_rules;
-  if ([defaults, user, root, harness, env].some((source) => source.metadata !== undefined)) {
+  if (
+    [defaults, userRoot, user, root, harness, env].some((source) => source.metadata !== undefined)
+  ) {
     // Spread defines own properties (including __proto__), unlike assignment into a target.
     merged.metadata = {
       ...defaults.metadata,
+      ...userRoot.metadata,
       ...user.metadata,
       ...root.metadata,
       ...harness.metadata,

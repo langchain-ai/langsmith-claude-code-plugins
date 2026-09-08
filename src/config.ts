@@ -13,7 +13,7 @@ import { debug, error } from "./logger.js";
 import { execSync } from "node:child_process";
 
 /**
- * Configuration — existing Claude environment discovery plus the shared langsmith.json contract.
+ * Configuration — existing Claude environment discovery plus the shared langsmith-plugins.json contract.
  */
 
 /**
@@ -66,7 +66,7 @@ export function readLocalUsername(): string {
 }
 
 export interface Config {
-  /** Master tracing switch, resolved from project config, user config, then environment. */
+  /** Master tracing switch, resolved from environment, project config, then user config. */
   enabled: boolean;
   /** Default for threads without an explicit preference; independent of the master switch. */
   defaultMuted: boolean;
@@ -281,24 +281,30 @@ export function loadConfig(options?: { cwd?: string }): Config {
     }
   }
 
-  const common = mergeCommonConfig({
-    harness: readCommonConfigFile(join(cwd, ".claude", "langsmith.json")).common,
-    root: readCommonConfigFile(join(cwd, "langsmith.json")).common,
-    user: homeDir
-      ? readCommonConfigFile(join(homeDir, ".claude", "langsmith.json")).common
-      : undefined,
-    env: {
-      enabled: envBoolean("enabled"),
-      defaultMuted: envBoolean("defaultMuted"),
-      api_key: process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY,
-      api_url: process.env.LANGSMITH_ENDPOINT,
-      project: process.env.CC_LANGSMITH_PROJECT,
-      metadata: customMetadata,
-      redact: process.env.CC_LANGSMITH_REDACT === undefined ? undefined : redact,
-      // Environment rules retain the existing tolerant parser.
+  const common = mergeCommonConfig(
+    {
+      harness: readCommonConfigFile(join(cwd, ".claude", "langsmith.json")).common,
+      root: readCommonConfigFile(join(cwd, "langsmith-plugins.json")).common,
+      user: homeDir
+        ? readCommonConfigFile(join(homeDir, ".claude", "langsmith.json")).common
+        : undefined,
+      userRoot: homeDir
+        ? readCommonConfigFile(join(homeDir, "langsmith-plugins.json")).common
+        : undefined,
+      env: {
+        enabled: envBoolean("enabled"),
+        defaultMuted: envBoolean("defaultMuted"),
+        api_key: process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY,
+        api_url: process.env.LANGSMITH_ENDPOINT,
+        project: process.env.CC_LANGSMITH_PROJECT,
+        metadata: customMetadata,
+        redact: process.env.CC_LANGSMITH_REDACT === undefined ? undefined : redact,
+        // Environment rules retain the existing tolerant parser.
+      },
+      defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" },
     },
-    defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" },
-  });
+    { envFirst: true },
+  );
   // Environment replicas retain their SDK format, including legacy tuples.
   if (replicas === undefined) replicas = toSdkReplicas(common.replicas);
   redactExtraRules ??= common.redact_extra_rules;

@@ -118,6 +118,7 @@ beforeEach(async () => {
   for (const key of Object.keys(process.env)) {
     if (/^(LANGCHAIN_|LANGSMITH_|CC_LANGSMITH_)/.test(key)) vi.stubEnv(key, undefined);
   }
+  vi.stubEnv("TRACE_TO_LANGSMITH", undefined);
   vi.stubEnv("LANGCHAIN_REVISION_ID", REVISION);
   vi.stubEnv("LANGSMITH_WORKSPACE_ID", WORKSPACE);
   vi.stubEnv("CI_COMMIT_SHA", CI_SHA);
@@ -518,7 +519,7 @@ describe("file-fed privacy and routing", () => {
           vi.stubEnv("LANGSMITH_ENDPOINT", undefined);
           vi.stubEnv("STATE_FILE", join(home, "state.json"));
           writeFileSync(
-            join(home, "langsmith.json"),
+            join(home, "langsmith-plugins.json"),
             JSON.stringify({
               enabled: true,
               defaultMuted,
@@ -540,7 +541,9 @@ describe("file-fed privacy and routing", () => {
           const { initTracing, traceTurn, completeTurnRun, generateDottedOrderSegment } =
             await import("./langsmith.js");
           const { resolveTurnTracingMode } = await import("./tracing-mode.js");
-          const loaded = loadConfig({ cwd: home });
+          const cwd = join(home, "project");
+          mkdirSync(cwd);
+          const loaded = loadConfig({ cwd });
           expect(loaded).toMatchObject({
             enabled: true,
             apiKey: "",
@@ -642,7 +645,7 @@ describe("file-fed privacy and routing", () => {
         vi.stubEnv("LANGSMITH_ENDPOINT", undefined);
         mkdirSync(join(home, ".claude"));
         writeFileSync(
-          join(home, "langsmith.json"),
+          join(home, "langsmith-plugins.json"),
           JSON.stringify({
             enabled: true,
             defaultMuted: true,
@@ -670,7 +673,9 @@ describe("file-fed privacy and routing", () => {
         const { loadConfig } = await import("./config.js");
         const { codingAgentMetadata } = await import("./metadata.js");
         const { resolveTurnTracingMode } = await import("./tracing-mode.js");
-        const loaded = loadConfig({ cwd: home });
+        const cwd = join(home, "project");
+        mkdirSync(cwd);
+        const loaded = loadConfig({ cwd });
         expect(loaded).toMatchObject({
           enabled: true,
           apiKey: "file-key",

@@ -161,6 +161,27 @@ describe("canonical common schema fixtures", () => {
 });
 
 describe("per-field precedence fixtures", () => {
+  it("envFirst overrides invalid sources independently without changing legacy defaults", () => {
+    const sources = {
+      harness: parseCommonConfig({ project: null }).common,
+      userRoot: { api_key: "home-key", metadata: { home: true } },
+      env: { enabled: true },
+    };
+    expect(mergeCommonConfig(sources)).toMatchObject({ enabled: false, defaultMuted: true });
+    expect(mergeCommonConfig(sources, { envFirst: true })).toMatchObject({
+      enabled: true,
+      defaultMuted: true,
+      api_key: "home-key",
+      metadata: { home: true },
+    });
+    expect(
+      mergeCommonConfig(
+        { ...sources, env: { enabled: true, defaultMuted: false } },
+        { envFirst: true },
+      ),
+    ).toMatchObject({ enabled: true, defaultMuted: false });
+  });
+
   const values = [undefined, false, true];
   it.each(
     (["enabled", "defaultMuted"] as const).flatMap((field) =>
@@ -185,7 +206,7 @@ describe("per-field precedence fixtures", () => {
   );
 
   it.each(["api_key", "api_url", "project", "replicas", "redact", "redact_extra_rules"] as const)(
-    "%s uses env > harness > root > user > defaults, including empty values",
+    "%s uses env > harness > root > user > userRoot > defaults, including empty values",
     (field) => {
       const sources: Record<string, CommonConfig> = {};
       const empty =
@@ -200,7 +221,7 @@ describe("per-field precedence fixtures", () => {
               : "default";
       sources.defaults = { [field]: nonempty };
       expect(mergeCommonConfig(sources)[field]).toEqual(nonempty);
-      for (const scope of ["user", "root", "harness", "env"]) {
+      for (const scope of ["userRoot", "user", "root", "harness", "env"]) {
         for (const source of Object.values(sources)) source[field] = nonempty as never;
         sources[scope] = { [field]: empty };
         expect(mergeCommonConfig(sources)[field]).toEqual(empty);

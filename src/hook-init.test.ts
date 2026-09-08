@@ -27,6 +27,7 @@ describe("initHook", () => {
   let projectPath: string;
   let rootPath: string;
   let userPath: string;
+  let userRootPath: string;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -35,8 +36,9 @@ describe("initHook", () => {
     mkdirSync(join(cwd, ".claude"), { recursive: true });
     mkdirSync(join(home, ".claude"));
     projectPath = join(cwd, ".claude", "langsmith.json");
-    rootPath = join(cwd, "langsmith.json");
+    rootPath = join(cwd, "langsmith-plugins.json");
     userPath = join(home, ".claude", "langsmith.json");
+    userRootPath = join(home, "langsmith-plugins.json");
     process.env.HOME = home;
     delete process.env.USERPROFILE;
     vi.spyOn(process, "cwd").mockReturnValue(cwd);
@@ -123,24 +125,38 @@ describe("initHook", () => {
   });
 
   it.each(
-    ["project", "root", "user"].flatMap((scope) =>
+    ["project", "root", "user", "userRoot"].flatMap((scope) =>
       [undefined, "false", ""].map((env) => ({ scope, env })),
     ),
-  )("enables tracing from the $scope file with credentials despite env=$env", ({ scope, env }) => {
+  )("resolves tracing from the $scope file with credentials and env=$env", ({ scope, env }) => {
     if (env !== undefined) process.env.TRACE_TO_LANGSMITH = env;
     writeFileSync(
-      scope === "project" ? projectPath : scope === "root" ? rootPath : userPath,
+      scope === "project"
+        ? projectPath
+        : scope === "root"
+          ? rootPath
+          : scope === "user"
+            ? userPath
+            : userRootPath,
       '{"enabled":true}',
     );
     process.env.CC_LANGSMITH_API_KEY = "test-key";
-    expect(initHook(cwd)).toMatchObject({ enabled: true, apiKey: "test-key" });
+    if (env === undefined)
+      expect(initHook(cwd)).toMatchObject({ enabled: true, apiKey: "test-key" });
+    else expect(initHook(cwd)).toBeNull();
   });
 
-  it.each(["project", "root", "user"])(
+  it.each(["project", "root", "user", "userRoot"])(
     "still requires credentials when the %s file enables tracing",
     (scope) => {
       writeFileSync(
-        scope === "project" ? projectPath : scope === "root" ? rootPath : userPath,
+        scope === "project"
+          ? projectPath
+          : scope === "root"
+            ? rootPath
+            : scope === "user"
+              ? userPath
+              : userRootPath,
         '{"enabled":true}',
       );
       expect(initHook(cwd)).toBeNull();
@@ -156,7 +172,6 @@ describe("initHook", () => {
       const { existsSync } = await import("node:fs");
       process.env.CC_LANGSMITH_API_KEY = "test-key";
       process.env.STATE_FILE = join(home, "state.json");
-      process.env.CC_LANGSMITH_DEFAULT_MUTED = String(!defaultMuted);
       writeFileSync(rootPath, JSON.stringify({ enabled: true, defaultMuted }));
       vi.spyOn(process, "cwd").mockReturnValue(home);
       const config = initHook(cwd)!;
@@ -165,6 +180,11 @@ describe("initHook", () => {
       expect(resolveTurnTracingMode(config, "fresh", "full")).toBe("full");
       expect(resolveTurnTracingMode(config, "fresh", "metadata")).toBe("metadata");
       expect(existsSync(tracingPolicyPath(config.stateFilePath))).toBe(false);
+      process.env.CC_LANGSMITH_DEFAULT_MUTED = String(!defaultMuted);
+      const next = initHook(cwd)!;
+      expect(resolveTurnTracingMode(next, "fresh")).toBe(defaultMuted ? "full" : "metadata");
+      expect(resolveTurnTracingMode(next, "fresh", "full")).toBe("full");
+      expect(resolveTurnTracingMode(next, "fresh", "metadata")).toBe("metadata");
     },
   );
 
@@ -182,12 +202,12 @@ describe("initHook", () => {
     { name: "env false with absent files", env: "false", project: undefined, user: undefined },
     { name: "env empty with absent files", env: "", project: undefined, user: undefined },
     { name: "root veto", env: undefined, root: false, project: undefined, user: true },
-    { name: "root veto over env true", env: "true", root: false, project: undefined, user: true },
-    { name: ".claude veto over root and env", env: "true", root: true, project: false, user: true },
+    { name: ".claude over root", env: undefined, root: true, project: false, user: true },
+    { name: "env false over files", env: "false", root: true, project: true, user: true },
+    { name: "env invalid over files", env: "yes", root: true, project: true, user: true },
+    { name: "env empty over files", env: "", root: true, project: true, user: true },
     { name: "project veto", env: undefined, project: false, user: true },
-    { name: "project veto over env true", env: "true", project: false, user: true },
     { name: "user off", env: undefined, project: undefined, user: false },
-    { name: "user veto over env true", env: "true", project: undefined, user: false },
   ])(
     "master off ($name) returns null and hooks never initialize tracing or upload content",
     async ({ env, project, root, user }) => {
@@ -202,6 +222,9 @@ describe("initHook", () => {
       process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([
         { apiUrl: "https://replica.test", apiKey: "replica-key", projectName: "replica" },
       ]);
+      process.env.STATE_FILE = join(home, "state.json");
+      const { setThreadTracingMode } = await import("./tracing-policy.js");
+      await setThreadTracingMode(process.env.STATE_FILE, "master-off-session", "full");
       const fetch = vi.fn();
       vi.stubGlobal("fetch", fetch);
       expect(initHook(cwd)).toBeNull();
@@ -233,6 +256,49 @@ describe("initHook", () => {
       }
       expect(readStdin).toHaveBeenCalledTimes(9);
       expect(initTracing).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["project", "root", "user", "userRoot"])(
+    "env true enables the real prompt hook despite disabled %s config",
+    async (scope) => {
+      for (const path of [projectPath, rootPath, userPath, userRootPath]) {
+        writeFileSync(path, JSON.stringify({ api_key: "file-key", enabled: false }));
+      }
+      // Include malformed sources: environment is a per-field override, not a global veto.
+      const path = { project: projectPath, root: rootPath, user: userPath, userRoot: userRootPath }[
+        scope
+      ]!;
+      writeFileSync(path, "{");
+      process.env.TRACE_TO_LANGSMITH = "true";
+      process.env.CC_LANGSMITH_DEFAULT_MUTED = "false";
+      process.env.STATE_FILE = join(home, "state.json");
+      const transcript = join(home, "transcript.jsonl");
+      writeFileSync(transcript, "");
+      const { RunTree } = await import("langsmith");
+      // Replace the SDK transport operation before invoking the actual hook.
+      const post = vi.spyOn(RunTree.prototype, "postRun").mockResolvedValue(undefined);
+      const fetch = vi.fn();
+      vi.stubGlobal("fetch", fetch);
+      vi.mocked(readStdin).mockResolvedValue({
+        cwd,
+        session_id: "env-enabled",
+        transcript_path: transcript,
+        prompt: "test prompt",
+      });
+      vi.resetModules();
+      await import("./hooks/user-prompt-submit.js");
+      const { readFileSync, existsSync } = await import("node:fs");
+      await vi.waitFor(() => {
+        expect(existsSync(process.env.STATE_FILE!)).toBe(true);
+        expect(
+          JSON.parse(readFileSync(process.env.STATE_FILE!, "utf8"))["env-enabled"],
+        ).toMatchObject({ current_turn_tracing: "full" });
+      });
+      expect(initTracing).toHaveBeenCalled();
+      expect(post).toHaveBeenCalledOnce();
       expect(fetch).not.toHaveBeenCalled();
       expect(error).not.toHaveBeenCalled();
     },
