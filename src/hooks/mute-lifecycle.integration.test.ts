@@ -233,9 +233,7 @@ function savedPolicy(mode: TracingMode | "corrupt" | "default") {
   }
   writeFileSync(
     tracingPolicyPath(h.policyPath),
-    mode === "corrupt"
-      ? "{broken"
-      : JSON.stringify({ threads: { session: mode } }),
+    mode === "corrupt" ? "{broken" : JSON.stringify({ threads: { session: mode } }),
   );
 }
 
@@ -298,10 +296,7 @@ describe("configured default lifecycle", () => {
     "unsnapshotted %s honors configured default with an empty override map",
     async (name) => {
       configuredDefault();
-      writeFileSync(
-        tracingPolicyPath(h.policyPath!),
-        JSON.stringify({ threads: {} }),
-      );
+      writeFileSync(tracingPolicyPath(h.policyPath!), JSON.stringify({ threads: {} }));
       legacyParent();
       h.messages = transcript({ id: "tool", name: "Bash" });
       await hook(name, { error: privateText, compact_summary: privateText });

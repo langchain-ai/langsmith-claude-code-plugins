@@ -158,7 +158,173 @@ function getSessionState(state, sessionId) {
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 
 // dist/config.js
-import { lstatSync as lstatSync2, readFileSync as readFileSync3 } from "node:fs";
+import { readFileSync as readFileSync4 } from "node:fs";
+
+// dist/shared-config.js
+import { lstatSync as lstatSync2, readFileSync as readFileSync3, statSync as statSync2 } from "node:fs";
+var COMMON_BOOLEAN_SETTINGS = {
+  enabled: { default: false, restrictive: false },
+  defaultMuted: { default: false, restrictive: true }
+};
+function object(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function invalid(raw) {
+  return {
+    status: "invalid",
+    common: { enabled: false, defaultMuted: true },
+    ...raw === void 0 ? {} : { raw },
+    diagnostics: [
+      "Invalid or unreadable common config; ordinary fields discarded, privacy switches restricted."
+    ]
+  };
+}
+function parseReplica(value) {
+  if (!object(value))
+    return void 0;
+  const replica = {};
+  for (const [canonical, alias] of [
+    ["api_url", "apiUrl"],
+    ["api_key", "apiKey"],
+    ["project", "projectName"]
+  ]) {
+    const selected = Object.hasOwn(value, canonical) ? canonical : alias;
+    if (Object.hasOwn(value, selected)) {
+      const entry = value[selected];
+      if (typeof entry !== "string")
+        return void 0;
+      replica[canonical] = entry;
+    }
+  }
+  if (Object.hasOwn(value, "updates")) {
+    if (!object(value.updates))
+      return void 0;
+    replica.updates = value.updates;
+  }
+  return replica;
+}
+function parseCommonConfig(value) {
+  if (!object(value))
+    return invalid();
+  const common = {};
+  const diagnostics = [];
+  for (const field of ["enabled", "defaultMuted"]) {
+    if (!Object.hasOwn(value, field))
+      continue;
+    const entry = value[field];
+    common[field] = typeof entry === "boolean" ? entry : COMMON_BOOLEAN_SETTINGS[field].restrictive;
+    if (typeof entry !== "boolean")
+      diagnostics.push(`Invalid ${field}; using restrictive value.`);
+  }
+  for (const field of ["api_key", "api_url", "project"]) {
+    if (!Object.hasOwn(value, field))
+      continue;
+    if (typeof value[field] !== "string")
+      return invalid(value);
+    common[field] = value[field];
+  }
+  if (Object.hasOwn(value, "redact")) {
+    if (typeof value.redact !== "boolean")
+      return invalid(value);
+    common.redact = value.redact;
+  }
+  if (Object.hasOwn(value, "metadata")) {
+    if (!object(value.metadata))
+      return invalid(value);
+    common.metadata = value.metadata;
+  }
+  if (Object.hasOwn(value, "replicas")) {
+    if (!Array.isArray(value.replicas))
+      return invalid(value);
+    const replicas = [];
+    for (const entry of value.replicas) {
+      const replica = parseReplica(entry);
+      if (replica === void 0)
+        return invalid(value);
+      replicas.push(replica);
+    }
+    common.replicas = replicas;
+  }
+  if (Object.hasOwn(value, "redact_extra_rules")) {
+    if (!Array.isArray(value.redact_extra_rules))
+      return invalid(value);
+    const rules = [];
+    for (const rule of value.redact_extra_rules) {
+      if (!object(rule) || typeof rule.pattern !== "string" || !Object.hasOwn(rule, "pattern")) {
+        return invalid(value);
+      }
+      const hasReplace = Object.hasOwn(rule, "replace");
+      if (hasReplace && typeof rule.replace !== "string")
+        return invalid(value);
+      try {
+        new RegExp(rule.pattern, "g");
+      } catch {
+        return invalid(value);
+      }
+      rules.push({
+        pattern: rule.pattern,
+        ...hasReplace ? { replace: rule.replace } : {}
+      });
+    }
+    common.redact_extra_rules = rules;
+  }
+  return { status: "valid", common, raw: value, diagnostics };
+}
+function readCommonConfigFile(path) {
+  try {
+    if (!statSync2(path).isFile())
+      return invalid();
+  } catch (error2) {
+    if (error2.code === "ENOENT") {
+      try {
+        lstatSync2(path);
+      } catch (lstatError) {
+        if (lstatError.code === "ENOENT") {
+          return { status: "absent", common: {}, diagnostics: [] };
+        }
+      }
+    }
+    return invalid();
+  }
+  try {
+    return parseCommonConfig(JSON.parse(readFileSync3(path, "utf8")));
+  } catch {
+    return invalid();
+  }
+}
+function mergeCommonConfig(sources) {
+  const { harness = {}, root = {}, user = {}, env = {}, defaults = {} } = sources;
+  const merged = { enabled: false, defaultMuted: false, redact: true };
+  for (const field of ["enabled", "defaultMuted"]) {
+    merged[field] = harness[field] ?? root[field] ?? user[field] ?? env[field] ?? defaults[field] ?? COMMON_BOOLEAN_SETTINGS[field].default;
+  }
+  merged.api_key = env.api_key ?? harness.api_key ?? root.api_key ?? user.api_key ?? defaults.api_key;
+  merged.api_url = env.api_url ?? harness.api_url ?? root.api_url ?? user.api_url ?? defaults.api_url;
+  merged.project = env.project ?? harness.project ?? root.project ?? user.project ?? defaults.project;
+  merged.replicas = env.replicas ?? harness.replicas ?? root.replicas ?? user.replicas ?? defaults.replicas;
+  merged.redact = env.redact ?? harness.redact ?? root.redact ?? user.redact ?? defaults.redact ?? true;
+  merged.redact_extra_rules = env.redact_extra_rules ?? harness.redact_extra_rules ?? root.redact_extra_rules ?? user.redact_extra_rules ?? defaults.redact_extra_rules;
+  if ([defaults, user, root, harness, env].some((source) => source.metadata !== void 0)) {
+    merged.metadata = {
+      ...defaults.metadata,
+      ...user.metadata,
+      ...root.metadata,
+      ...harness.metadata,
+      ...env.metadata
+    };
+  }
+  return merged;
+}
+function toSdkReplicas(replicas) {
+  return replicas?.map((replica) => ({
+    ...replica.api_url === void 0 ? {} : { apiUrl: replica.api_url },
+    ...replica.api_key === void 0 ? {} : { apiKey: replica.api_key },
+    ...replica.project === void 0 ? {} : { projectName: replica.project },
+    ...replica.updates === void 0 ? {} : { updates: replica.updates }
+  }));
+}
+
+// dist/config.js
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
@@ -175,7 +341,7 @@ function readAnthropicUserId() {
     return void 0;
   const configPath = join(homeDir, ".claude.json");
   try {
-    const raw = readFileSync3(configPath, "utf-8");
+    const raw = readFileSync4(configPath, "utf-8");
     const parsed = JSON.parse(raw);
     const userId = parsed?.userID;
     if (typeof userId === "string" && userId.length > 0) {
@@ -261,40 +427,14 @@ function getGitInfo(cwd) {
   return result;
 }
 var BOOLEAN_SETTINGS = {
-  enabled: { env: "TRACE_TO_LANGSMITH", default: false, restrictive: false },
-  defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", default: false, restrictive: true }
+  enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
+  defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted }
 };
-function readBooleanFile(path, field) {
-  const { restrictive } = BOOLEAN_SETTINGS[field];
-  try {
-    const parsed = JSON.parse(readFileSync3(path, "utf-8"));
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return restrictive;
-    }
-    if (!Object.hasOwn(parsed, field))
-      return void 0;
-    const value = parsed[field];
-    return typeof value === "boolean" ? value : restrictive;
-  } catch (err) {
-    if (err.code === "ENOENT") {
-      try {
-        lstatSync2(path);
-      } catch (statError) {
-        if (statError.code === "ENOENT")
-          return void 0;
-      }
-    }
-    return restrictive;
-  }
-}
-function resolveBoolean(cwd, homeDir, field) {
-  const fromFile = readBooleanFile(join(cwd, ".claude", "langsmith.json"), field) ?? (homeDir ? readBooleanFile(join(homeDir, ".claude", "langsmith.json"), field) : void 0);
-  if (fromFile !== void 0)
-    return fromFile;
+function envBoolean(field) {
   const setting = BOOLEAN_SETTINGS[field];
   const env = process.env[setting.env]?.toLowerCase();
   if (env === void 0)
-    return setting.default;
+    return void 0;
   if (env === "true")
     return true;
   if (env === "false")
@@ -303,9 +443,6 @@ function resolveBoolean(cwd, homeDir, field) {
 }
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
-  const apiKey = process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY ?? "";
-  const project = process.env.CC_LANGSMITH_PROJECT ?? "claude-code";
-  const apiBaseUrl = process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com";
   const homeDir = homedir();
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
@@ -357,13 +494,33 @@ function loadConfig(options) {
           }
           validRules.push(rule);
         }
-        if (validRules.length > 0)
+        if (validRules.length > 0 || parsed.length === 0)
           redactExtraRules = validRules;
       }
     } catch {
       error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");
     }
   }
+  const common = mergeCommonConfig({
+    harness: readCommonConfigFile(join(cwd, ".claude", "langsmith.json")).common,
+    root: readCommonConfigFile(join(cwd, "langsmith.json")).common,
+    user: homeDir ? readCommonConfigFile(join(homeDir, ".claude", "langsmith.json")).common : void 0,
+    env: {
+      enabled: envBoolean("enabled"),
+      defaultMuted: envBoolean("defaultMuted"),
+      api_key: process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY,
+      api_url: process.env.LANGSMITH_ENDPOINT,
+      project: process.env.CC_LANGSMITH_PROJECT,
+      metadata: customMetadata,
+      redact: process.env.CC_LANGSMITH_REDACT === void 0 ? void 0 : redact
+      // Environment rules retain the existing tolerant parser.
+    },
+    defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" }
+  });
+  if (replicas === void 0)
+    replicas = toSdkReplicas(common.replicas);
+  redactExtraRules ??= common.redact_extra_rules;
+  customMetadata = common.metadata;
   const anthropicUserId = readAnthropicUserId();
   const localUsername = readLocalUsername();
   const identityMetadata = { local_username: localUsername };
@@ -397,17 +554,17 @@ function loadConfig(options) {
     repoMetadata.git_commit_sha = gitInfo.commit;
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
   return {
-    enabled: resolveBoolean(cwd, homeDir, "enabled"),
-    defaultMuted: resolveBoolean(cwd, homeDir, "defaultMuted"),
-    apiKey,
-    project,
-    apiBaseUrl,
+    enabled: common.enabled,
+    defaultMuted: common.defaultMuted,
+    apiKey: common.api_key,
+    project: common.project,
+    apiBaseUrl: common.api_url,
     stateFilePath,
     debug: debug2,
     parentDottedOrder,
     replicas,
     customMetadata,
-    redact,
+    redact: common.redact,
     redactExtraRules
   };
 }

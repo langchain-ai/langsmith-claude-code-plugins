@@ -809,9 +809,8 @@ describe("traceTurn", () => {
     expect(lastRunTreeParams?.client).toBeDefined();
   });
 
-  it("uses no client in replicas-only mode when redaction is disabled", async () => {
-    // redact=false restores the original optimization: no explicit client, so
-    // RunTree dispatches replica posts via the shared client.
+  it("retains the configured client in replicas-only mode when redaction is disabled", async () => {
+    // Routing must not depend on whether the client has an anonymizer.
     initTracing(
       undefined,
       undefined,
@@ -846,12 +845,12 @@ describe("traceTurn", () => {
     ).resolves.not.toThrow();
 
     expect(lastRunTreeParams?.replicas).toHaveLength(1);
-    expect(lastRunTreeParams?.client).toBeUndefined();
+    expect(lastRunTreeParams?.client).toBeDefined();
   });
 
-  it("throws when neither client nor replicas are initialized", async () => {
-    // Initialize with no client and no replicas
-    initTracing(undefined, undefined, undefined);
+  it("constructs a client even when initialized without a primary key or replicas", async () => {
+    const client = initTracing(undefined, "https://private.test", undefined, false);
+    expect(client).toBeDefined();
 
     const turn: Turn = {
       userContent: "Hello",
@@ -867,7 +866,8 @@ describe("traceTurn", () => {
         turnNum: 1,
         project: "test-project",
       }),
-    ).rejects.toThrow("LangSmith client not initialized");
+    ).resolves.not.toThrow();
+    expect(lastRunTreeParams?.client).toBe(client);
   });
 
   it("passes replicas with updates field to RunTree", async () => {

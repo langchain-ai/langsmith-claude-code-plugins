@@ -115,7 +115,10 @@ Muted runs retain their normal nesting, names, timing, status, model/tool identi
 ```json
 {
   "messages": [
-    { "role": "user", "content": "[LangSmith system notice: content omitted because tracing is muted.]" }
+    {
+      "role": "user",
+      "content": "[LangSmith system notice: content omitted because tracing is muted.]"
+    }
   ]
 }
 ```
@@ -137,7 +140,7 @@ export CC_LANGSMITH_DEFAULT_MUTED="true"
 # Use "false" to return to the unmuted default.
 ```
 
-Or edit project `.claude/langsmith.json` or user `~/.claude/langsmith.json`:
+Or edit project `.claude/langsmith.json`, project-root `langsmith.json`, or user `~/.claude/langsmith.json`:
 
 ```json
 {
@@ -148,7 +151,7 @@ Or edit project `.claude/langsmith.json` or user `~/.claude/langsmith.json`:
 
 Set `defaultMuted` to the JSON boolean `false` to default to full content. You may omit `enabled` to inherit the master switch from a lower-priority source. Credentials remain separate and are still required.
 
-Precedence is **project `defaultMuted` > user `defaultMuted` > `CC_LANGSMITH_DEFAULT_MUTED` > unmuted**. Resolution is per field: an `enabled`-only file does not hide a lower-priority `defaultMuted`, and a `defaultMuted`-only file does not hide a lower-priority `enabled`. The project path uses the hook payload's `cwd`, not the plugin installation directory. A missing field falls through; an invalid present `defaultMuted` (including strings or null) defaults to muted. Malformed/non-object JSON or an unreadable file (including a dangling symlink) fails closed: tracing disabled and default muted, rather than falling through. Environment values `true`/`false` are case-insensitive, without whitespace trimming; any other present value, including an empty string, conservatively means muted. An unset environment variable means unmuted.
+For `defaultMuted`, precedence is **project `cwd/.claude/langsmith.json` > project `cwd/langsmith.json` > user `~/.claude/langsmith.json` > `CC_LANGSMITH_DEFAULT_MUTED` > unmuted**. Resolution is per field: an `enabled`-only file does not hide a lower-priority `defaultMuted`, and a `defaultMuted`-only file does not hide a lower-priority `enabled`. Both project paths use the hook payload's resolved `cwd` (or the process working directory when omitted), not the plugin installation directory; no ancestor directories are searched. All three files support the shared JSON contract below, including credentials and metadata. A missing field falls through; an invalid present `defaultMuted` (including strings or null) defaults to muted. Malformed/non-object JSON or an unreadable file (including a dangling symlink) fails closed: tracing disabled and default muted, rather than falling through. Environment values `true`/`false` are case-insensitive, without whitespace trimming; any other present value, including an empty string, conservatively means muted. An unset environment variable means unmuted.
 
 This default applies only when a thread has **no explicit saved mute/unmute override**. A saved unmute wins even over default mute; a saved mute survives default unmute. Config changes affect the next turn of threads without overrides, including task-notification turns. Existing turn/tool/compaction/subagent launch snapshots remain unchanged. Recovery paths without snapshots use the same thread preference and configured default. Config lookup never creates or modifies the privacy preference file, and commands only save an explicit thread override—not a global default.
 
@@ -158,16 +161,55 @@ The privacy file stores only explicit thread overrides, using the strict schema 
 
 Claude Code resolves the first applicable setting below; credentials are still required to upload.
 
-| Priority | Setting                          | Behavior                                                                                           |
-| -------- | -------------------------------- | -------------------------------------------------------------------------------------------------- |
-| 1        | Project `.claude/langsmith.json` | `{"enabled": true}` enables; `{"enabled": false}` disables. Overrides user config and environment. |
-| 2        | User `~/.claude/langsmith.json`  | Used when project `enabled` is absent. Same boolean `enabled` setting; overrides environment.      |
-| 3        | `TRACE_TO_LANGSMITH`             | Used when neither file sets `enabled`. Case-insensitive `true` enables; any other value disables.  |
-| 4        | No setting                       | Off.                                                                                               |
+| Priority | Setting                              | Behavior                                                                                           |
+| -------- | ------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| 1        | Project `cwd/.claude/langsmith.json` | `{"enabled": true}` enables; `{"enabled": false}` disables. Overrides root, user, and environment. |
+| 2        | Project-root `cwd/langsmith.json`    | Used when project `.claude` has no `enabled` setting. Overrides user config and environment.       |
+| 3        | User `~/.claude/langsmith.json`      | Used when both project files have no `enabled` setting. Overrides environment.                     |
+| 4        | `TRACE_TO_LANGSMITH`                 | Used when no file sets `enabled`. Case-insensitive `true` enables; any other value disables.       |
+| 5        | No setting                           | Off.                                                                                               |
 
-A present malformed or unreadable config file disables tracing rather than falling through to another file or the environment. In particular, project `{"enabled": false}` disables tracing even when `TRACE_TO_LANGSMITH=true`. This implements the requested file-plus-environment master control for Claude Code; this repository does not contain the Cursor or Codex plugins.
+At each priority, a missing file or field falls through; an invalid present `enabled` disables tracing. A present malformed/non-object JSON or unreadable config file (including a dangling symlink) fails closed for both fields rather than falling through to lower-priority files or the environment. Higher-priority valid settings still win. In particular, `{"enabled": false}` in either project file disables tracing even when `TRACE_TO_LANGSMITH=true`, unless the higher-priority project `.claude/langsmith.json` explicitly enables it. This implements the requested file-plus-environment master control for Claude Code; this repository does not contain the Cursor or Codex plugins.
 
 **Testing from the previous experimental branch:** its preferences lived inside tracing state and are not imported by this clean implementation. Run `/langsmith-tracing:mute` again for threads you want muted.
+
+## Shared `langsmith.json` contract
+
+All three paths use the same dependency-free parser (`src/shared-config.ts`). Files are read only at `cwd/.claude/langsmith.json`, `cwd/langsmith.json`, and `~/.claude/langsmith.json`; there is no ancestor search. Readable symlinks to regular files are supported. Directories, devices, FIFOs, dangling symlinks, unreadable files, malformed JSON, and non-object JSON restrict that source to `enabled:false, defaultMuted:true`. Only a truly absent entry is ignored.
+
+| Exact JSON field     | Type / default                                        | Existing environment source                      |
+| -------------------- | ----------------------------------------------------- | ------------------------------------------------ |
+| `enabled`            | boolean / `false`                                     | `TRACE_TO_LANGSMITH`                             |
+| `defaultMuted`       | boolean / `false`                                     | `CC_LANGSMITH_DEFAULT_MUTED`                     |
+| `api_key`            | string / `""`                                         | `CC_LANGSMITH_API_KEY`, then `LANGSMITH_API_KEY` |
+| `api_url`            | string / `https://api.smith.langchain.com`            | `LANGSMITH_ENDPOINT`                             |
+| `project`            | string / `claude-code`                                | `CC_LANGSMITH_PROJECT`                           |
+| `replicas`           | array of objects / absent                             | `CC_LANGSMITH_RUNS_ENDPOINTS`                    |
+| `metadata`           | JSON object / absent                                  | `CC_LANGSMITH_METADATA`                          |
+| `redact`             | boolean / `true`                                      | `CC_LANGSMITH_REDACT`                            |
+| `redact_extra_rules` | array of `{pattern:string, replace?:string}` / absent | `CC_LANGSMITH_REDACT_EXTRA`                      |
+
+**Ordinary fields are environment-first:** parsed env > project `.claude` > cwd root > user > defaults. **Both switches are independently file-first:** project `.claude` > cwd root > user > parsed env > `false`. Strings, including empty strings and whitespace, are accepted unchanged. Arrays replace rather than concatenate; `[]` explicitly selects no replicas/rules. Metadata shallow-merges per key from user → root → project `.claude` → env: nested values replace, and `{}` does not clear inherited keys. `__proto__` is treated as own data, not a prototype mutation. File metadata remains untrusted user metadata in the existing privacy builder.
+
+An invalid present `enabled` restricts only that field to `false`; an invalid present `defaultMuted` restricts only that field to `true`. **Any other recognized field with an invalid value invalidates the entire common file:** discard all its ordinary fields and restrict both switches. Ordinary values can still fall back to lower sources; higher-priority switch fields still override the restrictions (e.g. project `.claude` can override an invalid root file). Unknown keys are ignored, including malformed harness extensions; adapters can access the decoded raw object separately. Diagnostics never include file contents.
+
+Replica file entries use `api_url`, `api_key`, `project` (optional strings) and `updates` (optional JSON object, preserved). SDK aliases `apiUrl`, `apiKey`, `projectName` are accepted **only inside replica objects**. An own canonical key always wins, even if empty or invalid: `api_key:null` invalidates the common file even alongside a valid `apiKey`. Unknown replica/rule keys are stripped; `{}` is a valid replica. File tuple entries are invalid. Claude's existing environment replica parser still supports SDK objects and legacy tuples without canonical conversion. Rule patterns must compile as global regular expressions; any invalid file rule invalidates the common file. Existing tolerant environment parsers remain in place, including skipping malformed environment rules; an explicit environment `[]` overrides file rules.
+
+```json
+{
+  "enabled": true,
+  "defaultMuted": true,
+  "project": "my-project",
+  "metadata": { "team": "platform" },
+  "redact": true,
+  "redact_extra_rules": [{ "pattern": "ACME-[A-Z0-9]+", "replace": "[REDACTED]" }],
+  "replicas": [
+    { "api_url": "https://api.smith.langchain.com", "api_key": "your-key", "project": "audit" }
+  ]
+}
+```
+
+Credentials may come from files, including replica-only credentials, but never enable tracing by themselves: `initHook` still gates all uploads on the master switch. `redact:false` never bypasses muted content/provenance filtering. Keep credential-bearing files out of version control. No new environment aliases are introduced.
 
 ## Secret redaction
 
@@ -190,7 +232,7 @@ The plugin respects the following environment variables:
 
 | Variable                           | Required | Default                           | Description                                                                                                        |
 | ---------------------------------- | -------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `TRACE_TO_LANGSMITH`               | No       | File config, then off             | Fallback when neither file sets `enabled`; `"true"` enables, any other value disables.                             |
+| `TRACE_TO_LANGSMITH`               | No       | File config, then off             | Fallback when no config file sets `enabled`; `"true"` enables, any other value disables.                           |
 | `CC_LANGSMITH_DEFAULT_MUTED`       | No       | File config, then `false`         | Default metadata-only tracing for threads without overrides. Case-insensitive `true`/`false`; invalid values mute. |
 | `CC_LANGSMITH_API_KEY`             | No\*     | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`). \*Required unless `CC_LANGSMITH_RUNS_ENDPOINTS` is set.     |
 | `CC_LANGSMITH_PROJECT`             | No       | `"claude-code"`                   | LangSmith project name                                                                                             |

@@ -118,17 +118,24 @@ const postcommitFaults: FsFault[] = [
 ];
 
 describe("configured default and thread overrides", () => {
-  it.each([true, false])("uses defaultMuted=%s without creating a missing policy", (defaultMuted) => {
-    expect(getThreadTracingMode(state, "new", defaultMuted)).toBe(defaultMuted ? "metadata" : "full");
-    expect(readdirSync(dir)).toEqual([]);
-  });
+  it.each([true, false])(
+    "uses defaultMuted=%s without creating a missing policy",
+    (defaultMuted) => {
+      expect(getThreadTracingMode(state, "new", defaultMuted)).toBe(
+        defaultMuted ? "metadata" : "full",
+      );
+      expect(readdirSync(dir)).toEqual([]);
+    },
+  );
 
   it("uses the current configured default for threads without overrides", async () => {
     await setThreadTracingMode(state, "other", "full");
     const raw = readFileSync(policy, "utf8");
     expect(JSON.parse(raw)).toEqual({ threads: { other: "full" } });
     for (const defaultMuted of [true, false, true]) {
-      expect(getThreadTracingMode(state, "new", defaultMuted)).toBe(defaultMuted ? "metadata" : "full");
+      expect(getThreadTracingMode(state, "new", defaultMuted)).toBe(
+        defaultMuted ? "metadata" : "full",
+      );
       expect(readFileSync(policy, "utf8")).toBe(raw);
     }
   });

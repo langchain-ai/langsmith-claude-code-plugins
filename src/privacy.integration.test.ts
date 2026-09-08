@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Client as SDKClient, RunTreeConfig } from "langsmith";
 
@@ -8,7 +11,13 @@ type Transport = "non-batched" | "json-batch" | "multipart";
 type Status = "running" | "completed" | "error";
 type Payload = Record<string, any>;
 type Operation = { action: "post" | "patch"; payload: Payload };
-type RequestBody = { url: URL; method: string; raw: string; operations: Operation[] };
+type RequestBody = {
+  url: URL;
+  method: string;
+  headers: Headers;
+  raw: string;
+  operations: Operation[];
+};
 
 const API = "http://privacy.test";
 const FORBIDDEN = "FORBIDDEN_PRIVACY_MARKER";
@@ -26,6 +35,7 @@ let createSecretAnonymizer: typeof import("langsmith/anonymizer").createSecretAn
 let clients: Set<SDKClient>;
 let requests: RequestBody[];
 let transport: Transport;
+let allowedOrigins: Set<string>;
 
 const allowedMetadata = {
   thread_id: "thread",
@@ -66,8 +76,8 @@ async function decodeMultipart(raw: string, contentType: string): Promise<Operat
 const captureFetch: typeof fetch = async (input, init) => {
   const url = new URL(input instanceof Request ? input.url : String(input));
   // Even shared/fallback clients cannot make an external request.
-  expect(url.origin).toBe(API);
-  if (url.pathname === "/info") {
+  expect(allowedOrigins.has(url.origin), `unexpected destination ${url.origin}`).toBe(true);
+  if (url.pathname.endsWith("/info")) {
     return Response.json({
       batch_ingest_config: { use_multipart_endpoint: transport === "multipart" },
     });
@@ -96,7 +106,7 @@ const captureFetch: typeof fetch = async (input, init) => {
     expect(url.pathname).toMatch(/\/runs(?:\/[\da-f-]+)?$/);
     operations = [{ action: method === "POST" ? "post" : "patch", payload: JSON.parse(raw) }];
   }
-  requests.push({ url, method, raw, operations });
+  requests.push({ url, method, headers, raw, operations });
   return Response.json({});
 };
 
@@ -119,6 +129,7 @@ beforeEach(async () => {
   vi.stubGlobal("fetch", captureFetch);
   clients = new Set();
   requests = [];
+  allowedOrigins = new Set([API]);
   transport = "non-batched";
   ({ Client, RunTree } = await import("langsmith"));
   ({ createRunTree } = await import("./privacy.js"));
@@ -488,6 +499,236 @@ describe.each(["json-batch", "multipart"] as const)(
     });
   },
 );
+
+describe("file-fed privacy and routing", () => {
+  describe.each([false, true])("replica-only defaultMuted=%s", (defaultMuted) => {
+    it.each([false, true])(
+      "routes through initTracing with explicit replica endpoint=%s and redaction off",
+      async (overrideEndpoint) => {
+        transport = "json-batch";
+        const home = mkdtempSync(join(tmpdir(), "file-replica-routing-"));
+        const primaryApi = `${API}/private`;
+        const replicaApi = "http://replica.test/override";
+        const destination = overrideEndpoint ? replicaApi : primaryApi;
+        allowedOrigins.add(new URL(replicaApi).origin);
+        try {
+          vi.stubEnv("HOME", home);
+          vi.stubEnv("USERPROFILE", undefined);
+          vi.stubEnv("LANGSMITH_API_KEY", undefined);
+          vi.stubEnv("LANGSMITH_ENDPOINT", undefined);
+          vi.stubEnv("STATE_FILE", join(home, "state.json"));
+          writeFileSync(
+            join(home, "langsmith.json"),
+            JSON.stringify({
+              enabled: true,
+              defaultMuted,
+              api_url: primaryApi,
+              project: "file-primary",
+              redact: false,
+              redact_extra_rules: [{ pattern: SECRET, replace: REDACTED }],
+              metadata: { custom: FORBIDDEN, thread_id: FORBIDDEN },
+              replicas: [
+                {
+                  api_key: "replica-key",
+                  project: "file-destination",
+                  ...(overrideEndpoint ? { api_url: replicaApi } : {}),
+                },
+              ],
+            }),
+          );
+          const { loadConfig } = await import("./config.js");
+          const { initTracing, traceTurn, completeTurnRun, generateDottedOrderSegment } =
+            await import("./langsmith.js");
+          const { resolveTurnTracingMode } = await import("./tracing-mode.js");
+          const loaded = loadConfig({ cwd: home });
+          expect(loaded).toMatchObject({
+            enabled: true,
+            apiKey: "",
+            apiBaseUrl: primaryApi,
+            redact: false,
+            defaultMuted,
+            replicas: [
+              {
+                apiKey: "replica-key",
+                projectName: "file-destination",
+                ...(overrideEndpoint ? { apiUrl: replicaApi } : {}),
+              },
+            ],
+          });
+          if (!overrideEndpoint) expect(loaded.replicas![0]).not.toHaveProperty("apiUrl");
+          const client = initTracing(
+            loaded.apiKey,
+            loaded.apiBaseUrl,
+            loaded.replicas,
+            loaded.redact,
+            loaded.redactExtraRules,
+          );
+          expect(client).toBeInstanceOf(Client);
+          clients.add(client);
+          const tracing = resolveTurnTracingMode(loaded, "fresh");
+          expect(tracing).toBe(defaultMuted ? "metadata" : "full");
+          const startTime = "2025-01-01T00:00:00Z";
+          await traceTurn({
+            tracing,
+            turn: {
+              userContent: `${FORBIDDEN}_input ${SECRET}`,
+              userTimestamp: startTime,
+              llmCalls: [],
+              isComplete: false,
+            },
+            sessionId: "fresh",
+            turnNum: 1,
+            project: loaded.project,
+            customMetadata: loaded.customMetadata,
+          });
+          await flush();
+          const [post] = expectTransport(1);
+          expect(post.action).toBe("post");
+          expect(post.payload.session_name).toBe("file-destination");
+          const runId = post.payload.id;
+          await completeTurnRun({
+            tracing,
+            sessionId: "fresh",
+            runId,
+            traceId: runId,
+            dottedOrder: generateDottedOrderSegment(startTime, runId),
+            startTime,
+            project: loaded.project,
+            customMetadata: loaded.customMetadata,
+            lastAssistantMessage: `${FORBIDDEN}_output ${SECRET}`,
+          });
+          await flush();
+          const operations = expectTransport(2);
+          expect(operations.map(({ action }) => action)).toEqual(["post", "patch"]);
+          for (const request of requests) {
+            expect(request.url.origin).toBe(new URL(destination).origin);
+            expect(request.url.pathname).toMatch(
+              new RegExp(`^${new URL(destination).pathname}/runs(?:/|$)`),
+            );
+            expect(request.headers.get("x-api-key")).toBe("replica-key");
+            if (defaultMuted) {
+              expect(request.raw).not.toContain(FORBIDDEN);
+              expect(request.raw).not.toContain(SECRET);
+              for (const { action, payload } of request.operations) {
+                expectMutedContent(payload, action === "patch");
+                expect(payload.extra.metadata).toMatchObject({
+                  thread_id: "fresh",
+                  ls_agent_type: "root",
+                  ls_tracing_mode: "metadata",
+                });
+              }
+            } else {
+              expect(request.raw).toContain(FORBIDDEN);
+              expect(request.raw).toContain(SECRET);
+              expect(request.raw).not.toContain(REDACTED);
+            }
+          }
+        } finally {
+          rmSync(home, { recursive: true, force: true });
+        }
+      },
+    );
+  });
+
+  it.each([true, false])(
+    "file redact=%s cannot bypass muted provenance or replica projection",
+    async (redact) => {
+      transport = "json-batch";
+      const home = mkdtempSync(join(tmpdir(), "file-privacy-"));
+      try {
+        vi.stubEnv("HOME", home);
+        vi.stubEnv("USERPROFILE", undefined);
+        vi.stubEnv("LANGSMITH_API_KEY", undefined);
+        vi.stubEnv("LANGSMITH_ENDPOINT", undefined);
+        mkdirSync(join(home, ".claude"));
+        writeFileSync(
+          join(home, "langsmith.json"),
+          JSON.stringify({
+            enabled: true,
+            defaultMuted: true,
+            api_key: "file-key",
+            api_url: API,
+            project: "file-primary",
+            redact,
+            redact_extra_rules: [{ pattern: SECRET, replace: REDACTED }],
+            metadata: {
+              custom: FORBIDDEN,
+              ls_model_name: FORBIDDEN,
+              ls_agent_type: FORBIDDEN,
+              thread_id: FORBIDDEN,
+            },
+            replicas: [
+              {
+                api_url: `${API}/file-replica`,
+                api_key: "replica-key",
+                project: "file-destination",
+                updates: replicaUpdates(),
+              },
+            ],
+          }),
+        );
+        const { loadConfig } = await import("./config.js");
+        const { codingAgentMetadata } = await import("./metadata.js");
+        const { resolveTurnTracingMode } = await import("./tracing-mode.js");
+        const loaded = loadConfig({ cwd: home });
+        expect(loaded).toMatchObject({
+          enabled: true,
+          apiKey: "file-key",
+          apiBaseUrl: API,
+          project: "file-primary",
+          redact,
+        });
+        const { initTracing } = await import("./langsmith.js");
+        const client = initTracing(
+          loaded.apiKey,
+          loaded.apiBaseUrl,
+          loaded.replicas,
+          loaded.redact,
+          loaded.redactExtraRules,
+        );
+        clients.add(client);
+        const initial = {
+          ...config(client),
+          project_name: loaded.project,
+          replicas: loaded.replicas,
+          extra: {
+            metadata: codingAgentMetadata({
+              sessionId: "trusted-thread",
+              agentType: "root",
+              modelName: SECRET,
+              base: loaded.customMetadata,
+            }),
+          },
+        };
+        const mode = resolveTurnTracingMode(loaded, "fresh");
+        expect(mode).toBe("metadata");
+        await createRunTree(initial, mode).postRun();
+        await flush();
+        await createRunTree(
+          { ...initial, end_time: "2025-01-01T00:00:01Z", error: FORBIDDEN },
+          mode,
+        ).patchRun();
+        await flush();
+        const operations = expectTransport(2);
+        expect(operations[0].payload.session_name).toBe("file-destination");
+        for (const request of requests) {
+          expect(request.url.pathname).toMatch(/^\/file-replica\/runs/);
+          expect(request.raw).not.toContain(FORBIDDEN);
+          for (const { payload } of request.operations) {
+            expect(payload.extra.metadata).toMatchObject({
+              thread_id: "trusted-thread",
+              ls_agent_type: "root",
+              ls_model_name: redact ? REDACTED : SECRET,
+            });
+            expectMutedContent(payload);
+          }
+        }
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    },
+  );
+});
 
 describe("environment and shared SDK clients", () => {
   it("filters metadata/runtime on a real shared-client fallback", async () => {
