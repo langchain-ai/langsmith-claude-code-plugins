@@ -20,7 +20,7 @@
     "langsmith": "^0.8.11"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.4.1",
     "esbuild": "^0.28.1",
     "oxfmt": "^0.66.0",
     "oxlint": "^1.80.0",
