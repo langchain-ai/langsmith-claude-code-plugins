@@ -275,6 +275,32 @@ function replicaUpdates(): Payload {
 }
 
 describe.each(transports)("real SDK privacy over %s", (selectedTransport) => {
+  it("preserves empty usage metadata on post and patch", async () => {
+    transport = selectedTransport;
+    const { codingAgentMetadata } = await import("./metadata.js");
+    const metadata = codingAgentMetadata({
+      sessionId: "plugin-session",
+      agentType: "root",
+      usageMetadata: {},
+    });
+    const client = makeClient();
+    const initial = { ...config(client), extra: { metadata } };
+    await createRunTree(initial, "metadata").postRun();
+    await flush();
+    await createRunTree(
+      { ...config(client, "completed", initial.id), extra: { metadata } },
+      "metadata",
+    ).patchRun({ excludeInputs: true });
+    await flush();
+    const operations = expectTransport(2);
+    expect(operations.map(({ action }) => action)).toEqual(["post", "patch"]);
+    for (const { action, payload } of operations) {
+      expectMutedContent(payload, action === "patch");
+      expect(payload.extra.metadata.usage_metadata).toEqual({});
+      expect(JSON.stringify(payload)).not.toContain(FORBIDDEN);
+    }
+  });
+
   it.each(["base", "runSpecific"] as const)(
     "projects custom %s collisions using explicit builder provenance at the wire",
     async (layer) => {
@@ -295,7 +321,11 @@ describe.each(transports)("real SDK privacy over %s", (selectedTransport) => {
           input_tokens: 7,
           output_tokens: 3,
           total_tokens: 10,
-          input_token_details: { cache_read: 4, cache_creation: 1, custom: FORBIDDEN },
+          input_token_details: { cache_read: 4, cache_creation: 1, image: 2, custom: "allowed" },
+          output_token_details: { video: 3, annotations: ["estimated", { source: "provider" }] },
+          cost: { total: 0.25, currency: "USD" },
+          annotation: SECRET,
+          empty: {},
         },
         [layer]: collisions,
       });
@@ -329,7 +359,19 @@ describe.each(transports)("real SDK privacy over %s", (selectedTransport) => {
               input_tokens: 7,
               output_tokens: 3,
               total_tokens: 10,
-              input_token_details: { cache_read: 4, cache_creation: 1 },
+              input_token_details: {
+                cache_read: 4,
+                cache_creation: 1,
+                image: 2,
+                custom: "allowed",
+              },
+              output_token_details: {
+                video: 3,
+                annotations: ["estimated", { source: "provider" }],
+              },
+              cost: { total: 0.25, currency: "USD" },
+              annotation: REDACTED,
+              empty: {},
             },
             status: action === "post" ? "running" : "completed",
             ls_tracing_mode: "metadata",
