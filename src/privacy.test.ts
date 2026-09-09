@@ -15,6 +15,7 @@ vi.mock("langsmith", () => ({
       replicas: config.replicas ?? [
         { projectName: "env-replica", apiKey: "auth", updates: { inputs: { secret: true } } },
       ],
+      patchRun: vi.fn(),
     };
   }),
 }));

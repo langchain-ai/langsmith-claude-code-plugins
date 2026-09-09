@@ -162,5 +162,9 @@ export function createRunTree(config: RunTreeConfig, mode: TracingMode = "full")
       sanitizeReplica(replica, mode),
     ) as typeof run.replicas;
   }
+  if (typeof run.patchRun === "function") {
+    const patchRun = run.patchRun.bind(run);
+    run.patchRun = (options) => patchRun({ excludeInputs: false, ...options });
+  }
   return run;
 }
