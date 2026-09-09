@@ -25,33 +25,10 @@ const METADATA_KEYS = new Set([
   "ls_subagent_type",
 ]);
 
-function numericFields(value: unknown, keys: readonly string[]): Record<string, number> {
-  const safe: Record<string, number> = {};
-  if (!value || typeof value !== "object" || Array.isArray(value)) return safe;
-  for (const key of keys) {
-    const count = (value as Record<string, unknown>)[key];
-    if (typeof count === "number" && Number.isFinite(count) && count >= 0) safe[key] = count;
-  }
-  return safe;
-}
-
-/** Explicit token schema, not an arbitrary recursively allowed object. */
+/** Preserve all usage fields, including provider-specific and nested values. */
 function usageForMetadata(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const usage = value as Record<string, unknown>;
-  const safe: Record<string, unknown> = numericFields(usage, [
-    "input_tokens",
-    "output_tokens",
-    "total_tokens",
-  ]);
-  for (const [key, keys] of [
-    ["input_token_details", ["cache_read", "cache_creation", "audio"]],
-    ["output_token_details", ["reasoning", "audio"]],
-  ] as const) {
-    const details = numericFields(usage[key], keys);
-    if (Object.keys(details).length) safe[key] = details;
-  }
-  return Object.keys(safe).length ? safe : undefined;
+  return value as Record<string, unknown>;
 }
 
 // Also used at the wire boundary, on CURRENT (possibly anonymized) metadata.

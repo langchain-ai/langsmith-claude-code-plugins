@@ -184,7 +184,7 @@ describe("metadata tracing privacy", () => {
     expect(original).toEqual(snapshot);
   });
 
-  it("validates scalar types and explicitly projects numeric usage details", () => {
+  it("validates other scalar types while preserving all usage fields", () => {
     const metadata = {
       thread_id: { secret: "private" },
       turn_number: Infinity,
@@ -210,20 +210,14 @@ describe("metadata tracing privacy", () => {
     expect(metadataForMode(metadata, "metadata")).toEqual({
       status: "running",
       ls_tracing_mode: "metadata",
-      usage_metadata: {
-        input_tokens: 2,
-        input_token_details: { cache_read: 1, cache_creation: 0, audio: 2 },
-        output_token_details: { reasoning: 3 },
-      },
+      usage_metadata: metadata.usage_metadata,
     });
+    expect(metadataForMode(metadata, "metadata")?.usage_metadata).toBe(metadata.usage_metadata);
     expect(metadataForMode(metadata, "full")).toBe(metadata);
-    for (const usage_metadata of [
-      [],
-      "private",
-      null,
-      { total_tokens: {} },
-      { input_token_details: [1] },
-    ]) {
+    for (const usage_metadata of [{}, { total_tokens: {} }, { input_token_details: [1] }]) {
+      expect(metadataForMode({ usage_metadata }, "metadata")?.usage_metadata).toBe(usage_metadata);
+    }
+    for (const usage_metadata of [[], "private", null, undefined, 4, true]) {
       expect(metadataForMode({ usage_metadata }, "metadata")?.usage_metadata).toBeUndefined();
     }
   });
