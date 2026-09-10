@@ -32,10 +32,12 @@ const mocks = vi.hoisted(() => ({
   stdin: vi.fn(),
   tracing: vi.fn(),
   state: vi.fn(),
+  links: vi.fn(),
 }));
 vi.mock("node:fs/promises", async (importOriginal) => ({
   ...(await importOriginal<typeof import("node:fs/promises")>()),
 }));
+vi.mock("./thread-link.js", () => ({ describeThreadLinks: mocks.links }));
 vi.mock("./config.js", () => ({ loadConfig: mocks.config }));
 vi.mock("./utils/hook-init.js", () => ({ initHook: mocks.init, expandHome: (p: string) => p }));
 vi.mock("./utils/stdin.js", () => ({ readStdin: mocks.stdin }));
@@ -411,7 +413,7 @@ describe("standalone tracing preference", () => {
 });
 
 describe("exact command parser", () => {
-  it.each(["mute", "unmute"] as const)("recognizes %s", (cmd) => {
+  it.each(["mute", "unmute", "trace"] as const)("recognizes %s", (cmd) => {
     expect(parseTracingCommand(`/langsmith-tracing:${cmd}`)).toBe(cmd);
   });
   it.each([
@@ -424,6 +426,8 @@ describe("exact command parser", () => {
     "/langsmith-tracing:MUTE",
     "please /langsmith-tracing:mute",
     "/langsmith-tracing:muted",
+    "/langsmith-tracing:trace now",
+    "please /langsmith-tracing:trace",
   ])("does not handle %j", (prompt) => expect(parseTracingCommand(prompt)).toBeUndefined());
 });
 
@@ -454,6 +458,7 @@ describe("actual UserPromptSubmit command prefix", () => {
     mocks.config
       .mockReset()
       .mockReturnValue({ stateFilePath: state, apiKey: "test", enabled: false });
+    mocks.links.mockReset().mockResolvedValue("project: https://smith.langchain.com/example");
   });
 
   it.each(["mute", "unmute"] as const)(
@@ -471,29 +476,53 @@ describe("actual UserPromptSubmit command prefix", () => {
     },
   );
 
-  it.each(["mute", "unmute"] as const)(
+  it.each(["mute", "unmute", "trace"] as const)(
     "handles the actual %s command definition body without a model turn",
     async (command) => {
       const definition = readFileSync(
         new URL(`../commands/${command}.md`, import.meta.url),
         "utf8",
       );
-      const frontmatter = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(definition);
-      expect(frontmatter).not.toBeNull();
-      expect(frontmatter![0]).toContain("disable-model-invocation: true");
-      // Feed the complete Markdown body, not a hardcoded prompt. Strip only
-      // surrounding Markdown whitespace; explanatory prose must fail this test.
-      // This tests our definition/hook contract, not Claude Code's expansion order.
-      const prompt = definition.slice(frontmatter![0].length).trim();
+      const frontmatter = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(definition)!;
+      expect(frontmatter[0]).toContain("disable-model-invocation: true");
+      // Check the Markdown/hook contract; Claude Code's expansion order needs a live test.
+      const prompt = definition.slice(frontmatter[0].length).trim();
       expect(prompt).toBe(`/langsmith-tracing:${command}`);
-      await setThreadTracingMode(state, "session", command === "mute" ? "full" : "metadata");
       writeFileSync(state, "existing turn");
-      const reason = await submit(prompt);
-      expect(reason).toContain("for the next turn; the current turn is unchanged");
-      expect(getThreadTracingMode(state, "session")).toBe(command === "mute" ? "metadata" : "full");
+      await submit(prompt);
       expect(readFileSync(state, "utf8")).toBe("existing turn");
     },
   );
+
+  it("returns the resolved thread link without touching tracing preferences", async () => {
+    const reason = await submit("/langsmith-tracing:trace");
+    expect(reason).toContain("https://smith.langchain.com/example");
+    expect(mocks.config).toHaveBeenCalledWith({ cwd: dir });
+    expect(mocks.links).toHaveBeenCalledWith(mocks.config.mock.results[0].value, "session");
+    expect(existsSync(policy)).toBe(false);
+  });
+
+  it("blocks a failed trace command without exposing error details or changing preferences", async () => {
+    mocks.links.mockRejectedValue(new Error("PRIVATE_REQUEST_DETAILS"));
+    const reason = await submit("/langsmith-tracing:trace");
+    expect(reason).toContain("Session ID: session");
+    expect(reason).not.toContain("PRIVATE_REQUEST_DETAILS");
+    expect(existsSync(policy)).toBe(false);
+    expect(existsSync(state)).toBe(false);
+  });
+
+  it("does not resolve links for an ordinary prompt", async () => {
+    vi.resetModules();
+    mocks.stdin.mockResolvedValue({
+      prompt: "Explain /langsmith-tracing:trace",
+      cwd: dir,
+      session_id: "session",
+    });
+    mocks.init.mockReturnValue(null);
+    await import("./hooks/user-prompt-submit.js");
+    await vi.waitFor(() => expect(mocks.init).toHaveBeenCalledWith(dir));
+    expect(mocks.links).not.toHaveBeenCalled();
+  });
 
   it.each(postcommitFaults)("reports saved, not failed, after %s failure", async (fault) => {
     await setThreadTracingMode(state, "session", "metadata");

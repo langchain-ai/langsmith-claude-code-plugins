@@ -13050,6 +13050,8 @@ function parseTracingCommand(prompt) {
     return "mute";
   if (prompt === "/langsmith-tracing:unmute")
     return "unmute";
+  if (prompt === "/langsmith-tracing:trace")
+    return "trace";
   return void 0;
 }
 async function setThreadTracingMode(stateFilePath, sessionId, mode) {
@@ -15058,6 +15060,48 @@ function readStdin() {
   });
 }
 
+// dist/thread-link.js
+var LOOKUP_TIMEOUT_MS = 4e3;
+async function describeThreadLinks(config, sessionId) {
+  if (!config.enabled) {
+    return "LangSmith tracing is disabled. Enable it and send a prompt first.";
+  }
+  const destinations = config.replicas?.length ? config.replicas : [{}];
+  const links = await Promise.all(destinations.map(async (replica) => {
+    const destination = Array.isArray(replica) ? { projectName: replica[0] } : replica;
+    const projectName = destination.projectName ?? config.project;
+    const apiKey = destination.apiKey ?? config.apiKey;
+    if (!apiKey)
+      return `${projectName}: No LangSmith API key configured for this destination.`;
+    try {
+      const client2 = new Client({
+        apiKey,
+        apiUrl: destination.apiUrl ?? config.apiBaseUrl,
+        workspaceId: destination.workspaceId,
+        timeout_ms: LOOKUP_TIMEOUT_MS,
+        callerOptions: {
+          // The SDK ignores maxRetries on reads. Throwing here is what stops the retries.
+          onFailedResponseHook: async () => {
+            throw new Error("Thread link lookup failed");
+          }
+        }
+      });
+      const project = await client2.readProject({ projectName });
+      const url = new URL(client2.getHostUrl());
+      const path3 = ["o", project.tenant_id, "projects", "p", project.id, "t", sessionId];
+      url.pathname = `${url.pathname.replace(/\/$/, "")}/${path3.map(encodeURIComponent).join("/")}`;
+      return `${projectName}: ${url.href}`;
+    } catch {
+      return `${projectName}: Could not resolve the thread link. Check access and connectivity, then retry.`;
+    }
+  }));
+  return [
+    ...links,
+    `Session ID: ${sessionId}`,
+    "If a thread is empty, send a traced prompt and allow time for uploads."
+  ].join("\n");
+}
+
 // dist/hooks/user-prompt-submit.js
 var KILLED_NOTIFICATION_STATUS = "killed";
 async function main() {
@@ -15068,18 +15112,22 @@ async function main() {
     let reason;
     try {
       const commandConfig = loadConfig({ cwd: input.cwd });
-      const mode = command === "mute" ? "metadata" : "full";
-      const result = await setThreadTracingMode(commandConfig.stateFilePath, input.session_id, mode);
-      reason = `Thread tracing ${command === "mute" ? "muted (metadata-only)" : "unmuted (full content)"}. Preference saved for the next turn; the current turn is unchanged.`;
-      if (result?.warning)
-        reason += ` Warning: ${result.warning}.`;
-      if (!commandConfig.enabled) {
-        reason += " Master tracing is disabled; this preference does not enable it.";
-      } else if (!commandConfig.apiKey && (!commandConfig.replicas || commandConfig.replicas.length === 0)) {
-        reason += " Tracing remains inactive until credentials are configured.";
+      if (command === "trace") {
+        reason = await describeThreadLinks(commandConfig, input.session_id);
+      } else {
+        const mode = command === "mute" ? "metadata" : "full";
+        const result = await setThreadTracingMode(commandConfig.stateFilePath, input.session_id, mode);
+        reason = `Thread tracing ${command === "mute" ? "muted (metadata-only)" : "unmuted (full content)"}. Preference saved for the next turn; the current turn is unchanged.`;
+        if (result?.warning)
+          reason += ` Warning: ${result.warning}.`;
+        if (!commandConfig.enabled) {
+          reason += " Master tracing is disabled; this preference does not enable it.";
+        } else if (!commandConfig.apiKey && (!commandConfig.replicas || commandConfig.replicas.length === 0)) {
+          reason += " Tracing remains inactive until credentials are configured.";
+        }
       }
     } catch (err) {
-      reason = `Could not ${command} thread tracing: ${err instanceof Error ? err.message : String(err)}. Tracing may still be enabled. Command blocked; no model turn was started.`;
+      reason = command === "trace" ? `Could not run the trace command. Session ID: ${input.session_id}. No tracing settings were changed.` : `Could not ${command} thread tracing: ${err instanceof Error ? err.message : String(err)}. Tracing may still be enabled. Command blocked; no model turn was started.`;
     }
     try {
       console.log(JSON.stringify({ decision: "block", reason }));
