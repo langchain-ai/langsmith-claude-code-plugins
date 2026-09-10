@@ -15062,17 +15062,26 @@ function readStdin() {
 
 // dist/thread-link.js
 var LOOKUP_TIMEOUT_MS = 4e3;
+function terminalLink(url) {
+  const OSC8 = "\x1B]8;;";
+  const BEL = "\x07";
+  return `${OSC8}${url}${BEL}${url}${OSC8}${BEL}`;
+}
 async function describeThreadLinks(config, sessionId) {
   if (!config.enabled) {
     return "LangSmith tracing is disabled. Enable it and send a prompt first.";
   }
   const destinations = config.replicas?.length ? config.replicas : [{}];
-  const links = await Promise.all(destinations.map(async (replica) => {
+  const results = await Promise.all(destinations.map(async (replica) => {
     const destination = Array.isArray(replica) ? { projectName: replica[0] } : replica;
     const projectName = destination.projectName ?? config.project;
     const apiKey = destination.apiKey ?? config.apiKey;
-    if (!apiKey)
-      return `${projectName}: No LangSmith API key configured for this destination.`;
+    if (!apiKey) {
+      return {
+        resolved: false,
+        line: `${projectName}: No LangSmith API key configured for this destination.`
+      };
+    }
     try {
       const client2 = new Client({
         apiKey,
@@ -15090,16 +15099,18 @@ async function describeThreadLinks(config, sessionId) {
       const url = new URL(client2.getHostUrl());
       const path3 = ["o", project.tenant_id, "projects", "p", project.id, "t", sessionId];
       url.pathname = `${url.pathname.replace(/\/$/, "")}/${path3.map(encodeURIComponent).join("/")}`;
-      return `${projectName}: ${url.href}`;
+      return { resolved: true, line: `${projectName}: ${terminalLink(url.href)}` };
     } catch {
-      return `${projectName}: Could not resolve the thread link. Check access and connectivity, then retry.`;
+      return {
+        resolved: false,
+        line: `${projectName}: Could not resolve the thread link. Check access and connectivity, then retry.`
+      };
     }
   }));
-  return [
-    ...links,
-    `Session ID: ${sessionId}`,
-    "If a thread is empty, send a traced prompt and allow time for uploads."
-  ].join("\n");
+  const lines = results.map((result) => result.line);
+  if (results.some((result) => !result.resolved))
+    lines.push(`Session ID: ${sessionId}`);
+  return lines.join("\n");
 }
 
 // dist/hooks/user-prompt-submit.js

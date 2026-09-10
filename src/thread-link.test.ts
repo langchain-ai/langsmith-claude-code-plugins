@@ -33,9 +33,9 @@ describe("thread links", () => {
       { ...config, replicas: [["other", undefined]] },
       "session-b",
     );
-    expect(first).toContain(
-      "https://smith.langchain.com/o/workspace-id/projects/p/project-id/t/session-a",
-    );
+    // Resolved URLs carry an OSC 8 hyperlink.
+    const link = "https://smith.langchain.com/o/workspace-id/projects/p/project-id/t/session-a";
+    expect(first).toBe(`example: \u001b]8;;${link}\u0007${link}\u001b]8;;\u0007`);
     expect(second).toContain("/t/session-b");
     expect(second).not.toContain("session-a");
     expect(String(fetchMock.mock.calls[0][0])).toContain("name=example");
@@ -80,8 +80,8 @@ describe("thread links", () => {
       },
       "session",
     );
-    expect(output).toContain("us-project: https://smith.langchain.com/");
-    expect(output).toContain("eu-project: https://eu.smith.langchain.com/");
+    expect(output).toContain("us-project: \u001b]8;;https://smith.langchain.com/");
+    expect(output).toContain("eu-project: \u001b]8;;https://eu.smith.langchain.com/");
     expect(output).not.toContain("example:");
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1][1]?.headers).toMatchObject({
@@ -97,7 +97,7 @@ describe("thread links", () => {
       "session",
     );
     expect(output).toContain("bad: Could not resolve");
-    expect(output).toContain("good: https://smith.langchain.com/");
+    expect(output).toContain("good: \u001b]8;;https://smith.langchain.com/");
     expect(output).toContain("Session ID: session");
     expect(output).not.toContain("PRIVATE_DETAILS");
     expect(fetchMock).toHaveBeenCalledTimes(2);
