@@ -73,6 +73,7 @@ export interface Usage {
   output_tokens: number;
   cache_read_input_tokens?: number;
   cache_creation_input_tokens?: number;
+  service_tier?: string | null;
 }
 
 /** A user message (human input) in the transcript. */
@@ -114,6 +115,7 @@ export interface AssistantMessage {
   };
   timestamp: string;
   promptId?: string;
+  effort?: string;
 }
 
 export type TranscriptMessage = UserMessage | ToolResultMessage | AssistantMessage;
@@ -143,6 +145,8 @@ export interface LLMCall {
   startTime: string;
   /** Timestamp of last chunk (end time). */
   endTime: string;
+  /** Reasoning effort the call ran at, when the transcript records one. */
+  effort?: string;
   /** Tool calls made in this response. */
   toolCalls: ToolCall[];
   /** True if this LLM call was synthesized (not from the transcript). */

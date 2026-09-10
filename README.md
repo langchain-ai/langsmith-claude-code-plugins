@@ -88,7 +88,7 @@ With full tracing (the default), each LLM run includes:
 
 - **Inputs**: accumulated conversation messages
 - **Outputs**: assistant response content
-- **Metadata**: `ls_provider: "anthropic"`, `ls_model_name`, `ls_invocation_params` (model, stop reason), token usage
+- **Metadata**: `ls_provider: "anthropic"`, `ls_model_name`, `ls_invocation_params` (model, plus `effort`/`service_tier` when the transcript records them), token usage
 
 In full mode, all runs (LLM, tool, turn, subagent) automatically include identity metadata so you can attribute traces in LangSmith:
 

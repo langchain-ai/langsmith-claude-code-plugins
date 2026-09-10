@@ -437,6 +437,8 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
               ls_model_name: llmCall.model,
               ls_invocation_params: {
                 model: llmCall.model,
+                ...(llmCall.effort ? { effort: llmCall.effort } : {}),
+                ...(llmCall.usage.service_tier ? { service_tier: llmCall.usage.service_tier } : {}),
               },
               usage_metadata: buildUsageMetadata(llmCall.usage),
               ...(llmCall.synthetic ? { synthetic: true } : {}),
