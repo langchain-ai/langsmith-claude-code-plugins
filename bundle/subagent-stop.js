@@ -13437,6 +13437,8 @@ function mergeAssistantChunks(chunks) {
     model: stripModelDateSuffix(first.message.model),
     usage: last.message.usage,
     // SSE usage is cumulative; last chunk has final totals.
+    effort: chunks.find((c) => c.effort)?.effort,
+    // Only some chunks carry effort; take the first.
     startTime: first.timestamp,
     endTime: last.timestamp
   };
@@ -13510,6 +13512,7 @@ function groupIntoTurns(messages) {
         content: merged.content,
         model: merged.model,
         usage: merged.usage,
+        effort: merged.effort,
         startTime: merged.startTime,
         endTime: merged.endTime,
         toolCalls
@@ -13962,7 +13965,9 @@ async function traceTurn(options) {
             ls_provider: resolveProvider(llmCall.model),
             ls_model_name: llmCall.model,
             ls_invocation_params: {
-              model: llmCall.model
+              model: llmCall.model,
+              ...llmCall.effort ? { effort: llmCall.effort } : {},
+              ...llmCall.usage.service_tier ? { service_tier: llmCall.usage.service_tier } : {}
             },
             usage_metadata: buildUsageMetadata(llmCall.usage),
             ...llmCall.synthetic ? { synthetic: true } : {}

@@ -135,6 +135,9 @@ async function main(): Promise<void> {
       lastTurn.llmCalls.push({
         content: [{ type: "text", text: input.last_assistant_message }],
         model: lastLlm.model,
+        // A request setting, so it carries over like the model. service_tier is a
+        // response value with no reading for this call, so it stays absent.
+        effort: lastLlm.effort,
         usage: { input_tokens: 0, output_tokens: 0 },
         startTime: syntheticStart,
         endTime: syntheticEnd,

@@ -49,8 +49,9 @@ function makeAssistant(
     model?: string;
     ts?: string;
     toolUses?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
-    usage?: { input_tokens: number; output_tokens: number };
+    usage?: { input_tokens: number; output_tokens: number; service_tier?: string | null };
     stop_reason?: string | null;
+    effort?: string;
   } = {},
 ): AssistantMessage {
   const content: AssistantMessage["message"]["content"] = [{ type: "text" as const, text }];
@@ -70,6 +71,7 @@ function makeAssistant(
       stop_reason: opts.stop_reason,
     },
     timestamp: opts.ts ?? "2025-01-01T00:00:01Z",
+    effort: opts.effort,
   };
 }
 
@@ -398,6 +400,7 @@ describe("groupIntoTurns", () => {
       },
       {
         type: "assistant",
+        effort: "low",
         message: {
           id: "msg_stream",
           role: "assistant",
@@ -414,7 +417,7 @@ describe("groupIntoTurns", () => {
           role: "assistant",
           model: "claude-sonnet-4-5-20250929",
           content: [{ type: "text", text: "a time." }],
-          usage: { input_tokens: 10, output_tokens: 8 },
+          usage: { input_tokens: 10, output_tokens: 8, service_tier: "priority" },
         },
         timestamp: "2025-01-01T00:00:01.200Z",
       },
@@ -428,6 +431,9 @@ describe("groupIntoTurns", () => {
     expect(call.content).toEqual([{ type: "text", text: "Once upon a time." }]);
     // Usage from last chunk (cumulative)
     expect(call.usage.output_tokens).toBe(8);
+    expect(call.usage.service_tier).toBe("priority");
+    // Effort from the first chunk that carries it
+    expect(call.effort).toBe("low");
     // Times from first/last chunk
     expect(call.startTime).toBe("2025-01-01T00:00:01.000Z");
     expect(call.endTime).toBe("2025-01-01T00:00:01.200Z");
@@ -440,6 +446,17 @@ describe("groupIntoTurns", () => {
     ];
     const turns = groupIntoTurns(messages);
     expect(turns[0].llmCalls[0].model).toBe("claude-sonnet-4-5");
+  });
+
+  it.each([
+    ["captures top-level effort", { effort: "high" }, "high"],
+    ["leaves effort undefined when the transcript omits it", {}, undefined],
+  ] as const)("%s", (_, overrides, expected) => {
+    const messages: TranscriptMessage[] = [
+      makeUser("Hi"),
+      makeAssistant("msg_1", "Hello", overrides),
+    ];
+    expect(groupIntoTurns(messages)[0].llmCalls[0].effort).toBe(expected);
   });
 
   it("returns empty array for no messages", () => {
