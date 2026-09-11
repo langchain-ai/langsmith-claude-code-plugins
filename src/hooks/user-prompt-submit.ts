@@ -33,6 +33,7 @@ import { USER_PROMPT_TURN_NAME } from "../constants.js";
 import { codingAgentMetadata } from "../metadata.js";
 import { createRunTree } from "../privacy.js";
 import { loadConfig } from "../config.js";
+import { describeThreadLinks } from "../thread-link.js";
 import {
   parseTracingCommand,
   setThreadTracingMode,
@@ -71,25 +72,32 @@ async function main(): Promise<void> {
     let reason: string;
     try {
       const commandConfig = loadConfig({ cwd: input.cwd });
-      const mode = command === "mute" ? "metadata" : "full";
-      const result = await setThreadTracingMode(
-        commandConfig.stateFilePath,
-        input.session_id,
-        mode,
-      );
-      reason = `Thread tracing ${command === "mute" ? "muted (metadata-only)" : "unmuted (full content)"}. Preference saved for the next turn; the current turn is unchanged.`;
-      // Filesystem warnings stay in this local, blocked response, never tracing.
-      if (result?.warning) reason += ` Warning: ${result.warning}.`;
-      if (!commandConfig.enabled) {
-        reason += " Master tracing is disabled; this preference does not enable it.";
-      } else if (
-        !commandConfig.apiKey &&
-        (!commandConfig.replicas || commandConfig.replicas.length === 0)
-      ) {
-        reason += " Tracing remains inactive until credentials are configured.";
+      if (command === "trace") {
+        reason = await describeThreadLinks(commandConfig, input.session_id);
+      } else {
+        const mode = command === "mute" ? "metadata" : "full";
+        const result = await setThreadTracingMode(
+          commandConfig.stateFilePath,
+          input.session_id,
+          mode,
+        );
+        reason = `Thread tracing ${command === "mute" ? "muted (metadata-only)" : "unmuted (full content)"}. Preference saved for the next turn; the current turn is unchanged.`;
+        // Filesystem warnings stay in this local, blocked response, never tracing.
+        if (result?.warning) reason += ` Warning: ${result.warning}.`;
+        if (!commandConfig.enabled) {
+          reason += " Master tracing is disabled; this preference does not enable it.";
+        } else if (
+          !commandConfig.apiKey &&
+          (!commandConfig.replicas || commandConfig.replicas.length === 0)
+        ) {
+          reason += " Tracing remains inactive until credentials are configured.";
+        }
       }
     } catch (err) {
-      reason = `Could not ${command} thread tracing: ${err instanceof Error ? err.message : String(err)}. Tracing may still be enabled. Command blocked; no model turn was started.`;
+      reason =
+        command === "trace"
+          ? `Could not run the trace command. Session ID: ${input.session_id}. No tracing settings were changed.`
+          : `Could not ${command} thread tracing: ${err instanceof Error ? err.message : String(err)}. Tracing may still be enabled. Command blocked; no model turn was started.`;
     }
     try {
       console.log(JSON.stringify({ decision: "block", reason }));

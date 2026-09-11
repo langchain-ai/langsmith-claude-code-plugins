@@ -101,6 +101,17 @@ Tool runs include the tool name, inputs, and output content. Skill tool runs add
 
 Interrupted turns (where the user cancels mid-response) are marked with status `"interrupted"` in LangSmith.
 
+## Opening the current session in LangSmith
+
+Run `/langsmith-tracing:trace` to get a link to this conversation's trace. It does
+not start a model turn or change any settings. When you trace to several projects,
+you get one labelled link per project.
+
+- A new thread is empty until a traced prompt finishes uploading.
+- Changing projects does not move older traces.
+- These are not public share links; recipients need access to the project.
+- If the lookup fails, search LangSmith for the session ID it prints.
+
 ## Muting a thread
 
 Muting is off by default unless configured below. With tracing enabled, use these argument-free plugin commands:
