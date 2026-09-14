@@ -1398,6 +1398,23 @@ async function handleGatewayInput(input, entry2, env = process.env, home = userH
   await gatewayHook(input.hook_event_name, input.session_id, entry2, home, input.cwd);
 }
 
+// dist/utils/stdin.js
+function readStdin() {
+  return new Promise((resolve2, reject) => {
+    let data = "";
+    process.stdin.setEncoding("utf-8");
+    process.stdin.on("data", (chunk) => data += chunk);
+    process.stdin.on("end", () => {
+      try {
+        resolve2(JSON.parse(data));
+      } catch (err) {
+        reject(new Error(`Failed to parse hook input: ${err}`));
+      }
+    });
+    process.stdin.on("error", reject);
+  });
+}
+
 // dist/hooks/gateway.js
 var entry = fileURLToPath(import.meta.url);
 async function main() {
@@ -1405,23 +1422,8 @@ async function main() {
   if (command !== void 0 && (command !== "daemon" || args.length !== 0))
     throw new SetupError(COMMAND_GUIDANCE);
   if (command === void 0) {
-    let data = "";
-    const timer = setTimeout(() => process.stdin.destroy(), 1e3);
-    try {
-      for await (const chunk of process.stdin) {
-        data += chunk;
-        if (data.length > 65536) {
-          process.stdout.write(JSON.stringify({
-            decision: "block",
-            reason: "Gateway hook input too large; no changes made."
-          }) + "\n");
-          return;
-        }
-      }
-      await handleGatewayInput(JSON.parse(data), entry);
-    } finally {
-      clearTimeout(timer);
-    }
+    const input = await readStdin();
+    await handleGatewayInput(input, entry);
     return;
   }
   const config = loadConfig();

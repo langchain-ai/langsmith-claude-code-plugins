@@ -228,6 +228,7 @@ require("node:module").syncBuiltinESMExports();
         }
         for (const prompt of [
           "/langsmith-gateway:setup",
+          "/langsmith-gateway:setup --scope " + "private-argument".repeat(5000),
           "/langsmith-gateway:setup --scope global /absolute/cli profile 43127",
           "/langsmith-gateway:setup --yes --scope global",
           "/langsmith-gateway:setup --scope global --use-claude-subscription true",
@@ -481,6 +482,53 @@ require("node:module").syncBuiltinESMExports();
         expect(result.stdout).toBe("");
         expect(result.stderr).toBe("");
       }
+      const largeInput = JSON.stringify({
+        hook_event_name: "UserPromptSubmit",
+        prompt: "ordinary long prompt ".repeat(4000),
+        session_id: "isolated-package-test",
+        cwd: sandbox,
+      });
+      const malformedInput = JSON.stringify({ prompt: "private-malformed-input" }) + "invalid";
+      for (const input of [largeInput, malformedInput]) {
+        const result = spawnSync(process.execPath, ["--require", guard, artifact], {
+          cwd: sandbox,
+          env: { HOME: "/must-not-use-env-home", PATH: "" },
+          input,
+          encoding: "utf8",
+          timeout: 5000,
+        });
+        expect(result.error).toBeUndefined();
+        expect(result.status).toBe(0);
+        expect(result.stdout).toBe("");
+        if (input === largeInput) expect(result.stderr).toBe("");
+        else {
+          expect(result.stderr).toContain("No sensitive error details are printed.");
+          expect(result.stderr).not.toContain("private-malformed-input");
+          expect(result.stderr).not.toContain("Failed to parse hook input");
+        }
+      }
+      // Leave stdin open beyond the former one-second cutoff. The child has an
+      // outer test timeout; production relies on the timeout owned by Claude.
+      const delayed = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+        const child = execFile(
+          process.execPath,
+          ["--require", guard, artifact],
+          {
+            cwd: sandbox,
+            env: { HOME: "/must-not-use-env-home", PATH: "" },
+            timeout: 5000,
+          },
+          (error, stdout, stderr) => {
+            clearTimeout(timer);
+            if (error) reject(error);
+            else resolve({ stdout, stderr });
+          },
+        );
+        child.stdin!.on("error", reject);
+        child.stdin!.write(largeInput.slice(0, 100));
+        const timer = setTimeout(() => child.stdin!.end(largeInput.slice(100)), 1500);
+      });
+      expect(delayed).toEqual({ stdout: "", stderr: "" });
       expect(readdirSync(configDir)).toEqual(["config.json"]);
       expect(json(join(configDir, "config.json"))).toEqual(retained);
       // Invalid disabled data must not silently short-circuit validation. Hook

@@ -5,6 +5,7 @@ import { createProxy, identity } from "../proxy/server.js";
 import { COMMAND_GUIDANCE } from "../proxy/options.js";
 import { SetupError } from "../proxy/options.js";
 import { handleGatewayInput } from "../proxy/commands.js";
+import { readStdin } from "../utils/stdin.js";
 
 const entry = fileURLToPath(import.meta.url);
 async function main(): Promise<void> {
@@ -14,31 +15,18 @@ async function main(): Promise<void> {
   if (command !== undefined && (command !== "daemon" || args.length !== 0))
     throw new SetupError(COMMAND_GUIDANCE);
   if (command === undefined) {
-    let data = "";
-    const timer = setTimeout(() => process.stdin.destroy(), 1000);
-    try {
-      for await (const chunk of process.stdin) {
-        data += chunk;
-        if (data.length > 65536) {
-          process.stdout.write(
-            JSON.stringify({
-              decision: "block",
-              reason: "Gateway hook input too large; no changes made.",
-            }) + "\n",
-          );
-          return;
-        }
-      }
-      await handleGatewayInput(JSON.parse(data), entry);
-    } finally {
-      clearTimeout(timer);
-    }
+    // Claude supplies one JSON payload and owns the hook timeout.
+    const input: Parameters<typeof handleGatewayInput>[0] = await readStdin();
+    await handleGatewayInput(input, entry);
     return;
   }
   const config = loadConfig();
   if (!config) return;
   if (command === "daemon") {
+    // The same bundle runs in a separate background process so later model
+    // requests and streams can be served after the short-lived hooks exit.
     const { server, drain } = createProxy(config);
+    // This process outlives hooks, so notice config changes without another hook.
     const watch = setInterval(() => {
       try {
         const current = loadConfig();
