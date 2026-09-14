@@ -180,7 +180,7 @@ async function invoke(prompt = "/langsmith-gateway:status", cwd: unknown = proje
   return output.reason as string;
 }
 const disclaimer =
-  "Disk routing is not proof of this session's runtime routing. Configured forwarding mode does not verify actual Anthropic usage, authentication or subscription validity. Other projects may use the shared daemon.";
+  "This shows saved settings. Your current Claude session may still be using earlier settings. Configured forwarding mode does not verify actual Anthropic usage, authentication or subscription validity. Other projects may use the shared daemon.";
 beforeEach(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "gateway-status-")));
   home = join(root, "home");
@@ -218,10 +218,10 @@ describe("packaged read-only status", () => {
       [
         "Gateway status (read-only)",
         "Selected routing targets: global + current project",
-        `  global ${JSON.stringify(join(home, ".claude/settings.json"))}: settings missing; not configured (no retained config).`,
-        `  project ${JSON.stringify(join(project, ".claude/settings.local.json"))}: settings missing; not configured (no retained config).`,
+        `  global ${JSON.stringify(join(home, ".claude/settings.json"))}: settings missing; proxy setup is missing.`,
+        `  project ${JSON.stringify(join(project, ".claude/settings.local.json"))}: settings missing; proxy setup is missing.`,
         "Shared proxy configuration (applies to enabled scopes): not configured.",
-        "Shared daemon: not checked (no retained configuration).",
+        "Shared daemon: not checked (proxy setup is missing).",
         disclaimer,
       ].join("\n"),
     );
@@ -262,8 +262,8 @@ describe("packaged read-only status", () => {
         [
           "Gateway status (read-only)",
           "Selected routing targets: global + current project",
-          `  global ${JSON.stringify(global.settings)}: settings present; configured; disk routing matches private config.`,
-          `  project ${JSON.stringify(local.settings)}: settings present; configured; disk routing matches private config.`,
+          `  global ${JSON.stringify(global.settings)}: settings present; configured to use the local gateway proxy.`,
+          `  project ${JSON.stringify(local.settings)}: settings present; configured to use the local gateway proxy.`,
           `Shared proxy configuration (applies to enabled scopes): enabled; useClaudeSubscription ${mode === false ? "off" : "on"}; profile "preview"; API https://api.preview.test; gateway https://gateway.preview.test:8443.`,
           "Shared daemon: matching listener reachable.",
           disclaimer,
@@ -300,14 +300,20 @@ describe("packaged read-only status", () => {
     );
     expect(requests).toEqual(["GET /_langsmith/health"]);
   });
-  it.each(["missing", "base", "headers"])(
-    "reports %s settings drift against private config",
-    async (kind) => {
+  it.each([
+    ["missing", "gateway routing is not configured in this settings file"],
+    ["env", "gateway routing is not configured in this settings file"],
+    ["base", "Claude’s saved API address differs from this proxy’s address"],
+    ["headers", "local proxy authentication header is missing"],
+  ])(
+    "reports project %s settings separately from matching global routing",
+    async (kind, diagnostic) => {
       await probe("match");
       saveConfig();
       provision("global");
       const paths = provision("project");
       if (kind === "missing") rmSync(paths.settings);
+      else if (kind === "env") save(paths.settings, {});
       else {
         const disk = JSON.parse(readFileSync(paths.settings, "utf8"));
         disk.env[kind === "base" ? "ANTHROPIC_BASE_URL" : "ANTHROPIC_CUSTOM_HEADERS"] =
@@ -316,9 +322,11 @@ describe("packaged read-only status", () => {
       }
       const result = await invoke();
       expect(result).toContain(
-        `project ${JSON.stringify(paths.settings)}: settings ${kind === "missing" ? "missing" : "present"}; not configured; disk routing does not match private config.`,
+        `project ${JSON.stringify(paths.settings)}: settings ${kind === "missing" ? "missing" : "present"}; ${diagnostic}.`,
       );
-      expect(result).toContain("disk routing matches private config");
+      expect(result).toContain(
+        `global ${JSON.stringify(targetPaths(home, "global", project).settings)}: settings present; configured to use the local gateway proxy.`,
+      );
     },
   );
   it.each(["malformed", "stale", "symlink"])(
@@ -337,7 +345,7 @@ describe("packaged read-only status", () => {
             : JSON.stringify({ identity: "old", beforeHeaders: "synthetic-secret" }),
           { mode: 0o600 },
         );
-      expect(await invoke()).toContain("configured; disk routing matches private config");
+      expect(await invoke()).toContain("configured to use the local gateway proxy");
     },
   );
   it("can show a shared running daemon with neither current target configured", async () => {
@@ -347,9 +355,9 @@ describe("packaged read-only status", () => {
     mkdirSync(other, { mode: 0o700 });
     provision("project", other);
     const result = await invoke();
-    expect(
-      result.match(/not configured; disk routing does not match private config/g),
-    ).toHaveLength(2);
+    expect(result.match(/gateway routing is not configured in this settings file/g)).toHaveLength(
+      2,
+    );
     expect(result).toContain("Shared daemon: matching listener reachable.");
     expect(result).not.toContain(other);
   });

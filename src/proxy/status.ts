@@ -35,7 +35,7 @@ export async function gatewayStatus(
     // Only the existing authenticated, identity-matching loopback health probe
     // (500 ms wall-clock). No startup, leases, CLI, auth checks or token refresh.
     const daemon = !config
-      ? "not checked (no retained configuration)"
+      ? "not checked (proxy setup is missing)"
       : (await healthy(config))
         ? `matching listener reachable${state === "disabled" ? " (saved config disabled; may be awaiting drain)" : ""}`
         : "not reachable or incompatible";
@@ -45,7 +45,7 @@ export async function gatewayStatus(
       ...routes,
       `Shared proxy configuration (applies to enabled scopes): ${shared}`,
       `Shared daemon: ${daemon}.`,
-      "Disk routing is not proof of this session's runtime routing. Configured forwarding mode does not verify actual Anthropic usage, authentication or subscription validity. Other projects may use the shared daemon.",
+      "This shows saved settings. Your current Claude session may still be using earlier settings. Configured forwarding mode does not verify actual Anthropic usage, authentication or subscription validity. Other projects may use the shared daemon.",
     ].join("\n");
   } catch (error) {
     throw new SetupError(error instanceof ConfigError ? error.message : STATUS_ERROR);

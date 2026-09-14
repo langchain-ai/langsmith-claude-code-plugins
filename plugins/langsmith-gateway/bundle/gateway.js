@@ -1326,8 +1326,16 @@ function routingStatus(paths, config) {
   const env = routingEnv(current);
   const prefix = `settings ${current ? "present" : "missing"}; `;
   if (!config)
-    return prefix + "not configured (no retained config)";
-  return prefix + (matchesRouting(env, config) ? "configured; disk routing matches private config" : "not configured; disk routing does not match private config");
+    return prefix + "proxy setup is missing";
+  if (matchesRouting(env, config))
+    return prefix + "configured to use the local gateway proxy";
+  const headers = env[HEADERS];
+  const keys = typeof headers === "string" ? lines(headers).filter(keyLine) : [];
+  if (env[BASE] === void 0 || env[BASE] === "")
+    return prefix + (keys.length ? "gateway routing is incomplete; local proxy authentication header is present but Claude\u2019s saved API address is missing" : "gateway routing is not configured in this settings file");
+  if (env[BASE] !== `http://127.0.0.1:${config.port}`)
+    return prefix + "Claude\u2019s saved API address differs from this proxy\u2019s address";
+  return prefix + (keys.length === 0 ? "local proxy authentication header is missing" : "local proxy authentication header does not match");
 }
 
 // dist/proxy/status.js
@@ -1346,14 +1354,14 @@ async function gatewayStatus(args, env, home, cwd) {
     const { state, config } = configStatus(home);
     const routes = targets.map(({ selected, paths }) => `  ${selected} ${JSON.stringify(paths.settings)}: ${routingStatus(paths, config)}.`);
     const shared = config ? `${state}; useClaudeSubscription ${config.useClaudeSubscription ? "on" : "off"}; profile ${JSON.stringify(config.profile)}; API ${config.apiUrl}; gateway ${config.gatewayUrl}.` : "not configured.";
-    const daemon = !config ? "not checked (no retained configuration)" : await healthy(config) ? `matching listener reachable${state === "disabled" ? " (saved config disabled; may be awaiting drain)" : ""}` : "not reachable or incompatible";
+    const daemon = !config ? "not checked (proxy setup is missing)" : await healthy(config) ? `matching listener reachable${state === "disabled" ? " (saved config disabled; may be awaiting drain)" : ""}` : "not reachable or incompatible";
     return [
       "Gateway status (read-only)",
       `Selected routing targets: ${scope ?? "global + current project"}`,
       ...routes,
       `Shared proxy configuration (applies to enabled scopes): ${shared}`,
       `Shared daemon: ${daemon}.`,
-      "Disk routing is not proof of this session's runtime routing. Configured forwarding mode does not verify actual Anthropic usage, authentication or subscription validity. Other projects may use the shared daemon."
+      "This shows saved settings. Your current Claude session may still be using earlier settings. Configured forwarding mode does not verify actual Anthropic usage, authentication or subscription validity. Other projects may use the shared daemon."
     ].join("\n");
   } catch (error) {
     throw new SetupError(error instanceof ConfigError ? error.message : STATUS_ERROR);

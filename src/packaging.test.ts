@@ -353,7 +353,7 @@ require("node:module").syncBuiltinESMExports();
         expect(status.stderr).toBe("");
         expect(JSON.parse(status.stdout)).toMatchObject({
           decision: "block",
-          reason: expect.stringContaining("configured; disk routing matches private config"),
+          reason: expect.stringContaining("configured to use the local gateway proxy"),
         });
       }
       expect(controls).toEqual(Array(6).fill("GET /_langsmith/health"));

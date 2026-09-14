@@ -420,11 +420,23 @@ export function routingStatus(paths: ReturnType<typeof targetPaths>, config?: Pr
   const current = routingSnapshot(paths.settings);
   const env = routingEnv(current);
   const prefix = `settings ${current ? "present" : "missing"}; `;
-  if (!config) return prefix + "not configured (no retained config)";
+  if (!config) return prefix + "proxy setup is missing";
+  if (matchesRouting(env, config)) return prefix + "configured to use the local gateway proxy";
+  const headers = env[HEADERS];
+  const keys = typeof headers === "string" ? lines(headers).filter(keyLine) : [];
+  if (env[BASE] === undefined || env[BASE] === "")
+    return (
+      prefix +
+      (keys.length
+        ? "gateway routing is incomplete; local proxy authentication header is present but Claude’s saved API address is missing"
+        : "gateway routing is not configured in this settings file")
+    );
+  if (env[BASE] !== `http://127.0.0.1:${config.port}`)
+    return prefix + "Claude’s saved API address differs from this proxy’s address";
   return (
     prefix +
-    (matchesRouting(env, config)
-      ? "configured; disk routing matches private config"
-      : "not configured; disk routing does not match private config")
+    (keys.length === 0
+      ? "local proxy authentication header is missing"
+      : "local proxy authentication header does not match")
   );
 }

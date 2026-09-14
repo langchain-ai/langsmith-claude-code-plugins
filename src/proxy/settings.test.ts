@@ -15,11 +15,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as os from "node:os";
-import { enable, disable, SetupError } from "./settings.js";
+import { enable, disable, routingStatus, SetupError } from "./settings.js";
 import { API_URL, UPSTREAM, configDir, loadConfig } from "./config.js";
 import { atomic, snapshot, transaction } from "./files.js";
 import { control, ensure, waitForStopped } from "./lifecycle.js";
-import { targetPaths, configuredScope } from "./scopes.js";
+import { targetPaths, configuredScope, matchesRouting, BASE, HEADERS } from "./scopes.js";
 import { spawnSync } from "node:child_process";
 import { handleGatewayInput } from "./commands.js";
 import { identity } from "./server.js";
@@ -1438,4 +1438,106 @@ it("index changes do not change daemon identity or require referenced files for 
   writeFileSync(join(configDir(home), "config.json"), JSON.stringify(indexed));
   expect(identity(indexed)).toBe(identity(config));
   expect(configuredScope(home, home, loadConfig()!)).toBe(true);
+});
+
+describe("saved routing diagnostics", () => {
+  const config = {
+    enabled: true,
+    useClaudeSubscription: false,
+    cli: "/unused-cli",
+    profile: "unused-profile",
+    port: 43127,
+    secret: "synthetic-proxy-secret",
+  };
+  const base = `http://127.0.0.1:${config.port}`;
+  const key = `X-LangSmith-Proxy-Key: ${config.secret}`;
+  const unconfigured = "gateway routing is not configured in this settings file";
+  const configured = "configured to use the local gateway proxy";
+  const incomplete =
+    "gateway routing is incomplete; local proxy authentication header is present but Claude’s saved API address is missing";
+  const differentBase = "Claude’s saved API address differs from this proxy’s address";
+  const missingKey = "local proxy authentication header is missing";
+  const differentKey = "local proxy authentication header does not match";
+  it.each([
+    { name: "missing file", saved: undefined, diagnostic: unconfigured },
+    { name: "missing env", saved: {}, diagnostic: unconfigured },
+    { name: "empty env", saved: { env: {} }, diagnostic: unconfigured },
+    {
+      name: "unrelated headers only",
+      headers: "X-Private: synthetic-header",
+      diagnostic: unconfigured,
+    },
+    { name: "key without base", headers: key, diagnostic: incomplete },
+    { name: "empty base with key", base: "", headers: key, diagnostic: incomplete },
+    { name: "matching route", base, headers: key, diagnostic: configured },
+    {
+      name: "matching with unrelated headers and blank lines",
+      base,
+      headers: `X-Private: synthetic-header\n\n${key}\n`,
+      diagnostic: configured,
+    },
+    {
+      name: "different base",
+      base: "https://synthetic-user:synthetic-password@example.test/private?key=synthetic-query",
+      headers: key,
+      diagnostic: differentBase,
+    },
+    {
+      name: "non-string base",
+      base: { secret: "synthetic-private-value" },
+      headers: key,
+      diagnostic: differentBase,
+    },
+    { name: "missing headers", base, diagnostic: missingKey },
+    {
+      name: "unrelated headers",
+      base,
+      headers: "X-Private: synthetic-header",
+      diagnostic: missingKey,
+    },
+    {
+      name: "non-string headers",
+      base,
+      headers: [key, "synthetic-private-value"],
+      diagnostic: missingKey,
+    },
+    {
+      name: "wrong key",
+      base,
+      headers: "X-LangSmith-Proxy-Key: synthetic-wrong-key",
+      diagnostic: differentKey,
+    },
+    { name: "duplicate key", base, headers: `${key}\n${key}`, diagnostic: differentKey },
+    { name: "differently cased key", base, headers: key.toLowerCase(), diagnostic: differentKey },
+    { name: "extra key whitespace", base, headers: ` ${key}`, diagnostic: differentKey },
+    {
+      name: "mixed-case duplicate",
+      base,
+      headers: `${key}\n ${key.toLowerCase()}`,
+      diagnostic: differentKey,
+    },
+  ])("$name", (test) => {
+    const saved =
+      "saved" in test ? test.saved : { env: { [BASE]: test.base, [HEADERS]: test.headers } };
+    if (saved !== undefined) save(saved);
+    const before = snapshot(settings);
+    const result = routingStatus(targetPaths(home, "global", ""), config);
+    expect(result).toBe(
+      `settings ${saved === undefined ? "missing" : "present"}; ${test.diagnostic}`,
+    );
+    // Diagnostics must agree with the existing exact routing matcher, including
+    // its case/spacing and duplicate-key rules, without changing those rules.
+    expect(matchesRouting(saved && "env" in saved ? saved.env : {}, config)).toBe(
+      test.diagnostic === configured,
+    );
+    expect(result).not.toMatch(/synthetic-|X-LangSmith|https?:/);
+    expect(snapshot(settings)).toEqual(before);
+    expect(ensure).not.toHaveBeenCalled();
+  });
+  it("reports missing setup even when settings contain proxy transport", () => {
+    save({ env: { [BASE]: base, [HEADERS]: key } });
+    expect(routingStatus(targetPaths(home, "global", ""))).toBe(
+      "settings present; proxy setup is missing",
+    );
+  });
 });
