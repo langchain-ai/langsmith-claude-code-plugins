@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { httpsOrigin, endpoints, API_URL, UPSTREAM } from "./config.js";
-import { parseEnableArgs } from "./options.js";
+import { parseSetupArgs } from "./options.js";
 
 describe("strict endpoint origins and paired explicit setup arguments", () => {
   it.each([
@@ -51,14 +51,16 @@ describe("strict endpoint origins and paired explicit setup arguments", () => {
     expect(() => endpoints({ apiUrl: API_URL })).toThrow("both");
     expect(() => endpoints({ apiUrl: null, gatewayUrl: UPSTREAM })).toThrow();
   });
-  it("accepts consented enable positional options and profile plus endpoint pair", () => {
+  it("accepts named setup options and profile plus endpoint pair", () => {
     expect(
-      parseEnableArgs([
-        "--yes",
+      parseSetupArgs([
         "--scope",
         "global",
+        "--cli",
         "/bin/cli",
+        "--profile",
         "preview",
+        "--port",
         "43127",
         "--api-url",
         "https://api.preview.test/",
@@ -74,50 +76,47 @@ describe("strict endpoint origins and paired explicit setup arguments", () => {
       apiUrl: "https://api.preview.test",
       gatewayUrl: "https://gateway.preview.test",
     });
-    expect(parseEnableArgs(["--yes", "--scope", "global", "--profile", "preview"])).toEqual({
+    expect(parseSetupArgs(["--scope", "global", "--profile", "preview"])).toEqual({
       scope: "global",
       useClaudeSubscription: false,
       profile: "preview",
     });
-    expect(parseEnableArgs(["--yes", "--scope", "global"])).toEqual({
+    expect(parseSetupArgs(["--scope", "global"])).toEqual({
       scope: "global",
       useClaudeSubscription: false,
       profile: undefined,
     });
   });
   it.each([
-    ["--yes", "--scope", "global", "--api-url", API_URL],
-    ["--yes", "--scope", "global", "--gateway-url", UPSTREAM],
-    ["--yes", "--scope", "global", "--profile", "a", "--profile", "b"],
-    ["--yes", "--scope", "global", "--profile"],
-    ["--yes", "--scope", "global", "--unknown", "x"],
-    ["--yes", "--scope", "global", "/cli", "a", "43127", "--profile", "b"],
-    ["--yes", "--scope", "global", "/cli", "a"],
-    ["--yes", "--scope", "global", "/cli", "a", "0"],
-    ["--yes", "--scope", "global", "--yes"],
-    ["--yes", "--scope", "global", "--profile", "bad profile"],
-    ["--yes", "--scope", "global", "--api-url=http://bad"],
+    ["--scope", "global", "--api-url", API_URL],
+    ["--scope", "global", "--gateway-url", UPSTREAM],
+    ["--scope", "global", "--profile", "a", "--profile", "b"],
+    ["--scope", "global", "--profile"],
+    ["--scope", "global", "--unknown", "x"],
+    ["--scope", "global", "/cli", "a", "43127"],
+    ["--scope", "global", "bare"],
+    ["--yes", "--scope", "global"],
+    ["--scope", "global", "--profile", "bad profile"],
+    ["--scope", "global", "--api-url=http://bad"],
   ])("refuses invalid or mutually exclusive flags: %j", (...args) => {
-    expect(() => parseEnableArgs(args)).toThrow();
+    expect(() => parseSetupArgs(args)).toThrow();
   });
   it.each([[], ["/cli", "a", "43127"], ["--profile", "preview"]])(
-    "requires runtime consent before parsing options: %j",
+    "requires explicit scope: %j",
     (...args) => {
-      expect(() => parseEnableArgs(args)).toThrow("within Claude Code");
-      expect(() => parseEnableArgs(args)).toThrow("within Claude Code");
+      expect(() => parseSetupArgs(args)).toThrow("within Claude Code");
     },
   );
 });
 
-it("rejects control bytes in raw executable arguments before filesystem validation", () => {
-  expect(() => parseEnableArgs(["--yes", "--scope", "global", "--cli", "/tmp/cli\n"])).toThrow();
+it("rejects control bytes in setup arguments before filesystem validation", () => {
+  expect(() => parseSetupArgs(["--scope", "global", "--cli", "/tmp/cli\n"])).toThrow();
 });
 
 it.each([true, false])("parses subscription flag presence %s with all other options", (choice) => {
   const flags = choice ? ["--use-claude-subscription"] : [];
   expect(
-    parseEnableArgs([
-      "--yes",
+    parseSetupArgs([
       ...flags,
       "--scope",
       "project",
@@ -138,19 +137,14 @@ it.each([true, false])("parses subscription flag presence %s with all other opti
     profile: "test",
     port: 43127,
   });
-  expect(parseEnableArgs(["--yes", "--scope", "global"]).useClaudeSubscription).toBe(false);
 });
 it.each([
-  ["--use-claude-subscription", "--no-use-claude-subscription"],
-  ["--no-use-claude-subscription", "--use-claude-subscription"],
   ["--use-claude-subscription", "--use-claude-subscription"],
-  ["--no-use-claude-subscription", "--no-use-claude-subscription"],
   ["--no-use-claude-subscription"],
   ["--use-claude-subscription=true"],
   ["--use-claude-subscription=false"],
   ["--use-claude-subscription", "true"],
   ["--use-claude-subscription", "false"],
-  ["--no-use-claude-subscription", "false"],
 ])("rejects unsupported subscription arguments %j", (...flags) => {
-  expect(() => parseEnableArgs(["--yes", "--scope", "global", ...flags])).toThrow();
+  expect(() => parseSetupArgs(["--scope", "global", ...flags])).toThrow();
 });

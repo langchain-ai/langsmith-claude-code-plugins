@@ -20,24 +20,25 @@ import {
 } from "./files.js";
 import { createConfig, validateCLI } from "./setup.js";
 import { ensure, waitForStopped } from "./lifecycle.js";
-import { createHash } from "node:crypto";
-import { parseEnableArgs, parseSetupArgs, parseDisableArgs, SetupError } from "./options.js";
-import { targetPaths, secretGitCheck, receiptSnapshots } from "./scopes.js";
+import { parseSetupArgs, parseDisableArgs, SetupError } from "./options.js";
+import {
+  targetPaths,
+  secretGitCheck,
+  routingTargets,
+  routingSnapshot,
+  unchangedRouting,
+  routingEnv,
+  matchesRouting,
+  proxyKeyLine,
+  BASE,
+  HEADERS,
+} from "./scopes.js";
 export { SetupError } from "./options.js";
-
-// Ownership must survive daemon protocol upgrades; it binds only the retained
-// private config, not the forwarding protocol or upstream implementation version.
-const ownershipIdentity = (config: ProxyConfig) =>
-  createHash("sha256")
-    .update(JSON.stringify([config.cli, config.profile, config.port, config.secret]))
-    .digest("hex");
 
 // Only fixed, non-sensitive diagnostics may reach the command's output.
 const fail = (message: string): never => {
   throw new SetupError(message);
 };
-const BASE = "ANTHROPIC_BASE_URL";
-const HEADERS = "ANTHROPIC_CUSTOM_HEADERS";
 const AUTH = [
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_API_KEY",
@@ -62,6 +63,10 @@ function text(value: unknown): string | undefined {
 function lines(value: string | undefined): string[] {
   return value === undefined ? [] : value.split("\n");
 }
+// Keep the exact generated representation, including blank lines and value spacing.
+function withProxyKey(headers: string | undefined, config: ProxyConfig): string {
+  return (headers ? headers + "\n" : "") + `X-LangSmith-Proxy-Key: ${config.secret}`;
+}
 function keyLine(line: string): boolean {
   return /^\s*x-langsmith-proxy-key\s*:/i.test(line);
 }
@@ -82,38 +87,6 @@ function validateHeaders(value: string | undefined): void {
         "Custom Host headers are unsupported by persistent setup. Remove the Host header explicitly so the client uses the loopback target; review headers privately.",
       );
   }
-}
-interface Receipt {
-  version: 1;
-  identity: string;
-  beforeBase: string | null;
-  beforeHeaders: string | null;
-  afterBase: string;
-  afterHeaders: string;
-  envExisted: boolean;
-}
-function receipt(s: Snapshot | undefined, config: ProxyConfig): Receipt | undefined {
-  if (!s) return;
-  const value = JSON.parse(s.text);
-  if (value === null) return;
-  const r = object(value);
-  if (
-    r.version !== 1 ||
-    r.identity !== ownershipIdentity(config) ||
-    !(r.beforeBase === null || typeof r.beforeBase === "string") ||
-    !(r.beforeHeaders === null || typeof r.beforeHeaders === "string") ||
-    typeof r.afterBase !== "string" ||
-    typeof r.afterHeaders !== "string" ||
-    typeof r.envExisted !== "boolean"
-  )
-    return fail(
-      "Setup recovery record does not match the private config; resolve privately, do not overwrite it.",
-    );
-  return r as unknown as Receipt;
-}
-function assign(env: ObjectValue, key: string, value: string | null): void {
-  if (value === null) delete env[key];
-  else env[key] = value;
 }
 function settings(s: Snapshot | undefined): { value: ObjectValue; env: ObjectValue } {
   const value = s ? object(JSON.parse(s.text)) : {};
@@ -160,37 +133,27 @@ function discoverCLI(env: NodeJS.ProcessEnv): string {
     "LangSmith CLI not found. Install it using the README, complete terminal login with your selected profile and API URL (review the saved OAuth issuer), then retry /langsmith-gateway:setup.",
   );
 }
-// Allowlisted metadata only: no settings/CLI-store reads, executable discovery,
-// filesystem writes, auth, network, or daemon startup before consent.
-export function setupPlan(args: string[], env = process.env, home = userHome()) {
-  const requested = parseSetupArgs(args);
-  supportedHome(home, env);
-  const config = loadConfig(home, true);
-  return {
-    ...endpoints(requested.apiUrl === undefined ? (config ?? {}) : requested),
-    useClaudeSubscription: requested.useClaudeSubscription,
-    profile: requested.profile ?? config?.profile ?? "claude-gateway",
-    port: requested.port ?? config?.port ?? 43127,
-    status: config ? (loadConfig(home) ? "enabled" : "disabled") : "missing",
-  };
-}
-
 export async function enable(
   entry: string,
   args: string[],
   env = process.env,
   home = userHome(),
   cwd = process.cwd(),
-): Promise<{ settingsChanged: boolean; useClaudeSubscription: boolean; modeChanged: boolean }> {
-  const requested = parseEnableArgs(args);
+): Promise<{
+  settingsChanged: boolean;
+  useClaudeSubscription: boolean;
+  modeChanged: boolean;
+}> {
+  const requested = parseSetupArgs(args);
   supportedHome(home, env);
+  // Reject unsupported config before creating directories or a settings lock.
+  loadConfig(home, true);
   const unlock = lock(home);
   try {
     const p = targetPaths(home, requested.scope, cwd);
     directory(dirname(p.settings), true);
     secretGitCheck(p.settings);
     secretGitCheck(p.config);
-    secretGitCheck(p.receipt);
     const beforeSettings = snapshot(p.settings);
     const { value, env: savedEnv } = settings(beforeSettings);
     if (value.disableAllHooks === true)
@@ -211,17 +174,15 @@ export async function enable(
       headers = text(savedEnv[HEADERS]);
     validateHeaders(headers);
     let config = loadConfig(home, true);
-    const oldReceipt = snapshot(p.receipt, true);
-    if (!config && oldReceipt && JSON.parse(oldReceipt.text) !== null)
-      fail(
-        "Private config missing but a recovery record exists; restore the config privately before retrying.",
-      );
     const initiallyEnabled = loadConfig(home) !== undefined;
-    const allReceipts = receiptSnapshots(home);
-    if (!config && allReceipts.length)
-      fail("Private config missing but recovery records exist; restore privately.");
-    if (config) for (const item of allReceipts) receipt(item.saved, config);
-    const prior = config ? receipt(oldReceipt, config) : undefined;
+    const targets = routingTargets(home, cwd, config);
+    const active = config
+      ? targets.filter((item) => matchesRouting(routingEnv(item.saved), config!))
+      : [];
+    const settingsTargets = [...new Set([...active.map((item) => item.path), p.settings])];
+    if (settingsTargets.length > 128)
+      fail("Too many active routing targets; disable unused scopes before setup.");
+    const prior = !!config && matchesRouting(savedEnv, config);
     const port = requested.port ?? config?.port ?? 43127;
     const selected =
       requested.apiUrl === undefined ? endpoints(config ?? {}) : endpoints(requested);
@@ -229,6 +190,7 @@ export async function enable(
     const next = config
       ? {
           ...config,
+          enabled: true,
           ...selected,
           useClaudeSubscription,
           cli: requested.cli === undefined ? config.cli : validateCLI(requested.cli),
@@ -244,19 +206,19 @@ export async function enable(
         config.port !== next.port ||
         endpoints(config).apiUrl !== next.apiUrl ||
         endpoints(config).gatewayUrl !== next.gatewayUrl);
-    if (changing && (initiallyEnabled || allReceipts.length))
+    if (changing && (initiallyEnabled || active.length))
       fail(
-        "Existing pinned CLI/profile/port or endpoints differ. Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit config or delete ownership records.",
+        "Existing pinned CLI/profile/port or endpoints differ. Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit the shared config while other scopes are active.",
       );
     const modeChanged = !!config && config.useClaudeSubscription !== useClaudeSubscription;
     const switching = initiallyEnabled && modeChanged;
-    if (modeChanged && allReceipts.some((item) => item.path !== p.receipt))
+    if (modeChanged && active.some((item) => item.path !== p.settings))
       fail(
         "Subscription forwarding is shared. Disable every other active scope first, then retry setup for this scope; other scopes will not be silently switched.",
       );
     if (switching && !prior)
       fail(
-        "Only the sole active owned target can switch subscription forwarding in place. Disable existing routing first, then retry setup.",
+        "Only the sole active configured target can switch subscription forwarding in place. Disable existing routing first, then retry setup.",
       );
     const target = `http://127.0.0.1:${port}`;
     if (
@@ -266,40 +228,28 @@ export async function enable(
       fail(
         "Conflicting ANTHROPIC_BASE_URL. Remove it explicitly before setup; it will not be overwritten.",
       );
+    // Retained local key recognizes same-session re-enable without importing
+    // inherited headers into the selected settings file.
+    const retainedHeaders = !!config && !prior && env[HEADERS] === withProxyKey(headers, config);
     // Do not copy shell/project headers (potential secrets) into user settings.
     if (
       env[HEADERS] !== undefined &&
       env[HEADERS] !== headers &&
-      !(
-        config &&
-        allReceipts.some(({ saved }) => receipt(saved, config!)?.afterHeaders === env[HEADERS])
-      )
+      !retainedHeaders &&
+      !(config && active.some(({ saved }) => routingEnv(saved)[HEADERS] === env[HEADERS]))
     )
       fail(
-        "Inherited custom headers differ from user settings. Restart Claude without that override before setup.",
+        "Inherited custom headers differ from the selected scope settings and do not match trusted local transport. Resolve the override privately before setup; it will not be copied into settings.",
       );
-    const owned = config ? `X-LangSmith-Proxy-Key: ${config.secret}` : undefined;
+    const expectedKey = config ? `X-LangSmith-Proxy-Key: ${config.secret}` : undefined;
     const keys = lines(headers).filter(keyLine);
-    if (keys.length && (!prior || keys.length !== 1 || keys[0] !== owned))
-      fail("Conflicting local proxy header; no unowned header will be replaced.");
+    if (keys.length && (!config || keys.length !== 1 || keys[0] !== expectedKey))
+      fail("Conflicting local proxy header; no different header will be replaced.");
     if (switching && (base !== target || keys.length !== 1))
       fail(
-        "Owned transport settings changed. Restore them privately or disable this scope before switching subscription forwarding.",
+        "Configured transport settings changed. Review them privately or disable this scope before switching subscription forwarding.",
       );
     if (!config) {
-      // A bare legacy disabled marker has no retained executable/profile/key.
-      const old = snapshot(p.config, true);
-      if (old) {
-        if (
-          old.text.trim() !== '{"enabled":false}' &&
-          JSON.stringify(JSON.parse(old.text)) !== '{"enabled":false}'
-        )
-          fail("Invalid disabled config; resolve privately before retrying.");
-        // Do not silently discard unknown or incomplete legacy configuration.
-        fail(
-          "Legacy disabled marker has no pinned CLI/profile. Remove only that marker, then retry /langsmith-gateway:setup.",
-        );
-      }
       createConfig(
         requested.cli ?? discoverCLI(env),
         requested.profile ?? "claude-gateway",
@@ -317,10 +267,9 @@ export async function enable(
     let configSnapshot = snapshot(p.config, true);
     if (switching) {
       unchanged(p.settings, beforeSettings);
-      unchanged(p.receipt, oldReceipt, true);
-      for (const item of allReceipts) unchanged(item.path, item.saved, true);
+      for (const item of targets) unchangedRouting(item.path, item.saved);
       // Persist the requested mode, disabled, before waiting. Old versions also
-      // recognize disabled config. Keep transport/key/receipt untouched and never
+      // recognize disabled config. Keep transport/key untouched and never
       // restore subscription forwarding automatically after an opt-out failure.
       atomic(p.config, jsonText({ ...next!, enabled: false }), configSnapshot);
       configSnapshot = snapshot(p.config, true);
@@ -335,8 +284,7 @@ export async function enable(
       );
       unchanged(p.config, configSnapshot, true);
       unchanged(p.settings, beforeSettings);
-      unchanged(p.receipt, oldReceipt, true);
-      for (const item of allReceipts) unchanged(item.path, item.saved, true);
+      for (const item of targets) unchangedRouting(item.path, item.saved);
       config = next;
     }
     // Re-enable retained config without rotating the local key.
@@ -348,46 +296,46 @@ export async function enable(
       privatePath(configDir(home), true);
       unchanged(p.settings, beforeSettings);
       unchanged(p.config, currentConfig, true);
-      unchanged(p.receipt, oldReceipt, true);
-      for (const item of allReceipts) unchanged(item.path, item.saved, true);
+      for (const item of targets) unchangedRouting(item.path, item.saved);
       directory(dirname(p.settings));
       secretGitCheck(p.settings);
       secretGitCheck(p.config);
-      secretGitCheck(p.receipt);
-      const line = `X-LangSmith-Proxy-Key: ${config.secret}`;
-      const afterHeaders = keys.length ? headers! : (headers ? headers + "\n" : "") + line;
-      const record: Receipt = prior ?? {
-        version: 1,
-        identity: ownershipIdentity(config),
-        beforeBase: base ?? null,
-        beforeHeaders: headers ?? null,
-        afterBase: target,
-        afterHeaders,
-        envExisted: value.env !== undefined,
-      };
-      // Write-ahead ownership record: interrupted operations can be disabled safely.
-
+      const afterHeaders = keys.length ? headers! : withProxyKey(headers, config);
       savedEnv[BASE] = target;
       savedEnv[HEADERS] = afterHeaders;
       value.env = savedEnv;
       const settingsChanged = base !== target || headers !== afterHeaders;
       transaction([
-        ...(!prior ? [{ path: p.receipt, text: jsonText(record), prior: oldReceipt }] : []),
+        {
+          path: p.config,
+          text: jsonText({
+            ...config,
+            settingsTargets,
+          }),
+          prior: currentConfig,
+        },
         ...(settingsChanged
           ? [{ path: p.settings, text: jsonText(value), prior: beforeSettings }]
           : []),
       ]);
-      return { settingsChanged, useClaudeSubscription: config.useClaudeSubscription, modeChanged };
+      return {
+        settingsChanged,
+        useClaudeSubscription: config.useClaudeSubscription,
+        modeChanged,
+      };
     } catch (error) {
       // Leave settings untouched on readiness failure; a newly created/re-enabled
       // daemon sees disabled config and drains. Existing enabled installs stay enabled.
       if (!initiallyEnabled || switching) {
-        unchanged(p.config, currentConfig, true);
-        atomic(p.config, jsonText({ ...config, enabled: false }), currentConfig);
+        // A failed settings write may have rolled back the config transaction
+        // with a new inode. Disable only if its exact pre-transaction text remains.
+        const rolledBack = snapshot(p.config, true);
+        if (rolledBack?.text !== currentConfig?.text) throw error;
+        atomic(p.config, jsonText({ ...config, enabled: false }), rolledBack);
       }
       if (switching)
         fail(
-          "Gateway mode switch did not complete. Config remains disabled with the requested mode; routing settings and ownership are retained. Retry the same setup options after resolving local daemon readiness privately. No client restart is needed if transport settings are unchanged.",
+          "Gateway mode switch did not complete. Config remains disabled with the requested mode; routing settings are retained. Retry the same setup options after resolving local daemon readiness privately.",
         );
       throw error;
     }
@@ -422,53 +370,61 @@ export function disable(
     const config = loadConfig(home, true);
     if (!config) return;
     const p = targetPaths(home, requested.scope, cwd);
-    const allReceipts = receiptSnapshots(home);
-    for (const item of allReceipts) receipt(item.saved, config);
+    const targets = routingTargets(home, cwd, config);
     const configSnapshot = snapshot(p.config, true);
-    const recordSnapshot = snapshot(p.receipt, true);
-    const r = receipt(recordSnapshot, config);
-    if (!r) {
-      // Legacy config-only installs have no owned settings to restore. Explicit
-      // disable may stop them, but never stop a daemon with another active target.
-      if (!allReceipts.length && loadConfig(home))
-        atomic(p.config, jsonText({ ...config, enabled: false }), configSnapshot);
-      return;
-    }
-    directory(dirname(p.settings));
-    const before = snapshot(p.settings);
+    const before = targets.find((item) => item.path === p.settings)?.saved;
     const { value, env: savedEnv } = settings(before);
-    const writes: { path: string; text: string; prior: Snapshot | undefined }[] = [];
-    if (r) {
-      if (savedEnv[BASE] === r.afterBase) assign(savedEnv, BASE, r.beforeBase);
-      const current = text(savedEnv[HEADERS]);
-      if (current === r.afterHeaders) assign(savedEnv, HEADERS, r.beforeHeaders);
-      else if (current !== undefined) {
-        // Remove only our exact line, retaining later user headers and changed keys.
-        const line = `X-LangSmith-Proxy-Key: ${config.secret}`;
-        const remaining = lines(current).filter((item) => item !== line);
-        if (remaining.length !== lines(current).length)
-          assign(
-            savedEnv,
-            HEADERS,
-            remaining.length ? remaining.join("\n") : r.beforeHeaders === null ? null : "",
-          );
-      }
-      if (!r.envExisted && Object.keys(savedEnv).length === 0) delete value.env;
-      else if (value.env !== undefined) value.env = savedEnv;
-      if (before && JSON.stringify(value) !== JSON.stringify(JSON.parse(before.text)))
-        writes.push({ path: p.settings, text: jsonText(value), prior: before });
+    let routingRemoved = false;
+    if (savedEnv[BASE] === `http://127.0.0.1:${config.port}`) {
+      delete savedEnv[BASE];
+      routingRemoved = true;
     }
-    if (!allReceipts.some((item) => item.path !== p.receipt))
-      writes.push({
-        path: p.config,
-        text: jsonText({ ...config, enabled: false }),
-        prior: configSnapshot,
-      });
-    if (recordSnapshot) writes.push({ path: p.receipt, text: "null\n", prior: recordSnapshot });
-    for (const item of allReceipts) unchanged(item.path, item.saved, true);
+    const current = text(savedEnv[HEADERS]);
+    if (current !== undefined) {
+      const remaining = lines(current).filter((line) => line !== proxyKeyLine(config));
+      if (remaining.length !== lines(current).length) {
+        routingRemoved = true;
+        if (remaining.length) savedEnv[HEADERS] = remaining.join("\n");
+        else delete savedEnv[HEADERS];
+      }
+    }
+    if (routingRemoved && Object.keys(savedEnv).length === 0) delete value.env;
+    else if (value.env !== undefined) value.env = savedEnv;
+    const remainingTargets = targets.filter(
+      (item) => item.path !== p.settings && matchesRouting(routingEnv(item.saved), config),
+    );
+    if (remainingTargets.length > 128)
+      fail("Too many active routing targets; review the private target index before disable.");
+    const writes: { path: string; text: string; prior: Snapshot | undefined }[] = [];
+    if (before && JSON.stringify(value) !== JSON.stringify(JSON.parse(before.text)))
+      writes.push({ path: p.settings, text: jsonText(value), prior: before });
+    writes.push({
+      path: p.config,
+      text: jsonText({
+        ...config,
+        enabled: loadConfig(home) !== undefined && remainingTargets.length > 0,
+        settingsTargets: remainingTargets.map((item) => item.path),
+      }),
+      prior: configSnapshot,
+    });
+    for (const item of targets) unchangedRouting(item.path, item.saved);
     transaction(writes);
     // Config watcher drains within five seconds; never kills a listener by PID/port.
   } finally {
     unlock();
   }
+}
+
+// Status observes actual disk routing, never legacy receipts or list membership.
+export function routingStatus(paths: ReturnType<typeof targetPaths>, config?: ProxyConfig): string {
+  const current = routingSnapshot(paths.settings);
+  const env = routingEnv(current);
+  const prefix = `settings ${current ? "present" : "missing"}; `;
+  if (!config) return prefix + "not configured (no retained config)";
+  return (
+    prefix +
+    (matchesRouting(env, config)
+      ? "configured; disk routing matches private config"
+      : "not configured; disk routing does not match private config")
+  );
 }

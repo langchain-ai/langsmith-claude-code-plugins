@@ -143,77 +143,69 @@ notification chain`). Both roots close `success`.
 
 ## Experimental gateway tests
 
-Build the packages, then run the focused offline checks:
-
-```sh
-pnpm build
-pnpm exec vitest run src/packaging.test.ts src/proxy/proxy.test.ts src/proxy/settings.test.ts src/proxy/options.test.ts src/proxy/polling.test.ts
-```
-
-Use `pnpm exec vitest run` rather than `pnpm test <files>` to avoid script argument
-forwarding that can run the full suite. The package test isolates OS-home lookup;
-setting `HOME` alone does not isolate the proxy config. Use this harness rather
-than smoke-running the bundle against real user configuration.
-
-With dependencies already installed, bypass Corepack/package-manager bootstrap
-(and any network/signature lookup) by running the local tools from the repo root:
+With dependencies installed, build and run the offline checks from the repo root.
+These local tools bypass Corepack bootstrap and network/signature lookups:
 
 ```sh
 ./node_modules/.bin/tsc
 node esbuild.config.mjs
-./node_modules/.bin/vitest run src/packaging.test.ts src/proxy/proxy.test.ts src/proxy/settings.test.ts src/proxy/options.test.ts src/proxy/polling.test.ts
+./node_modules/.bin/vitest run src/packaging.test.ts src/proxy
 ./node_modules/.bin/oxlint
 ./node_modules/.bin/oxfmt --check src/proxy src/hooks/gateway.ts src/packaging.test.ts
 ```
 
+The package-manager equivalents are `pnpm build` and `pnpm exec vitest run
+src/packaging.test.ts src/proxy`; avoid `pnpm test <files>`, which can forward
+arguments incorrectly and run the full suite.
+
+Tests use scratch OS homes, fake CLIs and local upstreams. **HOME alone does not
+isolate config:** use the packaged harness, which redirects OS-home lookup and
+guards effects, rather than smoke-running the bundle against real user config.
+Status tests additionally forbid writes, credential reads, subprocesses and
+session controls; only the bounded loopback health probe is allowed.
+
 ### Offline scenarios
 
-- Packaging: separate marketplace sources, hook/bundle paths, standalone loading,
-  a read-only plan exposing only selected destinations/profile/port/status/subscription mode without
-  settings reads, secrets, writes, network or subprocesses; healthy enable without
-  token calls (under a 2-second test bound); disabled hooks without network or state changes, and rejection of removed
-  setup/launch entrypoints and unscoped/unauthorized enable/disable. Rejection checks isolate
-  the OS home and deny config reads, network, subprocesses, and filesystem writes.
-- Subscription mode: presence-only flag selects true; omission selects false on every
-  explicit setup, even with saved true or retained disabled config. Negative flags,
-  boolean values and duplicates reject without writes. Legacy missing-field reads
-  and session hooks preserve true until explicit setup without the flag switches
-  safely to false; hooks never require repeating setup each session. Check mode fingerprints
-  and polling drain, sole-owned-target toggles with byte-stable settings/receipt/key,
-  multi-scope and ownership refusal, unchanged endpoint disable-first rules, retained
-  disabled opt-out on drain/readiness failure and retry, safe plan/command summaries,
-  no client restart instruction for daemon-only changes, fake credential child
-  cancellation before listener release. Signed-out Claude client behavior is not
-  established by these tests.
-- Proxy: OAuth-only requests without native auth, adversarial native/aux auth stripping,
-  native/local auth validation, spoofed-header stripping, LS Bearer plus raw
-  native passthrough, bare-model normalization and preserved provider/model
-  overrides, JSON field retention and framing, malformed/oversized/compressed
-  request rejection before CLI refresh, native Anthropic count-token mapping and
-  local 501 for other prefixes, unified routing, SSE in both modes and cancellation.
-- Lifecycle/tokens: leases, bind/recovery, incompatible daemon identity, cache
-  expiry, singleflight, timeout, sanitized selected-profile/API login errors, and
-  SessionStart health/register only (authentication first model use).
-- Persistent setup: explicit scoped invocation, deterministic blocking before disabled config,
-  multi-project/global reference counts, legacy ownership migration, git secret protection, OS-home isolation, private atomic settings and
-  ownership receipt, exact header preservation, conflict/link/mode refusal, readiness
-  failures, idempotence, reversible disable and later/concurrent edits.
-- Configured destinations: strict HTTPS origin parsing/normalization, paired flags and mutually
-  exclusive profile forms, legacy defaults, endpoint identity changes, configured
-  CLI API flag, configured HTTPS hostname/port for every allowed route, rejected
-  redirects/no production fallback, disable-first endpoint/profile replacement,
-  old work drain and occupied-listener refusal, retained disabled destinations on failed daemon startup.
+- **Packaging/commands:** independent marketplace packages and bundles; standalone
+  loading; deterministic setup/disable/status through hook stdin for both scopes;
+  disabled hooks/daemon no-op. Unsupported argv and malformed slash options reject
+  before I/O, subprocesses or token acquisition.
+- **Status/config:** missing, enabled and retained-disabled full schemas; explicit
+  mode, receipt-free provisioning, scoped disk drift, unsafe paths and sanitized
+  errors. Matching, offline, incompatible, timed-out and draining listeners never
+  establish live client routing, authentication or subscription validity.
+- **Subscription mode:** presence selects true, omission false on every setup;
+  invalid/duplicate flags reject, hooks retain saved booleans. Fingerprints and
+  polling drain; sole-target switching with stable settings/key; multi-scope and
+  altered-routing refusal; opt-out stays disabled on drain/readiness failure and
+  retries safely. Credential children cancel before listener release.
+- **Proxy:** local/native auth validation and adversarial header stripping;
+  OAuth-only without native auth; LS Bearer and opt-in native passthrough; model
+  normalization/overrides, JSON framing, malformed/oversized/compressed rejection
+  before refresh, Anthropic count-token mapping and local 501 for other providers,
+  unified routes, SSE in both modes and cancellation.
+- **Lifecycle/tokens:** leases, exclusive bind/recovery, incompatible identities,
+  cache expiry/singleflight/timeout, sanitized profile/API login guidance and
+  health/register-only hooks. Authentication starts on the first model request.
+- **Settings:** global/multi-project disk matching, ignored receipts, git secret
+  protection, private atomic writes/rollback, exact headers, conflicts/links/modes,
+  idempotence, readiness failures and later/concurrent edits. Disable removes only
+  matching values without restoration and instructs affected sessions to restart.
+  Same-session re-enable preserves retained keys and disk headers without copying
+  inherited secrets or promising live reload; unknown/mutated/duplicate keys,
+  changed headers, missing config and base/port conflicts refuse without effects.
+  Ordinary hooks cannot re-enable disabled routing.
+- **Destinations:** strict paired HTTPS origins, named options, production defaults,
+  endpoint identity and CLI API selection, HTTPS host/port on every route, no
+  redirects/fallback, disable-first replacement, old-work drain and occupied-port
+  refusal; startup failure retains disabled selected destinations.
 
-Setup has no eager 10-second CLI/12-second auth-check wait. Healthy setup should
-be local-only; cold daemon startup still has a 4-second readiness polling budget.
-Re-enable after disable intentionally retains up to 36 seconds for old work to
-drain; conflicting listeners are never killed. First use may still wait up to
-10 seconds for CLI token acquisition plus upstream latency. No fixed total slash
-command latency guarantee (filesystem/git checks and listener drain add overhead).
+Healthy setup is local-only (no eager auth wait); cold readiness allows 4 seconds,
+re-enable drain up to 36 seconds, and first-use token acquisition up to 10 seconds
+plus upstream latency. Filesystem/git overhead prevents a total latency guarantee.
 
-For manual local preview testing, use the nested gateway `--plugin-dir` and retain
-that flag on restart/every session. Choose global or project settings scope; disable all active scopes and restart
-before removing the plugin. Do not make real-auth testing part of offline checks.
-
-Tests use fake CLI executables and local upstream doubles. Passing them does not
-establish gateway compatibility or real CLI concurrency safety.
+For manual preview testing, retain the nested gateway `--plugin-dir` on every
+session/restart, choose a settings scope, and disable all active scopes before
+removing the plugin. Keep real-auth testing separate. Offline tests do not establish
+backend compatibility, signed-out client behavior, live settings reload or real
+CLI cross-process concurrency safety.

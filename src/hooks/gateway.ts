@@ -1,39 +1,18 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
-import { loadConfig } from "../proxy/config.js";
+import { ConfigError, loadConfig } from "../proxy/config.js";
 import { createProxy, identity } from "../proxy/server.js";
 import { COMMAND_GUIDANCE } from "../proxy/options.js";
-import { enable, disable, modeSummary, setupPlan, SetupError } from "../proxy/settings.js";
+import { SetupError } from "../proxy/options.js";
 import { handleGatewayInput } from "../proxy/commands.js";
 
 const entry = fileURLToPath(import.meta.url);
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
-  if (command === "plan") {
-    process.stdout.write(JSON.stringify(setupPlan(args)) + "\n");
-    return;
-  }
-  if (command === "enable") {
-    const { settingsChanged, useClaudeSubscription, modeChanged } = await enable(entry, args);
-    process.stderr.write(
-      (settingsChanged
-        ? "Gateway settings saved for the selected scope; "
-        : "Gateway settings already configured for the selected scope; ") +
-        modeSummary(useClaudeSubscription, modeChanged) +
-        "local proxy healthy. Authentication is checked on the first model request, not during setup; deployment compatibility is not verified." +
-        (settingsChanged ? " Restart Claude to apply the settings." : "") +
-        " Use /langsmith-gateway:disable --scope global|project to undo owned settings.\n",
-    );
-    return;
-  }
-  if (command === "disable") {
-    disable(args);
-    process.stderr.write(
-      "Gateway disabled for the selected scope; only owned transport values were undone and later edits preserved. After the last active scope is disabled, the daemon drains after its next config check (within 5 seconds, up to 30 seconds for active work). Restart all Claude sessions without local proxy shell overrides. Keep private config for re-enable.\n",
-    );
-    return;
-  }
-  if (command !== undefined && command !== "daemon") throw new SetupError(COMMAND_GUIDANCE);
+  // Only hook stdin or the exact internal daemon argv is executable. Reject
+  // everything else before config reads, input handling or daemon side effects.
+  if (command !== undefined && (command !== "daemon" || args.length !== 0))
+    throw new SetupError(COMMAND_GUIDANCE);
   if (command === undefined) {
     let data = "";
     const timer = setTimeout(() => process.stdin.destroy(), 1000);
@@ -81,11 +60,11 @@ void main().catch((error) => {
   // Hook errors never block tracing/Claude and never include tokens, CLI stderr,
   // request bodies, or configuration. Daemon stdio is detached to /dev/null.
   process.stderr.write(
-    error instanceof SetupError
+    error instanceof SetupError || error instanceof ConfigError
       ? error.message + "\n"
-      : "Experimental LangSmith proxy unavailable; check private config, CLI executable, settings ownership/permissions/symlinks, and local port conflicts. No sensitive error details are printed. " +
+      : "Experimental LangSmith proxy unavailable; check private config, CLI executable, settings permissions/symlinks, and local port conflicts. No sensitive error details are printed. " +
           COMMAND_GUIDANCE +
           "\n",
   );
-  if (process.argv[2]) process.exitCode = 1;
+  if (process.argv.length > 2) process.exitCode = 1;
 });

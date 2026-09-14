@@ -7,14 +7,14 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { once } from "node:events";
-import { promisify } from "node:util";
 import { createProxy } from "./proxy/server.js";
-import { parseGatewayCommand } from "./proxy/options.js";
+import { COMMAND_GUIDANCE, parseGatewayCommand } from "./proxy/options.js";
 import { endpoints, type ProxyConfig } from "./proxy/config.js";
 import { isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
@@ -75,14 +75,18 @@ describe("separate marketplace packages", () => {
   });
 
   it("ships only argument-preserving deterministic command wrappers in the gateway", () => {
-    for (const name of ["setup", "disable"]) {
+    for (const name of ["setup", "disable", "status"]) {
       const command = readFileSync(join(gatewayRoot, "commands", `${name}.md`), "utf8");
       const [, frontmatter, body] = command.split("---\n");
       expect(frontmatter.trim().split("\n")).toEqual([
-        `description: ${name === "setup" ? "Enable" : "Disable"} gateway settings deterministically for an explicit scope`,
+        name === "status"
+          ? "description: Show read-only gateway routing and shared proxy status"
+          : `description: ${name === "setup" ? "Enable" : "Disable"} gateway settings deterministically for an explicit scope`,
         name === "setup"
           ? `argument-hint: "--scope global|project [--use-claude-subscription] [--profile name] [--api-url HTTPS_ORIGIN --gateway-url HTTPS_ORIGIN] [--cli /absolute/path --port 43127]"`
-          : `argument-hint: "--scope global|project"`,
+          : name === "status"
+            ? `argument-hint: "[--scope global|project]"`
+            : `argument-hint: "--scope global|project"`,
         "disable-model-invocation: true",
       ]);
       // Like tracing mute/unmute: no model instructions or fallback prose.
@@ -128,6 +132,7 @@ describe("separate marketplace packages", () => {
               ? "invalid-private-config"
               : JSON.stringify({
                   enabled: state !== "retained-disabled",
+                  useClaudeSubscription: false,
                   apiUrl: "https://api.preview.test",
                   gatewayUrl: "https://gateway.preview.test",
                   cli: process.execPath,
@@ -180,24 +185,8 @@ globalThis.fetch = deny;
 require("node:module").syncBuiltinESMExports();
 `,
         );
-        const invocations = [
-          ["setup"],
-          ["setup", process.execPath, "private-argument", "43127"],
-          ["setup", "--yes", "--scope", "global", "--profile", "private-argument"],
-          ["launch"],
-          ["launch", "--print", "private-argument"],
-          ["unknown-private-argument"],
-          ["--help"],
-          ["enable"],
-          ["enable", process.execPath, "private-argument", "43127"],
-          ["enable", "--yes", "--scope", "global", "--unknown", "private-argument"],
-          ["enable", "--yes", "--scope", "global", "--no-use-claude-subscription"],
-          ["enable", "--yes", "--scope", "global", "--use-claude-subscription=false"],
-          ["disable"],
-          ["disable", "--yes", "--scope", "global", "private-argument"],
-        ];
-        for (const args of invocations) {
-          const result = spawnSync(
+        const invoke = (args: string[], prompt?: string) =>
+          spawnSync(
             process.execPath,
             ["--require", guard, join(installed, "bundle/gateway.js"), ...args],
             {
@@ -205,119 +194,62 @@ require("node:module").syncBuiltinESMExports();
               env: { HOME: "/must-not-use-env-home", PATH: "", CLAUDE_PLUGIN_ROOT: installed },
               encoding: "utf8",
               timeout: 5000,
+              input:
+                prompt === undefined
+                  ? undefined
+                  : JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt, cwd: sandbox }),
             },
           );
+        const invocations = [
+          [""],
+          ["daemon", ""],
+          ["plan"],
+          ["enable", "--yes", "--scope", "global"],
+          ["disable", "--yes", "--scope", "global"],
+          ["status"],
+          ["daemon", "extra"],
+          ["daemon", "--scope", "global"],
+          ["setup"],
+          ["setup", process.execPath, "private-argument", "43127"],
+          ["setup", "--yes", "--scope", "global", "--profile", "private-argument"],
+          ["launch"],
+          ["unknown-private-argument"],
+          ["--help"],
+          ["enable"],
+          ["enable", process.execPath, "private-argument", "43127"],
+          ["disable"],
+        ];
+        for (const args of invocations) {
+          const result = invoke(args);
           expect(result.error, args.join(" ")).toBeUndefined();
           expect(result.status, result.stderr).toBe(1);
           expect(result.stdout).toBe("");
-          const guidance =
-            "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code.\n";
-          expect(result.stderr).toBe(
-            args[0] === "disable"
-              ? guidance
-              : args[0] === "enable" && args[1] !== "--yes"
-                ? "Explicit invocation required. " + guidance
-                : guidance,
-          );
+          expect(result.stderr).toBe(COMMAND_GUIDANCE + "\n");
         }
         for (const prompt of [
           "/langsmith-gateway:setup",
+          "/langsmith-gateway:setup --scope global /absolute/cli profile 43127",
+          "/langsmith-gateway:setup --yes --scope global",
+          "/langsmith-gateway:setup --scope global --use-claude-subscription true",
           "/langsmith-gateway:setup --scope global --scope project",
           "/langsmith-gateway:setup --scope global --use-claude-subscription --no-use-claude-subscription",
           "/langsmith-gateway:setup --scope global --no-use-claude-subscription",
           "/langsmith-gateway:setup --scope global --use-claude-subscription=false",
           "/langsmith-gateway:setup --scope global; echo secret",
           "/langsmith-gateway:disable --scope global --yes",
+          "/langsmith-gateway:status --unknown private-argument",
+          "/langsmith-gateway:status --scope project --scope global",
+          "/langsmith-gateway:status --scope",
+          "/langsmith-gateway:status --use-claude-subscription",
+          "/langsmith-gateway:status --scope global; private-argument",
         ]) {
-          const result = spawnSync(
-            process.execPath,
-            ["--require", guard, join(installed, "bundle/gateway.js")],
-            {
-              cwd: sandbox,
-              env: { PATH: "", HOME: "/not-trusted" },
-              encoding: "utf8",
-              timeout: 5000,
-              input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt, cwd: sandbox }),
-            },
-          );
+          const result = invoke([], prompt);
           expect(result.status, result.stderr).toBe(0);
           expect(result.stderr).toBe("");
           expect(JSON.parse(result.stdout)).toEqual({
             decision: "block",
             reason: expect.stringContaining("within Claude Code"),
           });
-        }
-        // The same packaged runtime has one read-only pre-consent exception.
-        // Permit safe config reads only; keep writes, network and processes fatal.
-        const planGuard = join(sandbox, "plan-guard.cjs");
-        writeFileSync(
-          planGuard,
-          readFileSync(guard, "utf8")
-            .replace(
-              '!String(path).startsWith(home) && (flags === "r" || flags === 0)',
-              '(flags === "r" || (typeof flags === "number" && (flags & (fs.constants.O_WRONLY | fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_TRUNC)) === 0))',
-            )
-            .replace(
-              "String(path).startsWith(home) ? deny() : original(path, ...args)",
-              'String(path).endsWith("settings.json") || String(path).includes("settings-ownership") ? deny() : original(path, ...args)',
-            ),
-        );
-        for (const options of [
-          ["--scope", "global"],
-          [
-            "--scope",
-            "global",
-            "--profile",
-            "explicit",
-            "--api-url",
-            "https://api.other.test/",
-            "--gateway-url",
-            "https://gateway.other.test/",
-          ],
-        ]) {
-          const result = spawnSync(
-            process.execPath,
-            ["--require", planGuard, join(installed, "bundle/gateway.js"), "plan", ...options],
-            {
-              cwd: sandbox,
-              env: { HOME: "/must-not-use-env-home", PATH: "" },
-              encoding: "utf8",
-              timeout: 5000,
-            },
-          );
-          expect(result.error).toBeUndefined();
-          if (state === "malformed") {
-            expect(result.status).toBe(1);
-            expect(result.stdout).toBe("");
-            expect(result.stderr).not.toContain("invalid-private-config");
-            expect(result.stderr).not.toContain("FORBIDDEN");
-          } else {
-            expect(result.status, result.stderr).toBe(0);
-            expect(result.stderr).toBe("");
-            const retained = ["enabled", "retained-disabled"].includes(state);
-            expect(JSON.parse(result.stdout)).toEqual({
-              apiUrl:
-                options.length > 2
-                  ? "https://api.other.test"
-                  : retained
-                    ? "https://api.preview.test"
-                    : "https://api.smith.langchain.com",
-              gatewayUrl:
-                options.length > 2
-                  ? "https://gateway.other.test"
-                  : retained
-                    ? "https://gateway.preview.test"
-                    : "https://gateway.smith.langchain.com",
-              profile:
-                options.length > 2 ? "explicit" : retained ? "private-profile" : "claude-gateway",
-              useClaudeSubscription: false,
-              port: 43127,
-              status: state === "enabled" ? "enabled" : retained ? "disabled" : "missing",
-            });
-            expect(result.stdout).not.toContain("b".repeat(64));
-            expect(result.stdout).not.toContain(process.execPath);
-            expect(result.stdout).not.toContain("X-Private");
-          }
         }
         expect(readdirSync(dir)).toEqual(state === "missing" ? [] : ["config.json"]);
         if (state !== "missing")
@@ -334,7 +266,7 @@ require("node:module").syncBuiltinESMExports();
   );
 
   it("enables/disables the standalone bundle against isolated OS home and a healthy daemon without invoking tokens", async () => {
-    const sandbox = mkdtempSync(join(tmpdir(), "langsmith-enable-package-"));
+    const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "langsmith-enable-package-")));
     const config: ProxyConfig = {
       enabled: true,
       useClaudeSubscription: false,
@@ -380,42 +312,8 @@ globalThis.fetch = deny;
 require("node:module").syncBuiltinESMExports();
 `,
       );
-      const invoke = (args: string[]) =>
-        promisify(execFile)(
-          process.execPath,
-          ["--require", guard, join(installed, "bundle/gateway.js"), ...args],
-          {
-            cwd: sandbox,
-            env: { HOME: "/must-not-use-env-home", PATH: "" },
-            timeout: 5000,
-          },
-        );
-      for (let i = 0; i < 2; i++) {
-        const started = performance.now();
-        const result = await invoke(["enable", "--yes", "--scope", "global"]);
-        expect(performance.now() - started).toBeLessThan(2000);
-        expect(result.stderr).toContain("Authentication is checked on the first model request");
-        expect(result.stderr).not.toContain("daemon was verified");
-        expect(token).not.toHaveBeenCalled();
-        expect(result.stdout).toBe("");
-        expect(result.stderr).toBe(
-          (i === 0
-            ? "Gateway settings saved for the selected scope; "
-            : "Gateway settings already configured for the selected scope; ") +
-            "OAuth-only gateway auth; native credentials are not forwarded. Gateway provider keys and provider billing apply. local proxy healthy. Authentication is checked on the first model request, not during setup; deployment compatibility is not verified." +
-            (i === 0 ? " Restart Claude to apply the settings." : "") +
-            " Use /langsmith-gateway:disable --scope global|project to undo owned settings.\n",
-        );
-        expect(result.stderr).not.toContain(config.secret);
-        expect(result.stderr).not.toContain("e30.");
-        expect(json(settings).env.ANTHROPIC_BASE_URL).toBe(`http://127.0.0.1:${config.port}`);
-        expect(json(settings).env.ANTHROPIC_CUSTOM_HEADERS).toBe(
-          `X-Test: keep\nX-LangSmith-Proxy-Key: ${config.secret}`,
-        );
-      }
-      expect(controls).toEqual(["GET /_langsmith/health", "GET /_langsmith/health"]);
-      const hookResult = await new Promise<{ stdout: string; stderr: string }>(
-        (resolve, reject) => {
+      const invokeHook = (prompt: string) =>
+        new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
           const child = execFile(
             process.execPath,
             ["--require", guard, join(installed, "bundle/gateway.js")],
@@ -429,23 +327,53 @@ require("node:module").syncBuiltinESMExports();
           child.stdin!.end(
             JSON.stringify({
               hook_event_name: "UserPromptSubmit",
-              prompt: "/langsmith-gateway:setup --scope global",
+              prompt,
               cwd: sandbox,
             }),
           );
-        },
-      );
-      expect(JSON.parse(hookResult.stdout)).toEqual({
-        decision: "block",
-        reason:
-          "Gateway settings already configured for the selected scope; OAuth-only gateway auth; native credentials are not forwarded. Gateway provider keys and provider billing apply. local daemon healthy. Authentication is checked on the first model request, not setup.",
-      });
-      expect(hookResult.stderr).toBe("");
+        });
+      const setupScope = async (scope: string) => {
+        for (const state of ["saved", "already configured"]) {
+          const started = performance.now();
+          const result = await invokeHook(`/langsmith-gateway:setup --scope ${scope}`);
+          expect(performance.now() - started).toBeLessThan(2000);
+          expect(result.stderr).toBe("");
+          const output = JSON.parse(result.stdout);
+          expect(output.decision).toBe("block");
+          expect(output.reason).toContain(`Gateway settings ${state} for the selected scope`);
+          expect(output.reason).toContain("local daemon healthy");
+          expect(output.reason).toContain("Authentication is checked on the first model request");
+          expect(output.reason).not.toMatch(/restart|live|next request/i);
+          expect(output.reason).not.toContain(config.secret);
+        }
+      };
+      for (const scope of ["global", "project"]) {
+        await setupScope(scope);
+        const status = await invokeHook(`/langsmith-gateway:status --scope ${scope}`);
+        expect(status.stderr).toBe("");
+        expect(JSON.parse(status.stdout)).toMatchObject({
+          decision: "block",
+          reason: expect.stringContaining("configured; disk routing matches private config"),
+        });
+      }
+      expect(controls).toEqual(Array(6).fill("GET /_langsmith/health"));
       expect(token).not.toHaveBeenCalled();
-
-      const result = await invoke(["disable", "--yes", "--scope", "global"]);
-      expect(result.stderr).toContain("Gateway disabled");
-      expect(result.stderr).not.toContain(config.secret);
+      expect(json(settings).env.ANTHROPIC_CUSTOM_HEADERS).toBe(
+        `X-Test: keep\nX-LangSmith-Proxy-Key: ${config.secret}`,
+      );
+      const result = await invokeHook("/langsmith-gateway:disable --scope global");
+      expect(result.stderr).toBe("");
+      const reason = JSON.parse(result.stdout).reason;
+      expect(JSON.parse(result.stdout).decision).toBe("block");
+      expect(reason).toContain("Gateway disabled");
+      expect(reason).toContain("Other known matching scopes remain active");
+      expect(reason).toContain("Restart affected Claude sessions to stop using the proxy.");
+      expect(reason).toContain("up to 30 seconds for active work");
+      expect(reason).not.toContain(config.secret);
+      expect(json(join(dir, "config.json")).enabled).toBe(true);
+      const projectDisabled = await invokeHook("/langsmith-gateway:disable --scope project");
+      expect(projectDisabled.stderr).toBe("");
+      expect(JSON.parse(projectDisabled.stdout)).toEqual({ decision: "block", reason });
       expect(json(settings)).toEqual({
         model: "keep",
         env: { ANTHROPIC_CUSTOM_HEADERS: "X-Test: keep" },
@@ -454,14 +382,23 @@ require("node:module").syncBuiltinESMExports();
         ...config,
         ...endpoints(config),
         enabled: false,
+        settingsTargets: [],
       });
-      try {
-        await invoke(["enable"]);
-        throw new Error("Expected refusal");
-      } catch (error) {
-        expect((error as { stderr: string }).stderr).toContain("within Claude Code");
-        expect((error as { stderr: string }).stderr).not.toContain(config.secret);
-      }
+      // Fresh and repeated hook setup, then hook disable, against the same local double.
+      writeFileSync(join(dir, "config.json"), JSON.stringify(config));
+      await setupScope("global");
+      const disabled = await invokeHook("/langsmith-gateway:disable --scope global");
+      expect(disabled.stderr).toBe("");
+      expect(JSON.parse(disabled.stdout)).toEqual({
+        decision: "block",
+        reason,
+      });
+      expect(json(settings)).toEqual({
+        model: "keep",
+        env: { ANTHROPIC_CUSTOM_HEADERS: "X-Test: keep" },
+      });
+      expect(json(join(dir, "config.json")).enabled).toBe(false);
+      expect(token).not.toHaveBeenCalled();
     } finally {
       daemon.drain();
       rmSync(sandbox, { recursive: true, force: true });
@@ -493,7 +430,15 @@ require("node:module").syncBuiltinESMExports();
       const home = join(sandbox, "home");
       const configDir = join(home, ".claude/langsmith-proxy");
       mkdirSync(configDir, { recursive: true, mode: 0o700 });
-      writeFileSync(join(configDir, "config.json"), '{"enabled":false}', { mode: 0o600 });
+      const retained = {
+        enabled: false,
+        useClaudeSubscription: false,
+        cli: process.execPath,
+        profile: "fake",
+        port: 43127,
+        secret: "b".repeat(64),
+      };
+      writeFileSync(join(configDir, "config.json"), JSON.stringify(retained), { mode: 0o600 });
       const guard = join(sandbox, "guard.cjs");
       // HOME alone is NOT isolation: production uses os.userInfo().homedir.
       // Redirect that builtin before loading ESM; deny effects even on regression.
@@ -502,7 +447,7 @@ require("node:module").syncBuiltinESMExports();
         `
 const os = require("node:os");
 os.userInfo = () => ({ homedir: ${JSON.stringify(home)} });
-const deny = () => { throw new Error("Forbidden effect in disabled package test"); };
+const deny = () => { process.stderr.write("FORBIDDEN EFFECT\\n"); process.exit(97); };
 for (const [module, names] of [
   ["node:child_process", ["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "fork"]],
   ["node:http", ["request", "get", "createServer"]],
@@ -515,25 +460,78 @@ globalThis.fetch = deny;
 require("node:module").syncBuiltinESMExports();
 `,
       );
-      for (const hook_event_name of events) {
-        const result = spawnSync(process.execPath, ["--require", guard, artifact], {
-          cwd: sandbox,
-          env: { HOME: home, PATH: "", CLAUDE_PLUGIN_ROOT: installed },
-          input: JSON.stringify({
-            hook_event_name,
-            session_id: "isolated-package-test",
+      for (const hook_event_name of [...events, "daemon"]) {
+        const result = spawnSync(
+          process.execPath,
+          ["--require", guard, artifact, ...(hook_event_name === "daemon" ? ["daemon"] : [])],
+          {
             cwd: sandbox,
-          }),
-          encoding: "utf8",
-          timeout: 5000,
-        });
+            env: { HOME: home, PATH: "", CLAUDE_PLUGIN_ROOT: installed },
+            input: JSON.stringify({
+              hook_event_name,
+              session_id: "isolated-package-test",
+              cwd: sandbox,
+            }),
+            encoding: "utf8",
+            timeout: 5000,
+          },
+        );
         expect(result.error).toBeUndefined();
         expect(result.status).toBe(0);
         expect(result.stdout).toBe("");
         expect(result.stderr).toBe("");
       }
       expect(readdirSync(configDir)).toEqual(["config.json"]);
-      expect(readFileSync(join(configDir, "config.json"), "utf8")).toBe('{"enabled":false}');
+      expect(json(join(configDir, "config.json"))).toEqual(retained);
+      // Invalid disabled data must not silently short-circuit validation. Hook
+      // failures stay safe and sanitized; daemon errors exit nonzero.
+      for (const invalid of [
+        { enabled: false },
+        { ...retained, useClaudeSubscription: undefined },
+        { ...retained, enabled: true, useClaudeSubscription: undefined },
+        { ...retained, apiUrl: "https://private.invalid/path" },
+        { ...retained, enabled: "false" },
+        { ...retained, enabled: undefined },
+        { ...retained, useClaudeSubscription: null },
+      ]) {
+        const before = JSON.stringify(invalid);
+        writeFileSync(join(configDir, "config.json"), before);
+        for (const mode of [...events, "daemon", "status", "setup", "disable"]) {
+          const command = ["status", "setup", "disable"].includes(mode);
+          const result = spawnSync(
+            process.execPath,
+            ["--require", guard, artifact, ...(mode === "daemon" ? ["daemon"] : [])],
+            {
+              cwd: sandbox,
+              env: { HOME: "/untrusted", PATH: "" },
+              input: JSON.stringify({
+                hook_event_name: command ? "UserPromptSubmit" : mode,
+                prompt: command ? `/langsmith-gateway:${mode} --scope global` : "ordinary prompt",
+                session_id: "isolated-package-test",
+                cwd: sandbox,
+              }),
+              encoding: "utf8",
+              timeout: 5000,
+            },
+          );
+          expect(result.error).toBeUndefined();
+          expect(result.status, result.stderr).toBe(mode === "daemon" ? 1 : 0);
+          if (command) {
+            expect(result.stderr).toBe("");
+            expect(JSON.parse(result.stdout)).toMatchObject({
+              decision: "block",
+              reason: expect.stringContaining("one-time private config update"),
+            });
+          } else {
+            expect(result.stdout).toBe("");
+            expect(result.stderr).toContain("one-time private config update");
+          }
+          expect(result.stdout + result.stderr).not.toContain(retained.secret);
+          expect(result.stdout + result.stderr).not.toContain("private.invalid");
+          expect(readFileSync(join(configDir, "config.json"), "utf8")).toBe(before);
+          expect(readdirSync(configDir)).toEqual(["config.json"]);
+        }
+      }
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }

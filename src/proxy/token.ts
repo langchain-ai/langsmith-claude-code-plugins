@@ -108,5 +108,5 @@ export class TokenCache {
 }
 
 export function loginGuidance(config: ProxyConfig): string {
-  return `LangSmith authentication unavailable. Stop gateway sessions and other CLI writers, then log in in a separate terminal using your pinned CLI executable with: --profile ${config.profile} --api-url ${endpoints(config).apiUrl} auth login. Use a dedicated profile matching the selected API: --api-url does not change an existing saved OAuth issuer. Review that issuer privately before login/refresh. Then restart Claude with the plugin enabled and retry the request. Hooks never open a browser.\n`;
+  return `LangSmith authentication unavailable. Stop gateway sessions and other CLI writers, then log in in a separate terminal using your pinned CLI executable with: --profile ${config.profile} --api-url ${endpoints(config).apiUrl} auth login. Use a dedicated profile matching the selected API: --api-url does not change an existing saved OAuth issuer. Review that issuer privately before login/refresh. Then retry the request; token lookup failures are cached for two seconds. Failed requests are not replayed automatically. Hooks never open a browser.\n`;
 }

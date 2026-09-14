@@ -57,12 +57,25 @@ client compatibility is not established; the plugin does not inject dummy creden
    identical CLI/profile/URLs/port and subscription-forwarding mode; incompatible
    setup is refused unchanged. New configs explicitly save `useClaudeSubscription: false`.
 
-3. **Restart Claude to apply the settings** when setup changes them. Saved transport
-   cannot redirect the current process. Repeating setup with unchanged settings
-   does not require another restart, but any restart still pending from an earlier
-   setup is needed. Normal prompts and session hooks do not require restarts.
-   Install scope and settings scope are independent; user plugin installation keeps
-   recovery hooks available across projects.
+3. **Continue using Claude Code.** Setup reports settings saved (or already
+   configured), the selected mode, and local daemon readiness. It does not confirm
+   that the running client's model transport has reloaded; see [troubleshooting](#safety-and-troubleshooting)
+   if routing does not update. Install scope and settings scope are independent;
+   user plugin installation keeps recovery hooks available across projects.
+
+## Read-only status
+
+```text
+/langsmith-gateway:status
+```
+
+Reports global/current-project disk routing, saved shared config and a bounded
+500 ms authenticated loopback health check. `--scope global|project` selects one
+routing target, not a separate proxy. Status never writes, starts the daemon,
+renews leases, invokes CLI/auth or reads credentials. Disk routing and configured
+mode do not prove live session routing, authentication or subscription validity.
+Other projects may use the daemon; “not reachable or incompatible” does not prove
+it stopped, and disabled config may coexist briefly with a draining listener.
 
 ## Optional subscription forwarding and mode switching
 
@@ -71,32 +84,22 @@ client compatibility is not established; the plugin does not inject dummy creden
 /langsmith-gateway:setup --scope project
 ```
 
-On every explicit setup (including re-enable), the flag selects `true`; omission
-selects `false` regardless of the saved mode. Re-run setup without the flag to
-disable forwarding. Global scope also works. Boolean values and repeated flags
-are rejected. Hooks use the saved mode unchanged: no setup or flag is needed each
-session. **Backward compatibility:** reading a pre-field private config still
-means `true`, including retained disabled configs, without rewriting the file.
-Explicit setup without the flag switches legacy configs to `false` through the
-same safe path below. New config creation defaults to explicit `false`.
+On every explicit setup/re-enable, flag presence selects `true` and omission
+selects `false`, regardless of saved mode. Boolean values, negative and repeated
+flags are rejected. Hooks retain the saved mode without repeating setup.
 
-For the **sole active owned target**, explicit mode-only setup safely switches
-without disabling routing settings: it saves the requested config temporarily
-disabled, waits for the old daemon to drain/release its port, then starts and
-checks the replacement identity. Settings, local key and ownership receipt remain
-unchanged; no client restart is needed for a daemon-only change (an earlier pending
-transport change still needs one). Expect brief downtime: polling notices within
-5 seconds, existing upstream work has up to 30 seconds to finish. New credential
-work stops during drain and the old in-flight credential child is cancelled.
+The **sole known active configured target** can switch mode in place: save the
+requested config disabled, drain the old daemon, then start/verify its replacement.
+Routing settings and local key stay unchanged. Expect brief downtime: polling
+notices within 5 seconds, upstream work gets up to 30 seconds, and new credential
+work stops while the in-flight credential child is cancelled.
 
-Multiple active scope receipts cause refusal, even if they refer to the same
-project/session. Disable every other active scope first, then switch the remaining
-target. Setup for another scope must select the same mode as active scopes. An unowned target cannot
-switch an active install. Later transport edits are not overwritten to force a
-switch. CLI/profile/port/endpoint changes still require disabling **all** scopes.
-On drain/readiness failure, the requested choice remains saved but disabled, and
-routing settings/ownership remain intact: retry the same setup after resolving the
-local conflict. Opt-out never automatically rolls back to forwarding native auth.
+Disable other active scopes first; an unconfigured target cannot switch an active
+install, and setup for another scope must match the shared mode. Later transport
+edits are not overwritten. CLI/profile/port/endpoint changes still require disabling
+**all** scopes. On drain/readiness failure, the requested choice stays disabled
+with routing intact; resolve the conflict and retry the same setup. Failed opt-out
+never automatically restores native forwarding.
 
 ## Alternate API and gateway hosts
 
@@ -107,7 +110,7 @@ supply both endpoint flags together (replace these placeholder hosts):
 /langsmith-gateway:setup --scope project --profile alternate-gateway --api-url https://api.example.com --gateway-url https://gateway.example.com
 ```
 
-Invoke only for trusted destinations and restart Claude when setup changes settings. The same CLI/login
+Invoke only for trusted destinations. The same CLI/login
 prerequisite applies; follow setup's guidance for the selected profile and API,
 not the production login example. **`--api-url` does not change an existing saved
 OAuth issuer.** Review the dedicated profile's issuer privately before login or
@@ -128,28 +131,26 @@ refresh; do not repurpose a production profile by changing only its API URL.
   /langsmith-gateway:setup --scope project --cli /absolute/path/to/langsmith --profile profile --port 43127
   ```
 
-  Local ports must be 1024–65535. The legacy CLI/profile/port triple also remains
-  accepted with an explicit scope; do not mix it with CLI/profile/port flags.
-  Paired endpoint flags still apply.
+  Local ports must be 1024–65535. Setup accepts only the named options
+  `--scope global|project`, `--cli`, `--profile`, `--port`, paired `--api-url` /
+  `--gateway-url`, and presence-only `--use-claude-subscription`. Bare arguments,
+  unknown or duplicate flags, negative flags and boolean flag values are rejected.
 
-To change saved endpoints, profile, executable, or port, first run
-`/langsmith-gateway:disable --scope global` and `--scope project` in every active
-project, then exit all gateway sessions. Stop other
-CLI token/login/config writers and allow up to 35 seconds for the daemon to drain
-before terminal login. Restart Claude and rerun setup with explicit options.
-Re-enable waits for the old listener to release its port before starting a
-replacement. On a drain conflict, wait and retry the same slash command; never
-kill an unknown listener or delete private configuration/recovery records. Failed
-daemon startup leaves the selected configuration disabled for retry, not reverted
-to production. Setup never performs login.
+To change pinned endpoints/profile/CLI/port, disable global routing and project
+routing in every active project, exit gateway sessions, stop other CLI writers,
+and allow up to 35 seconds to drain before terminal login. Rerun setup with explicit
+options after following the profile/issuer guidance above. Re-enable waits for the
+old port; on conflict, wait and retry without killing unknown listeners or deleting
+private config. Startup failure retains the selected config disabled, never falls
+back to production, and never performs login.
 
-To restore production, follow the same disable/restart procedure and explicitly run:
+To restore production, follow the same disable, stop sessions, and drain procedure and explicitly run:
 
 ```text
 /langsmith-gateway:setup --scope project --profile claude-gateway --api-url https://api.smith.langchain.com --gateway-url https://gateway.smith.langchain.com
 ```
 
-Complete matching terminal login if requested, then restart Claude again.
+Complete matching terminal login if requested before resuming gateway requests.
 
 ## Consent, credentials, and models
 
@@ -161,7 +162,7 @@ and never filter this traffic. Only approve destinations you trust with these da
   It strips caller Authorization, API keys, passthrough and routing/auth auxiliary
   headers, then sends only the CLI OAuth Bearer as gateway authentication. No native
   passthrough header is sent. Gateway provider keys and provider billing apply.
-- **Subscription forwarding (opt-in or retained legacy):** requires exactly one
+- **Subscription forwarding (explicit saved opt-in):** requires exactly one
   `Authorization: Bearer sk-ant-...` with a nonempty header-safe suffix, even for
   model overrides. Missing/invalid native auth fails before CLI token acquisition.
   The raw native credential goes in `X-LangSmith-Anthropic-Passthrough`, while the
@@ -196,7 +197,7 @@ a LangSmith token or local proxy key in those auth settings.
 For an authorized scope recorded privately in OS home, SessionStart ensures the daemon and registers a session lease without checking auth. UserPromptSubmit recovers the daemon and renews the lease; SessionEnd
 releases only that session. Leases expire after 30 minutes without renewal. With
 no leases or active work, the daemon exits after 60 seconds idle, including after
-setup before your restart. The next session/prompt starts it again. Background
+setup before any model use. The next session/prompt starts it again. Background
 requests before recovery may fail; hook errors do not block Claude, but transport
 errors have **no direct fallback**. No service manager is installed.
 
@@ -207,33 +208,125 @@ credential forwarding, re-run setup without `--use-claude-subscription` instead)
 /langsmith-gateway:disable --scope project
 ```
 
-Use `--scope global` to restore global settings. Invocation authorizes the change;
-no confirmation/model turn. Disable restores only the selected target's owned
-transport and preserves later edits. Other scopes remain active; **only the last
-active scope disables the daemon**, which notices within five seconds and drains
-for up to 30 seconds. Restart affected sessions; disable every scope before
+Use `--scope global` to remove global routing. Invocation authorizes the change;
+no confirmation/model turn. Disable unsets the selected target's
+`ANTHROPIC_BASE_URL` only if it matches the configured loopback URL, and removes
+only the exact `X-LangSmith-Proxy-Key: <local secret>` line. Other headers,
+unrelated settings and later replacements are preserved. **Previous values are
+never restored**, including empty env/header distinctions. Missing private config
+is a no-op: the command cannot safely identify a key to remove.
+**Restart affected Claude sessions to stop using the proxy.** Running sessions may
+retain transport after disk settings change. Other known matching scopes remain
+active; the last known active scope disables the shared config. The daemon notices
+within five seconds and drains for up to 30 seconds. Disable every scope before
 uninstalling. Global settings still apply in a project after its local scope is
-disabled. Unowned overrides may remain; review privately. Re-enable with setup
-and the same scope, then restart again.
+disabled. Other overrides may remain; review privately.
+
+To keep using the gateway, re-enable with setup and the same scope in the same
+session when the local transport still matches. Setup recognizes only the retained
+private config's exact generated key
+line appended to that target's current disk headers; unknown keys or added/altered
+inherited headers still cause refusal. It does not copy inherited headers into
+settings or retain extra secret/history files. Normal hooks never re-enable a
+disabled scope. Re-enable still waits for the old daemon to drain. This restores
+saved routing and the local daemon.
+
+## IT-provisioned configuration (no setup required)
+
+IT can provision the enabled private config, the selected CLI profile/login, and
+Claude settings directly. With the gateway plugin installed and hooks enabled,
+SessionStart/UserPromptSubmit automatically ensure the daemon and register the
+session. No slash setup, receipt, or target-list membership is required. Hooks
+never change the saved configuration or forwarding mode.
+
+The OS-account-owned `~/.claude/langsmith-proxy` directory must be `0700`, and its
+regular, single-link `config.json` must be `0600` (no symlinks). Example schema
+(placeholders must be replaced privately, not pasted into chat):
+
+```json
+{
+  "enabled": true,
+  "useClaudeSubscription": false,
+  "cli": "/absolute/canonical/path/to/langsmith",
+  "profile": "claude-gateway",
+  "port": 43127,
+  "secret": "<unique per-account random 32 bytes encoded as 64 lowercase hex characters>",
+  "apiUrl": "https://api.smith.langchain.com",
+  "gatewayUrl": "https://gateway.smith.langchain.com"
+}
+```
+
+Both boolean fields are required. A disabled config uses the same full schema
+with `enabled: false`, retaining its local secret, CLI, profile, port, endpoints
+and forwarding mode for re-enable. Both endpoint fields may be omitted together
+to use production defaults. Unknown fields and incomplete configs are rejected,
+even when disabled; no implicit schema migration occurs. If an older developer
+config is rejected, perform a one-time private update to this schema, choosing
+the forwarding boolean explicitly and retaining all existing transport/key values.
+Do not paste secrets into chat or delete/reset configuration to fix it. Ordinary
+hooks fail safely without startup or token acquisition on config errors.
+
+Provision `~/.claude/settings.json` for global routing or the canonical project's
+`.claude/settings.local.json` for project routing, preserving other fields:
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:43127",
+    "ANTHROPIC_CUSTOM_HEADERS": "X-LangSmith-Proxy-Key: <same local secret>"
+  }
+}
+```
+
+Settings containing this bearer secret should be account-owned `0600`, untracked
+and git-ignored. Parent directories must be account-owned, non-writable by other
+users and not symlinks. The executable must be account- or root-owned, executable
+and not group/world writable. CLI credentials remain in the CLI's own store;
+never place LangSmith OAuth tokens or native Anthropic credentials in this config.
+The local secret remains required in both modes; it is not native/provider auth.
+
+**Multi-scope discovery:** explicit setup maintains an optional `settingsTargets`
+array in this same config: at most 128 canonical absolute settings-file paths.
+It contains no keys, previous values, identity hashes or restore data. It exists
+only to find other scopes when disabling or changing the shared daemon mode.
+Commands inspect those paths plus global/current-project targets and count only
+matching disk URL/key pairs; membership neither authorizes startup nor proves
+routing. Status reports the selected global/current-project files, not the index.
+Hooks observe global settings with current project `settings.json` then
+`settings.local.json` env overrides, without registering paths or writing config.
+Managed settings, shell overrides and live client reload state are not fully
+observable; this is not universal enforcement of Claude's effective routing.
+
+IT can omit the index for global or single-project provisioning. For multiple
+externally provisioned projects, list their settings paths in `settingsTargets`
+before scoped disable/mode changes. Unknown projects outside the current directory
+cannot be discovered automatically (including legacy receipt-only projects).
+Unlisted external projects can still start hooks, but may be interrupted by a
+command that sees no other active target. Inventory those scopes before changes;
+stop sessions and disable all scopes before switching endpoints/profile/port/CLI.
+There is no separate MDM mode or additional authorization record.
 
 ## Safety and troubleshooting
 
+- Restart affected sessions after disable. For other routing changes, Claude Code
+  supports settings reload; restart if routing does not update. The hook environment
+  cannot prove live model transport, and offline tests do not verify synchronous
+  reload or supported client versions. The plugin cannot mutate its parent process.
 - Setup refuses detected transport/auth conflicts, disabled user hooks, unsafe
-  permissions/symlinks, and malformed settings rather than overwriting them.
-  Other project/managed settings and shell overrides may take precedence and are not
-  comprehensively inspected. Resolve reported conflicts privately and retry the
-  slash command; do not paste secrets or settings into the conversation.
-- Configuration and ownership records live under `~/.claude/langsmith-proxy` in
-  the **OS account home**. Keep them private and out of version control; ownership
-  records may contain previous headers. Each target has an independent private
-  receipt; legacy global v1 ownership and endpoint-less configs are retained safely. Do not edit settings concurrently with
-  setup/disable or delete recovery records to force setup. Custom
-  `CLAUDE_CONFIG_DIR`, CLI config environment overrides, custom proxies/CAs, and
-  Windows are unsupported.
+  permissions/links and malformed settings. Project/managed settings and shell
+  overrides may take precedence; remove inherited transport overrides and restart.
+  Resolve other conflicts privately before retrying, without pasting settings.
+- Config lives in the **OS account home**; keep it and secret-bearing settings private
+  and out of git. Legacy receipts are ignored and may contain sensitive old headers;
+  operators may remove them privately. There are no backup/restore records. Avoid
+  concurrent settings edits. Custom `CLAUDE_CONFIG_DIR`, CLI config environment
+  overrides, proxies/CAs and Windows are unsupported.
 - The CLI refreshes ordinary short-lived OAuth credentials and may save rotated
   credentials in its own store. The proxy only caches tokens in memory for at most
   60 seconds; it does not persist tokens or log bodies/tokens. Refresh failure
-  requires terminal login followed by restart/retry; failed requests are not replayed.
+  requires terminal login and a new request; token lookup failures are cached for
+  two seconds, after which a new request can read updated CLI credentials. Failed
+  requests are not replayed.
   **The CLI store has no cross-process locking:** avoid competing token refreshes
   on the same profile and login/config writes to the same store during gateway
   sessions. Stop sessions and other writers before login; the daemon serializes

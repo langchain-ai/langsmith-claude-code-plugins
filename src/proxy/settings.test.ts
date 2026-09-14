@@ -15,11 +15,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as os from "node:os";
-import { enable, disable, setupPlan, SetupError } from "./settings.js";
+import { enable, disable, SetupError } from "./settings.js";
 import { API_URL, UPSTREAM, configDir, loadConfig } from "./config.js";
 import { atomic, snapshot, transaction } from "./files.js";
 import { control, ensure, waitForStopped } from "./lifecycle.js";
-import { targetPaths, authorizedScope } from "./scopes.js";
+import { targetPaths, configuredScope } from "./scopes.js";
 import { spawnSync } from "node:child_process";
 import { handleGatewayInput } from "./commands.js";
 import { identity } from "./server.js";
@@ -40,10 +40,23 @@ const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 function save(value: unknown) {
   writeFileSync(settings, JSON.stringify(value), { mode: 0o600 });
 }
-const args = () => ["--yes", "--scope", "global", process.execPath, "fake-profile", "43127"];
+const transport = ({
+  settingsTargets: _targets,
+  ...config
+}: NonNullable<ReturnType<typeof loadConfig>>) => config;
+const args = () => [
+  "--scope",
+  "global",
+  "--cli",
+  process.execPath,
+  "--profile",
+  "fake-profile",
+  "--port",
+  "43127",
+];
 const run = () => enable("/fake/gateway.js", args(), {});
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), "gateway-settings-"));
+  home = realpathSync(mkdtempSync(join(tmpdir(), "gateway-settings-")));
   vi.mocked(os.userInfo).mockReturnValue({ homedir: home } as ReturnType<typeof os.userInfo>);
   mkdirSync(join(home, ".claude"), { mode: 0o700 });
   settings = join(home, ".claude/settings.json");
@@ -57,7 +70,7 @@ afterEach(() => {
 });
 
 describe("consented user transport setup (OS-home isolated, no real CLI/network)", () => {
-  it("requires explicit consent before any filesystem or daemon effects", async () => {
+  it("validates named scope before any filesystem or daemon effects", async () => {
     await expect(enable("/fake", [], {})).rejects.toThrow("within Claude Code");
     expect(() => disable([], {})).toThrow("within Claude Code");
     expect(existsSync(configDir(home))).toBe(false);
@@ -94,45 +107,41 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     for (const key of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"])
       expect(after.env[key]).toBeUndefined();
     expect(after.apiKeyHelper).toBeUndefined();
-    expect(ensure).toHaveBeenCalledWith(config, "/fake/gateway.js");
+    expect(ensure).toHaveBeenCalledWith(
+      expect.objectContaining(transport(config)),
+      "/fake/gateway.js",
+    );
     expect(control).not.toHaveBeenCalled();
     const bytes = readFileSync(settings, "utf8");
-    const record = readFileSync(join(configDir(home), "settings-ownership.json"), "utf8");
     await expect(run()).resolves.toEqual({
       settingsChanged: false,
       useClaudeSubscription: false,
       modeChanged: false,
     });
     expect(readFileSync(settings, "utf8")).toBe(bytes);
-    expect(readFileSync(join(configDir(home), "settings-ownership.json"), "utf8")).toBe(record);
-    for (const file of [
-      settings,
-      join(configDir(home), "config.json"),
-      join(configDir(home), "settings-ownership.json"),
-    ])
+    for (const file of [settings, join(configDir(home), "config.json")])
       expect(statSync(file).mode & 0o777).toBe(0o600);
-    disable(["--yes", "--scope", "global"], {});
+    disable(["--scope", "global"], {});
     expect(json(settings)).toEqual(before);
     expect(loadConfig()).toBeUndefined();
-    expect(loadConfig(home, true)).toEqual(config);
-    disable(["--yes", "--scope", "global"], {});
+    expect(loadConfig(home, true)).toEqual({ ...config, enabled: false, settingsTargets: [] });
+    disable(["--scope", "global"], {});
     expect(json(settings)).toEqual(before);
-    await expect(enable("/fake/gateway.js", ["--yes", "--scope", "global"], {})).resolves.toEqual({
+    await expect(enable("/fake/gateway.js", ["--scope", "global"], {})).resolves.toEqual({
       settingsChanged: true,
       useClaudeSubscription: false,
       modeChanged: false,
     });
-    expect(loadConfig()).toEqual(config);
-    disable(["--yes", "--scope", "global"], {});
+    expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
+    disable(["--scope", "global"], {});
     expect(json(settings)).toEqual(before);
   });
-  it("requires disable before switching and replaces retained endpoints/profile without losing ownership", async () => {
+  it("requires disable before switching and replaces retained endpoints/profile without losing unrelated settings", async () => {
     const before = { model: "keep", env: { ANTHROPIC_CUSTOM_HEADERS: "X-Keep: original" } };
     save(before);
     await run();
     const original = loadConfig()!;
     const preview = [
-      "--yes",
       "--scope",
       "global",
       "--profile",
@@ -143,10 +152,10 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
       "https://PR-42-gateway.review.smith.langchain.com:8443/",
     ];
     await expect(enable("/fake", preview, {})).rejects.toThrow("disable first");
-    expect(loadConfig()).toEqual(original);
-    disable(["--yes", "--scope", "global"], {});
+    expect(loadConfig()).toEqual({ ...original, settingsTargets: expect.any(Array) });
+    disable(["--scope", "global"], {});
     vi.mocked(waitForStopped).mockImplementationOnce(async (old) => {
-      expect(old).toEqual(original);
+      expect(old).toEqual({ ...original, enabled: false, settingsTargets: [] });
       expect(loadConfig()).toBeUndefined();
     });
     await enable("/fake", preview, {});
@@ -157,14 +166,13 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
       apiUrl: "https://pr-42-api.review.smith.langchain.com",
       gatewayUrl: "https://pr-42-gateway.review.smith.langchain.com:8443",
     });
-    expect(ensure).toHaveBeenLastCalledWith(current, "/fake");
+    expect(ensure).toHaveBeenLastCalledWith(expect.objectContaining(transport(current)), "/fake");
     expect(JSON.stringify(json(settings))).not.toContain("review.smith");
-    disable(["--yes", "--scope", "global"], {});
+    disable(["--scope", "global"], {});
     expect(json(settings)).toEqual(before);
     await enable(
       "/fake",
       [
-        "--yes",
         "--scope",
         "global",
         "--profile",
@@ -176,8 +184,8 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
       ],
       {},
     );
-    expect(loadConfig()).toEqual(original);
-    disable(["--yes", "--scope", "global"], {});
+    expect(loadConfig()).toEqual({ ...original, settingsTargets: expect.any(Array) });
+    disable(["--scope", "global"], {});
     expect(json(settings)).toEqual(before);
   });
   it("replaces a deleted disabled CLI without validating the old executable", async () => {
@@ -186,20 +194,28 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     const oldCLI = join(home, "old-langsmith");
     const newCLI = join(home, "new-langsmith");
     for (const cli of [oldCLI, newCLI]) writeFileSync(cli, "#!/bin/sh\nexit 1\n", { mode: 0o700 });
-    await enable("/fake", ["--yes", "--scope", "global", oldCLI, "fake-profile", "43127"], {});
+    await enable(
+      "/fake",
+      ["--scope", "global", "--cli", oldCLI, "--profile", "fake-profile", "--port", "43127"],
+      {},
+    );
     const original = loadConfig()!;
-    disable(["--yes", "--scope", "global"], {});
+    disable(["--scope", "global"], {});
     rmSync(oldCLI);
     expect(existsSync(original.cli)).toBe(false);
     // Retaining the deleted executable must still fail validation.
-    await expect(enable("/fake", ["--yes", "--scope", "global"], {})).rejects.toThrow();
+    await expect(enable("/fake", ["--scope", "global"], {})).rejects.toThrow();
     vi.clearAllMocks();
     const validate = vi.spyOn(setupModule, "validateCLI");
     try {
       vi.mocked(waitForStopped).mockImplementationOnce(async (old) => {
-        expect(old).toEqual(original);
+        expect(old).toEqual({ ...original, enabled: false, settingsTargets: [] });
         expect(loadConfig()).toBeUndefined();
-        expect(loadConfig(home, true)).toEqual(original);
+        expect(loadConfig(home, true)).toEqual({
+          ...original,
+          enabled: false,
+          settingsTargets: [],
+        });
         expect(json(settings)).toEqual(before);
         expect(ensure).not.toHaveBeenCalled();
         expect(control).not.toHaveBeenCalled();
@@ -207,11 +223,13 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
       await enable(
         "/fake",
         [
-          "--yes",
           "--scope",
           "global",
+          "--cli",
           newCLI,
+          "--profile",
           "preview-42",
+          "--port",
           "43128",
           "--api-url",
           "https://PR-42-api.review.smith.langchain.com/",
@@ -231,24 +249,31 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
       });
       expect(validate).toHaveBeenCalledWith(newCLI);
       expect(validate).not.toHaveBeenCalledWith(original.cli);
-      expect(waitForStopped).toHaveBeenCalledExactlyOnceWith(original);
-      expect(ensure).toHaveBeenCalledExactlyOnceWith(current, "/fake");
+      expect(waitForStopped).toHaveBeenCalledExactlyOnceWith({
+        ...original,
+        enabled: false,
+        settingsTargets: [],
+      });
+      expect(ensure).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining(transport(current)),
+        "/fake",
+      );
       expect(control).not.toHaveBeenCalled();
       expect(json(settings).env.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:43128");
       expect(json(settings).env.ANTHROPIC_CUSTOM_HEADERS).toBe(
         before.env.ANTHROPIC_CUSTOM_HEADERS + "\nX-LangSmith-Proxy-Key: " + original.secret,
       );
-      disable(["--yes", "--scope", "global"], {});
+      disable(["--scope", "global"], {});
       expect(json(settings)).toEqual(before);
       expect(loadConfig()).toBeUndefined();
-      expect(loadConfig(home, true)).toEqual(current);
+      expect(loadConfig(home, true)).toEqual({ ...current, enabled: false, settingsTargets: [] });
     } finally {
       validate.mockRestore();
     }
   });
   it("leaves disabled config/settings untouched when the old listener has not drained", async () => {
     await run();
-    disable(["--yes", "--scope", "global"], {});
+    disable(["--scope", "global"], {});
     const before = loadConfig(home, true);
     const saved = readFileSync(settings, "utf8");
     vi.clearAllMocks();
@@ -257,7 +282,6 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
       enable(
         "/fake",
         [
-          "--yes",
           "--scope",
           "global",
           "--profile",
@@ -317,15 +341,11 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
       save({ model: "private-model", permissions: { allow: ["Read"] } });
       if (state !== "fresh") {
         await run();
-        if (state === "disabled") disable(["--yes", "--scope", "global"], {});
+        if (state === "disabled") disable(["--scope", "global"], {});
       }
       const current = json(settings);
       save({ ...current, ...value, env: { ...current.env, ...value.env } });
-      const paths = [
-        settings,
-        join(configDir(home), "config.json"),
-        join(configDir(home), "settings-ownership.json"),
-      ];
+      const paths = [settings, join(configDir(home), "config.json")];
       const before = paths.map((path) => snapshot(path));
       vi.clearAllMocks();
       // Check both user-only headers and the same headers inherited by Claude.
@@ -353,7 +373,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     save(before);
     await run();
     expect(json(settings).disableAllHooks).toBe(false);
-    disable(["--yes", "--scope", "global"], {});
+    disable(["--scope", "global"], {});
     expect(json(settings)).toEqual(before);
   });
   it("disable preserves later disabled hooks and custom Host while removing owned transport", async () => {
@@ -364,7 +384,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     changed.env.ANTHROPIC_CUSTOM_HEADERS += "\nhOsT: private-host.invalid";
     save(changed);
     vi.clearAllMocks();
-    disable(["--yes", "--scope", "global"], {});
+    disable(["--scope", "global"], {});
     expect(json(settings)).toEqual({
       disableAllHooks: true,
       env: { ANTHROPIC_CUSTOM_HEADERS: "X-Old: keep\nhOsT: private-host.invalid" },
@@ -373,32 +393,30 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     expect(ensure).not.toHaveBeenCalled();
     expect(control).not.toHaveBeenCalled();
   });
-  it("disable restores a legacy receipt containing a custom Host header", async () => {
+  it("ignores malformed legacy receipts and never restores their previous values", async () => {
     await run();
     const path = join(configDir(home), "settings-ownership.json");
-    const record = json(path);
-    // Model an installation created before enable rejected custom Host headers.
-    record.beforeHeaders = "Host: private-host.invalid\nX-Old:  keep  ";
-    record.afterHeaders = record.beforeHeaders + "\n" + record.afterHeaders;
-    writeFileSync(path, JSON.stringify(record));
+    writeFileSync(path, "malformed synthetic-secret", { mode: 0o600 });
     const current = json(settings);
-    current.env.ANTHROPIC_CUSTOM_HEADERS = record.afterHeaders;
+    current.env.ANTHROPIC_CUSTOM_HEADERS =
+      "Host: private-host.invalid\n" + current.env.ANTHROPIC_CUSTOM_HEADERS;
     current.disableAllHooks = true;
     save(current);
-    disable(["--yes", "--scope", "global"], {});
+    disable(["--scope", "global"], {});
     expect(json(settings)).toEqual({
       disableAllHooks: true,
-      env: { ANTHROPIC_CUSTOM_HEADERS: record.beforeHeaders },
+      env: { ANTHROPIC_CUSTOM_HEADERS: "Host: private-host.invalid" },
     });
+    expect(readFileSync(path, "utf8")).toBe("malformed synthetic-secret");
     expect(loadConfig()).toBeUndefined();
   });
   it.each([undefined, {}, { env: {} }, { env: { ANTHROPIC_CUSTOM_HEADERS: "" } }])(
-    "restores absent/empty env distinctions: %j",
+    "unsets routing without restoring absent/empty env distinctions: %j",
     async (before) => {
       if (before !== undefined) save(before);
       await run();
-      disable(["--yes", "--scope", "global"], {});
-      expect(json(settings)).toEqual(before ?? {});
+      disable(["--scope", "global"], {});
+      expect(json(settings)).toEqual({});
     },
   );
   it("preserves later user edits, removing only the exact owned header line", async () => {
@@ -411,7 +429,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     changed.env.ANTHROPIC_CUSTOM_HEADERS =
       changed.env.ANTHROPIC_CUSTOM_HEADERS.replace("original", "edited") + "\nX-New: keep";
     save(changed);
-    disable(["--yes", "--scope", "global"], {});
+    disable(["--scope", "global"], {});
     expect(json(settings)).toEqual({
       ...changed,
       env: { ...changed.env, ANTHROPIC_CUSTOM_HEADERS: "X-Old: edited\nX-New: keep" },
@@ -422,7 +440,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     const changed = json(settings);
     changed.env.ANTHROPIC_CUSTOM_HEADERS = "X-LangSmith-Proxy-Key: user-replacement";
     save(changed);
-    disable(["--yes", "--scope", "global"], {});
+    disable(["--scope", "global"], {});
     expect(json(settings).env).toEqual({
       ANTHROPIC_CUSTOM_HEADERS: "X-LangSmith-Proxy-Key: user-replacement",
     });
@@ -465,7 +483,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
   });
   it("reports CLI installation guidance without invoking auth", async () => {
     await expect(
-      enable("/fake", ["--yes", "--scope", "global"], { PATH: "relative:/does-not-exist" }),
+      enable("/fake", ["--scope", "global"], { PATH: "relative:/does-not-exist" }),
     ).rejects.toThrow("LangSmith CLI not found");
     expect(ensure).not.toHaveBeenCalled();
   });
@@ -476,10 +494,14 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     save({});
     await run();
     await expect(
-      enable("/fake", ["--yes", "--scope", "global", process.execPath, "other", "43127"], {}),
+      enable(
+        "/fake",
+        ["--scope", "global", "--cli", process.execPath, "--profile", "other", "--port", "43127"],
+        {},
+      ),
     ).rejects.toThrow("Existing pinned");
   });
-  it.each(["settings", "claude", "config-dir", "config", "receipt"])(
+  it.each(["settings", "claude", "config-dir", "config"])(
     "refuses %s symlinks without changing targets",
     async (kind) => {
       const target = join(home, "target");
@@ -489,14 +511,11 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
         rmSync(join(home, ".claude"), { recursive: true });
         symlinkSync(home, join(home, ".claude"));
       }
-      if (["config-dir", "config", "receipt"].includes(kind)) {
+      if (["config-dir", "config"].includes(kind)) {
         if (kind === "config-dir") symlinkSync(home, configDir(home));
         else {
           mkdirSync(configDir(home), { mode: 0o700 });
-          symlinkSync(
-            target,
-            join(configDir(home), kind === "config" ? "config.json" : "settings-ownership.json"),
-          );
+          symlinkSync(target, join(configDir(home), "config.json"));
         }
       }
       await expect(run()).rejects.toThrow();
@@ -528,29 +547,35 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     async (state) => {
       save({ model: "keep" });
       await run();
-      if (state === "disabled") disable(["--yes", "--scope", "global"], {});
+      if (state === "disabled") disable(["--scope", "global"], {});
       const beforeConfig = readFileSync(join(configDir(home), "config.json"), "utf8");
       const beforeSettings = readFileSync(settings, "utf8");
-      const beforeReceipt = readFileSync(join(configDir(home), "settings-ownership.json"), "utf8");
       vi.mocked(ensure).mockRejectedValueOnce(new Error("Local proxy unavailable"));
       await expect(run()).rejects.toThrow("Local proxy unavailable");
       expect(readFileSync(join(configDir(home), "config.json"), "utf8")).toBe(beforeConfig);
       expect(readFileSync(settings, "utf8")).toBe(beforeSettings);
-      expect(readFileSync(join(configDir(home), "settings-ownership.json"), "utf8")).toBe(
-        beforeReceipt,
-      );
       expect(existsSync(join(configDir(home), "settings.lock"))).toBe(false);
     },
   );
   it("detects edits during readiness checks and serializes setup/disable", async () => {
     save({ model: "before" });
     vi.mocked(ensure).mockImplementation(async () => {
-      expect(() => disable(["--yes", "--scope", "global"], {})).toThrow("Another setup/disable");
+      expect(() => disable(["--scope", "global"], {})).toThrow("Another setup/disable");
       save({ model: "concurrent" });
     });
     await expect(run()).rejects.toThrow("Settings changed concurrently");
     expect(json(settings)).toEqual({ model: "concurrent" });
     expect(loadConfig()).toBeUndefined();
+  });
+  it.each(["settings", "config"])("bounds secure %s reads at 1 MiB", async (kind) => {
+    await run();
+    const path = kind === "settings" ? settings : join(configDir(home), "config.json");
+    const read = () => (kind === "settings" ? snapshot(path, true) : loadConfig(home, true));
+    const text = readFileSync(path, "utf8").padEnd(1024 * 1024, " ");
+    writeFileSync(path, text);
+    expect(read()).toBeDefined();
+    writeFileSync(path, text + " ");
+    expect(read).toThrow("Unsafe");
   });
   it("compare-before-rename refuses intervening edits", () => {
     save({ old: true });
@@ -570,12 +595,12 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     writeFileSync(target, "untouched", { mode: 0o600 });
     rmSync(settings);
     symlinkSync(target, settings);
-    expect(() => disable(["--yes", "--scope", "global"], {})).toThrow();
+    expect(() => disable(["--scope", "global"], {})).toThrow();
     expect(readFileSync(target, "utf8")).toBe("untouched");
     expect(loadConfig()?.enabled).toBe(true);
     rmSync(settings);
     writeFileSync(settings, original, { mode: 0o600 });
-    disable(["--yes", "--scope", "global"], {});
+    disable(["--scope", "global"], {});
     expect(json(settings)).toEqual({ keep: true });
   });
   it("refuses an unexpected owner without reading or changing the settings", async () => {
@@ -595,13 +620,13 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     expect(() => atomic(settings, "{}", undefined)).toThrow("Settings changed concurrently");
     expect(json(settings)).toEqual({ created: "by other writer" });
   });
-  it("write-ahead ownership recovers an interrupted settings write without restoring unrelated data", async () => {
+  it("disable handles an interrupted setup without restoring unrelated data", async () => {
     const before = { model: "keep", env: { OTHER: "keep" } };
     save(before);
     await run();
-    // Simulate a crash after writing the receipt but before replacing settings.
+    // Simulate routing absent after a partial setup.
     save({ ...before, model: "later" });
-    disable(["--yes", "--scope", "global"], {});
+    disable(["--scope", "global"], {});
     expect(json(settings)).toEqual({ ...before, model: "later" });
     expect(loadConfig()).toBeUndefined();
   });
@@ -613,18 +638,17 @@ describe("explicit scoped deterministic setup", () => {
     mkdirSync(cwd, { mode: 0o700 });
     return realpathSync(cwd);
   }
-  const scoped = (scope: string) => ["--yes", "--scope", scope];
-  it("shares a singleton across global and two projects and disables by reference count", async () => {
+  const scoped = (scope: string) => ["--scope", scope];
+  it("shares a singleton across global and two projects and disables by matching known disk targets", async () => {
     const a = project("a"),
       b = project("b");
     await run();
     const config = loadConfig()!;
     for (const cwd of [a, b]) {
       await enable("/fake", scoped("project"), {}, home, cwd);
-      expect(loadConfig()).toEqual(config);
+      expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
       const p = targetPaths(home, "project", cwd);
       expect(statSync(p.settings).mode & 0o777).toBe(0o600);
-      expect(statSync(p.receipt).mode & 0o777).toBe(0o600);
       expect(json(p.settings).env.ANTHROPIC_CUSTOM_HEADERS).toContain(config.secret);
     }
     const bytes = snapshot(targetPaths(home, "project", b).settings);
@@ -632,37 +656,32 @@ describe("explicit scoped deterministic setup", () => {
       enable("/fake", [...scoped("project"), "--profile", "different"], {}, home, b),
     ).rejects.toThrow("Existing pinned");
     expect(snapshot(targetPaths(home, "project", b).settings)).toEqual(bytes);
-    expect(loadConfig()).toEqual(config);
+    expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
     disable(scoped("global"), {}, home);
-    expect(loadConfig()).toEqual(config);
-    expect(authorizedScope(home, a, config)).toBe(true);
-    expect(authorizedScope(home, project("unapproved"), config)).toBe(false);
+    expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
+    expect(configuredScope(home, a, config)).toBe(true);
+    expect(configuredScope(home, project("unapproved"), config)).toBe(false);
     disable(scoped("project"), {}, home, a);
-    expect(loadConfig()).toEqual(config);
-    expect(authorizedScope(home, a, config)).toBe(false);
+    expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
+    expect(configuredScope(home, a, config)).toBe(false);
     disable(scoped("project"), {}, home, a);
-    expect(loadConfig()).toEqual(config);
+    expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
     disable(scoped("project"), {}, home, b);
     expect(loadConfig()).toBeUndefined();
     expect(json(targetPaths(home, "project", a).settings)).toEqual({});
     expect(json(targetPaths(home, "project", b).settings)).toEqual({});
   });
-  it("adopts legacy endpoint-less config and global v1 receipt without losing originals", async () => {
+  it("adopts explicit-mode endpoint-less config without receipts or losing unrelated settings", async () => {
     save({ env: { ANTHROPIC_CUSTOM_HEADERS: "X-Old: keep" } });
     await run();
     const path = join(configDir(home), "config.json");
     const legacy = json(path);
-    delete legacy.useClaudeSubscription;
     delete legacy.apiUrl;
     delete legacy.gatewayUrl;
     writeFileSync(path, JSON.stringify(legacy));
-    expect(loadConfig()?.useClaudeSubscription).toBe(true);
-    const originalReceipt = readFileSync(join(configDir(home), "settings-ownership.json"), "utf8");
-    const cwd = project("migration");
-    await enable("/fake", [...scoped("project"), "--use-claude-subscription"], {}, home, cwd);
-    expect(readFileSync(join(configDir(home), "settings-ownership.json"), "utf8")).toBe(
-      originalReceipt,
-    );
+    expect(loadConfig()?.useClaudeSubscription).toBe(false);
+    const cwd = project("provisioned");
+    await enable("/fake", scoped("project"), {}, home, cwd);
     disable(scoped("global"), {}, home);
     expect(json(settings)).toEqual({ env: { ANTHROPIC_CUSTOM_HEADERS: "X-Old: keep" } });
     expect(loadConfig()).toBeDefined();
@@ -689,7 +708,7 @@ describe("explicit scoped deterministic setup", () => {
       if (state === "tracked" || state === "ignored")
         writeFileSync(join(cwd, ".gitignore"), ".claude/settings.local.json\n");
       const invoke = () =>
-        enable("/fake", ["--yes", "--scope", "project", "--cli", process.execPath], {}, home, cwd);
+        enable("/fake", ["--scope", "project", "--cli", process.execPath], {}, home, cwd);
       if (state === "ignored") {
         await invoke();
         expect(json(file).env).toBeDefined();
@@ -701,7 +720,7 @@ describe("explicit scoped deterministic setup", () => {
         expect(snapshot(file)).toEqual(before);
         const paths = targetPaths(home, "project", cwd);
         expect(existsSync(paths.config)).toBe(false);
-        expect(existsSync(paths.receipt)).toBe(false);
+        expect(loadConfig(home, true)?.settingsTargets ?? []).toEqual([]);
         expect(ensure).not.toHaveBeenCalled();
         expect(loadConfig()).toBeUndefined();
       }
@@ -734,7 +753,7 @@ describe("explicit scoped deterministic setup", () => {
     expect(output).toHaveBeenCalledWith({
       decision: "block",
       reason:
-        "Gateway settings saved for the selected scope; OAuth-only gateway auth; native credentials are not forwarded. Gateway provider keys and provider billing apply. local daemon healthy. Authentication is checked on the first model request, not setup. Restart Claude to apply the settings.",
+        "Gateway settings saved for the selected scope; OAuth-only gateway auth; native credentials are not forwarded. Gateway provider keys and provider billing apply. local daemon healthy. Authentication is checked on the first model request, not setup.",
     });
     expect(output).toHaveBeenCalledTimes(1);
     expect(loadConfig()).toMatchObject({
@@ -762,6 +781,10 @@ describe("explicit scoped deterministic setup", () => {
       reason: expect.stringContaining("Gateway disabled"),
     });
     expect(output).toHaveBeenCalledTimes(2);
+    expect(output.mock.calls[0][0].reason).not.toMatch(/restart|live|next request/i);
+    expect(output.mock.calls[1][0].reason).toBe(
+      "Gateway disabled for the selected scope; matching gateway routing settings removed (no previous values restored) and later edits preserved. Restart affected Claude sessions to stop using the proxy. Other known matching scopes remain active. After the last known active scope is disabled, the daemon drains (up to 5 seconds to notice, then up to 30 seconds for active work).",
+    );
     expect(loadConfig()).toBeUndefined();
   });
   it("reports already configured without another restart instruction on repeated setup", async () => {
@@ -834,7 +857,7 @@ describe("explicit scoped deterministic setup", () => {
   });
 });
 
-it("rolls back completed writes on a later transaction failure without leaking receipts", () => {
+it("rolls back completed writes on a later transaction failure without persistent backups", () => {
   const first = join(home, "first");
   writeFileSync(first, "original", { mode: 0o600 });
   const second = join(home, "missing-parent", "second");
@@ -848,42 +871,38 @@ it("rolls back completed writes on a later transaction failure without leaking r
   expect(existsSync(second)).toBe(false);
 });
 
-it("rejects project settings and receipt hardlinks/symlinks without changing other targets", async () => {
+it("rejects project settings hardlinks/symlinks without changing other targets", async () => {
   const cwd = realpathSync(home);
   const p = targetPaths(home, "project", cwd);
-  await enable("/fake", ["--yes", "--scope", "project", "--cli", process.execPath], {}, home, cwd);
+  await enable("/fake", ["--scope", "project", "--cli", process.execPath], {}, home, cwd);
   const config = loadConfig()!;
   const backup = join(home, "backup");
-  linkSync(p.receipt, backup);
-  expect(() => disable(["--yes", "--scope", "project"], {}, home, cwd)).toThrow(
-    "Unsafe settings file",
-  );
+  linkSync(p.settings, backup);
+  expect(() => disable(["--scope", "project"], {}, home, cwd)).toThrow("Unsafe settings file");
   rmSync(backup);
   const original = readFileSync(p.settings, "utf8");
   rmSync(p.settings);
   writeFileSync(backup, "untouched", { mode: 0o600 });
   symlinkSync(backup, p.settings);
-  expect(() => disable(["--yes", "--scope", "project"], {}, home, cwd)).toThrow();
+  expect(() => disable(["--scope", "project"], {}, home, cwd)).toThrow();
   expect(readFileSync(backup, "utf8")).toBe("untouched");
-  expect(loadConfig()).toEqual(config);
+  expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
   rmSync(p.settings);
   writeFileSync(p.settings, original, { mode: 0o600 });
-  disable(["--yes", "--scope", "project"], {}, home, cwd);
+  disable(["--scope", "project"], {}, home, cwd);
   expect(loadConfig()).toBeUndefined();
 });
 
 it.each(["global", "project"] as const)(
-  "switches only the active %s mode, preserving settings, key and ownership",
+  "switches only the active %s mode, preserving settings, key and target index",
   async (scope) => {
     const cwd = realpathSync(home);
     const p = targetPaths(home, scope, cwd);
     const invoke = (...flags: string[]) =>
-      enable("/fake", ["--yes", "--scope", scope, ...flags], {}, home, cwd);
-    expect(setupPlan(["--scope", scope], {}, home).useClaudeSubscription).toBe(false);
+      enable("/fake", ["--scope", scope, ...flags], {}, home, cwd);
     await invoke("--cli", process.execPath);
     const original = loadConfig()!;
-    const bytes = readFileSync(p.settings, "utf8"),
-      record = readFileSync(p.receipt, "utf8");
+    const bytes = readFileSync(p.settings, "utf8");
     for (const choice of [true, false]) {
       const old = loadConfig()!;
       vi.mocked(waitForStopped).mockImplementationOnce(async (config) => {
@@ -891,7 +910,6 @@ it.each(["global", "project"] as const)(
         expect(loadConfig()).toBeUndefined();
         expect(loadConfig(home, true)?.useClaudeSubscription).toBe(choice);
         expect(readFileSync(p.settings, "utf8")).toBe(bytes);
-        expect(readFileSync(p.receipt, "utf8")).toBe(record);
       });
       const flags = choice ? ["--use-claude-subscription"] : [];
       await expect(invoke(...flags)).resolves.toEqual({
@@ -900,28 +918,28 @@ it.each(["global", "project"] as const)(
         modeChanged: true,
       });
       expect(loadConfig()).toEqual({ ...original, useClaudeSubscription: choice });
-      expect(authorizedScope(home, cwd, loadConfig()!)).toBe(true);
-      expect(ensure).toHaveBeenLastCalledWith(loadConfig(), "/fake");
+      expect(configuredScope(home, cwd, loadConfig()!)).toBe(true);
+      expect(ensure).toHaveBeenLastCalledWith(
+        expect.objectContaining(transport(loadConfig()!)),
+        "/fake",
+      );
       expect(readFileSync(p.settings, "utf8")).toBe(bytes);
-      expect(readFileSync(p.receipt, "utf8")).toBe(record);
       expect(identity(loadConfig()!)).not.toBe(identity(old));
       await expect(invoke(...flags)).resolves.toMatchObject({
         useClaudeSubscription: choice,
         modeChanged: false,
       });
-      expect(setupPlan(["--scope", scope], {}, home).useClaudeSubscription).toBe(false);
-      expect(setupPlan(["--scope", scope, ...flags], {}, home).useClaudeSubscription).toBe(choice);
       expect(loadConfig()?.useClaudeSubscription).toBe(choice);
     }
     expect(control).not.toHaveBeenCalled();
   },
 );
 
-it("refuses shared mode changes and unowned targets without altering any active scope", async () => {
+it("refuses shared mode changes and unconfigured targets without altering any active scope", async () => {
   await run();
   const cwd = realpathSync(home);
   const invoke = (scope: string, ...flags: string[]) =>
-    enable("/fake", ["--yes", "--scope", scope, ...flags], {}, home, cwd);
+    enable("/fake", ["--scope", scope, ...flags], {}, home, cwd);
   const original = loadConfig()!;
   await expect(invoke("project", "--use-claude-subscription")).rejects.toThrow(
     "Disable every other active scope",
@@ -930,15 +948,15 @@ it("refuses shared mode changes and unowned targets without altering any active 
   const paths = [
     settings,
     targetPaths(home, "project", cwd).settings,
-    ...["config.json", "settings-ownership.json"].map((n) => join(configDir(home), n)),
+    ...["config.json"].map((n) => join(configDir(home), n)),
   ];
   const saved = paths.map((path) => snapshot(path));
   await expect(invoke("global", "--use-claude-subscription")).rejects.toThrow(
     "Disable every other active scope",
   );
   expect(paths.map((path) => snapshot(path))).toEqual(saved);
-  expect(loadConfig()).toEqual(original);
-  disable(["--yes", "--scope", "project"], {}, home, cwd);
+  expect(loadConfig()).toEqual({ ...original, settingsTargets: expect.any(Array) });
+  disable(["--scope", "project"], {}, home, cwd);
   await invoke("global", "--use-claude-subscription");
   expect(loadConfig()?.useClaudeSubscription).toBe(true);
 });
@@ -948,57 +966,56 @@ it.each(["drain", "health"])(
   async (failure) => {
     await enable("/fake", [...args(), "--use-claude-subscription"], {});
     const bytes = readFileSync(settings, "utf8");
-    const record = readFileSync(join(configDir(home), "settings-ownership.json"), "utf8");
     if (failure === "drain") vi.mocked(waitForStopped).mockRejectedValueOnce(new Error("private"));
     else vi.mocked(ensure).mockRejectedValueOnce(new Error("private"));
-    const optOut = () => enable("/fake", ["--yes", "--scope", "global"], {});
+    const optOut = () => enable("/fake", ["--scope", "global"], {});
     await expect(optOut()).rejects.toThrow("Config remains disabled");
     expect(loadConfig()).toBeUndefined();
     expect(loadConfig(home, true)?.useClaudeSubscription).toBe(false);
     expect(readFileSync(settings, "utf8")).toBe(bytes);
-    expect(readFileSync(join(configDir(home), "settings-ownership.json"), "utf8")).toBe(record);
     await optOut();
     expect(loadConfig()?.useClaudeSubscription).toBe(false);
   },
 );
 
 it.each([false, true])(
-  "legacy reads preserve true until explicit setup omits the flag (disabled=%s)",
+  "rejects missing mode and incomplete disabled config without changing disk (disabled=%s)",
   async (disabled) => {
     await run();
     const path = join(configDir(home), "config.json");
-    const legacy = json(path);
-    delete legacy.useClaudeSubscription;
-    writeFileSync(path, JSON.stringify(legacy));
-    const before = readFileSync(path, "utf8");
-    const old = loadConfig()!;
-    expect(old.useClaudeSubscription).toBe(true);
-    expect(setupPlan(["--scope", "global"], {}, home).useClaudeSubscription).toBe(false);
-    expect(readFileSync(path, "utf8")).toBe(before);
-    if (disabled) {
-      disable(["--yes", "--scope", "global"], {});
-      expect(loadConfig(home, true)?.useClaudeSubscription).toBe(true);
+    const saved = json(path);
+    const beforeSettings = readFileSync(settings, "utf8");
+    for (const invalid of [
+      { ...saved, enabled: !disabled, useClaudeSubscription: undefined },
+      { enabled: false },
+    ]) {
+      writeFileSync(path, JSON.stringify(invalid));
+      const before = readFileSync(path, "utf8");
+      vi.clearAllMocks();
+      for (const includeDisabled of [false, true])
+        expect(() => loadConfig(home, includeDisabled)).toThrow("one-time private config update");
+      await expect(run()).rejects.toThrow("one-time private config update");
+      expect(() => disable(["--scope", "global"], {})).toThrow("one-time private config update");
+      expect(readFileSync(path, "utf8")).toBe(before);
+      expect(readFileSync(settings, "utf8")).toBe(beforeSettings);
+      expect(ensure).not.toHaveBeenCalled();
+      expect(control).not.toHaveBeenCalled();
+      expect(waitForStopped).not.toHaveBeenCalled();
     }
-    await expect(run()).resolves.toMatchObject({ useClaudeSubscription: false, modeChanged: true });
-    expect(loadConfig()?.useClaudeSubscription).toBe(false);
-    expect(json(path).useClaudeSubscription).toBe(false);
-    expect(identity(loadConfig()!)).not.toBe(identity(old));
-    expect(waitForStopped).toHaveBeenCalledWith(old);
   },
 );
 
 it("omitted setup refuses to switch multiple active true scopes without writes", async () => {
   const cwd = realpathSync(home);
   const invoke = (scope: string, ...flags: string[]) =>
-    enable("/fake", ["--yes", "--scope", scope, ...flags], {}, home, cwd);
+    enable("/fake", ["--scope", scope, ...flags], {}, home, cwd);
   await invoke("global", "--cli", process.execPath, "--use-claude-subscription");
   await invoke("project", "--use-claude-subscription");
   const global = targetPaths(home, "global", cwd);
   const project = targetPaths(home, "project", cwd);
-  const paths = [global.config, global.settings, global.receipt, project.settings, project.receipt];
+  const paths = [global.config, global.settings, project.settings];
   const before = paths.map((path) => snapshot(path));
   for (const scope of ["global", "project"]) {
-    expect(setupPlan(["--scope", scope], {}, home).useClaudeSubscription).toBe(false);
     await expect(invoke(scope)).rejects.toThrow("Disable every other active scope");
     expect(paths.map((path) => snapshot(path))).toEqual(before);
   }
@@ -1023,11 +1040,11 @@ it("macro opt-out switches daemon without a client restart instruction or authen
   expect(result.decision).toBe("block");
   expect(result.reason).toContain("OAuth-only");
   expect(result.reason).toContain("downtime");
-  expect(result.reason).not.toContain("Restart Claude");
+  expect(result.reason).not.toMatch(/restart|live|next request/i);
   expect(control).not.toHaveBeenCalled();
 });
 
-it("mode exception cannot relax pinned endpoint changes or replace a corrupt receipt", async () => {
+it("mode exception cannot relax pinned endpoint changes", async () => {
   await run();
   const config = loadConfig()!;
   const bytes = readFileSync(settings, "utf8");
@@ -1045,14 +1062,7 @@ it("mode exception cannot relax pinned endpoint changes or replace a corrupt rec
       {},
     ),
   ).rejects.toThrow("disable first");
-  const path = join(configDir(home), "settings-ownership.json");
-  const record = json(path);
-  record.identity = "unowned";
-  writeFileSync(path, JSON.stringify(record));
-  await expect(enable("/fake", [...args(), "--use-claude-subscription"], {})).rejects.toThrow(
-    "recovery record",
-  );
-  expect(loadConfig()).toEqual(config);
+  expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
   expect(readFileSync(settings, "utf8")).toBe(bytes);
   expect(waitForStopped).not.toHaveBeenCalled();
 });
@@ -1067,7 +1077,7 @@ it("preserves later settings edits while switching and later disable still undoe
   const bytes = readFileSync(settings, "utf8");
   await enable("/fake", [...args(), "--use-claude-subscription"], {});
   expect(readFileSync(settings, "utf8")).toBe(bytes);
-  disable(["--yes", "--scope", "global"], {});
+  disable(["--scope", "global"], {});
   expect(json(settings)).toEqual({
     model: "after",
     env: { ANTHROPIC_CUSTOM_HEADERS: "X-Old: keep\nX-Later: keep" },
@@ -1087,4 +1097,345 @@ it("refuses intervening settings edits during mode drain without re-enabling", a
   expect(loadConfig(home, true)?.useClaudeSubscription).toBe(true);
   expect(json(settings).model).toBe("concurrent");
   expect(ensure).not.toHaveBeenCalled();
+});
+
+describe.each(["global", "project"] as const)("same-session %s re-enable", (scope) => {
+  it.each([undefined, "", "x-MiXeD:  keep : unusual  \n\nX-Other: two\n"])(
+    "recreates exact transport with retained key and disk headers %j, without inferring live routing",
+    async (headers) => {
+      const cwd = realpathSync(home);
+      const p = targetPaths(home, scope, cwd);
+      const before = {
+        model: "keep",
+        permissions: { allow: ["Read"] },
+        env: {
+          KEEP: "original",
+          ...(headers === undefined ? {} : { ANTHROPIC_CUSTOM_HEADERS: headers }),
+        },
+      };
+      writeFileSync(p.settings, JSON.stringify(before), { mode: 0o600 });
+      const args = ["--scope", scope];
+      await enable(
+        "/fake",
+        [...args, "--cli", process.execPath, "--use-claude-subscription"],
+        {},
+        home,
+        cwd,
+      );
+      const disabled = headers === "" ? { ...before, env: { KEEP: "original" } } : before;
+      const config = loadConfig()!;
+      const inherited = { ...json(p.settings).env };
+      const after = json(p.settings);
+      disable(args, inherited, home, cwd);
+      expect(json(p.settings)).toEqual(disabled);
+      expect(loadConfig(home, true)?.settingsTargets).toEqual([]);
+      expect(configuredScope(home, cwd, config)).toBe(false);
+      expect(loadConfig()).toBeUndefined();
+      vi.clearAllMocks();
+      const output = vi.fn();
+      // Neither ordinary prompts nor lifecycle recovery can implicitly re-enable.
+      for (const event of ["SessionStart", "UserPromptSubmit", "SessionEnd"]) {
+        await handleGatewayInput(
+          { hook_event_name: event, prompt: "hello", cwd, session_id: "same-session" },
+          "/fake",
+          inherited,
+          home,
+          output,
+        );
+      }
+      expect(output).not.toHaveBeenCalled();
+      expect(ensure).not.toHaveBeenCalled();
+      expect(control).not.toHaveBeenCalled();
+      expect(loadConfig()).toBeUndefined();
+      vi.mocked(waitForStopped).mockImplementationOnce(async (old) => {
+        expect(old).toEqual({ ...config, enabled: false, settingsTargets: [] });
+        expect(loadConfig()).toBeUndefined();
+        expect(json(p.settings)).toEqual(disabled);
+      });
+      // Omission is still explicit opt-out, even with a retained true config.
+      await handleGatewayInput(
+        {
+          hook_event_name: "UserPromptSubmit",
+          prompt: `/langsmith-gateway:setup --scope ${scope}`,
+          cwd,
+        },
+        "/fake",
+        inherited,
+        home,
+        output,
+      );
+      expect(output).toHaveBeenCalledExactlyOnceWith({
+        decision: "block",
+        reason: expect.stringContaining("Gateway settings saved for the selected scope"),
+      });
+      expect(output.mock.calls[0][0].reason).not.toMatch(/restart|live|next request/i);
+      expect(output.mock.calls[0][0].reason).not.toContain(config.secret);
+      expect(loadConfig()).toEqual({ ...config, useClaudeSubscription: false });
+      expect(json(p.settings)).toEqual(after);
+      expect(loadConfig()?.settingsTargets).toEqual([p.settings]);
+      expect(configuredScope(home, cwd, loadConfig()!)).toBe(true);
+      expect(waitForStopped).toHaveBeenCalledExactlyOnceWith({
+        ...config,
+        enabled: false,
+        settingsTargets: [],
+      });
+      expect(ensure).toHaveBeenCalledTimes(1);
+      expect(control).not.toHaveBeenCalled();
+      disable(args, inherited, home, cwd);
+      expect(json(p.settings)).toEqual(disabled);
+      // Report disk changes without inferring the parent session's live transport.
+      await expect(enable("/fake", args, inherited, home, cwd)).resolves.toMatchObject({
+        settingsChanged: true,
+      });
+      disable(args, inherited, home, cwd);
+      expect(json(p.settings)).toEqual(disabled);
+    },
+  );
+
+  it.each([
+    ["unknown key", (s: string) => s.replace(/Proxy-Key: .+/, `Proxy-Key: ${"a".repeat(64)}`)],
+    ["added header", (s: string) => s + "\nX-Extra: secret"],
+    ["altered header", (s: string) => s.replace("original", "edited")],
+    ["reordered", (s: string) => s.split("\n").reverse().join("\n")],
+    ["key case", (s: string) => s.replace("X-LangSmith-Proxy-Key", "x-langsmith-proxy-key")],
+    ["key spacing", (s: string) => s.replace("Proxy-Key: ", "Proxy-Key:  ")],
+    ["duplicate key", (s: string) => s + "\n" + s.split("\n")[1]],
+    ["missing config"],
+    ["different base"],
+    ["changed port"],
+    ["later disk edit"],
+  ] as const)(
+    "rejects stale transport with %s before persistent writes or daemon effects",
+    async (change, headers) => {
+      const cwd = realpathSync(home);
+      const p = targetPaths(home, scope, cwd);
+      writeFileSync(
+        p.settings,
+        JSON.stringify({ env: { ANTHROPIC_CUSTOM_HEADERS: "X-Keep: original" } }),
+        { mode: 0o600 },
+      );
+      const args = ["--scope", scope];
+      await enable("/fake", [...args, "--cli", process.execPath], {}, home, cwd);
+      const inherited = { ...json(p.settings).env };
+      disable(args, inherited, home, cwd);
+      if (headers) inherited.ANTHROPIC_CUSTOM_HEADERS = headers(inherited.ANTHROPIC_CUSTOM_HEADERS);
+      if (change === "missing config") rmSync(p.config);
+      if (change === "different base") inherited.ANTHROPIC_BASE_URL = "https://other.invalid";
+      if (change === "changed port") args.push("--port", "43128");
+      if (change === "later disk edit")
+        writeFileSync(
+          p.settings,
+          JSON.stringify({ env: { ANTHROPIC_CUSTOM_HEADERS: "X-Keep: edited" } }),
+        );
+      const paths = [p.settings, p.config];
+      const before = paths.map((path) => snapshot(path));
+      vi.clearAllMocks();
+      await expect(enable("/fake", args, inherited, home, cwd)).rejects.toThrow(SetupError);
+      expect(paths.map((path) => snapshot(path))).toEqual(before);
+      expect(loadConfig()).toBeUndefined();
+      expect(ensure).not.toHaveBeenCalled();
+      expect(waitForStopped).not.toHaveBeenCalled();
+      expect(control).not.toHaveBeenCalled();
+    },
+  );
+
+  it("reports settings changes when only the inherited headers match", async () => {
+    const cwd = realpathSync(home);
+    const p = targetPaths(home, scope, cwd);
+    const args = ["--scope", scope];
+    await enable("/fake", [...args, "--cli", process.execPath], {}, home, cwd);
+    const inherited = { ANTHROPIC_CUSTOM_HEADERS: json(p.settings).env.ANTHROPIC_CUSTOM_HEADERS };
+    disable(args, {}, home, cwd);
+    await expect(enable("/fake", args, inherited, home, cwd)).resolves.toMatchObject({
+      settingsChanged: true,
+    });
+  });
+});
+
+it("re-enables a retired project while other scopes stay active, without trusting its headers in another target", async () => {
+  const project = (name: string) => {
+    const cwd = join(home, name);
+    mkdirSync(cwd, { mode: 0o700 });
+    return realpathSync(cwd);
+  };
+  const scoped = (scope: string) => ["--scope", scope];
+  const a = project("retired"),
+    b = project("other");
+  const pa = targetPaths(home, "project", a),
+    pb = targetPaths(home, "project", b);
+  mkdirSync(join(a, ".claude"), { mode: 0o700 });
+  writeFileSync(
+    pa.settings,
+    JSON.stringify({ env: { ANTHROPIC_CUSTOM_HEADERS: "X-Project: a" } }),
+    { mode: 0o600 },
+  );
+  await run();
+  await enable("/fake", scoped("project"), {}, home, a);
+  const inherited = { ...json(pa.settings).env };
+  disable(scoped("project"), inherited, home, a);
+  const config = loadConfig()!;
+  const global = targetPaths(home, "global", home);
+  const before = [global.settings].map((path) => snapshot(path));
+  expect(loadConfig()?.settingsTargets).toHaveLength(1);
+  vi.clearAllMocks();
+  await expect(enable("/fake", scoped("project"), inherited, home, b)).rejects.toThrow(
+    "Inherited custom headers",
+  );
+  expect(snapshot(pb.settings)).toBeUndefined();
+  expect(ensure).not.toHaveBeenCalled();
+  await expect(enable("/fake", scoped("project"), inherited, home, a)).resolves.toMatchObject({
+    settingsChanged: true,
+  });
+  expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
+  expect([global.settings].map((path) => snapshot(path))).toEqual(before);
+  expect(loadConfig()?.settingsTargets).toHaveLength(2);
+  expect(waitForStopped).not.toHaveBeenCalled();
+  disable(scoped("project"), inherited, home, a);
+  expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
+  disable(scoped("global"), {}, home);
+  expect(loadConfig()).toBeUndefined();
+});
+
+describe("externally provisioned receipt-free routing", () => {
+  async function provision() {
+    setupModule.createConfig(process.execPath, "it-profile", 43127, home);
+    const config = loadConfig()!;
+    save({
+      model: "keep",
+      env: {
+        ANTHROPIC_BASE_URL: `http://127.0.0.1:${config.port}`,
+        ANTHROPIC_CUSTOM_HEADERS: `X-IT: keep\nX-LangSmith-Proxy-Key: ${config.secret}`,
+      },
+    });
+    return config;
+  }
+  it("recognizes routing without setup, an index or receipts; ignores stale receipts", async () => {
+    const config = await provision();
+    const path = join(configDir(home), "settings-ownership.json");
+    writeFileSync(path, "invalid synthetic-private", { mode: 0o600 });
+    const before = [settings, join(configDir(home), "config.json"), path].map((p) => snapshot(p));
+    expect(configuredScope(home, home, config)).toBe(true);
+    expect([settings, join(configDir(home), "config.json"), path].map((p) => snapshot(p))).toEqual(
+      before,
+    );
+    expect(loadConfig()?.settingsTargets).toBeUndefined();
+  });
+  it("adopts provisioned routing and ignores linked legacy records even with no private config", async () => {
+    mkdirSync(configDir(home), { mode: 0o700 });
+    const path = join(configDir(home), "settings-ownership.json");
+    symlinkSync(join(home, "missing"), path);
+    await run();
+    expect(configuredScope(home, home, loadConfig()!)).toBe(true);
+    disable(["--scope", "global"], {});
+    expect(json(settings)).toEqual({});
+    expect(loadConfig()).toBeUndefined();
+  });
+  it("unsets provisioned transport without restoring old base/header values", async () => {
+    await provision();
+    const path = join(configDir(home), "settings-ownership.json");
+    writeFileSync(
+      path,
+      JSON.stringify({ beforeBase: "https://old.test", beforeHeaders: "X-Old: secret" }),
+      { mode: 0o600 },
+    );
+    disable(["--scope", "global"], {});
+    expect(json(settings)).toEqual({
+      model: "keep",
+      env: { ANTHROPIC_CUSTOM_HEADERS: "X-IT: keep" },
+    });
+    expect(loadConfig()).toBeUndefined();
+    expect(loadConfig(home, true)?.settingsTargets).toEqual([]);
+  });
+  it("adopts provisioned matching settings without changing their bytes or rotating the key", async () => {
+    const config = await provision();
+    const bytes = readFileSync(settings, "utf8");
+    await enable("/fake", ["--scope", "global"], {});
+    expect(readFileSync(settings, "utf8")).toBe(bytes);
+    expect(loadConfig()).toEqual({ ...config, settingsTargets: [settings] });
+  });
+  it("uses disk matches, not index membership, and never re-enables on disable", async () => {
+    const config = await provision();
+    const cwd = join(home, "external");
+    mkdirSync(join(cwd, ".claude"), { recursive: true, mode: 0o700 });
+    const local = targetPaths(home, "project", cwd).settings;
+    writeFileSync(local, readFileSync(settings), { mode: 0o600 });
+    const path = join(configDir(home), "config.json");
+    writeFileSync(path, JSON.stringify({ ...config, settingsTargets: [local] }));
+    disable(["--scope", "global"], {}, home, home);
+    expect(loadConfig()?.settingsTargets).toEqual([local]);
+    expect(configuredScope(home, cwd, loadConfig()!)).toBe(true);
+    writeFileSync(path, JSON.stringify({ ...loadConfig()!, enabled: false }));
+    disable(["--scope", "global"], {}, home, home);
+    expect(loadConfig()).toBeUndefined();
+    writeFileSync(path, JSON.stringify({ ...config, settingsTargets: [local] }));
+    writeFileSync(local, JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://later.test" } }));
+    disable(["--scope", "global"], {}, home, home);
+    expect(loadConfig()).toBeUndefined();
+    expect(json(local)).toEqual({ env: { ANTHROPIC_BASE_URL: "https://later.test" } });
+  });
+  it("observes project overrides without accepting project-selected endpoints or modes", async () => {
+    const config = await provision();
+    const local = targetPaths(home, "project", home).settings;
+    writeFileSync(
+      local,
+      JSON.stringify({
+        enabled: true,
+        gatewayUrl: "https://arbitrary.test",
+        env: { ANTHROPIC_BASE_URL: "https://other.test" },
+      }),
+      { mode: 0o600 },
+    );
+    expect(configuredScope(home, home, config)).toBe(false);
+    writeFileSync(
+      local,
+      JSON.stringify({ env: { ANTHROPIC_BASE_URL: `http://127.0.0.1:${config.port}` } }),
+    );
+    expect(configuredScope(home, home, config)).toBe(true);
+    expect(loadConfig()).toEqual(config);
+  });
+  it("preserves later settings on partial transaction failure and disables new config", async () => {
+    // A concurrent creator blocks the settings write after readiness, without
+    // requiring a persistent write-ahead record to clean up matching routing.
+    vi.mocked(ensure).mockImplementationOnce(async () => save({ model: "later" }));
+    await expect(run()).rejects.toThrow("Settings changed concurrently");
+    expect(json(settings)).toEqual({ model: "later" });
+    expect(loadConfig()).toBeUndefined();
+  });
+});
+
+it("disable leaves empty unrelated env untouched when no routing matches", async () => {
+  setupModule.createConfig(process.execPath, "it-profile", 43127, home);
+  save({ env: {}, model: "keep" });
+  const before = snapshot(settings);
+  disable(["--scope", "global"], {});
+  expect(snapshot(settings)).toEqual(before);
+});
+
+it.each([
+  null,
+  {},
+  ["relative/.claude/settings.local.json"],
+  ["/tmp/../tmp/.claude/settings.json"],
+  ["/tmp/other.json"],
+  Array(129).fill("/tmp/.claude/settings.local.json"),
+])(
+  "rejects invalid optional routing index %j without accepting it as config",
+  (settingsTargets) => {
+    setupModule.createConfig(process.execPath, "it-profile", 43127, home);
+    const path = join(configDir(home), "config.json");
+    writeFileSync(path, JSON.stringify({ ...loadConfig()!, settingsTargets }));
+    expect(() => loadConfig()).toThrow("Invalid proxy configuration");
+  },
+);
+
+it("index changes do not change daemon identity or require referenced files for hooks", async () => {
+  await run();
+  const config = loadConfig()!;
+  const indexed = {
+    ...config,
+    settingsTargets: [join(home, "missing/.claude/settings.local.json")],
+  };
+  writeFileSync(join(configDir(home), "config.json"), JSON.stringify(indexed));
+  expect(identity(indexed)).toBe(identity(config));
+  expect(configuredScope(home, home, loadConfig()!)).toBe(true);
 });

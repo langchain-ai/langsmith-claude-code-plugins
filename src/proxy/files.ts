@@ -109,8 +109,8 @@ export function atomic(path: string, text: string, prior: Snapshot | undefined):
 }
 export const jsonText = (value: unknown) => JSON.stringify(value, null, 2) + "\n";
 
-// Write-ahead order is supplied by the caller. Roll back only our exact writes,
-// never overwrite concurrent user edits. Receipts remain recoverable after a crash.
+// Roll back only our exact writes on failure, never overwrite concurrent user edits.
+// This is not a persistent backup or crash-atomic multi-file transaction.
 export function transaction(
   writes: { path: string; text: string; prior: Snapshot | undefined }[],
 ): void {
@@ -128,7 +128,7 @@ export function transaction(
         if (item.prior) atomic(item.path, item.prior.text, item.written);
         else unlinkSync(item.path);
       } catch {
-        /* Preserve concurrent changes; write-ahead receipt supports recovery. */
+        /* Preserve concurrent changes rather than forcing rollback. */
       }
     }
     throw error;

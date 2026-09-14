@@ -1,7 +1,11 @@
-import { constants, openSync, closeSync, fstatSync, readFileSync, lstatSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { lstatSync } from "node:fs";
+import { isAbsolute, join, normalize } from "node:path";
 import { userInfo } from "node:os";
-import { directories } from "./files.js";
+import { directories, snapshot } from "./files.js";
+
+export class ConfigError extends Error {}
+export const CONFIG_UPDATE_GUIDANCE =
+  "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints; review LOCAL_PROXY.md privately. Do not paste secrets or delete/reset configuration.";
 
 export const API_URL = "https://api.smith.langchain.com";
 export const UPSTREAM = "https://gateway.smith.langchain.com";
@@ -9,12 +13,14 @@ export const KEY_HEADER = "x-langsmith-proxy-key";
 export const userHome = () => userInfo().homedir;
 export const configDir = (home = userHome()) => join(home, ".claude", "langsmith-proxy");
 export interface ProxyConfig {
-  enabled: true;
+  enabled: boolean;
   useClaudeSubscription: boolean;
   cli: string;
   profile: string;
   port: number;
   secret: string;
+  // Optional discovery index only; never credentials, previous values or authorization.
+  settingsTargets?: string[];
   apiUrl?: string;
   gatewayUrl?: string;
 }
@@ -69,46 +75,25 @@ export function privatePath(path: string, directory = false): void {
 }
 
 // Never consult cwd, tracing configuration, or environment overrides.
+// Validate the full schema even when disabled; preserve its saved enabled state.
 export function loadConfig(home = userHome(), includeDisabled = false): ProxyConfig | undefined {
-  const dir = configDir(home);
+  let saved;
   try {
     directories(home);
-    privatePath(dir, true);
+    privatePath(configDir(home), true);
+    saved = snapshot(join(configDir(home), "config.json"), true);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw e;
-  }
-  const path = join(dir, "config.json");
-  let fd: number;
-  try {
-    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw e;
-  }
-  let c: ProxyConfig;
-  try {
-    const s = fstatSync(fd);
-    if (
-      !s.isFile() ||
-      s.nlink !== 1 ||
-      s.uid !== process.getuid?.() ||
-      s.mode & 0o077 ||
-      s.size > 8192
-    )
+    if (e instanceof Error && e.message === "Unsafe settings file")
       throw new Error("Unsafe proxy configuration");
-    c = JSON.parse(readFileSync(fd, "utf8"));
-  } finally {
-    closeSync(fd);
+    throw e;
   }
-  if (c && (c as { enabled: unknown }).enabled === false) {
-    if (!includeDisabled || Object.keys(c).length === 1) return;
-    c = { ...c, enabled: true }; // Validate retained configuration for explicit re-enable.
-  }
+  if (!saved) return;
+  const c: ProxyConfig = JSON.parse(saved.text);
   if (
     !c ||
-    c.enabled !== true ||
-    (c.useClaudeSubscription !== undefined && typeof c.useClaudeSubscription !== "boolean") ||
+    typeof c.enabled !== "boolean" ||
+    typeof c.useClaudeSubscription !== "boolean" ||
     typeof c.cli !== "string" ||
     !isAbsolute(c.cli) ||
     typeof c.profile !== "string" ||
@@ -118,10 +103,23 @@ export function loadConfig(home = userHome(), includeDisabled = false): ProxyCon
     c.port > 65535 ||
     typeof c.secret !== "string" ||
     !/^[a-f0-9]{64}$/.test(c.secret) ||
+    (c.settingsTargets !== undefined &&
+      (!Array.isArray(c.settingsTargets) ||
+        c.settingsTargets.length > 128 ||
+        c.settingsTargets.some(
+          (path) =>
+            typeof path !== "string" ||
+            path.length > 4096 ||
+            !isAbsolute(path) ||
+            normalize(path) !== path ||
+            path.includes("\0") ||
+            !/\/\.claude\/settings(?:\.local)?\.json$/.test(path),
+        ))) ||
     Object.keys(c).some(
       (k) =>
         ![
           "enabled",
+          "settingsTargets",
           "cli",
           "profile",
           "port",
@@ -132,8 +130,25 @@ export function loadConfig(home = userHome(), includeDisabled = false): ProxyCon
         ].includes(k),
     )
   )
-    throw new Error("Invalid proxy configuration");
-  // Existing pre-field configs always forwarded native auth. Only disk reads
-  // migrate missing fields to true; fresh creation writes an explicit false.
-  return { ...c, ...endpoints(c), useClaudeSubscription: c.useClaudeSubscription ?? true };
+    throw new ConfigError(CONFIG_UPDATE_GUIDANCE);
+  let selected: ReturnType<typeof endpoints>;
+  try {
+    selected = endpoints(c);
+  } catch {
+    throw new ConfigError(CONFIG_UPDATE_GUIDANCE);
+  }
+  if (!c.enabled && !includeDisabled) return;
+  return { ...c, ...selected };
+}
+
+// One validated private disk read, including retained disabled configuration.
+export function configStatus(home = userHome()): {
+  state: "not configured" | "enabled" | "disabled";
+  config?: ProxyConfig;
+} {
+  const config = loadConfig(home, true);
+  return {
+    state: config === undefined ? "not configured" : config.enabled ? "enabled" : "disabled",
+    config,
+  };
 }

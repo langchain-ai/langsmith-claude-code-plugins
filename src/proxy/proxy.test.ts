@@ -6,6 +6,7 @@ import type https from "node:https";
 import { once } from "node:events";
 import {
   mkdtempSync,
+  realpathSync,
   mkdirSync,
   readFileSync,
   writeFileSync,
@@ -55,7 +56,7 @@ afterEach(() => {
   for (const f of cleanup.splice(0).reverse()) f();
 });
 function temporary() {
-  const dir = mkdtempSync(join(tmpdir(), "ls-proxy-test-"));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ls-proxy-test-")));
   cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
@@ -450,6 +451,9 @@ describe("local boundary and upstream targeting", () => {
     expect(r.status).toBe(503);
     expect(r.body).not.toContain("secret");
     expect(r.body).toContain("--profile test --api-url https://api.preview.test auth login");
+    expect(r.body).not.toMatch(/restart/i);
+    expect(r.body).toContain("token lookup failures are cached for two seconds");
+    expect(r.body).toContain("Failed requests are not replayed automatically");
     expect(r.body).toContain("saved OAuth issuer");
     expect(r.body).not.toContain("api.smith.langchain.com");
     expect(f.targets).toHaveLength(0);
@@ -824,6 +828,23 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
       "LangSmith token unavailable",
     );
   });
+  it("reads updated credentials on a new lookup after the negative cache expires", async () => {
+    let now = 100_000;
+    const token = jwt(400);
+    const load = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(new Error("Login required"))
+      .mockResolvedValue(token);
+    const cache = new TokenCache(load, () => now);
+    await expect(cache.get()).rejects.toThrow("LangSmith token unavailable");
+    now += 1999;
+    await expect(cache.get()).rejects.toThrow("LangSmith token unavailable");
+    expect(load).toHaveBeenCalledTimes(1);
+    now += 1;
+    expect(load).toHaveBeenCalledTimes(1); // No automatic retry of failed work.
+    await expect(cache.get()).resolves.toBe(token);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
   it("pins executable/arguments and sanitizes environment and stdout", async () => {
     const dir = temporary(),
       cli = join(dir, "fake-cli"),
@@ -868,19 +889,14 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
   });
 });
 
-function authorizeGlobal(home: string, config: ProxyConfig) {
+function provisionGlobal(home: string, config: ProxyConfig) {
   writeFileSync(
-    join(configDir(home), "settings-ownership.json"),
+    join(home, ".claude/settings.json"),
     JSON.stringify({
-      version: 1,
-      identity: createHash("sha256")
-        .update(JSON.stringify([config.cli, config.profile, config.port, config.secret]))
-        .digest("hex"),
-      afterBase: `http://127.0.0.1:${config.port}`,
-      afterHeaders: `X-LangSmith-Proxy-Key: ${config.secret}`,
-      beforeBase: null,
-      beforeHeaders: null,
-      envExisted: false,
+      env: {
+        ANTHROPIC_BASE_URL: `http://127.0.0.1:${config.port}`,
+        ANTHROPIC_CUSTOM_HEADERS: `X-LangSmith-Proxy-Key: ${config.secret}`,
+      },
     }),
     { mode: 0o600 },
   );
@@ -919,10 +935,10 @@ describe("shared lifecycle and explicit configuration", () => {
     expect([...f.sessions.leases.keys()]).toEqual(["two"]);
     expect(f.token).not.toHaveBeenCalled();
   });
-  it.each([true, false, undefined])(
-    "hooks preserve saved mode %s (legacy true), with auth deferred to requests",
+  it.each([true, false])(
+    "receipt-free provisioned hooks preserve saved mode %s, with auth deferred to requests",
     async (savedMode) => {
-      const f = await fixture(undefined, undefined, { useClaudeSubscription: savedMode ?? true });
+      const f = await fixture(undefined, undefined, { useClaudeSubscription: savedMode });
       const controls: string[] = [];
       f.server.on("request", (req) => controls.push(`${req.method} ${req.url}`));
       const home = temporary();
@@ -930,7 +946,12 @@ describe("shared lifecycle and explicit configuration", () => {
       const path = join(configDir(home), "config.json");
       const before = JSON.stringify({ ...f.config, useClaudeSubscription: savedMode });
       writeFileSync(path, before, { mode: 0o600 });
-      authorizeGlobal(home, f.config);
+      provisionGlobal(home, f.config);
+      writeFileSync(
+        join(configDir(home), "settings-ownership.json"),
+        "malformed synthetic-private",
+        { mode: 0o600 },
+      );
       await gatewayHook("SessionStart", "one", "/must-not-spawn", home);
       await gatewayHook("SessionStart", "two", "/must-not-spawn", home);
       await gatewayHook("UserPromptSubmit", "two", "/must-not-spawn", home);
@@ -945,7 +966,7 @@ describe("shared lifecycle and explicit configuration", () => {
         "PUT /_langsmith/sessions/two",
         "DELETE /_langsmith/sessions/one",
       ]);
-      expect(loadConfig(home)?.useClaudeSubscription).toBe(savedMode ?? true);
+      expect(loadConfig(home)?.useClaudeSubscription).toBe(savedMode);
       expect(readFileSync(path, "utf8")).toBe(before);
       expect(f.token).not.toHaveBeenCalled();
       await request(f.config);
@@ -979,7 +1000,7 @@ describe("shared lifecycle and explicit configuration", () => {
     const home = temporary();
     mkdirSync(configDir(home), { recursive: true, mode: 0o700 });
     writeFileSync(join(configDir(home), "config.json"), JSON.stringify(config), { mode: 0o600 });
-    authorizeGlobal(home, config);
+    // End still releases a lease after routing settings have been removed.
     await gatewayHook("SessionEnd", "one", "/must-not-spawn", home);
     expect(methods).toEqual(["DELETE"]);
   });
@@ -1092,12 +1113,12 @@ describe("shared lifecycle and explicit configuration", () => {
     expect(await control(next, "GET", "/_langsmith/health")).toBe(identity(next));
     expect(identity(next)).not.toBe(identity(f.config));
   });
-  it("loads legacy defaults and invalidates identity on either normalized endpoint change", () => {
+  it("loads production endpoint defaults and invalidates identity on either normalized endpoint change", () => {
     const home = temporary();
     mkdirSync(configDir(home), { recursive: true, mode: 0o700 });
     const file = join(configDir(home), "config.json");
     const save = (c: unknown) => writeFileSync(file, JSON.stringify(c), { mode: 0o600 });
-    save({ ...base, useClaudeSubscription: undefined });
+    save(base);
     expect(loadConfig(home)).toEqual({ ...base, apiUrl: API_URL, gatewayUrl: UPSTREAM });
     expect(identity(loadConfig(home)!)).toBe(identity(base));
     const urls = { apiUrl: "https://api.preview.test", gatewayUrl: "https://gateway.preview.test" };
@@ -1136,7 +1157,11 @@ describe("shared lifecycle and explicit configuration", () => {
       await gatewayHook(event, "one", "/not-an-entry", home);
     expect(loadConfig(home)).toBeUndefined();
     mkdirSync(configDir(home), { recursive: true, mode: 0o700 });
-    writeFileSync(join(configDir(home), "config.json"), '{"enabled":false}', { mode: 0o600 });
+    writeFileSync(
+      join(configDir(home), "config.json"),
+      JSON.stringify({ ...base, enabled: false }),
+      { mode: 0o600 },
+    );
     await gatewayHook("SessionStart", "one", "/not-an-entry", home);
     expect(loadConfig(home)).toBeUndefined();
   });
@@ -1243,7 +1268,7 @@ it("validates the private boolean and fingerprints the mode", () => {
   const home = temporary();
   mkdirSync(configDir(home), { recursive: true, mode: 0o700 });
   const path = join(configDir(home), "config.json");
-  for (const value of [null, "false", 0, 1, {}, []]) {
+  for (const value of [undefined, null, "false", 0, 1, {}, []]) {
     writeFileSync(path, JSON.stringify({ ...base, useClaudeSubscription: value }), { mode: 0o600 });
     expect(() => loadConfig(home)).toThrow("Invalid proxy configuration");
   }

@@ -4,8 +4,8 @@
 import { fileURLToPath } from "node:url";
 
 // dist/proxy/config.js
-import { constants as constants2, openSync as openSync2, closeSync as closeSync2, fstatSync as fstatSync2, readFileSync as readFileSync2, lstatSync as lstatSync2 } from "node:fs";
-import { isAbsolute, join as join2 } from "node:path";
+import { lstatSync as lstatSync2 } from "node:fs";
+import { isAbsolute, join as join2, normalize } from "node:path";
 import { userInfo } from "node:os";
 
 // dist/proxy/files.js
@@ -112,6 +112,9 @@ function transaction(writes) {
 }
 
 // dist/proxy/config.js
+var ConfigError = class extends Error {
+};
+var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints; review LOCAL_PROXY.md privately. Do not paste secrets or delete/reset configuration.";
 var API_URL = "https://api.smith.langchain.com";
 var UPSTREAM = "https://gateway.smith.langchain.com";
 var KEY_HEADER = "x-langsmith-proxy-key";
@@ -141,40 +144,24 @@ function privatePath(path, directory2 = false) {
     throw new Error("Unsafe proxy configuration");
 }
 function loadConfig(home = userHome(), includeDisabled = false) {
-  const dir = configDir(home);
+  let saved;
   try {
     directories(home);
-    privatePath(dir, true);
+    privatePath(configDir(home), true);
+    saved = snapshot(join2(configDir(home), "config.json"), true);
   } catch (e) {
     if (e.code === "ENOENT")
       return;
-    throw e;
-  }
-  const path = join2(dir, "config.json");
-  let fd;
-  try {
-    fd = openSync2(path, constants2.O_RDONLY | constants2.O_NOFOLLOW | constants2.O_NONBLOCK);
-  } catch (e) {
-    if (e.code === "ENOENT")
-      return;
-    throw e;
-  }
-  let c;
-  try {
-    const s = fstatSync2(fd);
-    if (!s.isFile() || s.nlink !== 1 || s.uid !== process.getuid?.() || s.mode & 63 || s.size > 8192)
+    if (e instanceof Error && e.message === "Unsafe settings file")
       throw new Error("Unsafe proxy configuration");
-    c = JSON.parse(readFileSync2(fd, "utf8"));
-  } finally {
-    closeSync2(fd);
+    throw e;
   }
-  if (c && c.enabled === false) {
-    if (!includeDisabled || Object.keys(c).length === 1)
-      return;
-    c = { ...c, enabled: true };
-  }
-  if (!c || c.enabled !== true || c.useClaudeSubscription !== void 0 && typeof c.useClaudeSubscription !== "boolean" || typeof c.cli !== "string" || !isAbsolute(c.cli) || typeof c.profile !== "string" || !/^[a-zA-Z0-9_.-]{1,128}$/.test(c.profile) || !Number.isInteger(c.port) || c.port < 1024 || c.port > 65535 || typeof c.secret !== "string" || !/^[a-f0-9]{64}$/.test(c.secret) || Object.keys(c).some((k) => ![
+  if (!saved)
+    return;
+  const c = JSON.parse(saved.text);
+  if (!c || typeof c.enabled !== "boolean" || typeof c.useClaudeSubscription !== "boolean" || typeof c.cli !== "string" || !isAbsolute(c.cli) || typeof c.profile !== "string" || !/^[a-zA-Z0-9_.-]{1,128}$/.test(c.profile) || !Number.isInteger(c.port) || c.port < 1024 || c.port > 65535 || typeof c.secret !== "string" || !/^[a-f0-9]{64}$/.test(c.secret) || c.settingsTargets !== void 0 && (!Array.isArray(c.settingsTargets) || c.settingsTargets.length > 128 || c.settingsTargets.some((path) => typeof path !== "string" || path.length > 4096 || !isAbsolute(path) || normalize(path) !== path || path.includes("\0") || !/\/\.claude\/settings(?:\.local)?\.json$/.test(path))) || Object.keys(c).some((k) => ![
     "enabled",
+    "settingsTargets",
     "cli",
     "profile",
     "port",
@@ -183,8 +170,23 @@ function loadConfig(home = userHome(), includeDisabled = false) {
     "gatewayUrl",
     "useClaudeSubscription"
   ].includes(k)))
-    throw new Error("Invalid proxy configuration");
-  return { ...c, ...endpoints(c), useClaudeSubscription: c.useClaudeSubscription ?? true };
+    throw new ConfigError(CONFIG_UPDATE_GUIDANCE);
+  let selected;
+  try {
+    selected = endpoints(c);
+  } catch {
+    throw new ConfigError(CONFIG_UPDATE_GUIDANCE);
+  }
+  if (!c.enabled && !includeDisabled)
+    return;
+  return { ...c, ...selected };
+}
+function configStatus(home = userHome()) {
+  const config = loadConfig(home, true);
+  return {
+    state: config === void 0 ? "not configured" : config.enabled ? "enabled" : "disabled",
+    config
+  };
 }
 
 // dist/proxy/server.js
@@ -286,7 +288,7 @@ var TokenCache = class {
   }
 };
 function loginGuidance(config) {
-  return `LangSmith authentication unavailable. Stop gateway sessions and other CLI writers, then log in in a separate terminal using your pinned CLI executable with: --profile ${config.profile} --api-url ${endpoints(config).apiUrl} auth login. Use a dedicated profile matching the selected API: --api-url does not change an existing saved OAuth issuer. Review that issuer privately before login/refresh. Then restart Claude with the plugin enabled and retry the request. Hooks never open a browser.
+  return `LangSmith authentication unavailable. Stop gateway sessions and other CLI writers, then log in in a separate terminal using your pinned CLI executable with: --profile ${config.profile} --api-url ${endpoints(config).apiUrl} auth login. Use a dedicated profile matching the selected API: --api-url does not change an existing saved OAuth issuer. Review that issuer privately before login/refresh. Then retry the request; token lookup failures are cached for two seconds. Failed requests are not replayed automatically. Hooks never open a browser.
 `;
 }
 
@@ -715,18 +717,11 @@ function createProxy(config, options = {}) {
 // dist/proxy/options.js
 var SetupError = class extends Error {
 };
-var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code.";
-function parseEnableArgs(args) {
-  const usage = COMMAND_GUIDANCE;
-  if (args[0] !== "--yes")
-    throw new SetupError("Explicit invocation required. " + usage);
-  return parseSetupArgs(args.slice(1));
-}
+var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic.";
 function parseSetupArgs(rest) {
   const usage = COMMAND_GUIDANCE;
   if (rest.some((arg) => typeof arg !== "string" || !arg || [...arg].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)))
     throw new SetupError(usage);
-  const positional = [];
   const flags = /* @__PURE__ */ new Map();
   let useClaudeSubscription = false;
   for (let i = 0; i < rest.length; i++) {
@@ -737,22 +732,14 @@ function parseSetupArgs(rest) {
       useClaudeSubscription = true;
       continue;
     }
-    if (!arg.startsWith("--")) {
-      positional.push(arg);
-      continue;
-    }
     if (!["--scope", "--cli", "--port", "--profile", "--api-url", "--gateway-url"].includes(arg) || flags.has(arg) || !rest[i + 1] || rest[i + 1].startsWith("--"))
       throw new SetupError(usage);
     flags.set(arg, rest[++i]);
   }
-  if (![0, 3].includes(positional.length) || positional.length && flags.has("--profile"))
-    throw new SetupError(usage);
   const scope = flags.get("--scope");
   if (scope !== "global" && scope !== "project")
     throw new SetupError(usage);
   const result = { scope, useClaudeSubscription };
-  if (positional.length && (flags.has("--cli") || flags.has("--port")))
-    throw new SetupError(usage);
   result.cli = flags.get("--cli");
   if (result.cli !== void 0 && !result.cli.startsWith("/"))
     throw new SetupError(usage);
@@ -762,15 +749,7 @@ function parseSetupArgs(rest) {
       throw new SetupError(usage);
     result.port = Number(port);
   }
-  if (positional.length) {
-    [result.cli, result.profile] = positional;
-    if (!/^[0-9]{4,5}$/.test(positional[2]) || !result.cli.startsWith("/"))
-      throw new SetupError(usage);
-    result.port = Number(positional[2]);
-    if (!Number.isInteger(result.port) || result.port < 1024 || result.port > 65535)
-      throw new SetupError("Local port must be 1024-65535");
-  } else
-    result.profile = flags.get("--profile");
+  result.profile = flags.get("--profile");
   if (result.profile !== void 0 && !/^[a-zA-Z0-9_.-]{1,128}$/.test(result.profile))
     throw new SetupError("Invalid CLI profile name");
   if (flags.has("--api-url") || flags.has("--gateway-url")) {
@@ -783,34 +762,44 @@ function parseSetupArgs(rest) {
   return result;
 }
 function parseDisableArgs(args) {
-  if (args.length !== 3 || args[0] !== "--yes" || args[1] !== "--scope")
+  if (args.length !== 2 || args[0] !== "--scope")
     throw new SetupError(COMMAND_GUIDANCE);
-  return parseSetupArgs(args.slice(1));
+  return parseSetupArgs(args);
+}
+var STATUS_GUIDANCE = "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
+function parseStatusArgs(args) {
+  if (args.length === 0)
+    return {};
+  if (args.length === 2 && args[0] === "--scope" && (args[1] === "global" || args[1] === "project"))
+    return { scope: args[1] };
+  throw new SetupError(STATUS_GUIDANCE);
 }
 function parseGatewayCommand(prompt) {
   if (typeof prompt !== "string")
     return;
-  const match = /^\/langsmith-gateway:(setup|disable)(?=\s|$)/.exec(prompt);
+  const match = /^\/langsmith-gateway:(setup|disable|status)(?=\s|$)/.exec(prompt);
   if (!match)
     return;
   const rest = prompt.slice(match[0].length);
   if (/[\r\n\x00-\x1f'"`$;&|<>\\]/.test(rest))
-    throw new SetupError(COMMAND_GUIDANCE);
+    throw new SetupError(match[1] === "status" ? STATUS_GUIDANCE : COMMAND_GUIDANCE);
   const args = rest.trim() ? rest.trim().split(/ +/) : [];
   const command = match[1];
   if (command === "setup")
     parseSetupArgs(args);
+  else if (command === "disable")
+    parseDisableArgs(args);
   else
-    parseDisableArgs(["--yes", ...args]);
+    parseStatusArgs(args);
   return { command, args };
 }
 
 // dist/proxy/settings.js
-import { accessSync as accessSync2, constants as constants4, mkdirSync as mkdirSync3, rmdirSync } from "node:fs";
+import { accessSync as accessSync2, constants as constants3, mkdirSync as mkdirSync3, rmdirSync } from "node:fs";
 import { dirname as dirname3, isAbsolute as isAbsolute3, join as join5 } from "node:path";
 
 // dist/proxy/setup.js
-import { constants as constants3, accessSync, mkdirSync as mkdirSync2, realpathSync, statSync } from "node:fs";
+import { constants as constants2, accessSync, mkdirSync as mkdirSync2, realpathSync, statSync } from "node:fs";
 import { isAbsolute as isAbsolute2, join as join3 } from "node:path";
 import { randomBytes as randomBytes2 } from "node:crypto";
 function validateCLI(cli) {
@@ -820,7 +809,7 @@ function validateCLI(cli) {
   const stat = statSync(cli);
   if (!stat.isFile() || stat.mode & 18 || stat.uid !== 0 && stat.uid !== process.getuid?.())
     throw new Error("Unsafe CLI executable");
-  accessSync(cli, constants3.X_OK);
+  accessSync(cli, constants2.X_OK);
   return cli;
 }
 function createConfig(cli, profile, port, home = userHome(), urls = {}, useClaudeSubscription = false) {
@@ -858,16 +847,14 @@ import { connect } from "node:net";
 import { spawn as spawn2 } from "node:child_process";
 
 // dist/proxy/scopes.js
-import { readdirSync, realpathSync as realpathSync2 } from "node:fs";
+import { realpathSync as realpathSync2 } from "node:fs";
 import { dirname as dirname2, join as join4, resolve } from "node:path";
-import { createHash as createHash2 } from "node:crypto";
 import { spawnSync } from "node:child_process";
 function targetPaths(home, scope, cwd) {
   if (scope === "global")
     return {
       settings: join4(home, ".claude/settings.json"),
-      config: join4(configDir(home), "config.json"),
-      receipt: join4(configDir(home), "settings-ownership.json")
+      config: join4(configDir(home), "config.json")
     };
   if (!cwd || !cwd.startsWith("/"))
     throw new SetupError("Project scope requires an absolute hook cwd.");
@@ -876,11 +863,9 @@ function targetPaths(home, scope, cwd) {
     throw new SetupError("Project path must be canonical and not a symlink.");
   directory(root);
   const settings2 = join4(root, ".claude/settings.local.json");
-  const id = createHash2("sha256").update(settings2).digest("hex");
   return {
     settings: settings2,
-    config: join4(configDir(home), "config.json"),
-    receipt: join4(configDir(home), `settings-ownership-${id}.json`)
+    config: join4(configDir(home), "config.json")
   };
 }
 function secretGitCheck(path) {
@@ -910,27 +895,59 @@ function secretGitCheck(path) {
   if (tracked.status !== 0 || tracked.stdout.trim() || ignored.status !== 0)
     throw new SetupError(`Secret destination ${JSON.stringify(path)} is tracked or not git-ignored. Untrack and privately ignore it before setup; nothing was written there.`);
 }
-function receiptSnapshots(home) {
-  return readdirSync(configDir(home)).filter((name) => /^settings-ownership(?:-[a-f0-9]{64})?\.json$/.test(name)).map((name) => ({
-    path: join4(configDir(home), name),
-    saved: snapshot(join4(configDir(home), name), true)
-  })).filter(({ saved }) => JSON.parse(saved.text) !== null);
+var BASE = "ANTHROPIC_BASE_URL";
+var HEADERS = "ANTHROPIC_CUSTOM_HEADERS";
+var proxyKeyLine = (config) => `X-LangSmith-Proxy-Key: ${config.secret}`;
+function routingSnapshot(path) {
+  try {
+    const root = dirname2(dirname2(path));
+    if (realpathSync2(root) !== root)
+      throw new Error("Noncanonical routing target");
+    directory(root);
+    directory(dirname2(path));
+    return snapshot(path);
+  } catch (error) {
+    if (error.code !== "ENOENT")
+      throw error;
+  }
 }
-function authorizedScope(home, cwd, config) {
-  const valid = (saved2) => {
-    if (!saved2)
-      return false;
-    const r = JSON.parse(saved2.text);
-    return r?.version === 1 && r.identity === createHash2("sha256").update(JSON.stringify([config.cli, config.profile, config.port, config.secret])).digest("hex") && typeof r.afterHeaders === "string" && r.afterBase === `http://127.0.0.1:${config.port}`;
-  };
-  const global = snapshot(join4(configDir(home), "settings-ownership.json"), true);
-  if (valid(global))
-    return true;
-  if (!cwd)
-    return false;
-  const p = targetPaths(home, "project", cwd);
-  const saved = snapshot(p.receipt, true);
-  return valid(saved);
+function unchangedRouting(path, saved) {
+  if (JSON.stringify(routingSnapshot(path)) !== JSON.stringify(saved))
+    throw new Error("Settings changed concurrently; retry");
+}
+function routingEnv(saved) {
+  const value = saved ? JSON.parse(saved.text) : {};
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Invalid settings");
+  const env = value.env === void 0 ? {} : value.env;
+  if (!env || typeof env !== "object" || Array.isArray(env))
+    throw new Error("Invalid settings");
+  return env;
+}
+function matchesRouting(env, config) {
+  const headers = env[HEADERS];
+  return env[BASE] === `http://127.0.0.1:${config.port}` && typeof headers === "string" && headers.split("\n").filter((line) => /^\s*x-langsmith-proxy-key\s*:/i.test(line)).length === 1 && headers.split("\n").includes(proxyKeyLine(config));
+}
+function routingTargets(home, cwd, config) {
+  const paths = /* @__PURE__ */ new Set([
+    targetPaths(home, "global", cwd).settings,
+    ...config?.settingsTargets ?? []
+  ]);
+  if (cwd)
+    paths.add(targetPaths(home, "project", cwd).settings);
+  return [...paths].map((path) => ({ path, saved: routingSnapshot(path) }));
+}
+function configuredScope(home, cwd, config) {
+  let env = routingEnv(routingSnapshot(targetPaths(home, "global", "").settings));
+  if (cwd) {
+    const local = targetPaths(home, "project", cwd).settings;
+    env = {
+      ...env,
+      ...routingEnv(routingSnapshot(join4(dirname2(local), "settings.json"))),
+      ...routingEnv(routingSnapshot(local))
+    };
+  }
+  return matchesRouting(env, config);
 }
 
 // dist/proxy/lifecycle.js
@@ -989,13 +1006,15 @@ async function ensure(config, entry2) {
 }
 async function gatewayHook(event, session, entry2, home = userHome(), cwd) {
   const config = loadConfig(home);
-  if (!config || !authorizedScope(home, cwd, config))
+  if (!config)
     return;
   if (!["SessionStart", "UserPromptSubmit", "SessionEnd"].includes(String(event)) || typeof session !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(session))
     return;
   if (event === "SessionEnd") {
     await control(config, "DELETE", `/_langsmith/sessions/${session}`);
   } else {
+    if (!configuredScope(home, cwd, config))
+      return;
     await ensure(config, entry2);
     await control(config, "PUT", `/_langsmith/sessions/${session}`);
   }
@@ -1021,13 +1040,9 @@ async function waitForStopped(config, timeoutMs = 36e3) {
 }
 
 // dist/proxy/settings.js
-import { createHash as createHash3 } from "node:crypto";
-var ownershipIdentity = (config) => createHash3("sha256").update(JSON.stringify([config.cli, config.profile, config.port, config.secret])).digest("hex");
 var fail = (message) => {
   throw new SetupError(message);
 };
-var BASE = "ANTHROPIC_BASE_URL";
-var HEADERS = "ANTHROPIC_CUSTOM_HEADERS";
 var AUTH = [
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_API_KEY",
@@ -1053,6 +1068,9 @@ function text(value) {
 function lines(value) {
   return value === void 0 ? [] : value.split("\n");
 }
+function withProxyKey(headers, config) {
+  return (headers ? headers + "\n" : "") + `X-LangSmith-Proxy-Key: ${config.secret}`;
+}
 function keyLine(line) {
   return /^\s*x-langsmith-proxy-key\s*:/i.test(line);
 }
@@ -1066,23 +1084,6 @@ function validateHeaders(value) {
     if (/^host$/i.test(match[1]))
       fail("Custom Host headers are unsupported by persistent setup. Remove the Host header explicitly so the client uses the loopback target; review headers privately.");
   }
-}
-function receipt(s, config) {
-  if (!s)
-    return;
-  const value = JSON.parse(s.text);
-  if (value === null)
-    return;
-  const r = object(value);
-  if (r.version !== 1 || r.identity !== ownershipIdentity(config) || !(r.beforeBase === null || typeof r.beforeBase === "string") || !(r.beforeHeaders === null || typeof r.beforeHeaders === "string") || typeof r.afterBase !== "string" || typeof r.afterHeaders !== "string" || typeof r.envExisted !== "boolean")
-    return fail("Setup recovery record does not match the private config; resolve privately, do not overwrite it.");
-  return r;
-}
-function assign(env, key, value) {
-  if (value === null)
-    delete env[key];
-  else
-    env[key] = value;
 }
 function settings(s) {
   const value = s ? object(JSON.parse(s.text)) : {};
@@ -1117,35 +1118,23 @@ function discoverCLI(env) {
       continue;
     const path = join5(dir, "langsmith");
     try {
-      accessSync2(path, constants4.X_OK);
+      accessSync2(path, constants3.X_OK);
       return path;
     } catch {
     }
   }
   return fail("LangSmith CLI not found. Install it using the README, complete terminal login with your selected profile and API URL (review the saved OAuth issuer), then retry /langsmith-gateway:setup.");
 }
-function setupPlan(args, env = process.env, home = userHome()) {
+async function enable(entry2, args, env = process.env, home = userHome(), cwd = process.cwd()) {
   const requested = parseSetupArgs(args);
   supportedHome(home, env);
-  const config = loadConfig(home, true);
-  return {
-    ...endpoints(requested.apiUrl === void 0 ? config ?? {} : requested),
-    useClaudeSubscription: requested.useClaudeSubscription,
-    profile: requested.profile ?? config?.profile ?? "claude-gateway",
-    port: requested.port ?? config?.port ?? 43127,
-    status: config ? loadConfig(home) ? "enabled" : "disabled" : "missing"
-  };
-}
-async function enable(entry2, args, env = process.env, home = userHome(), cwd = process.cwd()) {
-  const requested = parseEnableArgs(args);
-  supportedHome(home, env);
+  loadConfig(home, true);
   const unlock = lock(home);
   try {
     const p = targetPaths(home, requested.scope, cwd);
     directory(dirname3(p.settings), true);
     secretGitCheck(p.settings);
     secretGitCheck(p.config);
-    secretGitCheck(p.receipt);
     const beforeSettings = snapshot(p.settings);
     const { value, env: savedEnv } = settings(beforeSettings);
     if (value.disableAllHooks === true)
@@ -1159,22 +1148,19 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
     const base = text(savedEnv[BASE]), headers = text(savedEnv[HEADERS]);
     validateHeaders(headers);
     let config = loadConfig(home, true);
-    const oldReceipt = snapshot(p.receipt, true);
-    if (!config && oldReceipt && JSON.parse(oldReceipt.text) !== null)
-      fail("Private config missing but a recovery record exists; restore the config privately before retrying.");
     const initiallyEnabled = loadConfig(home) !== void 0;
-    const allReceipts = receiptSnapshots(home);
-    if (!config && allReceipts.length)
-      fail("Private config missing but recovery records exist; restore privately.");
-    if (config)
-      for (const item of allReceipts)
-        receipt(item.saved, config);
-    const prior = config ? receipt(oldReceipt, config) : void 0;
+    const targets = routingTargets(home, cwd, config);
+    const active = config ? targets.filter((item) => matchesRouting(routingEnv(item.saved), config)) : [];
+    const settingsTargets = [.../* @__PURE__ */ new Set([...active.map((item) => item.path), p.settings])];
+    if (settingsTargets.length > 128)
+      fail("Too many active routing targets; disable unused scopes before setup.");
+    const prior = !!config && matchesRouting(savedEnv, config);
     const port = requested.port ?? config?.port ?? 43127;
     const selected = requested.apiUrl === void 0 ? endpoints(config ?? {}) : endpoints(requested);
     const useClaudeSubscription = requested.useClaudeSubscription;
     const next = config ? {
       ...config,
+      enabled: true,
       ...selected,
       useClaudeSubscription,
       cli: requested.cli === void 0 ? config.cli : validateCLI(requested.cli),
@@ -1182,32 +1168,27 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       port
     } : void 0;
     const changing = config && next && (config.cli !== next.cli || config.profile !== next.profile || config.port !== next.port || endpoints(config).apiUrl !== next.apiUrl || endpoints(config).gatewayUrl !== next.gatewayUrl);
-    if (changing && (initiallyEnabled || allReceipts.length))
-      fail("Existing pinned CLI/profile/port or endpoints differ. Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit config or delete ownership records.");
+    if (changing && (initiallyEnabled || active.length))
+      fail("Existing pinned CLI/profile/port or endpoints differ. Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit the shared config while other scopes are active.");
     const modeChanged = !!config && config.useClaudeSubscription !== useClaudeSubscription;
     const switching = initiallyEnabled && modeChanged;
-    if (modeChanged && allReceipts.some((item) => item.path !== p.receipt))
+    if (modeChanged && active.some((item) => item.path !== p.settings))
       fail("Subscription forwarding is shared. Disable every other active scope first, then retry setup for this scope; other scopes will not be silently switched.");
     if (switching && !prior)
-      fail("Only the sole active owned target can switch subscription forwarding in place. Disable existing routing first, then retry setup.");
+      fail("Only the sole active configured target can switch subscription forwarding in place. Disable existing routing first, then retry setup.");
     const target = `http://127.0.0.1:${port}`;
     if (base !== void 0 && base !== target || env[BASE] !== void 0 && env[BASE] !== target)
       fail("Conflicting ANTHROPIC_BASE_URL. Remove it explicitly before setup; it will not be overwritten.");
-    if (env[HEADERS] !== void 0 && env[HEADERS] !== headers && !(config && allReceipts.some(({ saved }) => receipt(saved, config)?.afterHeaders === env[HEADERS])))
-      fail("Inherited custom headers differ from user settings. Restart Claude without that override before setup.");
-    const owned = config ? `X-LangSmith-Proxy-Key: ${config.secret}` : void 0;
+    const retainedHeaders = !!config && !prior && env[HEADERS] === withProxyKey(headers, config);
+    if (env[HEADERS] !== void 0 && env[HEADERS] !== headers && !retainedHeaders && !(config && active.some(({ saved }) => routingEnv(saved)[HEADERS] === env[HEADERS])))
+      fail("Inherited custom headers differ from the selected scope settings and do not match trusted local transport. Resolve the override privately before setup; it will not be copied into settings.");
+    const expectedKey = config ? `X-LangSmith-Proxy-Key: ${config.secret}` : void 0;
     const keys = lines(headers).filter(keyLine);
-    if (keys.length && (!prior || keys.length !== 1 || keys[0] !== owned))
-      fail("Conflicting local proxy header; no unowned header will be replaced.");
+    if (keys.length && (!config || keys.length !== 1 || keys[0] !== expectedKey))
+      fail("Conflicting local proxy header; no different header will be replaced.");
     if (switching && (base !== target || keys.length !== 1))
-      fail("Owned transport settings changed. Restore them privately or disable this scope before switching subscription forwarding.");
+      fail("Configured transport settings changed. Review them privately or disable this scope before switching subscription forwarding.");
     if (!config) {
-      const old = snapshot(p.config, true);
-      if (old) {
-        if (old.text.trim() !== '{"enabled":false}' && JSON.stringify(JSON.parse(old.text)) !== '{"enabled":false}')
-          fail("Invalid disabled config; resolve privately before retrying.");
-        fail("Legacy disabled marker has no pinned CLI/profile. Remove only that marker, then retry /langsmith-gateway:setup.");
-      }
       createConfig(requested.cli ?? discoverCLI(env), requested.profile ?? "claude-gateway", port, home, selected, useClaudeSubscription);
       config = loadConfig(home);
     }
@@ -1217,9 +1198,8 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
     let configSnapshot = snapshot(p.config, true);
     if (switching) {
       unchanged(p.settings, beforeSettings);
-      unchanged(p.receipt, oldReceipt, true);
-      for (const item of allReceipts)
-        unchanged(item.path, item.saved, true);
+      for (const item of targets)
+        unchangedRouting(item.path, item.saved);
       atomic(p.config, jsonText({ ...next, enabled: false }), configSnapshot);
       configSnapshot = snapshot(p.config, true);
     }
@@ -1227,9 +1207,8 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       await waitForStopped(config).catch(() => fail("Old proxy still draining or local port occupied. Config remains disabled; routing settings and requested mode are retained. Wait at least 35 seconds and retry the same setup options; resolve port conflicts privately without killing an unknown listener."));
       unchanged(p.config, configSnapshot, true);
       unchanged(p.settings, beforeSettings);
-      unchanged(p.receipt, oldReceipt, true);
-      for (const item of allReceipts)
-        unchanged(item.path, item.saved, true);
+      for (const item of targets)
+        unchangedRouting(item.path, item.saved);
       config = next;
     }
     if (!loadConfig(home))
@@ -1241,40 +1220,41 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       privatePath(configDir(home), true);
       unchanged(p.settings, beforeSettings);
       unchanged(p.config, currentConfig, true);
-      unchanged(p.receipt, oldReceipt, true);
-      for (const item of allReceipts)
-        unchanged(item.path, item.saved, true);
+      for (const item of targets)
+        unchangedRouting(item.path, item.saved);
       directory(dirname3(p.settings));
       secretGitCheck(p.settings);
       secretGitCheck(p.config);
-      secretGitCheck(p.receipt);
-      const line = `X-LangSmith-Proxy-Key: ${config.secret}`;
-      const afterHeaders = keys.length ? headers : (headers ? headers + "\n" : "") + line;
-      const record = prior ?? {
-        version: 1,
-        identity: ownershipIdentity(config),
-        beforeBase: base ?? null,
-        beforeHeaders: headers ?? null,
-        afterBase: target,
-        afterHeaders,
-        envExisted: value.env !== void 0
-      };
+      const afterHeaders = keys.length ? headers : withProxyKey(headers, config);
       savedEnv[BASE] = target;
       savedEnv[HEADERS] = afterHeaders;
       value.env = savedEnv;
       const settingsChanged = base !== target || headers !== afterHeaders;
       transaction([
-        ...!prior ? [{ path: p.receipt, text: jsonText(record), prior: oldReceipt }] : [],
+        {
+          path: p.config,
+          text: jsonText({
+            ...config,
+            settingsTargets
+          }),
+          prior: currentConfig
+        },
         ...settingsChanged ? [{ path: p.settings, text: jsonText(value), prior: beforeSettings }] : []
       ]);
-      return { settingsChanged, useClaudeSubscription: config.useClaudeSubscription, modeChanged };
+      return {
+        settingsChanged,
+        useClaudeSubscription: config.useClaudeSubscription,
+        modeChanged
+      };
     } catch (error) {
       if (!initiallyEnabled || switching) {
-        unchanged(p.config, currentConfig, true);
-        atomic(p.config, jsonText({ ...config, enabled: false }), currentConfig);
+        const rolledBack = snapshot(p.config, true);
+        if (rolledBack?.text !== currentConfig?.text)
+          throw error;
+        atomic(p.config, jsonText({ ...config, enabled: false }), rolledBack);
       }
       if (switching)
-        fail("Gateway mode switch did not complete. Config remains disabled with the requested mode; routing settings and ownership are retained. Retry the same setup options after resolving local daemon readiness privately. No client restart is needed if transport settings are unchanged.");
+        fail("Gateway mode switch did not complete. Config remains disabled with the requested mode; routing settings are retained. Retry the same setup options after resolving local daemon readiness privately.");
       throw error;
     }
   } finally {
@@ -1295,73 +1275,110 @@ function disable(args, env = process.env, home = userHome(), cwd = process.cwd()
     if (!config)
       return;
     const p = targetPaths(home, requested.scope, cwd);
-    const allReceipts = receiptSnapshots(home);
-    for (const item of allReceipts)
-      receipt(item.saved, config);
+    const targets = routingTargets(home, cwd, config);
     const configSnapshot = snapshot(p.config, true);
-    const recordSnapshot = snapshot(p.receipt, true);
-    const r = receipt(recordSnapshot, config);
-    if (!r) {
-      if (!allReceipts.length && loadConfig(home))
-        atomic(p.config, jsonText({ ...config, enabled: false }), configSnapshot);
-      return;
-    }
-    directory(dirname3(p.settings));
-    const before = snapshot(p.settings);
+    const before = targets.find((item) => item.path === p.settings)?.saved;
     const { value, env: savedEnv } = settings(before);
-    const writes = [];
-    if (r) {
-      if (savedEnv[BASE] === r.afterBase)
-        assign(savedEnv, BASE, r.beforeBase);
-      const current = text(savedEnv[HEADERS]);
-      if (current === r.afterHeaders)
-        assign(savedEnv, HEADERS, r.beforeHeaders);
-      else if (current !== void 0) {
-        const line = `X-LangSmith-Proxy-Key: ${config.secret}`;
-        const remaining = lines(current).filter((item) => item !== line);
-        if (remaining.length !== lines(current).length)
-          assign(savedEnv, HEADERS, remaining.length ? remaining.join("\n") : r.beforeHeaders === null ? null : "");
-      }
-      if (!r.envExisted && Object.keys(savedEnv).length === 0)
-        delete value.env;
-      else if (value.env !== void 0)
-        value.env = savedEnv;
-      if (before && JSON.stringify(value) !== JSON.stringify(JSON.parse(before.text)))
-        writes.push({ path: p.settings, text: jsonText(value), prior: before });
+    let routingRemoved = false;
+    if (savedEnv[BASE] === `http://127.0.0.1:${config.port}`) {
+      delete savedEnv[BASE];
+      routingRemoved = true;
     }
-    if (!allReceipts.some((item) => item.path !== p.receipt))
-      writes.push({
-        path: p.config,
-        text: jsonText({ ...config, enabled: false }),
-        prior: configSnapshot
-      });
-    if (recordSnapshot)
-      writes.push({ path: p.receipt, text: "null\n", prior: recordSnapshot });
-    for (const item of allReceipts)
-      unchanged(item.path, item.saved, true);
+    const current = text(savedEnv[HEADERS]);
+    if (current !== void 0) {
+      const remaining = lines(current).filter((line) => line !== proxyKeyLine(config));
+      if (remaining.length !== lines(current).length) {
+        routingRemoved = true;
+        if (remaining.length)
+          savedEnv[HEADERS] = remaining.join("\n");
+        else
+          delete savedEnv[HEADERS];
+      }
+    }
+    if (routingRemoved && Object.keys(savedEnv).length === 0)
+      delete value.env;
+    else if (value.env !== void 0)
+      value.env = savedEnv;
+    const remainingTargets = targets.filter((item) => item.path !== p.settings && matchesRouting(routingEnv(item.saved), config));
+    if (remainingTargets.length > 128)
+      fail("Too many active routing targets; review the private target index before disable.");
+    const writes = [];
+    if (before && JSON.stringify(value) !== JSON.stringify(JSON.parse(before.text)))
+      writes.push({ path: p.settings, text: jsonText(value), prior: before });
+    writes.push({
+      path: p.config,
+      text: jsonText({
+        ...config,
+        enabled: loadConfig(home) !== void 0 && remainingTargets.length > 0,
+        settingsTargets: remainingTargets.map((item) => item.path)
+      }),
+      prior: configSnapshot
+    });
+    for (const item of targets)
+      unchangedRouting(item.path, item.saved);
     transaction(writes);
   } finally {
     unlock();
   }
 }
+function routingStatus(paths, config) {
+  const current = routingSnapshot(paths.settings);
+  const env = routingEnv(current);
+  const prefix = `settings ${current ? "present" : "missing"}; `;
+  if (!config)
+    return prefix + "not configured (no retained config)";
+  return prefix + (matchesRouting(env, config) ? "configured; disk routing matches private config" : "not configured; disk routing does not match private config");
+}
+
+// dist/proxy/status.js
+import { join as join6 } from "node:path";
+var STATUS_ERROR = "Gateway status unavailable; review config, settings, permissions and canonical project path privately. No changes made.";
+async function gatewayStatus(args, env, home, cwd) {
+  const { scope } = parseStatusArgs(args);
+  try {
+    if (env.CLAUDE_CONFIG_DIR && env.CLAUDE_CONFIG_DIR !== join6(home, ".claude"))
+      throw new Error("Unsupported configuration directory");
+    const scopes = scope ? [scope] : ["global", "project"];
+    const targets = scopes.map((selected) => ({
+      selected,
+      paths: targetPaths(home, selected, cwd)
+    }));
+    const { state, config } = configStatus(home);
+    const routes = targets.map(({ selected, paths }) => `  ${selected} ${JSON.stringify(paths.settings)}: ${routingStatus(paths, config)}.`);
+    const shared = config ? `${state}; useClaudeSubscription ${config.useClaudeSubscription ? "on" : "off"}; profile ${JSON.stringify(config.profile)}; API ${config.apiUrl}; gateway ${config.gatewayUrl}.` : "not configured.";
+    const daemon = !config ? "not checked (no retained configuration)" : await healthy(config) ? `matching listener reachable${state === "disabled" ? " (saved config disabled; may be awaiting drain)" : ""}` : "not reachable or incompatible";
+    return [
+      "Gateway status (read-only)",
+      `Selected routing targets: ${scope ?? "global + current project"}`,
+      ...routes,
+      `Shared proxy configuration (applies to enabled scopes): ${shared}`,
+      `Shared daemon: ${daemon}.`,
+      "Disk routing is not proof of this session's runtime routing. Configured forwarding mode does not verify actual Anthropic usage, authentication or subscription validity. Other projects may use the shared daemon."
+    ].join("\n");
+  } catch (error) {
+    throw new SetupError(error instanceof ConfigError ? error.message : STATUS_ERROR);
+  }
+}
 
 // dist/proxy/commands.js
 async function handleGatewayInput(input, entry2, env = process.env, home = userHome(), output = (value) => process.stdout.write(JSON.stringify(value) + "\n")) {
-  if (input.hook_event_name === "UserPromptSubmit" && typeof input.prompt === "string" && /^\/langsmith-gateway:(setup|disable)(?=\s|$)/.test(input.prompt)) {
+  if (input.hook_event_name === "UserPromptSubmit" && typeof input.prompt === "string" && /^\/langsmith-gateway:(setup|disable|status)(?=\s|$)/.test(input.prompt)) {
     let reason;
     try {
       const command = parseGatewayCommand(input.prompt);
       if (!command)
         return;
       if (command.command === "setup") {
-        const { settingsChanged, useClaudeSubscription, modeChanged } = await enable(entry2, ["--yes", ...command.args], env, home, input.cwd ?? "");
-        reason = (settingsChanged ? "Gateway settings saved for the selected scope; " : "Gateway settings already configured for the selected scope; ") + modeSummary(useClaudeSubscription, modeChanged) + "local daemon healthy. Authentication is checked on the first model request, not setup." + (settingsChanged ? " Restart Claude to apply the settings." : "");
+        const { settingsChanged, useClaudeSubscription, modeChanged } = await enable(entry2, command.args, env, home, input.cwd ?? "");
+        reason = (settingsChanged ? "Gateway settings saved for the selected scope; " : "Gateway settings already configured for the selected scope; ") + modeSummary(useClaudeSubscription, modeChanged) + "local daemon healthy. Authentication is checked on the first model request, not setup.";
+      } else if (command.command === "status") {
+        reason = await gatewayStatus(command.args, env, home, input.cwd ?? "");
       } else {
-        disable(["--yes", ...command.args], env, home, input.cwd ?? "");
-        reason = "Gateway disabled for the selected scope; owned settings restored and later edits preserved. The last active scope disables the daemon (up to 5 seconds to notice, then up to 30 seconds to drain). Restart affected Claude sessions.";
+        disable(command.args, env, home, input.cwd ?? "");
+        reason = "Gateway disabled for the selected scope; matching gateway routing settings removed (no previous values restored) and later edits preserved. Restart affected Claude sessions to stop using the proxy. Other known matching scopes remain active. After the last known active scope is disabled, the daemon drains (up to 5 seconds to notice, then up to 30 seconds for active work).";
       }
     } catch (error) {
-      reason = error instanceof SetupError ? error.message : "Gateway command failed; check private config, CLI installation, permissions, links, concurrent edits and port conflicts privately. " + COMMAND_GUIDANCE;
+      reason = error instanceof SetupError || error instanceof ConfigError ? error.message : "Gateway command failed; check private config, CLI installation, permissions, links, concurrent edits and port conflicts privately. " + COMMAND_GUIDANCE;
     }
     try {
       output({ decision: "block", reason });
@@ -1377,21 +1394,7 @@ async function handleGatewayInput(input, entry2, env = process.env, home = userH
 var entry = fileURLToPath(import.meta.url);
 async function main() {
   const [command, ...args] = process.argv.slice(2);
-  if (command === "plan") {
-    process.stdout.write(JSON.stringify(setupPlan(args)) + "\n");
-    return;
-  }
-  if (command === "enable") {
-    const { settingsChanged, useClaudeSubscription, modeChanged } = await enable(entry, args);
-    process.stderr.write((settingsChanged ? "Gateway settings saved for the selected scope; " : "Gateway settings already configured for the selected scope; ") + modeSummary(useClaudeSubscription, modeChanged) + "local proxy healthy. Authentication is checked on the first model request, not during setup; deployment compatibility is not verified." + (settingsChanged ? " Restart Claude to apply the settings." : "") + " Use /langsmith-gateway:disable --scope global|project to undo owned settings.\n");
-    return;
-  }
-  if (command === "disable") {
-    disable(args);
-    process.stderr.write("Gateway disabled for the selected scope; only owned transport values were undone and later edits preserved. After the last active scope is disabled, the daemon drains after its next config check (within 5 seconds, up to 30 seconds for active work). Restart all Claude sessions without local proxy shell overrides. Keep private config for re-enable.\n");
-    return;
-  }
-  if (command !== void 0 && command !== "daemon")
+  if (command !== void 0 && (command !== "daemon" || args.length !== 0))
     throw new SetupError(COMMAND_GUIDANCE);
   if (command === void 0) {
     let data = "";
@@ -1436,7 +1439,7 @@ async function main() {
   }
 }
 void main().catch((error) => {
-  process.stderr.write(error instanceof SetupError ? error.message + "\n" : "Experimental LangSmith proxy unavailable; check private config, CLI executable, settings ownership/permissions/symlinks, and local port conflicts. No sensitive error details are printed. " + COMMAND_GUIDANCE + "\n");
-  if (process.argv[2])
+  process.stderr.write(error instanceof SetupError || error instanceof ConfigError ? error.message + "\n" : "Experimental LangSmith proxy unavailable; check private config, CLI executable, settings permissions/symlinks, and local port conflicts. No sensitive error details are printed. " + COMMAND_GUIDANCE + "\n");
+  if (process.argv.length > 2)
     process.exitCode = 1;
 });

@@ -43,25 +43,35 @@ tool run. See [TESTING.md](./TESTING.md) for testing guidance.
 The marketplace retains `langsmith-tracing` at source `./` with its root manifest,
 hooks, bundles and commands. `langsmith-gateway` installs separately from source
 `./plugins/langsmith-gateway`, with its own `.claude-plugin/plugin.json` (experimental
-`0.1.0`), `hooks/hooks.json`, `commands/setup.md`, `commands/disable.md`, and `bundle/gateway.js`.
+`0.1.0`), `hooks/hooks.json`, `commands/setup.md`, `commands/disable.md`, `commands/status.md`, and `bundle/gateway.js`.
 Explicit `/langsmith-gateway:setup --scope global|project` and scoped disable
 are consumed by the supported UserPromptSubmit hook before config checks, then
-return `decision: "block"`, following tracing mute/unmute. Invocation authorizes
-changes; markdown is a non-executing fallback, not an LLM tool workflow. Internal
-`enable --yes --scope ...`/disable entrypoints remain for tests, not manual user setup.
+return `decision: "block"`, following tracing mute/unmute. Read-only
+`/langsmith-gateway:status` follows the same protocol before disabled checks,
+reporting both routing targets and shared config without setup/lease/auth effects. Invocation authorizes
+changes; markdown is a non-executing fallback, not an LLM tool workflow. The
+packaged executable accepts only hook stdin or the exact internal daemon mode,
+validated before I/O. Runtime management tests use packaged slash-command hooks;
+unit tests call safe functions with actual named arguments. There is no terminal
+management interface.
 There is no Claude launch wrapper or config-only setup subcommand. Settings/secret manipulation belongs only in the
 deterministic runtime. Setup supports
 paired `--api-url`/`--gateway-url` HTTPS origins and optional `--profile`; endpoint/profile
 changes require disabling every active scope then re-enabling, which waits for the old daemon to drain.
 The presence-only `--use-claude-subscription` flag selects true; omission selects
-false on every explicit setup, including internal enable and re-enable. Boolean
-values and duplicate/unknown flags are rejected before writes. New configs default
-false; missing fields in existing configs still read as legacy true until explicit
-setup without the flag switches them to false. Hooks keep the saved mode unchanged;
-no repeated setup or flag is needed each session. A sole active
-owned scope may switch only this mode in place with drain/restart and unchanged
-transport/receipt; multiple scopes must disable other targets first. Mode is in
-daemon identity, not stable settings ownership identity. Shared source stays in
+false on every explicit setup, including re-enable. Only named options are
+accepted; boolean values, bare arguments and duplicate/unknown flags are rejected
+before writes. Configs require explicit enabled and forwarding booleans plus the
+full retained schema even when disabled. Unsupported older configs need a private
+one-time update, not a reset; see LOCAL_PROXY.md. Hooks keep the saved mode unchanged;
+no repeated setup or flag is needed each session. A sole known active
+configured scope may switch only this mode in place with drain/restart and unchanged
+transport; multiple scopes must disable other targets first. Mode is in
+daemon identity. Ownership/backup/restore records are not used. Optional
+`settingsTargets` paths in the existing private config support discovery of other
+scopes for disable/mode-change decisions, not authorization. Hooks are read-only
+and support provisioned config + settings without setup or index membership.
+See LOCAL_PROXY.md for unknown-project discovery limits. Shared source stays in
 `src/proxy/` and `src/hooks/gateway.ts`. The nested `package.json` declares ESM mode
 only, with no runtime dependencies or version to synchronize. The distributable
 must load with Node 20 without the repository root or `node_modules`.

@@ -1,7 +1,8 @@
 import { parseGatewayCommand, SetupError, COMMAND_GUIDANCE } from "./options.js";
 import { enable, disable, modeSummary } from "./settings.js";
 import { gatewayHook } from "./lifecycle.js";
-import { userHome } from "./config.js";
+import { gatewayStatus } from "./status.js";
+import { ConfigError, userHome } from "./config.js";
 
 export async function handleGatewayInput(
   input: { hook_event_name?: unknown; prompt?: unknown; session_id?: unknown; cwd?: string },
@@ -15,7 +16,7 @@ export async function handleGatewayInput(
   if (
     input.hook_event_name === "UserPromptSubmit" &&
     typeof input.prompt === "string" &&
-    /^\/langsmith-gateway:(setup|disable)(?=\s|$)/.test(input.prompt)
+    /^\/langsmith-gateway:(setup|disable|status)(?=\s|$)/.test(input.prompt)
   ) {
     let reason: string;
     try {
@@ -24,7 +25,7 @@ export async function handleGatewayInput(
       if (command.command === "setup") {
         const { settingsChanged, useClaudeSubscription, modeChanged } = await enable(
           entry,
-          ["--yes", ...command.args],
+          command.args,
           env,
           home,
           input.cwd ?? "",
@@ -34,16 +35,17 @@ export async function handleGatewayInput(
             ? "Gateway settings saved for the selected scope; "
             : "Gateway settings already configured for the selected scope; ") +
           modeSummary(useClaudeSubscription, modeChanged) +
-          "local daemon healthy. Authentication is checked on the first model request, not setup." +
-          (settingsChanged ? " Restart Claude to apply the settings." : "");
+          "local daemon healthy. Authentication is checked on the first model request, not setup.";
+      } else if (command.command === "status") {
+        reason = await gatewayStatus(command.args, env, home, input.cwd ?? "");
       } else {
-        disable(["--yes", ...command.args], env, home, input.cwd ?? "");
+        disable(command.args, env, home, input.cwd ?? "");
         reason =
-          "Gateway disabled for the selected scope; owned settings restored and later edits preserved. The last active scope disables the daemon (up to 5 seconds to notice, then up to 30 seconds to drain). Restart affected Claude sessions.";
+          "Gateway disabled for the selected scope; matching gateway routing settings removed (no previous values restored) and later edits preserved. Restart affected Claude sessions to stop using the proxy. Other known matching scopes remain active. After the last known active scope is disabled, the daemon drains (up to 5 seconds to notice, then up to 30 seconds for active work).";
       }
     } catch (error) {
       reason =
-        error instanceof SetupError
+        error instanceof SetupError || error instanceof ConfigError
           ? error.message
           : "Gateway command failed; check private config, CLI installation, permissions, links, concurrent edits and port conflicts privately. " +
             COMMAND_GUIDANCE;

@@ -1,6 +1,5 @@
-import { readdirSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { configDir, type ProxyConfig } from "./config.js";
 import { directory, snapshot } from "./files.js";
@@ -11,7 +10,6 @@ export function targetPaths(home: string, scope: SetupOptions["scope"], cwd: str
     return {
       settings: join(home, ".claude/settings.json"),
       config: join(configDir(home), "config.json"),
-      receipt: join(configDir(home), "settings-ownership.json"),
     };
   if (!cwd || !cwd.startsWith("/"))
     throw new SetupError("Project scope requires an absolute hook cwd.");
@@ -21,11 +19,9 @@ export function targetPaths(home: string, scope: SetupOptions["scope"], cwd: str
     throw new SetupError("Project path must be canonical and not a symlink.");
   directory(root);
   const settings = join(root, ".claude/settings.local.json");
-  const id = createHash("sha256").update(settings).digest("hex");
   return {
     settings,
     config: join(configDir(home), "config.json"),
-    receipt: join(configDir(home), `settings-ownership-${id}.json`),
   };
 }
 
@@ -61,39 +57,73 @@ export function secretGitCheck(path: string): void {
     );
 }
 
-export function receiptSnapshots(home: string) {
-  return readdirSync(configDir(home))
-    .filter((name) => /^settings-ownership(?:-[a-f0-9]{64})?\.json$/.test(name))
-    .map((name) => ({
-      path: join(configDir(home), name),
-      saved: snapshot(join(configDir(home), name), true)!,
-    }))
-    .filter(({ saved }) => JSON.parse(saved.text) !== null);
+export const BASE = "ANTHROPIC_BASE_URL";
+export const HEADERS = "ANTHROPIC_CUSTOM_HEADERS";
+export const proxyKeyLine = (config: ProxyConfig) => `X-LangSmith-Proxy-Key: ${config.secret}`;
+
+// These snapshots are routing observations, not authorization or restoration records.
+// Never follow linked parent directories, including optional registered project paths.
+export function routingSnapshot(path: string) {
+  try {
+    const root = dirname(dirname(path));
+    if (realpathSync(root) !== root) throw new Error("Noncanonical routing target");
+    directory(root);
+    directory(dirname(path));
+    return snapshot(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}
+export function unchangedRouting(path: string, saved: ReturnType<typeof snapshot>): void {
+  if (JSON.stringify(routingSnapshot(path)) !== JSON.stringify(saved))
+    throw new Error("Settings changed concurrently; retry");
+}
+export function routingEnv(saved: ReturnType<typeof snapshot>): Record<string, unknown> {
+  const value = saved ? JSON.parse(saved.text) : {};
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Invalid settings");
+  const env = value.env === undefined ? {} : value.env;
+  if (!env || typeof env !== "object" || Array.isArray(env)) throw new Error("Invalid settings");
+  return env;
+}
+export function matchesRouting(env: Record<string, unknown>, config: ProxyConfig): boolean {
+  const headers = env[HEADERS];
+  return (
+    env[BASE] === `http://127.0.0.1:${config.port}` &&
+    typeof headers === "string" &&
+    headers.split("\n").filter((line) => /^\s*x-langsmith-proxy-key\s*:/i.test(line)).length ===
+      1 &&
+    headers.split("\n").includes(proxyKeyLine(config))
+  );
 }
 
-// Trust only private OS-home receipts, never a project's config/settings/env.
-export function authorizedScope(
+// Optional config bookkeeping lets explicit commands discover other plugin-created
+// scopes. Disk routing, not list membership, determines whether a target is active.
+export function routingTargets(home: string, cwd: string, config?: ProxyConfig) {
+  const paths = new Set([
+    targetPaths(home, "global", cwd).settings,
+    ...(config?.settingsTargets ?? []),
+  ]);
+  if (cwd) paths.add(targetPaths(home, "project", cwd).settings);
+  return [...paths].map((path) => ({ path, saved: routingSnapshot(path) }));
+}
+
+// Only private OS-home config selects executable, endpoints, mode and secret.
+// Claude settings merely signal routing to that configured loopback listener.
+// Hooks are read-only and work with externally provisioned, receipt-free settings.
+export function configuredScope(
   home: string,
   cwd: string | undefined,
   config: ProxyConfig,
 ): boolean {
-  const valid = (saved: ReturnType<typeof snapshot>) => {
-    if (!saved) return false;
-    const r = JSON.parse(saved.text);
-    return (
-      r?.version === 1 &&
-      r.identity ===
-        createHash("sha256")
-          .update(JSON.stringify([config.cli, config.profile, config.port, config.secret]))
-          .digest("hex") &&
-      typeof r.afterHeaders === "string" &&
-      r.afterBase === `http://127.0.0.1:${config.port}`
-    );
-  };
-  const global = snapshot(join(configDir(home), "settings-ownership.json"), true);
-  if (valid(global)) return true;
-  if (!cwd) return false;
-  const p = targetPaths(home, "project", cwd);
-  const saved = snapshot(p.receipt, true);
-  return valid(saved);
+  let env = routingEnv(routingSnapshot(targetPaths(home, "global", "").settings));
+  if (cwd) {
+    const local = targetPaths(home, "project", cwd).settings;
+    env = {
+      ...env,
+      ...routingEnv(routingSnapshot(join(dirname(local), "settings.json"))),
+      ...routingEnv(routingSnapshot(local)),
+    };
+  }
+  return matchesRouting(env, config);
 }
