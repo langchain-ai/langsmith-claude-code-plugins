@@ -5,7 +5,7 @@ import { directories, snapshot } from "./files.js";
 
 export class ConfigError extends Error {}
 export const CONFIG_UPDATE_GUIDANCE =
-  "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints; review LOCAL_PROXY.md privately. Do not paste secrets or delete/reset configuration.";
+  "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
 
 export const API_URL = "https://api.smith.langchain.com";
 export const UPSTREAM = "https://gateway.smith.langchain.com";
