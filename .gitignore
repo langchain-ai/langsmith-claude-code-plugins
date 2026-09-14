@@ -24,3 +24,4 @@ cc_transcript.jsonl
 
 .claude/state/*
 .claude/langsmith.json
+.claude/settings.local.json

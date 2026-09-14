@@ -1,0 +1,38 @@
+{
+  "description": "Experimental opt-in LangSmith gateway lifecycle hooks (separate from tracing)",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/gateway.js\"",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/gateway.js\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/gateway.js\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

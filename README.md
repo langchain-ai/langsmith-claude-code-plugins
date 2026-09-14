@@ -2,6 +2,8 @@
 
 A Claude Code plugin that traces conversations, tool calls, subagent executions, and context compaction to [LangSmith](https://smith.langchain.com).
 
+**Setting up the gateway?** Start with the required [LangSmith CLI installation and browser login](#langsmith-cli-prerequisite), then install and enable the separate `langsmith-gateway` plugin. The tracing plugin documented below does **not** require the LangSmith CLI and is optional when using the gateway.
+
 ![](./static/img/example_trace.png)
 
 ## Prerequisites
@@ -398,6 +400,161 @@ Each replica object supports the following fields:
 | `projectName` | Yes      | Project name in the destination workspace                       |
 | `updates`     | No       | Optional metadata/fields to override on the replicated runs     |
 
+## Experimental langsmith-gateway plugin (separate install)
+
+Route model requests through LangSmith independently of tracing. Start with the
+required CLI setup below, then install and enable the plugin in Claude Code.
+New configurations use **OAuth-only gateway authentication** and gateway-managed
+provider keys (provider billing applies), without forwarding native Claude credentials.
+Review [consent and compatibility](./LOCAL_PROXY.md) before enabling: the selected
+gateway receives **unredacted conversation/tool content**. Native subscription
+credentials are sent only with explicit opt-in or a retained legacy configuration.
+Tracing settings, mute, and redaction do not control this traffic. Claude Code
+signed-out client compatibility is not established; no dummy credential is injected.
+
+### LangSmith CLI prerequisite
+
+**Install and authenticate the LangSmith CLI before installing or enabling the gateway plugin.**
+The gateway requires macOS/Linux, Node.js 20+, and Claude Code and `langsmith` on PATH.
+These requirements are for the gateway, not the tracing-only installation above.
+
+In your terminal, install the [LangSmith CLI](https://docs.langchain.com/langsmith/langsmith-cli)
+if needed:
+
+```sh
+curl -fsSL https://cli.langsmith.com/install.sh | sh
+```
+
+Follow the installer's PATH instructions, then open a new terminal if needed so
+`langsmith` is available to both your shell and Claude Code. For a new production
+configuration, log in with the dedicated `claude-gateway` profile:
+
+```sh
+langsmith --profile claude-gateway --api-url https://api.smith.langchain.com auth login
+```
+
+Complete the browser-based login. Use ordinary short-lived OAuth credentials, not
+the CLI's separate static-token gateway setup flow. **Never copy tokens into Claude
+or settings.** Only model requests acquire and refresh tokens, using the daemon's
+singleflight cache; setup and hooks do not check authentication or open browser login.
+
+For an existing or alternate configuration, use its pinned CLI executable and
+matching profile/API instead of the production example. **`--api-url` does not
+change a saved OAuth issuer**; review your dedicated profile's issuer privately.
+Before logging in again, stop gateway sessions and other CLI token/login/config
+writers: the CLI store has no cross-process locking. Follow the
+[switching destinations](./LOCAL_PROXY.md#alternate-api-and-gateway-hosts) procedure
+before changing a saved endpoint/profile. After reauthentication, restart Claude
+with the plugin enabled and retry the request.
+
+### Install and enable the gateway in Claude Code
+
+1. **Install at user scope**, inside Claude Code, so hooks run in all projects:
+
+   ```text
+   /plugin marketplace add langchain-ai/langsmith-claude-code-plugins
+   /plugin install langsmith-gateway@langsmith-claude-code-plugins --scope user
+   /reload-plugins
+   ```
+
+   `langsmith-tracing` is a separate, optional install.
+
+2. **Enable gateway routing globally** (the invocation authorizes changes;
+   no model turn or confirmation question):
+
+   ```text
+   /langsmith-gateway:setup --scope global
+   ```
+
+   This writes `~/.claude/settings.json` and selects OAuth-only authentication
+   without forwarding native Claude credentials. For only the current project,
+   use `/langsmith-gateway:setup --scope project` instead; it writes the private
+   `.claude/settings.local.json`. Setup automatically
+   saves transport settings and starts/verifies the local daemon without checking
+   tokens or logging in. Secret destinations must be untracked and git-ignored
+   when inside a repository; unsafe/conflicting settings are refused.
+
+   New configurations use API `https://api.smith.langchain.com`, gateway
+   `https://gateway.smith.langchain.com`, profile `claude-gateway`, and port `43127`.
+   Existing config retains its pinned CLI/profile/port and endpoint pair. All active
+   scopes share one daemon and must use identical options. Disable every active
+   scope before changing those pinned options (the mode-only exception is below). Local readiness does not prove upstream
+   compatibility. If setup cannot find the CLI, check its PATH and retry setup.
+   Authentication is checked on first model use; if login is missing or expired,
+   follow the terminal-login guidance in the [CLI prerequisite](#langsmith-cli-prerequisite).
+
+3. **Restart Claude to apply the settings** when setup changes them. Repeating setup
+   with unchanged settings does not require another restart, but it does not apply
+   pending changes to a session that has not restarted yet. Normal prompts and
+   session hooks do not require restarts. Hooks recover only already-authorized
+   global/project configuration; project data never enables it. Installing tracing
+   alone does not activate the gateway.
+
+To undo the selected target, invoke `/langsmith-gateway:disable --scope global`
+or `--scope project`, then restart affected sessions. Other scopes remain active;
+the last disable drains the daemon. Disable all scopes before uninstalling.
+Later user edits are preserved; private config is retained for re-enable.
+See [LOCAL_PROXY.md](./LOCAL_PROXY.md) for security limits and recovery.
+
+### Optional Claude subscription credential forwarding
+
+```text
+/langsmith-gateway:setup --scope project --use-claude-subscription
+/langsmith-gateway:setup --scope project
+```
+
+On every explicit setup, the flag enables forwarding; omission saves `false`,
+even for an existing or re-enabled config. Re-run setup without the flag to disable
+forwarding. The flag takes no boolean value and cannot be repeated. Hooks keep the
+saved mode, so there is no need to repeat setup or the flag each session. Legacy
+configs missing the field still read as `true` until explicit setup without the
+flag switches them to `false`. New configs default to `false`. Opt-in requires native Claude login and forwards
+native Anthropic credentials for built-in Anthropic destinations, including gateway
+fallback legs; gateway/provider eligibility and subscription terms still apply.
+It does not guarantee subscription billing or access. OAuth-only uses the gateway
+provider keys instead; normal `anthropic/` model normalization is unchanged.
+
+A mode-only setup on the **sole active owned scope** drains/restarts the daemon,
+retaining settings, local key and ownership: brief downtime, but no client restart
+when transport settings are unchanged. With multiple active scopes, disable every
+other scope first; setup refuses to silently change their mode. Setup for another
+scope must select the same mode as active scopes. Endpoint/profile/CLI/port changes still require
+disabling all scopes. On drain/readiness failure, the requested mode stays saved
+but disabled, with routing settings retained; retry the same setup command.
+
+### Alternate API and gateway hosts
+
+Use both endpoint flags together with a dedicated OAuth profile matching your
+trusted API (replace these placeholder hosts):
+
+```text
+/langsmith-gateway:setup --scope project --profile alternate-gateway --api-url https://api.example.com --gateway-url https://gateway.example.com
+```
+
+Invoke only for trusted destinations, follow any CLI/login guidance, and restart Claude
+when setup changes settings.
+HTTPS public DNS origins only; no `/api` or `/gateway` suffix, credentials, query,
+fragment, IP/local hosts, or TLS bypass. There are no redirects or production
+fallback. Hosts must implement OAuth and, when opted in, the passthrough protocol; URL
+validation does not establish trust or deployment compatibility.
+
+Before changing enabled endpoints/profile/CLI/port, disable every active target using `/langsmith-gateway:disable --scope global`
+or `--scope project` in each project, exit
+all gateway sessions, and stop other CLI writers. Allow up to 35 seconds for the
+old daemon to drain before terminal login, then restart Claude and run setup with
+explicit options. **`--api-url` does not change a saved OAuth issuer**; review your
+dedicated profile's issuer privately. Omitting endpoint flags retains the saved
+pair, not necessarily production. See [switching destinations](./LOCAL_PROXY.md#alternate-api-and-gateway-hosts)
+for restoring production and custom executable/profile/port options.
+
+Default Claude models need no changes: bare model IDs get an `anthropic/` prefix.
+Use Claude's model selection (for example `/model openai/gpt-4.1`) for overrides;
+`provider/model` strings, including `custom/<saved-model>`, are preserved.
+Availability and custom-provider credentials are gateway-managed. Native Claude
+auth is required by the proxy only in subscription-forwarding mode; non-Anthropic
+token counting is unsupported. There is no
+automatic model or direct-connection fallback. See [model details](./LOCAL_PROXY.md#consent-credentials-and-models).
+
 ## Known limitations
 
 Currently, subagents are only traced upon completion. This means if you interrupt a conversation turn during a subagent run,
@@ -408,7 +565,7 @@ the subagent runs will not be traced.
 ```bash
 pnpm install
 pnpm test        # Run tests
-pnpm build       # Production build
+pnpm build       # Regenerate tracing and experimental gateway bundles
 ```
 
 After making changes, run `pnpm build`, then run:

@@ -21,9 +21,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm build
-      - name: Check bundle is up to date
+      - name: Check both plugin bundles are up to date
         run: |
-          git diff --exit-code bundle/ || {
-            echo "::error::bundle/ is out of date. Run 'pnpm build' and commit the result."
+          git diff --exit-code HEAD -- bundle/ plugins/langsmith-gateway/bundle/ || {
+            echo "::error::Plugin bundles are out of date. Run 'pnpm build' and commit the result."
             exit 1
           }
+          if [ -n "$(git ls-files --others --exclude-standard -- bundle/ plugins/langsmith-gateway/bundle/)" ]; then
+            echo "::error::Untracked plugin bundles. Run 'pnpm build' and include both bundle directories."
+            exit 1
+          fi
