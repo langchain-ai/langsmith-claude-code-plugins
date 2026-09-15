@@ -13404,6 +13404,7 @@ var METADATA_KEYS = /* @__PURE__ */ new Set([
   "ls_trace_schema_version",
   "ls_model_name",
   "ls_tool_name",
+  "ls_skill_name",
   "usage_metadata",
   "ls_subagent_id",
   "ls_subagent_type"
