@@ -844,6 +844,91 @@ function createConfig(cli, profile, port, home = userHome(), urls = {}, useClaud
 import http2 from "node:http";
 import { connect } from "node:net";
 import { spawn as spawn2 } from "node:child_process";
+function control(config, method, path, timeoutMs = 500) {
+  return new Promise((resolve2, reject) => {
+    const req = http2.request({
+      hostname: "127.0.0.1",
+      port: config.port,
+      method,
+      path,
+      agent: false,
+      headers: { [KEY_HEADER]: config.secret, "content-length": "0" }
+    }, (res) => {
+      let data = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        data += chunk;
+        if (data.length > 1024)
+          req.destroy();
+      });
+      res.on("error", () => reject(new Error("Local proxy unavailable")));
+      res.on("end", () => res.statusCode === 200 || res.statusCode === 204 ? resolve2(data) : reject(new Error("Local proxy unavailable")));
+    });
+    const timer = setTimeout(() => req.destroy(new Error("Local proxy unavailable")), timeoutMs);
+    req.on("close", () => clearTimeout(timer));
+    req.on("error", () => reject(new Error("Local proxy unavailable")));
+    req.end();
+  });
+}
+async function healthy(config) {
+  try {
+    return await control(config, "GET", "/_langsmith/health") === identity(config);
+  } catch {
+    return false;
+  }
+}
+async function ensure(config, entry2) {
+  if (await healthy(config))
+    return;
+  const child = spawn2(process.execPath, [entry2, "daemon"], {
+    detached: true,
+    stdio: "ignore",
+    cwd: userHome(),
+    env: cliEnvironment()
+  });
+  child.on("error", () => {
+  });
+  child.unref();
+  const deadline = Date.now() + 4e3;
+  do {
+    if (await healthy(config))
+      return;
+    await new Promise((resolve2) => setTimeout(resolve2, 100));
+  } while (Date.now() < deadline);
+  throw new Error("Local proxy unavailable");
+}
+async function gatewayHook(event, session, entry2, home = userHome()) {
+  const config = loadConfig(home);
+  if (!config)
+    return;
+  if (!["SessionStart", "UserPromptSubmit", "SessionEnd"].includes(String(event)) || typeof session !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(session))
+    return;
+  if (event === "SessionEnd") {
+    await control(config, "DELETE", `/_langsmith/sessions/${session}`);
+  } else {
+    await ensure(config, entry2);
+    await control(config, "PUT", `/_langsmith/sessions/${session}`);
+  }
+}
+async function waitForStopped(config, timeoutMs = 36e3) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const stopped = await new Promise((resolve2) => {
+      const socket = connect({ host: "127.0.0.1", port: config.port });
+      const finish = (free) => {
+        socket.destroy();
+        resolve2(free);
+      };
+      socket.once("connect", () => finish(false));
+      socket.once("error", (error) => finish(error.code === "ECONNREFUSED"));
+      socket.setTimeout(500, () => finish(false));
+    });
+    if (stopped)
+      return;
+    await new Promise((resolve2) => setTimeout(resolve2, 100));
+  } while (Date.now() < deadline);
+  throw new Error("Old proxy still draining or local port occupied");
+}
 
 // dist/proxy/scopes.js
 import { realpathSync as realpathSync2 } from "node:fs";
@@ -907,107 +992,6 @@ function routingTargets(home, cwd, config) {
   if (cwd)
     paths.add(targetPaths(home, "project", cwd).settings);
   return [...paths].map((path) => ({ path, saved: routingSnapshot(path) }));
-}
-function configuredScope(home, cwd, config) {
-  let env = routingEnv(routingSnapshot(targetPaths(home, "global", "").settings));
-  if (cwd) {
-    const local = targetPaths(home, "project", cwd).settings;
-    env = {
-      ...env,
-      ...routingEnv(routingSnapshot(join4(dirname2(local), "settings.json"))),
-      ...routingEnv(routingSnapshot(local))
-    };
-  }
-  return matchesRouting(env, config);
-}
-
-// dist/proxy/lifecycle.js
-function control(config, method, path, timeoutMs = 500) {
-  return new Promise((resolve2, reject) => {
-    const req = http2.request({
-      hostname: "127.0.0.1",
-      port: config.port,
-      method,
-      path,
-      agent: false,
-      headers: { [KEY_HEADER]: config.secret, "content-length": "0" }
-    }, (res) => {
-      let data = "";
-      res.setEncoding("utf8");
-      res.on("data", (chunk) => {
-        data += chunk;
-        if (data.length > 1024)
-          req.destroy();
-      });
-      res.on("error", () => reject(new Error("Local proxy unavailable")));
-      res.on("end", () => res.statusCode === 200 || res.statusCode === 204 ? resolve2(data) : reject(new Error("Local proxy unavailable")));
-    });
-    const timer = setTimeout(() => req.destroy(new Error("Local proxy unavailable")), timeoutMs);
-    req.on("close", () => clearTimeout(timer));
-    req.on("error", () => reject(new Error("Local proxy unavailable")));
-    req.end();
-  });
-}
-async function healthy(config) {
-  try {
-    return await control(config, "GET", "/_langsmith/health") === identity(config);
-  } catch {
-    return false;
-  }
-}
-async function ensure(config, entry2) {
-  if (await healthy(config))
-    return;
-  const child = spawn2(process.execPath, [entry2, "daemon"], {
-    detached: true,
-    stdio: "ignore",
-    cwd: userHome(),
-    env: cliEnvironment()
-  });
-  child.on("error", () => {
-  });
-  child.unref();
-  const deadline = Date.now() + 4e3;
-  do {
-    if (await healthy(config))
-      return;
-    await new Promise((resolve2) => setTimeout(resolve2, 100));
-  } while (Date.now() < deadline);
-  throw new Error("Local proxy unavailable");
-}
-async function gatewayHook(event, session, entry2, home = userHome(), cwd) {
-  const config = loadConfig(home);
-  if (!config)
-    return;
-  if (!["SessionStart", "UserPromptSubmit", "SessionEnd"].includes(String(event)) || typeof session !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(session))
-    return;
-  if (event === "SessionEnd") {
-    await control(config, "DELETE", `/_langsmith/sessions/${session}`);
-  } else {
-    if (!configuredScope(home, cwd, config))
-      return;
-    await ensure(config, entry2);
-    await control(config, "PUT", `/_langsmith/sessions/${session}`);
-  }
-}
-async function waitForStopped(config, timeoutMs = 36e3) {
-  const deadline = Date.now() + timeoutMs;
-  do {
-    const stopped = await new Promise((resolve2) => {
-      const socket = connect({ host: "127.0.0.1", port: config.port });
-      const finish = (free) => {
-        socket.destroy();
-        resolve2(free);
-      };
-      socket.once("connect", () => finish(false));
-      socket.once("error", (error) => finish(error.code === "ECONNREFUSED"));
-      socket.setTimeout(500, () => finish(false));
-    });
-    if (stopped)
-      return;
-    await new Promise((resolve2) => setTimeout(resolve2, 100));
-  } while (Date.now() < deadline);
-  throw new Error("Old proxy still draining or local port occupied");
 }
 
 // dist/proxy/settings.js
@@ -1362,7 +1346,7 @@ async function handleGatewayInput(input, entry2, env = process.env, home = userH
     }
     return;
   }
-  await gatewayHook(input.hook_event_name, input.session_id, entry2, home, input.cwd);
+  await gatewayHook(input.hook_event_name, input.session_id, entry2, home);
 }
 
 // dist/utils/stdin.js

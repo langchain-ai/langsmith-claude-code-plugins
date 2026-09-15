@@ -181,6 +181,11 @@ session controls; only the bounded loopback health probe is allowed.
   CLI default/current profile label when no profile is saved.
 - `src/proxy/proxy.test.ts`: auth/header isolation in both modes, model routing and
   token counting, SSE/cancellation, daemon recovery, and request-time token caching.
+  Hook startup requires only valid enabled private config, including absent ordinary
+  routing (managed-only scenario), malformed settings, and conflicting project routing.
+  Missing/disabled config stays inactive, and invalid events/session IDs do nothing.
+  No managed settings parsing or precedence fixtures are needed; explicit setup/disable
+  scope editing remains covered by the settings suite.
 - `src/proxy/polling.test.ts`: config changes trigger drain and cancel credential work.
 
 Timing budgets: cold readiness 4 seconds, re-enable drain up to 36 seconds, and
