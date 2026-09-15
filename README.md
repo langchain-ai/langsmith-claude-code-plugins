@@ -518,8 +518,7 @@ scopes. Expect brief downtime. See [mode switching and recovery](./LOCAL_PROXY.m
 ### Alternate API and gateway hosts
 
 Use paired `--api-url` / `--gateway-url` flags and a matching OAuth profile.
-An explicit `--profile name` is optional and recommended for destination isolation,
-not as a workaround for concurrent CLI writes.
+You can optionally specify an LangSmith auth profile with `--profile name`
 **`--api-url` does not change a saved OAuth issuer.** Before changing endpoints,
 profile, CLI, or port, disable all scopes and follow the
 [switching-destinations procedure](./LOCAL_PROXY.md#alternate-api-and-gateway-hosts),

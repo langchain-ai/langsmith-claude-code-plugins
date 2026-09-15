@@ -178,7 +178,7 @@ session controls; only the bounded loopback health probe is allowed.
   disabled. Setup must remain independent of Git availability/tracking/ignore state.
 - `src/proxy/status.test.ts`: read-only status across config, routing drift, unsafe
   paths, and matching/offline/incompatible/draining listeners, including the
-  “CLI default/current profile” label when no profile is saved.
+  CLI default/current profile label when no profile is saved.
 - `src/proxy/proxy.test.ts`: auth/header isolation in both modes, model routing and
   token counting, SSE/cancellation, daemon recovery, and request-time token caching.
 - `src/proxy/polling.test.ts`: config changes trigger drain and cancel credential work.

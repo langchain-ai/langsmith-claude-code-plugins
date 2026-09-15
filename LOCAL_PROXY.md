@@ -59,7 +59,7 @@ authenticated loopback health check. `--scope global|project` selects one routin
 target. Status is read-only; it does not start the daemon or check upstream auth.
 Disk routing and saved mode do not verify live session routing or subscription
 validity. Other projects may use the daemon, and disabled config may briefly have
-a draining listener; “not reachable or incompatible” is not proof it stopped.
+a draining listener; "not reachable or incompatible" is not proof it stopped.
 
 ## Optional subscription forwarding and mode switching
 
@@ -85,8 +85,7 @@ a failed opt-out does not restore credential forwarding.
 ## Alternate API and gateway hosts
 
 Inside Claude Code, supply both endpoint flags together and use an OAuth profile
-matching your trusted API. An explicit profile is optional and recommended for
-destination isolation, not concurrent-write safety (replace these placeholder hosts):
+matching your trusted API. You can optionally specify an explicit auth profile:
 
 ```text
 /langsmith-gateway:setup --scope project --profile alternate-gateway --api-url https://api.example.com --gateway-url https://gateway.example.com
@@ -216,7 +215,6 @@ regular, single-link `config.json` must be `0600` (no symlinks). Example schema
 
 `profile` is optional: omit it for CLI default/current selection, or set it to an
 explicit name (1–128 letters, digits, `_`, `.`, or `-`). Null/empty values are invalid.
-Do not remove existing explicit profiles as an automatic migration.
 
 Both booleans are required, including when disabled (`enabled: false`); retain the
 other fields for re-enable. Both endpoints may be omitted together for production
