@@ -140,3 +140,51 @@ notification chain`). Both roots close `success`.
   interrupt/concurrency race (two `UserPromptSubmit`s closing the same stale
   turn → a harmless 409 "duplicate run update"; the run is already closed by the
   first patch). Not an AskUserQuestion bug — see the interrupt path.
+
+## Experimental gateway tests
+
+With dependencies installed, build and run the offline checks from the repo root.
+These local tools bypass Corepack bootstrap and network/signature lookups:
+
+```sh
+./node_modules/.bin/tsc
+node esbuild.config.mjs
+./node_modules/.bin/vitest run src/packaging.test.ts src/proxy
+./node_modules/.bin/oxlint
+./node_modules/.bin/oxfmt --check src/proxy src/hooks/gateway.ts src/packaging.test.ts
+```
+
+The package-manager equivalents are `pnpm build` and `pnpm exec vitest run
+src/packaging.test.ts src/proxy`; avoid `pnpm test <files>`, which can forward
+arguments incorrectly and run the full suite.
+
+Tests use scratch OS homes, fake CLIs and local upstreams. **HOME alone does not
+isolate config:** use the packaged harness, which redirects OS-home lookup and
+guards effects, rather than smoke-running the bundle against real user config.
+Status tests additionally forbid writes, credential reads, subprocesses and
+session controls; only the bounded loopback health probe is allowed.
+
+### Focused suites
+
+- `src/packaging.test.ts`: independent bundles, standalone loading, and packaged
+  setup/disable/status hooks; reject unsupported commands before side effects.
+- `src/proxy/options.test.ts`: named options, paired HTTPS origins, and explicit
+  subscription opt-in parsing.
+- `src/proxy/settings.test.ts`: private writes, conflicts/concurrent edits,
+  provisioning and multi-scope discovery, mode/destination changes, and recovery.
+  Disable removes matching values without restoring old ones; failed opt-out stays
+  disabled. Setup must remain independent of Git availability/tracking/ignore state.
+- `src/proxy/status.test.ts`: read-only status across config, routing drift, unsafe
+  paths, and matching/offline/incompatible/draining listeners.
+- `src/proxy/proxy.test.ts`: auth/header isolation in both modes, model routing and
+  token counting, SSE/cancellation, daemon recovery, and request-time token caching.
+- `src/proxy/polling.test.ts`: config changes trigger drain and cancel credential work.
+
+Timing budgets: cold readiness 4 seconds, re-enable drain up to 36 seconds, and
+first-use token acquisition up to 10 seconds plus upstream latency.
+
+For manual preview testing, retain the nested gateway `--plugin-dir` on every
+session/restart, choose a settings scope, and disable all active scopes before
+removing the plugin. Keep real-auth testing separate. Offline tests do not establish
+backend compatibility, signed-out client behavior, live settings reload or real
+CLI cross-process concurrency safety.

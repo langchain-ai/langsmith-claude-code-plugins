@@ -2,6 +2,8 @@
 
 A Claude Code plugin that traces conversations, tool calls, subagent executions, and context compaction to [LangSmith](https://smith.langchain.com).
 
+**Setting up the LangSmith Gateway?** Start with the required [LangSmith CLI installation and browser login](#langsmith-cli-prerequisite), then install and enable the separate `langsmith-gateway` plugin. The tracing plugin documented below does **not** require the LangSmith CLI and is optional when using the gateway.
+
 ![](./static/img/example_trace.png)
 
 ## Prerequisites
@@ -409,6 +411,116 @@ Each replica object supports the following fields:
 | `projectName` | Yes      | Project name in the destination workspace                       |
 | `updates`     | No       | Optional metadata/fields to override on the replicated runs     |
 
+## Experimental langsmith-gateway plugin (separate install)
+
+Route model requests through LangSmith independently of tracing. The default is
+**OAuth-only gateway authentication**, using gateway-managed provider keys and
+provider billing. Native Claude credentials are forwarded only with explicit opt-in.
+**The gateway receives unredacted conversation/tool content**; tracing settings,
+mute, and redaction do not filter it. Review the [operational and security reference](./LOCAL_PROXY.md)
+before enabling.
+
+### LangSmith CLI prerequisite
+
+**Install and authenticate the LangSmith CLI before installing or enabling the gateway plugin.**
+The gateway requires macOS/Linux, Node.js 20+, and Claude Code and `langsmith` on PATH.
+These requirements are for the gateway, not the tracing-only installation above.
+
+In your terminal, install the [LangSmith CLI](https://docs.langchain.com/langsmith/langsmith-cli)
+if needed:
+
+```sh
+curl -fsSL https://cli.langsmith.com/install.sh | sh
+```
+
+Follow the installer's PATH instructions, then open a new terminal if needed so
+`langsmith` is available to both your shell and Claude Code. For a new production
+configuration, log in with the dedicated `claude-gateway` profile:
+
+```sh
+langsmith --profile claude-gateway auth login
+```
+
+Complete the browser login using ordinary short-lived OAuth credentials, not the
+CLI's static-token gateway setup flow. Setup does not check login; authentication
+is checked on first model use. For an existing or alternate profile, follow the
+[profile and issuer guidance](./LOCAL_PROXY.md#alternate-api-and-gateway-hosts).
+Stop gateway sessions and other CLI writers before reauthentication: **the CLI
+credential store has no cross-process locking**.
+
+### Install and enable the gateway in Claude Code
+
+1. **Install at user scope**, inside Claude Code, so hooks run in all projects:
+
+   ```text
+   /plugin marketplace add langchain-ai/langsmith-claude-code-plugins
+   /plugin install langsmith-gateway@langsmith-claude-code-plugins --scope user
+   /reload-plugins
+   ```
+
+   `langsmith-tracing` is a separate, optional install.
+
+2. **Enable gateway routing globally:**
+
+   ```text
+   /langsmith-gateway:setup --scope global
+   ```
+
+   This saves routing in `~/.claude/settings.json` and starts the local daemon.
+   For only the current project, use `/langsmith-gateway:setup --scope project`;
+   it writes `.claude/settings.local.json`. Keep these credential-bearing files
+   private, untracked, and git-ignored; never commit credentials.
+
+   New configs use API `https://api.smith.langchain.com`, gateway
+   `https://gateway.smith.langchain.com`, profile `claude-gateway`, and port `52507`.
+   Existing configs retain their CLI/profile/port and endpoints. All scopes share
+   one daemon and must use the same options. If the CLI is not found, check PATH
+   and retry setup.
+
+3. **Continue using Claude Code.** Default Claude models need no changes. If routing
+   does not update, see [troubleshooting](./LOCAL_PROXY.md#safety-and-troubleshooting).
+
+To undo routing, run `/langsmith-gateway:disable --scope global` or `--scope project`.
+**Restart affected Claude sessions to stop using the proxy.** Global routing still
+applies after disabling a project's local scope. Disable every active scope before
+uninstalling; see [disable and re-enable details](./LOCAL_PROXY.md#session-recovery-and-disabling).
+
+### Read-only gateway status
+
+```text
+/langsmith-gateway:status
+```
+
+Reports saved global/current-project routing, shared configuration, and local
+health without changing anything. Optional `--scope global|project` selects one
+routing target. This is not a check of live session routing or upstream authentication.
+
+### Optional Claude subscription credential forwarding
+
+```text
+/langsmith-gateway:setup --scope project --use-claude-subscription
+/langsmith-gateway:setup --scope project
+```
+
+The first command opts in; the second turns forwarding off. Every explicit setup
+without the flag saves `false`; hooks retain the saved choice between sessions.
+Opt-in requires native Claude login and sends native credentials for built-in
+Anthropic destinations, including gateway fallback legs; provider eligibility and
+billing terms still apply. Both modes require LangSmith CLI login.
+
+To switch modes, run setup on the configured scope after disabling all other active
+scopes. Expect brief downtime. See [mode switching and recovery](./LOCAL_PROXY.md#optional-subscription-forwarding-and-mode-switching).
+
+### Alternate API and gateway hosts
+
+Use paired `--api-url` / `--gateway-url` flags and a dedicated matching OAuth profile.
+**`--api-url` does not change a saved OAuth issuer.** Before changing endpoints,
+profile, CLI, or port, disable all scopes and follow the
+[switching-destinations procedure](./LOCAL_PROXY.md#alternate-api-and-gateway-hosts),
+including session shutdown and drain before login.
+
+For model overrides and token-counting limits, see [model details](./LOCAL_PROXY.md#consent-credentials-and-models).
+
 ## Known limitations
 
 Currently, subagents are only traced upon completion. This means if you interrupt a conversation turn during a subagent run,
@@ -419,7 +531,7 @@ the subagent runs will not be traced.
 ```bash
 pnpm install
 pnpm test        # Run tests
-pnpm build       # Production build
+pnpm build       # Regenerate tracing and experimental gateway bundles
 ```
 
 After making changes, run `pnpm build`, then run:

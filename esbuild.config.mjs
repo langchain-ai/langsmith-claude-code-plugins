@@ -41,3 +41,16 @@ for (const entry of entryPoints) {
 }
 
 console.log(`Bundled ${entryPoints.length} hooks into bundle/`);
+
+// A separate installable plugin; all runtime code is bundled within its root.
+// Its package.json supplies ESM mode on Node 20 without the tracing package.
+await build({
+  entryPoints: ["dist/hooks/gateway.js"],
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  outfile: "plugins/langsmith-gateway/bundle/gateway.js",
+  external: ["node:*"],
+});
+chmodSync("plugins/langsmith-gateway/bundle/gateway.js", 0o755);
+console.log("Bundled experimental gateway into plugins/langsmith-gateway/bundle/");
