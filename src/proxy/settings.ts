@@ -249,7 +249,7 @@ export async function enable(
     if (!config) {
       createConfig(
         requested.cli ?? discoverCLI(env),
-        requested.profile ?? "claude-gateway",
+        requested.profile,
         port,
         home,
         selected,

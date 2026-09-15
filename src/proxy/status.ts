@@ -30,7 +30,7 @@ export async function gatewayStatus(
         `  ${selected} ${JSON.stringify(paths.settings)}: ${routingStatus(paths, config)}.`,
     );
     const shared = config
-      ? `${state}; useClaudeSubscription ${config.useClaudeSubscription ? "on" : "off"}; profile ${JSON.stringify(config.profile)}; API ${config.apiUrl}; gateway ${config.gatewayUrl}.`
+      ? `${state}; useClaudeSubscription ${config.useClaudeSubscription ? "on" : "off"}; profile ${config.profile === undefined ? "CLI default/current profile" : JSON.stringify(config.profile)}; API ${config.apiUrl}; gateway ${config.gatewayUrl}.`
       : "not configured.";
     // Only the existing authenticated, identity-matching loopback health probe
     // (500 ms wall-clock). No startup, leases, CLI, auth checks or token refresh.

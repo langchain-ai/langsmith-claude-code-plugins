@@ -16,7 +16,8 @@ export interface ProxyConfig {
   enabled: boolean;
   useClaudeSubscription: boolean;
   cli: string;
-  profile: string;
+  // Omission delegates to the CLI’s persisted current/default profile.
+  profile?: string;
   port: number;
   secret: string;
   // Optional discovery index only; never credentials, previous values or authorization.
@@ -96,8 +97,8 @@ export function loadConfig(home = userHome(), includeDisabled = false): ProxyCon
     typeof c.useClaudeSubscription !== "boolean" ||
     typeof c.cli !== "string" ||
     !isAbsolute(c.cli) ||
-    typeof c.profile !== "string" ||
-    !/^[a-zA-Z0-9_.-]{1,128}$/.test(c.profile) ||
+    (c.profile !== undefined &&
+      (typeof c.profile !== "string" || !/^[a-zA-Z0-9_.-]{1,128}$/.test(c.profile))) ||
     !Number.isInteger(c.port) ||
     c.port < 1024 ||
     c.port > 65535 ||

@@ -435,16 +435,20 @@ curl -fsSL https://cli.langsmith.com/install.sh | sh
 
 Follow the installer's PATH instructions, then open a new terminal if needed so
 `langsmith` is available to both your shell and Claude Code. For a new production
-configuration, log in with the dedicated `claude-gateway` profile:
+configuration, log in using the CLI’s normal selected/default profile:
 
 ```sh
-langsmith --profile claude-gateway auth login
+langsmith auth login
 ```
 
 Complete the browser login using ordinary short-lived OAuth credentials, not the
 CLI's static-token gateway setup flow. Setup does not check login; authentication
 is checked on first model use. For an existing or alternate profile, follow the
 [profile and issuer guidance](./LOCAL_PROXY.md#alternate-api-and-gateway-hosts).
+Without `--profile`, new gateway setups defer to the CLI’s persisted `current_profile`
+(or `default` when none is selected). The sanitized token subprocess does not inherit
+`LANGSMITH_PROFILE` or other CLI environment overrides; use setup `--profile name`
+if you need to pin an environment-only selection.
 Stop gateway sessions and other CLI writers before reauthentication: **the CLI
 credential store has no cross-process locking**.
 
@@ -472,7 +476,7 @@ credential store has no cross-process locking**.
    private, untracked, and git-ignored; never commit credentials.
 
    New configs use API `https://api.smith.langchain.com`, gateway
-   `https://gateway.smith.langchain.com`, profile `claude-gateway`, and port `52507`.
+   `https://gateway.smith.langchain.com`, the CLI default/current profile, and port `52507`.
    Existing configs retain their CLI/profile/port and endpoints. All scopes share
    one daemon and must use the same options. If the CLI is not found, check PATH
    and retry setup.
@@ -513,7 +517,9 @@ scopes. Expect brief downtime. See [mode switching and recovery](./LOCAL_PROXY.m
 
 ### Alternate API and gateway hosts
 
-Use paired `--api-url` / `--gateway-url` flags and a dedicated matching OAuth profile.
+Use paired `--api-url` / `--gateway-url` flags and a matching OAuth profile.
+An explicit `--profile name` is optional and recommended for destination isolation,
+not as a workaround for concurrent CLI writes.
 **`--api-url` does not change a saved OAuth issuer.** Before changing endpoints,
 profile, CLI, or port, disable all scopes and follow the
 [switching-destinations procedure](./LOCAL_PROXY.md#alternate-api-and-gateway-hosts),

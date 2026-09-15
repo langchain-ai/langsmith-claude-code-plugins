@@ -227,6 +227,21 @@ describe("packaged read-only status", () => {
     );
     expect(requests).toEqual([]);
   });
+  it.each([true, false])(
+    "reports CLI default/current profile when enabled is %s",
+    async (enabled) => {
+      await probe("match");
+      delete config.profile;
+      config.enabled = enabled;
+      saveConfig();
+      expect(loadConfig(home, true)?.profile).toBeUndefined();
+      const result = await invoke();
+      expect(result).toContain("profile CLI default/current profile;");
+      expect(result).not.toContain("undefined");
+      expect(result).toContain("matching listener reachable");
+      expect(requests).toEqual(["GET /_langsmith/health"]);
+    },
+  );
   it.each([{ enabled: false }, { useClaudeSubscription: undefined }])(
     "rejects incomplete config %j without probes or effects",
     async (invalid) => {

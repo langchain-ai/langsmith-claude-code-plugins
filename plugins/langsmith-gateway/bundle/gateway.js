@@ -159,7 +159,7 @@ function loadConfig(home = userHome(), includeDisabled = false) {
   if (!saved)
     return;
   const c = JSON.parse(saved.text);
-  if (!c || typeof c.enabled !== "boolean" || typeof c.useClaudeSubscription !== "boolean" || typeof c.cli !== "string" || !isAbsolute(c.cli) || typeof c.profile !== "string" || !/^[a-zA-Z0-9_.-]{1,128}$/.test(c.profile) || !Number.isInteger(c.port) || c.port < 1024 || c.port > 65535 || typeof c.secret !== "string" || !/^[a-f0-9]{64}$/.test(c.secret) || c.settingsTargets !== void 0 && (!Array.isArray(c.settingsTargets) || c.settingsTargets.length > 128 || c.settingsTargets.some((path) => typeof path !== "string" || path.length > 4096 || !isAbsolute(path) || normalize(path) !== path || path.includes("\0") || !/\/\.claude\/settings(?:\.local)?\.json$/.test(path))) || Object.keys(c).some((k) => ![
+  if (!c || typeof c.enabled !== "boolean" || typeof c.useClaudeSubscription !== "boolean" || typeof c.cli !== "string" || !isAbsolute(c.cli) || c.profile !== void 0 && (typeof c.profile !== "string" || !/^[a-zA-Z0-9_.-]{1,128}$/.test(c.profile)) || !Number.isInteger(c.port) || c.port < 1024 || c.port > 65535 || typeof c.secret !== "string" || !/^[a-f0-9]{64}$/.test(c.secret) || c.settingsTargets !== void 0 && (!Array.isArray(c.settingsTargets) || c.settingsTargets.length > 128 || c.settingsTargets.some((path) => typeof path !== "string" || path.length > 4096 || !isAbsolute(path) || normalize(path) !== path || path.includes("\0") || !/\/\.claude\/settings(?:\.local)?\.json$/.test(path))) || Object.keys(c).some((k) => ![
     "enabled",
     "settingsTargets",
     "cli",
@@ -206,8 +206,7 @@ function cliToken(config, timeoutMs = 1e4, signal) {
       return;
     }
     const child = spawn(config.cli, [
-      "--profile",
-      config.profile,
+      ...config.profile === void 0 ? [] : ["--profile", config.profile],
       "--api-url",
       endpoints(config).apiUrl,
       "--format=pretty",
@@ -288,7 +287,7 @@ var TokenCache = class {
   }
 };
 function loginGuidance(config) {
-  return `LangSmith authentication unavailable. Stop gateway sessions and other CLI writers, then log in in a separate terminal using your pinned CLI executable with: --profile ${config.profile} --api-url ${endpoints(config).apiUrl} auth login. Use a dedicated profile matching the selected API: --api-url does not change an existing saved OAuth issuer. Review that issuer privately before login/refresh. Then retry the request; token lookup failures are cached for two seconds. Failed requests are not replayed automatically. Hooks never open a browser.
+  return `LangSmith authentication unavailable. Stop gateway sessions and other CLI writers, then log in in a separate terminal using your pinned CLI executable with: ${config.profile === void 0 ? "" : `--profile ${config.profile} `}--api-url ${endpoints(config).apiUrl} auth login. Use a profile matching the selected API (optionally pin it with --profile): --api-url does not change an existing saved OAuth issuer. Review that issuer privately before login/refresh. Then retry the request; token lookup failures are cached for two seconds. Failed requests are not replayed automatically. Hooks never open a browser.
 `;
 }
 
@@ -813,7 +812,7 @@ function validateCLI(cli) {
   return cli;
 }
 function createConfig(cli, profile, port, home = userHome(), urls = {}, useClaudeSubscription = false) {
-  if (typeof useClaudeSubscription !== "boolean" || !isAbsolute2(cli) || !/^[a-zA-Z0-9_.-]{1,128}$/.test(profile) || !Number.isInteger(port) || port < 1024 || port > 65535)
+  if (typeof useClaudeSubscription !== "boolean" || !isAbsolute2(cli) || profile !== void 0 && (typeof profile !== "string" || !/^[a-zA-Z0-9_.-]{1,128}$/.test(profile)) || !Number.isInteger(port) || port < 1024 || port > 65535)
     throw new Error("Invalid setup arguments");
   const selected = endpoints(urls);
   cli = validateCLI(cli);
@@ -1159,7 +1158,7 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
     if (switching && (base !== target || keys.length !== 1))
       fail("Configured transport settings changed. Review them privately or disable this scope before switching subscription forwarding.");
     if (!config) {
-      createConfig(requested.cli ?? discoverCLI(env), requested.profile ?? "claude-gateway", port, home, selected, useClaudeSubscription);
+      createConfig(requested.cli ?? discoverCLI(env), requested.profile, port, home, selected, useClaudeSubscription);
       config = loadConfig(home);
     }
     const effective = next ?? config;
@@ -1321,7 +1320,7 @@ async function gatewayStatus(args, env, home, cwd) {
     }));
     const { state, config } = configStatus(home);
     const routes = targets.map(({ selected, paths }) => `  ${selected} ${JSON.stringify(paths.settings)}: ${routingStatus(paths, config)}.`);
-    const shared = config ? `${state}; useClaudeSubscription ${config.useClaudeSubscription ? "on" : "off"}; profile ${JSON.stringify(config.profile)}; API ${config.apiUrl}; gateway ${config.gatewayUrl}.` : "not configured.";
+    const shared = config ? `${state}; useClaudeSubscription ${config.useClaudeSubscription ? "on" : "off"}; profile ${config.profile === void 0 ? "CLI default/current profile" : JSON.stringify(config.profile)}; API ${config.apiUrl}; gateway ${config.gatewayUrl}.` : "not configured.";
     const daemon = !config ? "not checked (proxy setup is missing)" : await healthy(config) ? `matching listener reachable${state === "disabled" ? " (saved config disabled; may be awaiting drain)" : ""}` : "not reachable or incompatible";
     return [
       "Gateway status (read-only)",
