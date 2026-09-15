@@ -3,7 +3,6 @@ import { connect } from "node:net";
 import { spawn } from "node:child_process";
 import { KEY_HEADER, loadConfig, userHome, type ProxyConfig } from "./config.js";
 import { identity } from "./server.js";
-import { configuredScope } from "./scopes.js";
 import { cliEnvironment } from "./token.js";
 
 export function control(
@@ -79,7 +78,6 @@ export async function gatewayHook(
   session: unknown,
   entry: string,
   home = userHome(),
-  cwd?: string,
 ): Promise<void> {
   const config = loadConfig(home);
   if (!config) return;
@@ -94,7 +92,7 @@ export async function gatewayHook(
     // If no listener exists yet, lease expiry is the fallback (no persistent state).
     await control(config, "DELETE", `/_langsmith/sessions/${session}`);
   } else {
-    if (!configuredScope(home, cwd, config)) return;
+
     await ensure(config, entry);
     await control(config, "PUT", `/_langsmith/sessions/${session}`);
   }

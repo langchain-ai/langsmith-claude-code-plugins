@@ -57,5 +57,5 @@ export async function handleGatewayInput(
     }
     return;
   }
-  await gatewayHook(input.hook_event_name, input.session_id, entry, home, input.cwd);
+  await gatewayHook(input.hook_event_name, input.session_id, entry, home);
 }

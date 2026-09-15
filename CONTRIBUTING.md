@@ -57,8 +57,12 @@ Gateway source map:
   `settingsTargets` is a discovery index, not authorization. Explicit setup selects
   forwarding by flag presence; ordinary hooks preserve the saved mode.
 - `lifecycle.ts`, `server.ts`, `token.ts`: daemon identity, leases/draining, request
-  forwarding, and request-time OAuth caching. Mode changes drain/restart the daemon;
-  authentication is deferred until model use. New setup without `--profile` saves
+  forwarding, and request-time OAuth caching. Valid SessionStart/UserPromptSubmit
+  hooks start the daemon whenever private config is enabled, without reading user,
+  project, or managed routing settings; SessionEnd only releases its lease.
+  Setup/disable still modify selected user/project settings files. No managed policy
+  awareness or Claude settings precedence implementation is required.
+  Mode changes drain/restart the daemon; authentication is deferred until model use. New setup without `--profile` saves
   no profile, letting the CLI use its persisted current/default selection; existing
   explicit profiles are retained. Keep token subprocess environment sanitization
   (`LANGSMITH_PROFILE` is not inherited) and configured `--api-url` pinning intact.

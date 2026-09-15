@@ -482,6 +482,12 @@ if you need to pin an environment-only selection.
 3. **Continue using Claude Code.** Default Claude models need no changes. If routing
    does not update, see [troubleshooting](./LOCAL_PROXY.md#safety-and-troubleshooting).
 
+Gateway session-start and prompt hooks start the daemon whenever the private proxy
+config is enabled, independently of routing settings (including managed-only routing).
+They do not read user/project routing or interpret Claude managed policy/precedence.
+Setup and disable still modify only the selected user/project settings files, not
+managed settings; disabled private config is never implicitly re-enabled by hooks.
+
 To undo routing, run `/langsmith-gateway:disable --scope global` or `--scope project`.
 **Restart affected Claude sessions to stop using the proxy.** Global routing still
 applies after disabling a project's local scope. Disable every active scope before

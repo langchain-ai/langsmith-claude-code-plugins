@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import http from "node:http";
+import * as childProcess from "node:child_process";
+import { handleGatewayInput } from "./commands.js";
 import { connect } from "node:net";
 import { createHash } from "node:crypto";
 import type https from "node:https";
@@ -37,6 +39,10 @@ import {
 import { cliToken, loginGuidance, TokenCache } from "./token.js";
 import { control, ensure, gatewayHook, waitForStopped } from "./lifecycle.js";
 import { createConfig } from "./setup.js";
+
+vi.mock("node:child_process", async (original) => ({
+  ...(await original<typeof import("node:child_process")>()),
+}));
 
 // Synthetic native token; never read actual Claude or CLI credentials in tests.
 const native = `sk-ant-oat01-${"test_native-".repeat(8)}`;
@@ -936,7 +942,7 @@ describe("shared lifecycle and explicit configuration", () => {
     expect(f.token).not.toHaveBeenCalled();
   });
   it.each([true, false])(
-    "receipt-free provisioned hooks preserve saved mode %s, with auth deferred to requests",
+    "private-config-only hooks preserve saved mode %s, with auth deferred to requests",
     async (savedMode) => {
       const f = await fixture(undefined, undefined, { useClaudeSubscription: savedMode });
       const controls: string[] = [];
@@ -946,7 +952,7 @@ describe("shared lifecycle and explicit configuration", () => {
       const path = join(configDir(home), "config.json");
       const before = JSON.stringify({ ...f.config, useClaudeSubscription: savedMode });
       writeFileSync(path, before, { mode: 0o600 });
-      provisionGlobal(home, f.config);
+      // No ordinary routing files: routing may be supplied by Claude managed settings.
       writeFileSync(
         join(configDir(home), "settings-ownership.json"),
         "malformed synthetic-private",
@@ -974,6 +980,75 @@ describe("shared lifecycle and explicit configuration", () => {
       expect(f.token).toHaveBeenCalledTimes(1);
     },
   );
+  describe.each(["SessionStart", "UserPromptSubmit"])("%s startup", (event) => {
+    it.each(["absent", "malformed", "conflicting"])(
+      "starts from enabled private config with %s ordinary routing, without settings precedence",
+      async (routing) => {
+        const f = await fixture();
+        const closed = once(f.server, "close");
+        f.drain();
+        await closed;
+        const home = temporary();
+        mkdirSync(configDir(home), { recursive: true, mode: 0o700 });
+        const path = join(configDir(home), "config.json");
+        const before = JSON.stringify(f.config);
+        writeFileSync(path, before, { mode: 0o600 });
+        const cwd = join(home, "project");
+        mkdirSync(join(cwd, ".claude"), { recursive: true, mode: 0o700 });
+        const paths = [
+          join(home, ".claude/settings.json"),
+          join(cwd, ".claude/settings.json"),
+          join(cwd, ".claude/settings.local.json"),
+        ];
+        const text =
+          routing === "malformed"
+            ? "{"
+            : JSON.stringify({
+                enabled: false,
+                useClaudeSubscription: !f.config.useClaudeSubscription,
+                gatewayUrl: "https://project-selected.invalid",
+                env: { ANTHROPIC_BASE_URL: "https://other.invalid" },
+              });
+        if (routing !== "absent")
+          for (const target of paths) writeFileSync(target, text, { mode: 0o600 });
+        // The absent case represents managed-only routing. No managed policy fixture
+        // or parser is needed: hooks only consume the enabled private config.
+        const daemon = createProxy(f.config, { token: f.token });
+        cleanup.push(() => daemon.drain());
+        const unref = vi.fn();
+        const spawn = vi.spyOn(childProcess, "spawn").mockImplementation(() => {
+          daemon.server.listen({ host: "127.0.0.1", port: f.config.port, exclusive: true });
+          return { on: vi.fn(), unref } as unknown as childProcess.ChildProcess;
+        });
+        const output = vi.fn();
+        try {
+          await handleGatewayInput(
+            { hook_event_name: event, session_id: "managed-only", cwd, prompt: "hello" },
+            "/fake/gateway.js",
+            {},
+            home,
+            output,
+          );
+          expect(spawn).toHaveBeenCalledExactlyOnceWith(
+            process.execPath,
+            ["/fake/gateway.js", "daemon"],
+            expect.objectContaining({ detached: true, stdio: "ignore" }),
+          );
+          expect(unref).toHaveBeenCalledOnce();
+          expect([...daemon.sessions.leases.keys()]).toEqual(["managed-only"]);
+          expect(f.token).not.toHaveBeenCalled();
+          expect(output).not.toHaveBeenCalled();
+          expect(readFileSync(path, "utf8")).toBe(before);
+          for (const target of paths) {
+            if (routing === "absent") expect(() => readFileSync(target)).toThrow();
+            else expect(readFileSync(target, "utf8")).toBe(text);
+          }
+        } finally {
+          spawn.mockRestore();
+        }
+      },
+    );
+  });
   it("rejects delayed PUT after DELETE, including an end before registration", async () => {
     const f = await fixture();
     await control(f.config, "PUT", "/_langsmith/sessions/existing");
@@ -1147,23 +1222,66 @@ describe("shared lifecycle and explicit configuration", () => {
     }
     expect(endpoints(base)).toEqual({ apiUrl: API_URL, gatewayUrl: UPSTREAM });
   });
-  it("no-ops missing/disabled config regardless of arbitrary tracing files", async () => {
+  it.each(["absent", "matching"])(
+    "no-ops missing/disabled private config with %s routing and arbitrary tracing files",
+    async (routing) => {
+      const f = await fixture();
+      const controls: string[] = [];
+      f.server.on("request", (req) => controls.push(`${req.method} ${req.url}`));
+      const home = temporary();
+      writeFileSync(
+        join(home, ".langsmith-plugins.json"),
+        '{"enabled":true,"proxy":{"enabled":true}}',
+      );
+      mkdirSync(configDir(home), { recursive: true, mode: 0o700 });
+      if (routing === "matching") provisionGlobal(home, f.config);
+      const spawn = vi.spyOn(childProcess, "spawn").mockImplementation(() => {
+        throw new Error("Must not spawn");
+      });
+      try {
+        for (const state of ["missing", "disabled"]) {
+          if (state === "disabled")
+            writeFileSync(
+              join(configDir(home), "config.json"),
+              JSON.stringify({ ...f.config, enabled: false }),
+              { mode: 0o600 },
+            );
+          for (const event of ["SessionStart", "UserPromptSubmit", "SessionEnd"])
+            await gatewayHook(event, "one", "/not-an-entry", home);
+          expect(loadConfig(home)).toBeUndefined();
+        }
+        expect(loadConfig(home, true)?.enabled).toBe(false);
+        expect(spawn).not.toHaveBeenCalled();
+        expect(controls).toEqual([]);
+        expect(f.sessions.leases.size).toBe(0);
+        expect(f.token).not.toHaveBeenCalled();
+      } finally {
+        spawn.mockRestore();
+      }
+    },
+  );
+  it("ignores unsupported events and invalid sessions with enabled private config", async () => {
+    const f = await fixture();
+    const controls: string[] = [];
+    f.server.on("request", (req) => controls.push(`${req.method} ${req.url}`));
     const home = temporary();
-    writeFileSync(
-      join(home, ".langsmith-plugins.json"),
-      '{"enabled":true,"proxy":{"enabled":true}}',
-    );
-    for (const event of ["SessionStart", "UserPromptSubmit", "SessionEnd"])
-      await gatewayHook(event, "one", "/not-an-entry", home);
-    expect(loadConfig(home)).toBeUndefined();
     mkdirSync(configDir(home), { recursive: true, mode: 0o700 });
-    writeFileSync(
-      join(configDir(home), "config.json"),
-      JSON.stringify({ ...base, enabled: false }),
-      { mode: 0o600 },
-    );
-    await gatewayHook("SessionStart", "one", "/not-an-entry", home);
-    expect(loadConfig(home)).toBeUndefined();
+    writeFileSync(join(configDir(home), "config.json"), JSON.stringify(f.config), { mode: 0o600 });
+    const spawn = vi.spyOn(childProcess, "spawn").mockImplementation(() => {
+      throw new Error("Must not spawn");
+    });
+    try {
+      for (const event of [undefined, "Stop", "PreToolUse"])
+        await gatewayHook(event, "valid", "/not-an-entry", home);
+      for (const event of ["SessionStart", "UserPromptSubmit", "SessionEnd"])
+        for (const session of [undefined, null, 1, "", "../invalid", "a".repeat(129)])
+          await gatewayHook(event, session, "/not-an-entry", home);
+      expect(spawn).not.toHaveBeenCalled();
+      expect(controls).toEqual([]);
+      expect(f.sessions.leases.size).toBe(0);
+    } finally {
+      spawn.mockRestore();
+    }
   });
   it.each([null, "", 1, true, {}, [], "bad profile", "a".repeat(129)])(
     "rejects invalid optional profiles %j during creation and loading, even disabled",

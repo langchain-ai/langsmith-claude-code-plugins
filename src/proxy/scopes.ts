@@ -74,23 +74,3 @@ export function routingTargets(home: string, cwd: string, config?: ProxyConfig) 
   if (cwd) paths.add(targetPaths(home, "project", cwd).settings);
   return [...paths].map((path) => ({ path, saved: routingSnapshot(path) }));
 }
-
-// Only private OS-home config selects executable, endpoints, mode and secret.
-// Claude settings merely signal routing to that configured loopback listener.
-// Hooks are read-only and work with externally provisioned, receipt-free settings.
-export function configuredScope(
-  home: string,
-  cwd: string | undefined,
-  config: ProxyConfig,
-): boolean {
-  let env = routingEnv(routingSnapshot(targetPaths(home, "global", "").settings));
-  if (cwd) {
-    const local = targetPaths(home, "project", cwd).settings;
-    env = {
-      ...env,
-      ...routingEnv(routingSnapshot(join(dirname(local), "settings.json"))),
-      ...routingEnv(routingSnapshot(local)),
-    };
-  }
-  return matchesRouting(env, config);
-}

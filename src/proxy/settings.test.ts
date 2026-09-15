@@ -19,7 +19,7 @@ import { enable, disable, routingStatus, SetupError } from "./settings.js";
 import { API_URL, UPSTREAM, configDir, loadConfig } from "./config.js";
 import { atomic, snapshot, transaction } from "./files.js";
 import { control, ensure, waitForStopped } from "./lifecycle.js";
-import { targetPaths, configuredScope, matchesRouting, BASE, HEADERS } from "./scopes.js";
+import { targetPaths, routingEnv, matchesRouting, BASE, HEADERS } from "./scopes.js";
 import { spawnSync } from "node:child_process";
 import { handleGatewayInput } from "./commands.js";
 import { identity } from "./server.js";
@@ -757,11 +757,17 @@ describe("explicit scoped deterministic setup", () => {
     expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
     disable(scoped("global"), {}, home);
     expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
-    expect(configuredScope(home, a, config)).toBe(true);
-    expect(configuredScope(home, project("unapproved"), config)).toBe(false);
+    expect(
+      matchesRouting(routingEnv(snapshot(targetPaths(home, "project", a).settings)), config),
+    ).toBe(true);
+    expect(
+      snapshot(targetPaths(home, "project", project("unconfigured")).settings),
+    ).toBeUndefined();
     disable(scoped("project"), {}, home, a);
     expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
-    expect(configuredScope(home, a, config)).toBe(false);
+    expect(
+      matchesRouting(routingEnv(snapshot(targetPaths(home, "project", a).settings)), config),
+    ).toBe(false);
     disable(scoped("project"), {}, home, a);
     expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
     disable(scoped("project"), {}, home, b);
@@ -978,7 +984,7 @@ it.each(["global", "project"] as const)(
         modeChanged: true,
       });
       expect(loadConfig()).toEqual({ ...original, useClaudeSubscription: choice });
-      expect(configuredScope(home, cwd, loadConfig()!)).toBe(true);
+      expect(matchesRouting(routingEnv(snapshot(p.settings)), loadConfig()!)).toBe(true);
       expect(ensure).toHaveBeenLastCalledWith(
         expect.objectContaining(transport(loadConfig()!)),
         "/fake",
@@ -1189,7 +1195,7 @@ describe.each(["global", "project"] as const)("same-session %s re-enable", (scop
       disable(args, inherited, home, cwd);
       expect(json(p.settings)).toEqual(disabled);
       expect(loadConfig(home, true)?.settingsTargets).toEqual([]);
-      expect(configuredScope(home, cwd, config)).toBe(false);
+      expect(matchesRouting(routingEnv(snapshot(p.settings)), config)).toBe(false);
       expect(loadConfig()).toBeUndefined();
       vi.clearAllMocks();
       const output = vi.fn();
@@ -1233,7 +1239,7 @@ describe.each(["global", "project"] as const)("same-session %s re-enable", (scop
       expect(loadConfig()).toEqual({ ...config, useClaudeSubscription: false });
       expect(json(p.settings)).toEqual(after);
       expect(loadConfig()?.settingsTargets).toEqual([p.settings]);
-      expect(configuredScope(home, cwd, loadConfig()!)).toBe(true);
+      expect(matchesRouting(routingEnv(snapshot(p.settings)), loadConfig()!)).toBe(true);
       expect(waitForStopped).toHaveBeenCalledExactlyOnceWith({
         ...config,
         enabled: false,
@@ -1374,7 +1380,7 @@ describe("externally provisioned receipt-free routing", () => {
     const path = join(configDir(home), "settings-ownership.json");
     writeFileSync(path, "invalid synthetic-private", { mode: 0o600 });
     const before = [settings, join(configDir(home), "config.json"), path].map((p) => snapshot(p));
-    expect(configuredScope(home, home, config)).toBe(true);
+    expect(matchesRouting(routingEnv(snapshot(settings)), config)).toBe(true);
     expect([settings, join(configDir(home), "config.json"), path].map((p) => snapshot(p))).toEqual(
       before,
     );
@@ -1385,7 +1391,7 @@ describe("externally provisioned receipt-free routing", () => {
     const path = join(configDir(home), "settings-ownership.json");
     symlinkSync(join(home, "missing"), path);
     await run();
-    expect(configuredScope(home, home, loadConfig()!)).toBe(true);
+    expect(matchesRouting(routingEnv(snapshot(settings)), loadConfig()!)).toBe(true);
     disable(["--scope", "global"], {});
     expect(json(settings)).toEqual({});
     expect(loadConfig()).toBeUndefined();
@@ -1423,7 +1429,7 @@ describe("externally provisioned receipt-free routing", () => {
     writeFileSync(path, JSON.stringify({ ...config, settingsTargets: [local] }));
     disable(["--scope", "global"], {}, home, home);
     expect(loadConfig()?.settingsTargets).toEqual([local]);
-    expect(configuredScope(home, cwd, loadConfig()!)).toBe(true);
+    expect(matchesRouting(routingEnv(snapshot(local)), loadConfig()!)).toBe(true);
     writeFileSync(path, JSON.stringify({ ...loadConfig()!, enabled: false }));
     disable(["--scope", "global"], {}, home, home);
     expect(loadConfig()).toBeUndefined();
@@ -1432,26 +1438,6 @@ describe("externally provisioned receipt-free routing", () => {
     disable(["--scope", "global"], {}, home, home);
     expect(loadConfig()).toBeUndefined();
     expect(json(local)).toEqual({ env: { ANTHROPIC_BASE_URL: "https://later.test" } });
-  });
-  it("observes project overrides without accepting project-selected endpoints or modes", async () => {
-    const config = await provision();
-    const local = targetPaths(home, "project", home).settings;
-    writeFileSync(
-      local,
-      JSON.stringify({
-        enabled: true,
-        gatewayUrl: "https://arbitrary.test",
-        env: { ANTHROPIC_BASE_URL: "https://other.test" },
-      }),
-      { mode: 0o600 },
-    );
-    expect(configuredScope(home, home, config)).toBe(false);
-    writeFileSync(
-      local,
-      JSON.stringify({ env: { ANTHROPIC_BASE_URL: `http://127.0.0.1:${config.port}` } }),
-    );
-    expect(configuredScope(home, home, config)).toBe(true);
-    expect(loadConfig()).toEqual(config);
   });
   it("preserves later settings on partial transaction failure and disables new config", async () => {
     // A concurrent creator blocks the settings write after readiness, without
@@ -1488,7 +1474,7 @@ it.each([
   },
 );
 
-it("index changes do not change daemon identity or require referenced files for hooks", async () => {
+it("index changes do not change daemon identity or require referenced files to load config", async () => {
   await run();
   const config = loadConfig()!;
   const indexed = {
@@ -1497,7 +1483,7 @@ it("index changes do not change daemon identity or require referenced files for 
   };
   writeFileSync(join(configDir(home), "config.json"), JSON.stringify(indexed));
   expect(identity(indexed)).toBe(identity(config));
-  expect(configuredScope(home, home, loadConfig()!)).toBe(true);
+  expect(loadConfig()).toEqual(indexed);
 });
 
 describe("saved routing diagnostics", () => {
