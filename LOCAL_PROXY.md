@@ -193,10 +193,35 @@ privately if setup refuses. Re-enable waits for the old daemon to drain.
 
 ## IT-provisioned configuration
 
-IT installs the software and provisions two files per OS account: the private proxy
-config and Claude routing settings. **The user signs in with their own account;
-IT does not provision or distribute OAuth tokens.** No `/langsmith-gateway:setup`
-command is needed after provisioning.
+IT installs the software, deploys organization policy through Claude Code's
+**managed settings**, and provisions the gateway's per-account files. **The user
+signs in with their own account; IT does not provision or distribute OAuth tokens.**
+
+### Managed settings and current gateway support
+
+Deliver organization policy through a `managed-settings.json` file, an MDM policy,
+or server-managed settings from the claude.ai console. Managed keys take precedence
+over user/project files and `--settings`; users cannot override them locally. If
+multiple managed sources are deployed, follow Claude Code's [managed-settings precedence rules](https://code.claude.com/docs/en/settings#settings-precedence),
+rather than assuming every source is merged.
+
+For model policy, `model` sets the session's starting model; it does **not** lock
+model selection. Use `availableModels` to constrain `/model`, `--model`, and the
+`model` key in user settings.
+
+**Managed-only gateway routing is not supported by this plugin yet.** Startup hooks
+look for matching routing in user/project settings files; they do not read managed
+settings or use inherited routing environment variables for that check. Status and
+scope discovery also do not inspect managed policy. Deploying only managed
+`ANTHROPIC_BASE_URL` and `ANTHROPIC_CUSTOM_HEADERS` will not automatically start
+the daemon.
+
+The checklist below therefore provisions the currently supported user/project
+routing files alongside any managed organization policy. This is **not an enforced
+routing policy**: the gateway config and these routing files remain user-owned.
+MDM can deploy those files, but that is distinct from Claude Code's managed tier.
+Do not deploy conflicting managed routing values. Managed-only gateway provisioning
+requires lifecycle support in the plugin before it can replace this checklist.
 
 ### IT admin checklist
 
@@ -288,7 +313,9 @@ writers are running.
    that native Claude login is also required; see [credential forwarding](#consent-credentials-and-models).
    The local key is required in either mode and is not a LangSmith OAuth token.
 
-4. **Configure Claude routing.** Choose one destination:
+4. **Provision the gateway's user/project routing files.** These files support
+   automatic startup without `/langsmith-gateway:setup`; they are not managed
+   settings. Choose one destination:
 
    - Global: `~/.claude/settings.json`.
    - Project: `.claude/settings.local.json` under the canonical project directory.
@@ -306,8 +333,12 @@ writers are running.
    }
    ```
 
-   Resolve conflicting auth/transport overrides before proceeding. Make the
-   settings file account-owned with mode `0600`; parent directories must be
+   Resolve conflicting auth/transport overrides before proceeding. If a managed
+   policy sets these keys, changes here cannot override it; IT must change the
+   policy. `/langsmith-gateway:disable` cannot remove managed routing and may stop
+   the local daemon while that policy still points Claude at it.
+
+   Make the settings file account-owned with mode `0600`; parent directories must be
    account-owned, not writable by other users, and not symlinks. Keep both
    credential-bearing files untracked and git-ignored; never commit them.
 
