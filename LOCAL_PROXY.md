@@ -75,7 +75,7 @@ The flag takes no value and may appear only once. Hooks retain the saved mode.
 To change modes, disable every other active scope, then run setup on the remaining
 configured scope. The daemon drains/restarts with brief downtime; routing settings
 and the local key stay unchanged. Setup for additional scopes must match the shared
-mode. For externally provisioned projects, check [scope discovery](#it-provisioned-configuration-no-setup-required)
+mode. For externally provisioned projects, check [scope discovery](#it-provisioned-configuration)
 first. CLI/profile/port/endpoint changes require disabling **all** scopes.
 
 If draining or startup fails, the requested mode stays saved but disabled, with
@@ -191,65 +191,199 @@ The private config and local key are retained. Same-session re-enable is support
 when inherited transport still matches; resolve altered headers or unknown keys
 privately if setup refuses. Re-enable waits for the old daemon to drain.
 
-## IT-provisioned configuration (no setup required)
+## IT-provisioned configuration
 
-IT can provision the enabled private config, CLI profile/login, and Claude settings
-directly. With the plugin installed and hooks enabled, sessions automatically start
-the daemon using the saved configuration and forwarding mode.
+IT installs the software and provisions two files per OS account: the private proxy
+config and Claude routing settings. **The user signs in with their own account;
+IT does not provision or distribute OAuth tokens.** No `/langsmith-gateway:setup`
+command is needed after provisioning.
 
-The OS-account-owned `~/.claude/langsmith-proxy` directory must be `0700`, and its
-regular, single-link `config.json` must be `0600` (no symlinks). Example schema
-(placeholders must be replaced privately, not pasted into chat):
+### IT admin checklist
 
-```json
-{
-  "enabled": true,
-  "useClaudeSubscription": false,
-  "cli": "/absolute/canonical/path/to/langsmith",
-  "port": 52507,
-  "secret": "<unique per-account random 32 bytes encoded as 64 lowercase hex characters>",
-  "apiUrl": "https://api.smith.langchain.com",
-  "gatewayUrl": "https://gateway.smith.langchain.com"
-}
+The examples use production endpoints and the CLI's current/default login.
+Here, `~` and `$HOME` mean the **target user's OS account home**, not the admin's or
+root's home. Run the examples in that user's account context; privileged deployment
+tools must explicitly set the destination and user ownership. For an existing
+installation, coordinate session shutdown before updates and allow up to 35 seconds
+for the daemon to drain. Do not change the CLI store while sessions or other CLI
+writers are running.
+
+1. **Deploy the prerequisites.** Ensure macOS/Linux, Node.js 20+, and Claude Code
+   are installed. Install the [LangSmith CLI](https://docs.langchain.com/langsmith/langsmith-cli)
+   for the target user:
+
+   ```sh
+   curl -fsSL https://cli.langsmith.com/install.sh | sh
+   ```
+
+   Follow the installer's PATH instructions so Node and `langsmith` are available
+   to the user's Claude Code process. Verify in the target user's environment:
+
+   ```sh
+   node --version
+   langsmith --version
+   ```
+
+2. **Deploy and enable the plugin at user scope.** The target user's Claude Code
+   installation needs the gateway plugin and enabled hooks in every project. For
+   an interactive installation in that user's Claude Code session, run:
+
+   ```text
+   /plugin marketplace add langchain-ai/langsmith-claude-code-plugins
+   /plugin install langsmith-gateway@langsmith-claude-code-plugins --scope user
+   /reload-plugins
+   ```
+
+   Keep hooks enabled. Exit Claude Code while provisioning the files below;
+   reloading a previously configured plugin can activate its saved mode.
+
+3. **Create the private proxy config for each user.** Prepare its directory:
+
+   ```sh
+   umask 077
+   mkdir -p "$HOME/.claude/langsmith-proxy"
+   chmod 700 "$HOME/.claude/langsmith-proxy"
+   ```
+
+   Resolve the CLI's canonical executable path for the `cli` field:
+
+   ```sh
+   node -e 'console.log(require("node:fs").realpathSync(process.argv[1]))' "$(command -v langsmith)"
+   ```
+
+   Generate a separate local key for each new account installation. Do not reuse
+   one key across a fleet or include it in deployment logs. For an interactive
+   installation, generate it in a private terminal:
+
+   ```sh
+   node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))'
+   ```
+
+   Create `~/.claude/langsmith-proxy/config.json` with a local editor or your
+   provisioning tool. Replace the placeholders with the path and key above:
+
+   ```json
+   {
+     "enabled": true,
+     "useClaudeSubscription": false,
+     "cli": "/absolute/canonical/path/to/langsmith",
+     "port": 52507,
+     "secret": "<64 lowercase hex characters>",
+     "apiUrl": "https://api.smith.langchain.com",
+     "gatewayUrl": "https://gateway.smith.langchain.com"
+   }
+   ```
+
+   ```sh
+   chmod 600 "$HOME/.claude/langsmith-proxy/config.json"
+   ```
+
+   The directory and config must be account-owned; the config must be a regular,
+   single-link file, not a symlink. The CLI executable must be account- or
+   root-owned, executable, and not group/world writable. Preserve the existing
+   key and transport values when updating an installation.
+
+   Leave `useClaudeSubscription` false for OAuth-only routing. Set it to true only
+   with explicit approval to forward native Claude credentials, and tell the user
+   that native Claude login is also required; see [credential forwarding](#consent-credentials-and-models).
+   The local key is required in either mode and is not a LangSmith OAuth token.
+
+4. **Configure Claude routing.** Choose one destination:
+
+   - Global: `~/.claude/settings.json`.
+   - Project: `.claude/settings.local.json` under the canonical project directory.
+
+   Merge these fields into the existing settings rather than replacing the file.
+   Use the same port and local key as the private config. Preserve unrelated env
+   fields and custom header lines:
+
+   ```json
+   {
+     "env": {
+       "ANTHROPIC_BASE_URL": "http://127.0.0.1:52507",
+       "ANTHROPIC_CUSTOM_HEADERS": "X-LangSmith-Proxy-Key: <same local secret>"
+     }
+   }
+   ```
+
+   Resolve conflicting auth/transport overrides before proceeding. Make the
+   settings file account-owned with mode `0600`; parent directories must be
+   account-owned, not writable by other users, and not symlinks. Keep both
+   credential-bearing files untracked and git-ignored; never commit them.
+
+5. **Register project scopes when provisioning more than one.** Add optional
+   `settingsTargets` to the private config, listing the canonical absolute paths
+   of the provisioned settings files (up to 128):
+
+   ```json
+   "settingsTargets": [
+     "/Users/alice/work/project-a/.claude/settings.local.json",
+     "/Users/alice/work/project-b/.claude/settings.local.json"
+   ]
+   ```
+
+   Commands inspect this list plus global/current-project settings before disable
+   or mode changes. Unlisted projects outside the current directory cannot be
+   discovered, so commands may interrupt them by assuming no other scope is active.
+   The list supports discovery, not authorization.
+
+6. **Hand off to the user.** Confirm that the plugin is enabled, file ownership and
+   permissions are correct, and both files contain the same local key and port.
+   Give the user the configured scope, forwarding mode, and the
+   sign-in instructions below. Tell them that the gateway receives unredacted
+   conversation/tool content independently of tracing settings. **Do not run login
+   as the administrator or copy an administrator's CLI credential store.**
+
+### End-user steps after IT provisioning
+
+These are user actions, not admin deployment steps. For the production configuration
+shown above:
+
+1. **Sign in from a terminal as yourself**, with gateway sessions closed:
+
+   ```sh
+   langsmith auth login
+   ```
+
+   Complete browser login with your own LangSmith account/workspace. Use ordinary
+   OAuth, not the CLI's static-token gateway setup flow. Credentials remain in the
+   CLI's store; do not paste tokens into Claude or settings. If IT enabled native
+   subscription forwarding, native Claude login is also required.
+
+2. **Open a new Claude Code session** in the configured scope. Hooks start the
+   daemon automatically; do not run setup. Check local readiness with:
+
+   ```text
+   /langsmith-gateway:status
+   ```
+
+3. **Send a model request** to test upstream authentication. Status checks saved
+   routing and local health, not login or live session routing. If the request
+   fails, see [troubleshooting](#safety-and-troubleshooting) or contact IT. To undo
+   routing, follow [disable instructions](#session-recovery-and-disabling) and
+   restart affected sessions.
+
+### Advanced: pinning a CLI profile
+
+No profile configuration is needed for the steps above. Without a `profile` field,
+the gateway uses the CLI's persisted current profile, falling back to `default`.
+
+To pin a specific profile, IT can add `"profile": "claude-gateway"` to the private
+config and instruct the user to sign in with:
+
+```sh
+langsmith --profile claude-gateway auth login
 ```
 
-`profile` is optional: omit it for CLI default/current selection, or set it to an
-explicit name (1–128 letters, digits, `_`, `.`, or `-`). Null/empty values are invalid.
+Explicit names allow 1–128 letters, digits, `_`, `.`, or `-`; null/empty values are
+invalid. For custom destinations or an existing profile, review the [profile and issuer requirements](#alternate-api-and-gateway-hosts)
+before login. The gateway does not inherit `LANGSMITH_PROFILE` or other CLI
+environment overrides.
 
-Both booleans are required, including when disabled (`enabled: false`); retain the
-other fields for re-enable. Both endpoints may be omitted together for production
-defaults. Incomplete/unknown fields are rejected. Update older configs privately to
-this schema, explicitly choosing forwarding mode and preserving keys and transport
-values; do not paste secrets into chat or delete/reset config.
-
-Provision `~/.claude/settings.json` for global routing or the canonical project's
-`.claude/settings.local.json` for project routing, preserving other fields:
-
-```json
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://127.0.0.1:52507",
-    "ANTHROPIC_CUSTOM_HEADERS": "X-LangSmith-Proxy-Key: <same local secret>"
-  }
-}
-```
-
-Settings containing this bearer secret should be account-owned `0600`, untracked
-and git-ignored. Parent directories must be account-owned, non-writable by other
-users and not symlinks. The executable must be account- or root-owned, executable
-and not group/world writable. CLI credentials remain in the CLI's own store;
-never place LangSmith OAuth tokens or native Anthropic credentials in this config.
-The local secret remains required in both modes; it is not native/provider auth.
-
-**Multi-scope discovery:** setup maintains optional `settingsTargets` in this config,
-an array of up to 128 canonical absolute settings-file paths. Commands inspect
-these plus global/current-project settings to find matching URL/key pairs before
-disable or mode changes. The list aids discovery, not authorization.
-
-For multiple externally provisioned projects, populate `settingsTargets` before
-scoped disable/mode changes. Unlisted projects outside the current directory cannot
-be discovered: their hooks can still start, but commands may interrupt them by
-assuming no other scope is active. Inventory those projects before changes.
+**Schema notes:** Both booleans are required, even when disabled; retain the other
+fields for re-enable. Both endpoints may be omitted together for production
+defaults. Incomplete/unknown fields are rejected. Update older configs privately,
+preserving keys and transport values rather than deleting/resetting them.
 
 ## Safety and troubleshooting
 

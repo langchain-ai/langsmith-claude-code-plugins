@@ -449,8 +449,6 @@ Without `--profile`, new gateway setups defer to the CLI’s persisted `current_
 (or `default` when none is selected). The sanitized token subprocess does not inherit
 `LANGSMITH_PROFILE` or other CLI environment overrides; use setup `--profile name`
 if you need to pin an environment-only selection.
-Stop gateway sessions and other CLI writers before reauthentication: **the CLI
-credential store has no cross-process locking**.
 
 ### Install and enable the gateway in Claude Code
 
