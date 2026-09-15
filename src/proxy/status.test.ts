@@ -197,7 +197,7 @@ beforeEach(() => {
     useClaudeSubscription: false,
     cli: "/never-run-synthetic-cli",
     profile: "preview",
-    port: 43127,
+    port: 52507,
     secret: "a".repeat(64),
   };
   requests = [];

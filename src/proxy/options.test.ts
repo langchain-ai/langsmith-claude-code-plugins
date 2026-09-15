@@ -61,7 +61,7 @@ describe("strict endpoint origins and paired explicit setup arguments", () => {
         "--profile",
         "preview",
         "--port",
-        "43127",
+        "52507",
         "--api-url",
         "https://api.preview.test/",
         "--gateway-url",
@@ -72,7 +72,7 @@ describe("strict endpoint origins and paired explicit setup arguments", () => {
       useClaudeSubscription: false,
       cli: "/bin/cli",
       profile: "preview",
-      port: 43127,
+      port: 52507,
       apiUrl: "https://api.preview.test",
       gatewayUrl: "https://gateway.preview.test",
     });
@@ -93,7 +93,7 @@ describe("strict endpoint origins and paired explicit setup arguments", () => {
     ["--scope", "global", "--profile", "a", "--profile", "b"],
     ["--scope", "global", "--profile"],
     ["--scope", "global", "--unknown", "x"],
-    ["--scope", "global", "/cli", "a", "43127"],
+    ["--scope", "global", "/cli", "a", "52507"],
     ["--scope", "global", "bare"],
     ["--yes", "--scope", "global"],
     ["--scope", "global", "--profile", "bad profile"],
@@ -101,7 +101,7 @@ describe("strict endpoint origins and paired explicit setup arguments", () => {
   ])("refuses invalid or mutually exclusive flags: %j", (...args) => {
     expect(() => parseSetupArgs(args)).toThrow();
   });
-  it.each([[], ["/cli", "a", "43127"], ["--profile", "preview"]])(
+  it.each([[], ["/cli", "a", "52507"], ["--profile", "preview"]])(
     "requires explicit scope: %j",
     (...args) => {
       expect(() => parseSetupArgs(args)).toThrow("within Claude Code");
@@ -129,13 +129,13 @@ it.each([true, false])("parses subscription flag presence %s with all other opti
       "--cli",
       "/bin/cli",
       "--port",
-      "43127",
+      "52507",
     ]),
   ).toMatchObject({
     scope: "project",
     useClaudeSubscription: choice,
     profile: "test",
-    port: 43127,
+    port: 52507,
   });
 });
 it.each([

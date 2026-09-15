@@ -1125,7 +1125,7 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
     if (settingsTargets.length > 128)
       fail("Too many active routing targets; disable unused scopes before setup.");
     const prior = !!config && matchesRouting(savedEnv, config);
-    const port = requested.port ?? config?.port ?? 43127;
+    const port = requested.port ?? config?.port ?? 52507;
     const selected = requested.apiUrl === void 0 ? endpoints(config ?? {}) : endpoints(requested);
     const useClaudeSubscription = requested.useClaudeSubscription;
     const next = config ? {

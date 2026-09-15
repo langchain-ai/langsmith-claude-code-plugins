@@ -32,15 +32,8 @@ client compatibility is not established; the plugin does not inject dummy creden
    /langsmith-gateway:setup --scope project
    ```
 
-   **The invocation authorizes the change.** The supported UserPromptSubmit hook
-   handles it before disabled-config checks and blocks the model, exactly like
-   tracing mute/unmute. There is no LLM confirmation, tool execution, or question
-   wall. If command markdown reaches the model, it must not execute a fallback;
-   enable/reload the plugin and retry.
-
    - `--scope global`: `~/.claude/settings.json`.
-   - `--scope project`: current hook cwd's `.claude/settings.local.json` (never the
-     tracked `.claude/settings.json`). Project path must be canonical, not a symlink.
+   - `--scope project`: current hook cwd's `.claude/settings.local.json`.
    - Keep credential-bearing files untracked and git-ignored; never commit credentials.
 
    Setup discovers/pins the CLI on PATH, saves private loopback transport settings
@@ -51,7 +44,7 @@ client compatibility is not established; the plugin does not inject dummy creden
    first use gives terminal guidance. See the [CLI prerequisite](./README.md#langsmith-cli-prerequisite).
 
    New configs default to API `https://api.smith.langchain.com`, gateway
-   `https://gateway.smith.langchain.com`, profile `claude-gateway`, port `43127`.
+   `https://gateway.smith.langchain.com`, profile `claude-gateway`, port `52507`.
    Existing config retains its pinned CLI/profile/URLs/port. All active targets share one daemon and
    identical CLI/profile/URLs/port and subscription-forwarding mode; incompatible
    setup is refused unchanged. New configs explicitly save `useClaudeSubscription: false`.
@@ -127,7 +120,7 @@ refresh; do not repurpose a production profile by changing only its API URL.
   slash command accepts explicit flags:
 
   ```text
-  /langsmith-gateway:setup --scope project --cli /absolute/path/to/langsmith --profile profile --port 43127
+  /langsmith-gateway:setup --scope project --cli /absolute/path/to/langsmith --profile profile --port 52507
   ```
 
   Local ports must be 1024–65535. Setup accepts only the named options
@@ -248,7 +241,7 @@ regular, single-link `config.json` must be `0600` (no symlinks). Example schema
   "useClaudeSubscription": false,
   "cli": "/absolute/canonical/path/to/langsmith",
   "profile": "claude-gateway",
-  "port": 43127,
+  "port": 52507,
   "secret": "<unique per-account random 32 bytes encoded as 64 lowercase hex characters>",
   "apiUrl": "https://api.smith.langchain.com",
   "gatewayUrl": "https://gateway.smith.langchain.com"
@@ -271,7 +264,7 @@ Provision `~/.claude/settings.json` for global routing or the canonical project'
 ```json
 {
   "env": {
-    "ANTHROPIC_BASE_URL": "http://127.0.0.1:43127",
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:52507",
     "ANTHROPIC_CUSTOM_HEADERS": "X-LangSmith-Proxy-Key: <same local secret>"
   }
 }

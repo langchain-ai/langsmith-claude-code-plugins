@@ -83,7 +83,7 @@ describe("separate marketplace packages", () => {
           ? "description: Show read-only gateway routing and shared proxy status"
           : `description: ${name === "setup" ? "Enable" : "Disable"} gateway settings deterministically for an explicit scope`,
         name === "setup"
-          ? `argument-hint: "--scope global|project [--use-claude-subscription] [--profile name] [--api-url HTTPS_ORIGIN --gateway-url HTTPS_ORIGIN] [--cli /absolute/path --port 43127]"`
+          ? `argument-hint: "--scope global|project [--use-claude-subscription] [--profile name] [--api-url HTTPS_ORIGIN --gateway-url HTTPS_ORIGIN] [--cli /absolute/path --port 52507]"`
           : name === "status"
             ? `argument-hint: "[--scope global|project]"`
             : `argument-hint: "--scope global|project"`,
@@ -105,7 +105,7 @@ describe("separate marketplace packages", () => {
             "--cli",
             "/absolute/path/to/langsmith",
             "--port",
-            "43128",
+            "52508",
           );
         const expanded = body.trim().replace("$ARGUMENTS", args.join(" "));
         expect(expanded).toBe(`/langsmith-gateway:${name} ${args.join(" ")}`);
@@ -137,7 +137,7 @@ describe("separate marketplace packages", () => {
                   gatewayUrl: "https://gateway.preview.test",
                   cli: process.execPath,
                   profile: "private-profile",
-                  port: 43127,
+                  port: 52507,
                   secret: "b".repeat(64),
                 });
         if (state !== "missing") writeFileSync(join(dir, "config.json"), config, { mode: 0o600 });
@@ -210,13 +210,13 @@ require("node:module").syncBuiltinESMExports();
           ["daemon", "extra"],
           ["daemon", "--scope", "global"],
           ["setup"],
-          ["setup", process.execPath, "private-argument", "43127"],
+          ["setup", process.execPath, "private-argument", "52507"],
           ["setup", "--yes", "--scope", "global", "--profile", "private-argument"],
           ["launch"],
           ["unknown-private-argument"],
           ["--help"],
           ["enable"],
-          ["enable", process.execPath, "private-argument", "43127"],
+          ["enable", process.execPath, "private-argument", "52507"],
           ["disable"],
         ];
         for (const args of invocations) {
@@ -229,7 +229,7 @@ require("node:module").syncBuiltinESMExports();
         for (const prompt of [
           "/langsmith-gateway:setup",
           "/langsmith-gateway:setup --scope " + "private-argument".repeat(5000),
-          "/langsmith-gateway:setup --scope global /absolute/cli profile 43127",
+          "/langsmith-gateway:setup --scope global /absolute/cli profile 52507",
           "/langsmith-gateway:setup --yes --scope global",
           "/langsmith-gateway:setup --scope global --use-claude-subscription true",
           "/langsmith-gateway:setup --scope global --scope project",
@@ -436,7 +436,7 @@ require("node:module").syncBuiltinESMExports();
         useClaudeSubscription: false,
         cli: process.execPath,
         profile: "fake",
-        port: 43127,
+        port: 52507,
         secret: "b".repeat(64),
       };
       writeFileSync(join(configDir, "config.json"), JSON.stringify(retained), { mode: 0o600 });

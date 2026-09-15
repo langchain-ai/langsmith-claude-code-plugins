@@ -180,7 +180,7 @@ export async function enable(
     if (settingsTargets.length > 128)
       fail("Too many active routing targets; disable unused scopes before setup.");
     const prior = !!config && matchesRouting(savedEnv, config);
-    const port = requested.port ?? config?.port ?? 43127;
+    const port = requested.port ?? config?.port ?? 52507;
     const selected =
       requested.apiUrl === undefined ? endpoints(config ?? {}) : endpoints(requested);
     const useClaudeSubscription = requested.useClaudeSubscription;

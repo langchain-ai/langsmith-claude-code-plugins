@@ -52,7 +52,7 @@ const args = () => [
   "--profile",
   "fake-profile",
   "--port",
-  "43127",
+  "52507",
 ];
 const run = () => enable("/fake/gateway.js", args(), {});
 beforeEach(() => {
@@ -103,7 +103,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     expect(after.env.ANTHROPIC_CUSTOM_HEADERS).toBe(
       before.env.ANTHROPIC_CUSTOM_HEADERS + "\nX-LangSmith-Proxy-Key: " + config.secret,
     );
-    expect(after.env.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:43127");
+    expect(after.env.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:52507");
     for (const key of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"])
       expect(after.env[key]).toBeUndefined();
     expect(after.apiKeyHelper).toBeUndefined();
@@ -196,7 +196,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     for (const cli of [oldCLI, newCLI]) writeFileSync(cli, "#!/bin/sh\nexit 1\n", { mode: 0o700 });
     await enable(
       "/fake",
-      ["--scope", "global", "--cli", oldCLI, "--profile", "fake-profile", "--port", "43127"],
+      ["--scope", "global", "--cli", oldCLI, "--profile", "fake-profile", "--port", "52507"],
       {},
     );
     const original = loadConfig()!;
@@ -230,7 +230,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
           "--profile",
           "preview-42",
           "--port",
-          "43128",
+          "52508",
           "--api-url",
           "https://PR-42-api.review.smith.langchain.com/",
           "--gateway-url",
@@ -243,7 +243,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
         ...original,
         cli: realpathSync(newCLI),
         profile: "preview-42",
-        port: 43128,
+        port: 52508,
         apiUrl: "https://pr-42-api.review.smith.langchain.com",
         gatewayUrl: "https://pr-42-gateway.review.smith.langchain.com:8443",
       });
@@ -259,7 +259,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
         "/fake",
       );
       expect(control).not.toHaveBeenCalled();
-      expect(json(settings).env.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:43128");
+      expect(json(settings).env.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:52508");
       expect(json(settings).env.ANTHROPIC_CUSTOM_HEADERS).toBe(
         before.env.ANTHROPIC_CUSTOM_HEADERS + "\nX-LangSmith-Proxy-Key: " + original.secret,
       );
@@ -334,7 +334,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
         message: "Custom Host headers are unsupported",
       },
       {
-        value: { env: { ANTHROPIC_CUSTOM_HEADERS: "HOST: 127.0.0.1:43127" } },
+        value: { env: { ANTHROPIC_CUSTOM_HEADERS: "HOST: 127.0.0.1:52507" } },
         message: "Custom Host headers are unsupported",
       },
     ])("rejects $message without writes or startup", async ({ value, message }) => {
@@ -496,7 +496,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     await expect(
       enable(
         "/fake",
-        ["--scope", "global", "--cli", process.execPath, "--profile", "other", "--port", "43127"],
+        ["--scope", "global", "--cli", process.execPath, "--profile", "other", "--port", "52507"],
         {},
       ),
     ).rejects.toThrow("Existing pinned");
@@ -703,7 +703,7 @@ describe("explicit scoped deterministic setup", () => {
         hook_event_name: "UserPromptSubmit",
         prompt: expand(
           "setup",
-          `--scope global --cli ${process.execPath} --profile preview --port 43128 --api-url https://api.preview.test/ --gateway-url https://gateway.preview.test:8443/`,
+          `--scope global --cli ${process.execPath} --profile preview --port 52508 --api-url https://api.preview.test/ --gateway-url https://gateway.preview.test:8443/`,
         ),
         cwd: home,
       },
@@ -721,11 +721,11 @@ describe("explicit scoped deterministic setup", () => {
     expect(loadConfig()).toMatchObject({
       cli: process.execPath,
       profile: "preview",
-      port: 43128,
+      port: 52508,
       apiUrl: "https://api.preview.test",
       gatewayUrl: "https://gateway.preview.test:8443",
     });
-    expect(json(settings).env.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:43128");
+    expect(json(settings).env.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:52508");
     expect(control).not.toHaveBeenCalled();
     await handleGatewayInput(
       {
@@ -1183,7 +1183,7 @@ describe.each(["global", "project"] as const)("same-session %s re-enable", (scop
       if (headers) inherited.ANTHROPIC_CUSTOM_HEADERS = headers(inherited.ANTHROPIC_CUSTOM_HEADERS);
       if (change === "missing config") rmSync(p.config);
       if (change === "different base") inherited.ANTHROPIC_BASE_URL = "https://other.invalid";
-      if (change === "changed port") args.push("--port", "43128");
+      if (change === "changed port") args.push("--port", "52508");
       if (change === "later disk edit")
         writeFileSync(
           p.settings,
@@ -1260,7 +1260,7 @@ it("re-enables a retired project while other scopes stay active, without trustin
 
 describe("externally provisioned receipt-free routing", () => {
   async function provision() {
-    setupModule.createConfig(process.execPath, "it-profile", 43127, home);
+    setupModule.createConfig(process.execPath, "it-profile", 52507, home);
     const config = loadConfig()!;
     save({
       model: "keep",
@@ -1366,7 +1366,7 @@ describe("externally provisioned receipt-free routing", () => {
 });
 
 it("disable leaves empty unrelated env untouched when no routing matches", async () => {
-  setupModule.createConfig(process.execPath, "it-profile", 43127, home);
+  setupModule.createConfig(process.execPath, "it-profile", 52507, home);
   save({ env: {}, model: "keep" });
   const before = snapshot(settings);
   disable(["--scope", "global"], {});
@@ -1383,7 +1383,7 @@ it.each([
 ])(
   "rejects invalid optional routing index %j without accepting it as config",
   (settingsTargets) => {
-    setupModule.createConfig(process.execPath, "it-profile", 43127, home);
+    setupModule.createConfig(process.execPath, "it-profile", 52507, home);
     const path = join(configDir(home), "config.json");
     writeFileSync(path, JSON.stringify({ ...loadConfig()!, settingsTargets }));
     expect(() => loadConfig()).toThrow("Invalid proxy configuration");
@@ -1408,7 +1408,7 @@ describe("saved routing diagnostics", () => {
     useClaudeSubscription: false,
     cli: "/unused-cli",
     profile: "unused-profile",
-    port: 43127,
+    port: 52507,
     secret: "synthetic-proxy-secret",
   };
   const base = `http://127.0.0.1:${config.port}`;

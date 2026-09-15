@@ -475,7 +475,7 @@ token lookup failures are cached for two seconds. Failed requests are not replay
    never commit credentials.
 
    New configurations use API `https://api.smith.langchain.com`, gateway
-   `https://gateway.smith.langchain.com`, profile `claude-gateway`, and port `43127`.
+   `https://gateway.smith.langchain.com`, profile `claude-gateway`, and port `52507`.
    Existing config retains its pinned CLI/profile/port and endpoint pair. All active
    scopes share one daemon and must use identical options. Disable every active
    scope before changing those pinned options (the mode-only exception is below). Local readiness does not prove upstream

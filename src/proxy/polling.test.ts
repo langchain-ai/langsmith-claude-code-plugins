@@ -25,7 +25,7 @@ it.each(["apiUrl", "gatewayUrl", "useClaudeSubscription", "disabled", "invalid"]
       useClaudeSubscription: true,
       cli: "/fake/cli",
       profile: "preview",
-      port: 43127,
+      port: 52507,
       secret: "a".repeat(64),
       apiUrl: "https://api.preview.test",
       gatewayUrl: "https://gateway.preview.test",
