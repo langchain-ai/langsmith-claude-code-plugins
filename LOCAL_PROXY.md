@@ -41,8 +41,7 @@ client compatibility is not established; the plugin does not inject dummy creden
    - `--scope global`: `~/.claude/settings.json`.
    - `--scope project`: current hook cwd's `.claude/settings.local.json` (never the
      tracked `.claude/settings.json`). Project path must be canonical, not a symlink.
-   - Secret files inside repositories must be untracked and git-ignored. Setup
-     checks git; it never edits ignores or stages files for you.
+   - Keep credential-bearing files untracked and git-ignored; never commit credentials.
 
    Setup discovers/pins the CLI on PATH, saves private loopback transport settings
    and starts/verifies daemon identity/health. It preserves unrelated settings and

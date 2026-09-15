@@ -187,8 +187,9 @@ session controls; only the bounded loopback health probe is allowed.
 - **Lifecycle/tokens:** leases, exclusive bind/recovery, incompatible identities,
   cache expiry/singleflight/timeout, sanitized profile/API login guidance and
   health/register-only hooks. Authentication starts on the first model request.
-- **Settings:** global/multi-project disk matching, ignored receipts, git secret
-  protection, private atomic writes/rollback, exact headers, conflicts/links/modes,
+- **Settings:** global/multi-project disk matching, ignored receipts, setup independent
+  of Git tracking/ignore status or availability, private atomic writes/rollback,
+  exact headers, conflicts/links/modes,
   idempotence, readiness failures and later/concurrent edits. Disable removes only
   matching values without restoration and instructs affected sessions to restart.
   Same-session re-enable preserves retained keys and disk headers without copying
@@ -202,7 +203,7 @@ session controls; only the bounded loopback health probe is allowed.
 
 Healthy setup is local-only (no eager auth wait); cold readiness allows 4 seconds,
 re-enable drain up to 36 seconds, and first-use token acquisition up to 10 seconds
-plus upstream latency. Filesystem/git overhead prevents a total latency guarantee.
+plus upstream latency. Filesystem overhead prevents a total latency guarantee.
 
 For manual preview testing, retain the nested gateway `--plugin-dir` on every
 session/restart, choose a settings scope, and disable all active scopes before

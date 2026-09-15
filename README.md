@@ -471,8 +471,8 @@ token lookup failures are cached for two seconds. Failed requests are not replay
    use `/langsmith-gateway:setup --scope project` instead; it writes the private
    `.claude/settings.local.json`. Setup automatically
    saves transport settings and starts/verifies the local daemon without checking
-   tokens or logging in. Secret destinations must be untracked and git-ignored
-   when inside a repository; unsafe/conflicting settings are refused.
+   tokens or logging in. Keep credential-bearing files untracked and git-ignored;
+   never commit credentials.
 
    New configurations use API `https://api.smith.langchain.com`, gateway
    `https://gateway.smith.langchain.com`, profile `claude-gateway`, and port `43127`.

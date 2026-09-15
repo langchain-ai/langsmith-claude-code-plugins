@@ -688,44 +688,6 @@ describe("explicit scoped deterministic setup", () => {
     disable(scoped("project"), {}, home, cwd);
     expect(loadConfig()).toBeUndefined();
   });
-  it.each(["unignored", "tracked", "ignored", "missing"])(
-    "protects project secrets in %s git files with an escaped destination diagnostic",
-    async (state) => {
-      const cwd = project('repo "quoted"\\\n\t\x1b');
-      const git = (...args: string[]) => {
-        const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
-        expect(result.status, result.stderr).toBe(0);
-      };
-      git("init", "--quiet");
-      mkdirSync(join(cwd, ".claude"), { mode: 0o700 });
-      const file = join(cwd, ".claude/settings.local.json");
-      const contents = JSON.stringify({
-        env: { ANTHROPIC_CUSTOM_HEADERS: "X-Private: synthetic-secret-do-not-print" },
-      });
-      if (state !== "missing") writeFileSync(file, contents, { mode: 0o600 });
-      const before = snapshot(file);
-      if (state === "tracked") git("add", "-f", ".claude/settings.local.json");
-      if (state === "tracked" || state === "ignored")
-        writeFileSync(join(cwd, ".gitignore"), ".claude/settings.local.json\n");
-      const invoke = () =>
-        enable("/fake", ["--scope", "project", "--cli", process.execPath], {}, home, cwd);
-      if (state === "ignored") {
-        await invoke();
-        expect(json(file).env).toBeDefined();
-      } else {
-        // Exact output allows only the quoted path, never settings/env contents.
-        await expect(invoke()).rejects.toMatchObject({
-          message: `Secret destination ${JSON.stringify(file)} is tracked or not git-ignored. Untrack and privately ignore it before setup; nothing was written there.`,
-        });
-        expect(snapshot(file)).toEqual(before);
-        const paths = targetPaths(home, "project", cwd);
-        expect(existsSync(paths.config)).toBe(false);
-        expect(loadConfig(home, true)?.settingsTargets ?? []).toEqual([]);
-        expect(ensure).not.toHaveBeenCalled();
-        expect(loadConfig()).toBeUndefined();
-      }
-    },
-  );
   it("expanded slash commands preserve arguments, block the model, and never call auth", async () => {
     const expand = (name: string, args: string) =>
       readFileSync(

@@ -23,7 +23,6 @@ import { ensure, waitForStopped } from "./lifecycle.js";
 import { parseSetupArgs, parseDisableArgs, SetupError } from "./options.js";
 import {
   targetPaths,
-  secretGitCheck,
   routingTargets,
   routingSnapshot,
   unchangedRouting,
@@ -152,8 +151,6 @@ export async function enable(
   try {
     const p = targetPaths(home, requested.scope, cwd);
     directory(dirname(p.settings), true);
-    secretGitCheck(p.settings);
-    secretGitCheck(p.config);
     const beforeSettings = snapshot(p.settings);
     const { value, env: savedEnv } = settings(beforeSettings);
     if (value.disableAllHooks === true)
@@ -298,8 +295,6 @@ export async function enable(
       unchanged(p.config, currentConfig, true);
       for (const item of targets) unchangedRouting(item.path, item.saved);
       directory(dirname(p.settings));
-      secretGitCheck(p.settings);
-      secretGitCheck(p.config);
       const afterHeaders = keys.length ? headers! : withProxyKey(headers, config);
       savedEnv[BASE] = target;
       savedEnv[HEADERS] = afterHeaders;

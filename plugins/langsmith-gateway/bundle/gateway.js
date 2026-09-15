@@ -114,7 +114,7 @@ function transaction(writes) {
 // dist/proxy/config.js
 var ConfigError = class extends Error {
 };
-var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints; review LOCAL_PROXY.md privately. Do not paste secrets or delete/reset configuration.";
+var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
 var API_URL = "https://api.smith.langchain.com";
 var UPSTREAM = "https://gateway.smith.langchain.com";
 var KEY_HEADER = "x-langsmith-proxy-key";
@@ -849,7 +849,6 @@ import { spawn as spawn2 } from "node:child_process";
 // dist/proxy/scopes.js
 import { realpathSync as realpathSync2 } from "node:fs";
 import { dirname as dirname2, join as join4, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 function targetPaths(home, scope, cwd) {
   if (scope === "global")
     return {
@@ -867,33 +866,6 @@ function targetPaths(home, scope, cwd) {
     settings: settings2,
     config: join4(configDir(home), "config.json")
   };
-}
-function secretGitCheck(path) {
-  const cwd = dirname2(path);
-  const run = (args) => spawnSync("git", ["-C", cwd, ...args], {
-    encoding: "utf8",
-    timeout: 5e3,
-    env: {
-      PATH: process.env.PATH,
-      HOME: "/dev/null",
-      LC_ALL: "C",
-      GIT_CONFIG_NOSYSTEM: "1",
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_OPTIONAL_LOCKS: "0"
-    }
-  });
-  const repo = run(["rev-parse", "--is-inside-work-tree"]);
-  if (repo.error)
-    throw new SetupError("Cannot verify secrets are outside version control; git is required.");
-  if (repo.status !== 0) {
-    if (repo.status === 128 && repo.stderr.includes("not a git repository"))
-      return;
-    throw new SetupError("Cannot verify secret destination repository safety.");
-  }
-  const tracked = run(["ls-files", "--cached", "--", path]);
-  const ignored = run(["check-ignore", "--no-index", "--quiet", "--", path]);
-  if (tracked.status !== 0 || tracked.stdout.trim() || ignored.status !== 0)
-    throw new SetupError(`Secret destination ${JSON.stringify(path)} is tracked or not git-ignored. Untrack and privately ignore it before setup; nothing was written there.`);
 }
 var BASE = "ANTHROPIC_BASE_URL";
 var HEADERS = "ANTHROPIC_CUSTOM_HEADERS";
@@ -1133,8 +1105,6 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
   try {
     const p = targetPaths(home, requested.scope, cwd);
     directory(dirname3(p.settings), true);
-    secretGitCheck(p.settings);
-    secretGitCheck(p.config);
     const beforeSettings = snapshot(p.settings);
     const { value, env: savedEnv } = settings(beforeSettings);
     if (value.disableAllHooks === true)
@@ -1223,8 +1193,6 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       for (const item of targets)
         unchangedRouting(item.path, item.saved);
       directory(dirname3(p.settings));
-      secretGitCheck(p.settings);
-      secretGitCheck(p.config);
       const afterHeaders = keys.length ? headers : withProxyKey(headers, config);
       savedEnv[BASE] = target;
       savedEnv[HEADERS] = afterHeaders;

@@ -1,6 +1,5 @@
 import { realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { configDir, type ProxyConfig } from "./config.js";
 import { directory, snapshot } from "./files.js";
 import { SetupError, type SetupOptions } from "./options.js";
@@ -23,38 +22,6 @@ export function targetPaths(home: string, scope: SetupOptions["scope"], cwd: str
     settings,
     config: join(configDir(home), "config.json"),
   };
-}
-
-// Fail closed in repositories: ignored is not enough if already tracked. Never
-// modify .gitignore or stage files on the user's behalf.
-export function secretGitCheck(path: string): void {
-  const cwd = dirname(path);
-  const run = (args: string[]) =>
-    spawnSync("git", ["-C", cwd, ...args], {
-      encoding: "utf8",
-      timeout: 5000,
-      env: {
-        PATH: process.env.PATH,
-        HOME: "/dev/null",
-        LC_ALL: "C",
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_OPTIONAL_LOCKS: "0",
-      },
-    });
-  const repo = run(["rev-parse", "--is-inside-work-tree"]);
-  if (repo.error)
-    throw new SetupError("Cannot verify secrets are outside version control; git is required.");
-  if (repo.status !== 0) {
-    if (repo.status === 128 && repo.stderr.includes("not a git repository")) return;
-    throw new SetupError("Cannot verify secret destination repository safety.");
-  }
-  const tracked = run(["ls-files", "--cached", "--", path]);
-  const ignored = run(["check-ignore", "--no-index", "--quiet", "--", path]);
-  if (tracked.status !== 0 || tracked.stdout.trim() || ignored.status !== 0)
-    throw new SetupError(
-      `Secret destination ${JSON.stringify(path)} is tracked or not git-ignored. Untrack and privately ignore it before setup; nothing was written there.`,
-    );
 }
 
 export const BASE = "ANTHROPIC_BASE_URL";
