@@ -2,7 +2,7 @@
 
 A Claude Code plugin that traces conversations, tool calls, subagent executions, and context compaction to [LangSmith](https://smith.langchain.com).
 
-**Setting up the gateway?** Start with the required [LangSmith CLI installation and browser login](#langsmith-cli-prerequisite), then install and enable the separate `langsmith-gateway` plugin. The tracing plugin documented below does **not** require the LangSmith CLI and is optional when using the gateway.
+**Setting up the LangSmith Gateway?** Start with the required [LangSmith CLI installation and browser login](#langsmith-cli-prerequisite), then install and enable the separate `langsmith-gateway` plugin. The tracing plugin documented below does **not** require the LangSmith CLI and is optional when using the gateway.
 
 ![](./static/img/example_trace.png)
 
