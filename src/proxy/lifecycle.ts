@@ -92,7 +92,6 @@ export async function gatewayHook(
     // If no listener exists yet, lease expiry is the fallback (no persistent state).
     await control(config, "DELETE", `/_langsmith/sessions/${session}`);
   } else {
-
     await ensure(config, entry);
     await control(config, "PUT", `/_langsmith/sessions/${session}`);
   }

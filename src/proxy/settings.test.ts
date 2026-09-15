@@ -20,7 +20,6 @@ import { API_URL, UPSTREAM, configDir, loadConfig } from "./config.js";
 import { atomic, snapshot, transaction } from "./files.js";
 import { control, ensure, waitForStopped } from "./lifecycle.js";
 import { targetPaths, routingEnv, matchesRouting, BASE, HEADERS } from "./scopes.js";
-import { spawnSync } from "node:child_process";
 import { handleGatewayInput } from "./commands.js";
 import { identity } from "./server.js";
 import * as setupModule from "./setup.js";

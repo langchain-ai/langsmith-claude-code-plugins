@@ -164,8 +164,9 @@ Never put LangSmith tokens or the local proxy key in those auth settings.
 
 ## Session recovery and disabling
 
-Hooks recover the daemon for enabled, configured scopes at session start and on
-prompts. Session leases expire after 30 minutes without renewal; the daemon exits
+Hooks recover the daemon at session start and on prompts whenever the private
+config is enabled, even if that session does not use gateway routing. Session leases
+expire after 30 minutes without renewal; the daemon exits
 after 60 seconds with no leases or active work. The next session/prompt restarts it.
 Background requests before recovery may fail; transport errors have **no direct fallback**.
 
@@ -197,7 +198,7 @@ IT installs the software, deploys organization policy through Claude Code's
 **managed settings**, and provisions the gateway's per-account files. **The user
 signs in with their own account; IT does not provision or distribute OAuth tokens.**
 
-### Managed settings and current gateway support
+### Managed settings
 
 Deliver organization policy through a `managed-settings.json` file, an MDM policy,
 or server-managed settings from the claude.ai console. Managed keys take precedence
@@ -209,19 +210,10 @@ For model policy, `model` sets the session's starting model; it does **not** loc
 model selection. Use `availableModels` to constrain `/model`, `--model`, and the
 `model` key in user settings.
 
-**Managed-only gateway routing is not supported by this plugin yet.** Startup hooks
-look for matching routing in user/project settings files; they do not read managed
-settings or use inherited routing environment variables for that check. Status and
-scope discovery also do not inspect managed policy. Deploying only managed
-`ANTHROPIC_BASE_URL` and `ANTHROPIC_CUSTOM_HEADERS` will not automatically start
-the daemon.
-
-The checklist below therefore provisions the currently supported user/project
-routing files alongside any managed organization policy. This is **not an enforced
-routing policy**: the gateway config and these routing files remain user-owned.
-MDM can deploy those files, but that is distinct from Claude Code's managed tier.
-Do not deploy conflicting managed routing values. Managed-only gateway provisioning
-requires lifecycle support in the plugin before it can replace this checklist.
+Claude Code resolves managed routing. The plugin starts the local daemon whenever
+its private config is enabled; it does not parse managed policy or require duplicate
+routing in user/project files. The private config remains user-owned: managed
+routing does not make the daemon tamper-proof or prevent a user from disabling it.
 
 ### IT admin checklist
 
@@ -313,16 +305,11 @@ writers are running.
    that native Claude login is also required; see [credential forwarding](#consent-credentials-and-models).
    The local key is required in either mode and is not a LangSmith OAuth token.
 
-4. **Provision the gateway's user/project routing files.** These files support
-   automatic startup without `/langsmith-gateway:setup`; they are not managed
-   settings. Choose one destination:
-
-   - Global: `~/.claude/settings.json`.
-   - Project: `.claude/settings.local.json` under the canonical project directory.
-
-   Merge these fields into the existing settings rather than replacing the file.
-   Use the same port and local key as the private config. Preserve unrelated env
-   fields and custom header lines:
+4. **Deploy routing through managed settings.** Use your organization's
+   `managed-settings.json`, MDM policy, or server-managed settings from the claude.ai
+   console. Add the following to the managed settings payload, preserving unrelated
+   fields and custom header lines. The port and key must match the target account's
+   private proxy config:
 
    ```json
    {
@@ -333,34 +320,21 @@ writers are running.
    }
    ```
 
-   Resolve conflicting auth/transport overrides before proceeding. If a managed
-   policy sets these keys, changes here cannot override it; IT must change the
-   policy. `/langsmith-gateway:disable` cannot remove managed routing and may stop
-   the local daemon while that policy still points Claude at it.
+   This payload contains a local bearer secret. Use a delivery mechanism that can
+   target the account with its matching key and protect that value; do not publish
+   one shared key in organization-wide policy or source control. If your managed
+   source cannot deliver account-specific secrets, do not use it to distribute this
+   header. No copy in `~/.claude/settings.json` or project settings is required.
 
-   Make the settings file account-owned with mode `0600`; parent directories must be
-   account-owned, not writable by other users, and not symlinks. Keep both
-   credential-bearing files untracked and git-ignored; never commit them.
+   Resolve conflicting auth/transport policy before rollout. To remove routing,
+   IT must remove these managed values, restart affected sessions, and set the
+   private config's `enabled` to `false` to stop the daemon. Do not use
+   `/langsmith-gateway:disable` for managed policy: it only edits user/project
+   settings and may stop the daemon while managed routing still points at it.
 
-5. **Register project scopes when provisioning more than one.** Add optional
-   `settingsTargets` to the private config, listing the canonical absolute paths
-   of the provisioned settings files (up to 128):
-
-   ```json
-   "settingsTargets": [
-     "/Users/alice/work/project-a/.claude/settings.local.json",
-     "/Users/alice/work/project-b/.claude/settings.local.json"
-   ]
-   ```
-
-   Commands inspect this list plus global/current-project settings before disable
-   or mode changes. Unlisted projects outside the current directory cannot be
-   discovered, so commands may interrupt them by assuming no other scope is active.
-   The list supports discovery, not authorization.
-
-6. **Hand off to the user.** Confirm that the plugin is enabled, file ownership and
-   permissions are correct, and both files contain the same local key and port.
-   Give the user the configured scope, forwarding mode, and the
+5. **Hand off to the user.** Confirm that the plugin is enabled, private-file
+   ownership and permissions are correct, and managed routing uses the matching
+   local key and port. Give the user the forwarding mode and the
    sign-in instructions below. Tell them that the gateway receives unredacted
    conversation/tool content independently of tracing settings. **Do not run login
    as the administrator or copy an administrator's CLI credential store.**
@@ -381,18 +355,21 @@ shown above:
    CLI's store; do not paste tokens into Claude or settings. If IT enabled native
    subscription forwarding, native Claude login is also required.
 
-2. **Open a new Claude Code session** in the configured scope. Hooks start the
-   daemon automatically; do not run setup. Check local readiness with:
+2. **Open a new Claude Code session** with the managed policy applied. Hooks start
+   the daemon automatically; do not run setup. Check local readiness with:
 
    ```text
    /langsmith-gateway:status
    ```
 
-3. **Send a model request** to test upstream authentication. Status checks saved
-   routing and local health, not login or live session routing. If the request
-   fails, see [troubleshooting](#safety-and-troubleshooting) or contact IT. To undo
-   routing, follow [disable instructions](#session-recovery-and-disabling) and
-   restart affected sessions.
+   Status reports private config and daemon health, but its routing-file checks
+   cover only user/project settings. An unconfigured routing-file result is expected
+   when routing comes exclusively from managed policy.
+
+3. **Send a model request** to test upstream authentication. Status does not check
+   login or live session routing. If the request fails, see [troubleshooting](#safety-and-troubleshooting)
+   or contact IT. Ask IT to change or remove managed routing; local setup/disable
+   commands do not override organization policy.
 
 ### Advanced: pinning a CLI profile
 
