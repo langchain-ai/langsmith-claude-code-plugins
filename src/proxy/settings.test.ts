@@ -24,6 +24,7 @@ import { spawnSync } from "node:child_process";
 import { handleGatewayInput } from "./commands.js";
 import { identity } from "./server.js";
 import * as setupModule from "./setup.js";
+import { cliToken } from "./token.js";
 
 vi.mock("node:os", async (original) => ({
   ...(await original<typeof import("node:os")>()),
@@ -70,6 +71,103 @@ afterEach(() => {
 });
 
 describe("consented user transport setup (OS-home isolated, no real CLI/network)", () => {
+  it.each([undefined, "claude-gateway"])(
+    "preserves omitted/explicit profile %j through setup, disable and re-enable",
+    async (profile) => {
+      const options = ["--scope", "global", "--cli", process.execPath];
+      if (profile !== undefined) options.push("--profile", profile);
+      await enable("/fake", options, { LANGSMITH_PROFILE: "untrusted" });
+      const original = loadConfig()!;
+      expect(original.profile).toBe(profile);
+      const path = join(configDir(home), "config.json");
+      expect(Object.hasOwn(json(path), "profile")).toBe(profile !== undefined);
+      await enable("/fake", ["--scope", "global"], {});
+      expect(loadConfig()).toEqual(original);
+      disable(["--scope", "global"], {});
+      expect(loadConfig(home, true)?.profile).toBe(profile);
+      await enable("/fake", ["--scope", "global"], {});
+      expect(loadConfig()).toEqual(original);
+      await expect(
+        enable("/fake", ["--scope", "global", "--profile", "changed"], {}),
+      ).rejects.toThrow("disable first");
+      disable(["--scope", "global"], {});
+      await enable("/fake", ["--scope", "global", "--profile", "changed"], {});
+      expect(loadConfig()).toEqual({ ...original, profile: "changed" });
+    },
+  );
+  it.each([
+    { current: "selected", profile: undefined, expected: "selected" },
+    { current: undefined, profile: undefined, expected: "default" },
+    { current: "selected", profile: "claude-gateway", expected: "claude-gateway" },
+    { current: "selected", profile: "explicit-new", expected: "explicit-new" },
+  ])(
+    "delegates token selection to an isolated CLI config fixture %j",
+    async ({ current, profile, expected }) => {
+      const cli = join(home, "fake-cli.cjs");
+      const captured = join(home, "captured.json");
+      const profiles = Object.fromEntries(
+        ["selected", "default", "claude-gateway", "explicit-new"].map((name) => [
+          name,
+          { oauth: { access_token: `e30.${Buffer.from(name).toString("base64url")}.signature` } },
+        ]),
+      );
+      mkdirSync(join(home, ".langsmith"), { mode: 0o700 });
+      writeFileSync(
+        join(home, ".langsmith/config.json"),
+        JSON.stringify({ current_profile: current, profiles }),
+        { mode: 0o600 },
+      );
+      // Fake CLI mirrors the sibling CLI's flag/env/current_profile/default resolution.
+      // Only this scratch config is read; no credentials, refresh or network access.
+      writeFileSync(
+        cli,
+        `#!${process.execPath}
+const fs = require("node:fs"), path = require("node:path");
+const args = process.argv.slice(2);
+const cfg = JSON.parse(fs.readFileSync(path.join(process.env.HOME, ".langsmith/config.json"), "utf8"));
+const index = args.indexOf("--profile");
+const name = index < 0 ? process.env.LANGSMITH_PROFILE || cfg.current_profile || "default" : args[index + 1];
+fs.writeFileSync(${JSON.stringify(captured)}, JSON.stringify({ args, env: process.env, name }));
+process.stdout.write(cfg.profiles[name].oauth.access_token);
+`,
+        { mode: 0o700 },
+      );
+      const options = ["--scope", "global", "--cli", cli];
+      if (profile !== undefined) options.push("--profile", profile);
+      await enable("/fake", options, {});
+      // Load saved config, rather than passing the setup arguments to token lookup.
+      const config = loadConfig()!;
+      for (const key of [
+        "LANGSMITH_PROFILE",
+        "LANGSMITH_CONFIG_FILE",
+        "LANGSMITH_ENDPOINT",
+        "LANGSMITH_API_KEY",
+        "NODE_OPTIONS",
+        "HTTPS_PROXY",
+      ])
+        vi.stubEnv(key, "untrusted");
+      try {
+        expect(await cliToken(config)).toBe(profiles[expected].oauth.access_token);
+        const recorded = json(captured);
+        // macOS may add this runtime variable after spawn; no CLI overrides are allowed.
+        delete recorded.env.__CF_USER_TEXT_ENCODING;
+        expect(recorded).toEqual({
+          args: [
+            ...(profile === undefined ? [] : ["--profile", profile]),
+            "--api-url",
+            API_URL,
+            "--format=pretty",
+            "auth",
+            "token",
+          ],
+          env: { HOME: home, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
+          name: expected,
+        });
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
   it("validates named scope before any filesystem or daemon effects", async () => {
     await expect(enable("/fake", [], {})).rejects.toThrow("within Claude Code");
     expect(() => disable([], {})).toThrow("within Claude Code");

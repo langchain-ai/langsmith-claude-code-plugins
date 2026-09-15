@@ -34,7 +34,7 @@ import {
   loadConfig,
   type ProxyConfig,
 } from "./config.js";
-import { cliToken, TokenCache } from "./token.js";
+import { cliToken, loginGuidance, TokenCache } from "./token.js";
 import { control, ensure, gatewayHook, waitForStopped } from "./lifecycle.js";
 import { createConfig } from "./setup.js";
 
@@ -1164,6 +1164,39 @@ describe("shared lifecycle and explicit configuration", () => {
     );
     await gatewayHook("SessionStart", "one", "/not-an-entry", home);
     expect(loadConfig(home)).toBeUndefined();
+  });
+  it.each([null, "", 1, true, {}, [], "bad profile", "a".repeat(129)])(
+    "rejects invalid optional profiles %j during creation and loading, even disabled",
+    (profile) => {
+      const home = temporary();
+      expect(() => createConfig(process.execPath, profile as string, 19991, home)).toThrow(
+        "Invalid setup arguments",
+      );
+      mkdirSync(configDir(home), { recursive: true, mode: 0o700 });
+      for (const enabled of [true, false]) {
+        writeFileSync(
+          join(configDir(home), "config.json"),
+          JSON.stringify({ ...base, enabled, profile }),
+          { mode: 0o600 },
+        );
+        for (const includeDisabled of [true, false])
+          expect(() => loadConfig(home, includeDisabled)).toThrow("Invalid proxy configuration");
+      }
+    },
+  );
+  it("fingerprints omitted profiles consistently without reusing explicit-profile daemons", () => {
+    const { profile: _profile, ...config } = base;
+    expect(identity(config)).toBe(identity({ ...config, profile: undefined }));
+    expect(identity(config)).toBe(identity(JSON.parse(JSON.stringify(config))));
+    expect(identity(config)).not.toBe(identity(base));
+    expect(identity(config)).not.toBe(identity({ ...base, profile: "claude-gateway" }));
+  });
+  it("omits the profile flag from default-profile login diagnostics", () => {
+    const guidance = loginGuidance({ ...base, profile: undefined });
+    expect(guidance).toContain(`with: --api-url ${API_URL} auth login.`);
+    expect(guidance).not.toContain("undefined");
+    expect(guidance).not.toContain("--profile undefined");
+    expect(guidance).toContain("saved OAuth issuer");
   });
   it("internal config creation produces private explicit config without overwriting or exposing secrets", () => {
     const home = temporary();

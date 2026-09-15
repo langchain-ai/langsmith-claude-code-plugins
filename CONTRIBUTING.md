@@ -58,7 +58,10 @@ Gateway source map:
   forwarding by flag presence; ordinary hooks preserve the saved mode.
 - `lifecycle.ts`, `server.ts`, `token.ts`: daemon identity, leases/draining, request
   forwarding, and request-time OAuth caching. Mode changes drain/restart the daemon;
-  authentication is deferred until model use.
+  authentication is deferred until model use. New setup without `--profile` saves
+  no profile, letting the CLI use its persisted current/default selection; existing
+  explicit profiles are retained. Keep token subprocess environment sanitization
+  (`LANGSMITH_PROFILE` is not inherited) and configured `--api-url` pinning intact.
 - `status.ts`: read-only disk routing/config reporting and bounded loopback health.
 
 See [LOCAL_PROXY.md](./LOCAL_PROXY.md) for setup, schema, scope limits, and recovery,

@@ -37,8 +37,13 @@ Signed-out Claude Code compatibility is not established.
    produces terminal guidance.
 
    New configs use API `https://api.smith.langchain.com`, gateway
-   `https://gateway.smith.langchain.com`, profile `claude-gateway`, port `52507`,
+   `https://gateway.smith.langchain.com`, the CLI default/current profile, port `52507`,
    and OAuth-only auth. Existing configs retain their CLI/profile/URLs/port.
+   Without `--profile`, new setups save no profile and token lookup uses the CLI’s
+   persisted `current_profile`, falling back to `default` when none is selected.
+   `LANGSMITH_PROFILE` and other CLI environment overrides are intentionally stripped,
+   not captured from the setup process; pin `--profile name` if needed. Omission on
+   existing setups (even disabled ones) preserves any saved explicit profile.
    All active scopes share one daemon and must use identical options and mode.
 
 3. **Continue using Claude Code.** If routing does not update, see [troubleshooting](#safety-and-troubleshooting).
@@ -54,7 +59,7 @@ authenticated loopback health check. `--scope global|project` selects one routin
 target. Status is read-only; it does not start the daemon or check upstream auth.
 Disk routing and saved mode do not verify live session routing or subscription
 validity. Other projects may use the daemon, and disabled config may briefly have
-a draining listener; “not reachable or incompatible” is not proof it stopped.
+a draining listener; "not reachable or incompatible" is not proof it stopped.
 
 ## Optional subscription forwarding and mode switching
 
@@ -79,16 +84,17 @@ a failed opt-out does not restore credential forwarding.
 
 ## Alternate API and gateway hosts
 
-Inside Claude Code, use a dedicated OAuth profile matching your trusted API and
-supply both endpoint flags together (replace these placeholder hosts):
+Inside Claude Code, supply both endpoint flags together and use an OAuth profile
+matching your trusted API. You can optionally specify an explicit auth profile:
 
 ```text
 /langsmith-gateway:setup --scope project --profile alternate-gateway --api-url https://api.example.com --gateway-url https://gateway.example.com
 ```
 
 Use only trusted destinations and follow login guidance for the selected profile
-and API. **`--api-url` does not change a saved OAuth issuer.** Review the dedicated
-profile's issuer privately before login or refresh; changing a production profile's
+and API. The proxy always passes its configured `--api-url`, overriding the CLI
+profile’s saved API URL. **`--api-url` does not change a saved OAuth issuer.** Review
+the selected profile’s issuer privately before login or refresh; changing a production profile's
 API URL alone does not safely retarget it.
 
 - Both URL flags are required together. Omitting both retains saved destinations,
@@ -103,7 +109,7 @@ API URL alone does not safely retarget it.
   slash command accepts explicit flags:
 
   ```text
-  /langsmith-gateway:setup --scope project --cli /absolute/path/to/langsmith --profile profile --port 52507
+  /langsmith-gateway:setup --scope project --cli /absolute/path/to/langsmith --port 52507
   ```
 
   Local ports must be 1024–65535. The examples above cover all setup options;
@@ -119,10 +125,12 @@ To change pinned endpoints/profile/CLI/port:
 On a port conflict, wait and retry without killing unknown listeners or deleting
 private config. Startup failure leaves the selected config disabled.
 
-To restore production, follow the same disable, stop sessions, and drain procedure and explicitly run:
+To restore production, follow the same disable, stop sessions, and drain procedure.
+If you pinned an alternate profile, explicitly select your matching production
+profile (replace `production-profile`; omitting the flag retains the saved profile):
 
 ```text
-/langsmith-gateway:setup --scope project --profile claude-gateway --api-url https://api.smith.langchain.com --gateway-url https://gateway.smith.langchain.com
+/langsmith-gateway:setup --scope project --profile production-profile --api-url https://api.smith.langchain.com --gateway-url https://gateway.smith.langchain.com
 ```
 
 Complete matching terminal login if requested before resuming gateway requests.
@@ -198,13 +206,15 @@ regular, single-link `config.json` must be `0600` (no symlinks). Example schema
   "enabled": true,
   "useClaudeSubscription": false,
   "cli": "/absolute/canonical/path/to/langsmith",
-  "profile": "claude-gateway",
   "port": 52507,
   "secret": "<unique per-account random 32 bytes encoded as 64 lowercase hex characters>",
   "apiUrl": "https://api.smith.langchain.com",
   "gatewayUrl": "https://gateway.smith.langchain.com"
 }
 ```
+
+`profile` is optional: omit it for CLI default/current selection, or set it to an
+explicit name (1–128 letters, digits, `_`, `.`, or `-`). Null/empty values are invalid.
 
 Both booleans are required, including when disabled (`enabled: false`); retain the
 other fields for re-enable. Both endpoints may be omitted together for production

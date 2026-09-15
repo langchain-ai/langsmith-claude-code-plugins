@@ -172,10 +172,13 @@ session controls; only the bounded loopback health probe is allowed.
   subscription opt-in parsing.
 - `src/proxy/settings.test.ts`: private writes, conflicts/concurrent edits,
   provisioning and multi-scope discovery, mode/destination changes, and recovery.
+  Cover new setup without `--profile`, persisted CLI current/default selection via
+  a scratch fake CLI, explicit saved/new profiles, and stripped environment overrides.
   Disable removes matching values without restoring old ones; failed opt-out stays
   disabled. Setup must remain independent of Git availability/tracking/ignore state.
 - `src/proxy/status.test.ts`: read-only status across config, routing drift, unsafe
-  paths, and matching/offline/incompatible/draining listeners.
+  paths, and matching/offline/incompatible/draining listeners, including the
+  CLI default/current profile label when no profile is saved.
 - `src/proxy/proxy.test.ts`: auth/header isolation in both modes, model routing and
   token counting, SSE/cancellation, daemon recovery, and request-time token caching.
 - `src/proxy/polling.test.ts`: config changes trigger drain and cancel credential work.

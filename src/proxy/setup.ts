@@ -17,7 +17,7 @@ export function validateCLI(cli: string): string {
 // Internal config creation for consented enable; not a runtime subcommand.
 export function createConfig(
   cli: string,
-  profile: string,
+  profile: string | undefined,
   port: number,
   home = userHome(),
   urls: { apiUrl?: string; gatewayUrl?: string } = {},
@@ -26,7 +26,8 @@ export function createConfig(
   if (
     typeof useClaudeSubscription !== "boolean" ||
     !isAbsolute(cli) ||
-    !/^[a-zA-Z0-9_.-]{1,128}$/.test(profile) ||
+    (profile !== undefined &&
+      (typeof profile !== "string" || !/^[a-zA-Z0-9_.-]{1,128}$/.test(profile))) ||
     !Number.isInteger(port) ||
     port < 1024 ||
     port > 65535
