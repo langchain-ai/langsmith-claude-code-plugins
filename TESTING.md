@@ -164,46 +164,24 @@ guards effects, rather than smoke-running the bundle against real user config.
 Status tests additionally forbid writes, credential reads, subprocesses and
 session controls; only the bounded loopback health probe is allowed.
 
-### Offline scenarios
+### Focused suites
 
-- **Packaging/commands:** independent marketplace packages and bundles; standalone
-  loading; deterministic setup/disable/status through hook stdin for both scopes;
-  disabled hooks/daemon no-op. Unsupported argv and malformed slash options reject
-  before I/O, subprocesses or token acquisition.
-- **Status/config:** missing, enabled and retained-disabled full schemas; explicit
-  mode, receipt-free provisioning, scoped disk drift, unsafe paths and sanitized
-  errors. Matching, offline, incompatible, timed-out and draining listeners never
-  establish live client routing, authentication or subscription validity.
-- **Subscription mode:** presence selects true, omission false on every setup;
-  invalid/duplicate flags reject, hooks retain saved booleans. Fingerprints and
-  polling drain; sole-target switching with stable settings/key; multi-scope and
-  altered-routing refusal; opt-out stays disabled on drain/readiness failure and
-  retries safely. Credential children cancel before listener release.
-- **Proxy:** local/native auth validation and adversarial header stripping;
-  OAuth-only without native auth; LS Bearer and opt-in native passthrough; model
-  normalization/overrides, JSON framing, malformed/oversized/compressed rejection
-  before refresh, Anthropic count-token mapping and local 501 for other providers,
-  unified routes, SSE in both modes and cancellation.
-- **Lifecycle/tokens:** leases, exclusive bind/recovery, incompatible identities,
-  cache expiry/singleflight/timeout, sanitized profile/API login guidance and
-  health/register-only hooks. Authentication starts on the first model request.
-- **Settings:** global/multi-project disk matching, ignored receipts, setup independent
-  of Git tracking/ignore status or availability, private atomic writes/rollback,
-  exact headers, conflicts/links/modes,
-  idempotence, readiness failures and later/concurrent edits. Disable removes only
-  matching values without restoration and instructs affected sessions to restart.
-  Same-session re-enable preserves retained keys and disk headers without copying
-  inherited secrets or promising live reload; unknown/mutated/duplicate keys,
-  changed headers, missing config and base/port conflicts refuse without effects.
-  Ordinary hooks cannot re-enable disabled routing.
-- **Destinations:** strict paired HTTPS origins, named options, production defaults,
-  endpoint identity and CLI API selection, HTTPS host/port on every route, no
-  redirects/fallback, disable-first replacement, old-work drain and occupied-port
-  refusal; startup failure retains disabled selected destinations.
+- `src/packaging.test.ts`: independent bundles, standalone loading, and packaged
+  setup/disable/status hooks; reject unsupported commands before side effects.
+- `src/proxy/options.test.ts`: named options, paired HTTPS origins, and explicit
+  subscription opt-in parsing.
+- `src/proxy/settings.test.ts`: private writes, conflicts/concurrent edits,
+  provisioning and multi-scope discovery, mode/destination changes, and recovery.
+  Disable removes matching values without restoring old ones; failed opt-out stays
+  disabled. Setup must remain independent of Git availability/tracking/ignore state.
+- `src/proxy/status.test.ts`: read-only status across config, routing drift, unsafe
+  paths, and matching/offline/incompatible/draining listeners.
+- `src/proxy/proxy.test.ts`: auth/header isolation in both modes, model routing and
+  token counting, SSE/cancellation, daemon recovery, and request-time token caching.
+- `src/proxy/polling.test.ts`: config changes trigger drain and cancel credential work.
 
-Healthy setup is local-only (no eager auth wait); cold readiness allows 4 seconds,
-re-enable drain up to 36 seconds, and first-use token acquisition up to 10 seconds
-plus upstream latency. Filesystem overhead prevents a total latency guarantee.
+Timing budgets: cold readiness 4 seconds, re-enable drain up to 36 seconds, and
+first-use token acquisition up to 10 seconds plus upstream latency.
 
 For manual preview testing, retain the nested gateway `--plugin-dir` on every
 session/restart, choose a settings scope, and disable all active scopes before

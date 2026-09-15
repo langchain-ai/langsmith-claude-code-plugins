@@ -40,46 +40,29 @@ tool run. See [TESTING.md](./TESTING.md) for testing guidance.
 
 ## Separate experimental gateway package
 
-The marketplace retains `langsmith-tracing` at source `./` with its root manifest,
-hooks, bundles and commands. `langsmith-gateway` installs separately from source
-`./plugins/langsmith-gateway`, with its own `.claude-plugin/plugin.json` (experimental
-`0.1.0`), `hooks/hooks.json`, `commands/setup.md`, `commands/disable.md`, `commands/status.md`, and `bundle/gateway.js`.
-Explicit `/langsmith-gateway:setup --scope global|project` and scoped disable
-are consumed by the supported UserPromptSubmit hook before config checks, then
-return `decision: "block"`, following tracing mute/unmute. Read-only
-`/langsmith-gateway:status` follows the same protocol before disabled checks,
-reporting both routing targets and shared config without setup/lease/auth effects. Invocation authorizes
-changes; markdown is a non-executing fallback, not an LLM tool workflow. The
-packaged executable accepts only hook stdin or the exact internal daemon mode,
-validated before I/O. Runtime management tests use packaged slash-command hooks;
-unit tests call safe functions with actual named arguments. There is no terminal
-management interface.
-There is no Claude launch wrapper or config-only setup subcommand. Settings/secret manipulation belongs only in the
-deterministic runtime. Setup supports
-paired `--api-url`/`--gateway-url` HTTPS origins and optional `--profile`; endpoint/profile
-changes require disabling every active scope then re-enabling, which waits for the old daemon to drain.
-The presence-only `--use-claude-subscription` flag selects true; omission selects
-false on every explicit setup, including re-enable. Only named options are
-accepted; boolean values, bare arguments and duplicate/unknown flags are rejected
-before writes. Configs require explicit enabled and forwarding booleans plus the
-full retained schema even when disabled. Unsupported older configs need a private
-one-time update, not a reset; see LOCAL_PROXY.md. Hooks keep the saved mode unchanged;
-no repeated setup or flag is needed each session. A sole known active
-configured scope may switch only this mode in place with drain/restart and unchanged
-transport; multiple scopes must disable other targets first. Mode is in
-daemon identity. Ownership/backup/restore records are not used. Optional
-`settingsTargets` paths in the existing private config support discovery of other
-scopes for disable/mode-change decisions, not authorization. Hooks are read-only
-and support provisioned config + settings without setup or index membership.
-See LOCAL_PROXY.md for unknown-project discovery limits. Shared source stays in
-`src/proxy/` and `src/hooks/gateway.ts`. The nested `package.json` declares ESM mode
-only, with no runtime dependencies or version to synchronize. The distributable
-must load with Node 20 without the repository root or `node_modules`.
+`langsmith-tracing` installs from `./`; `langsmith-gateway` installs from
+`./plugins/langsmith-gateway` with its own manifest, hooks, commands, and bundle.
+The nested ESM package must run on Node 20 without the repository root or
+`node_modules`. Use the nested directory as `--plugin-dir` for gateway development;
+the root loads tracing only.
 
-For compatibility requirements and the Claude Code setup workflow, see
-[LOCAL_PROXY.md](./LOCAL_PROXY.md). Use the nested gateway directory as its
-`--plugin-dir`; the repository root loads tracing only. Installing tracing alone
-never runs gateway hooks.
+Gateway source map:
+
+- `src/hooks/gateway.ts` and `src/proxy/commands.ts`: consume setup/disable/status
+  in UserPromptSubmit before config checks and return `decision: "block"`.
+  Commands run deterministically; command markdown is a non-executing fallback.
+  The executable accepts hook stdin or internal daemon mode, validated before I/O.
+- `options.ts`, `config.ts`, `settings.ts`, `scopes.ts`, `files.ts`: validate options
+  and private config, write settings safely, and discover shared routing scopes.
+  `settingsTargets` is a discovery index, not authorization. Explicit setup selects
+  forwarding by flag presence; ordinary hooks preserve the saved mode.
+- `lifecycle.ts`, `server.ts`, `token.ts`: daemon identity, leases/draining, request
+  forwarding, and request-time OAuth caching. Mode changes drain/restart the daemon;
+  authentication is deferred until model use.
+- `status.ts`: read-only disk routing/config reporting and bounded loopback health.
+
+See [LOCAL_PROXY.md](./LOCAL_PROXY.md) for setup, schema, scope limits, and recovery,
+and [TESTING.md](./TESTING.md#experimental-gateway-tests) for the isolated test harness.
 
 ## The build → bundle directories relationship (important)
 
