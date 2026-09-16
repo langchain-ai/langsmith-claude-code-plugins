@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * PreCompact hook entry point.
  *
@@ -11,7 +10,6 @@ import { debug } from "../logger.js";
 import { atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
-import { runHookEntry } from "../utils/hook-entry.js";
 
 interface PreCompactHookInput {
   session_id: string;
@@ -22,7 +20,7 @@ interface PreCompactHookInput {
   custom_instructions: string;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: PreCompactHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -51,5 +49,3 @@ async function main(): Promise<void> {
 
   debug(`Recorded compaction start time for session ${input.session_id}`);
 }
-
-runHookEntry("PreCompact", main);

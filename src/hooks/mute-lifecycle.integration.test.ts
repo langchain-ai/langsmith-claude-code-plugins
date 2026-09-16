@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { HookEventName } from "../constants.js";
 import type { TracingMode, TracingState, TranscriptMessage } from "../types.js";
 import { tracingPolicyPath } from "../tracing-policy.js";
 
@@ -149,6 +150,17 @@ function reset(mode: TracingMode) {
   h.errors = [];
   h.beforePost = undefined;
 }
+const HOOK_EVENT_BY_NAME: Record<string, HookEventName> = {
+  prompt: "UserPromptSubmit",
+  pre: "PreToolUse",
+  post: "PostToolUse",
+  stop: "Stop",
+  agent: "SubagentStop",
+  precompact: "PreCompact",
+  postcompact: "PostCompact",
+  failure: "StopFailure",
+  end: "SessionEnd",
+};
 async function hook(name: string, extra: Record<string, unknown> = {}) {
   h.input = {
     session_id: "session",
@@ -164,37 +176,10 @@ async function hook(name: string, extra: Record<string, unknown> = {}) {
     ...extra,
   };
   vi.resetModules();
-  switch (name) {
-    case "prompt":
-      await import("./user-prompt-submit.js");
-      break;
-    case "pre":
-      await import("./pre-tool-use.js");
-      break;
-    case "post":
-      await import("./post-tool-use.js");
-      break;
-    case "stop":
-      await import("./stop.js");
-      break;
-    case "agent":
-      await import("./subagent-stop.js");
-      break;
-    case "precompact":
-      await import("./pre-compact.js");
-      break;
-    case "postcompact":
-      await import("./post-compact.js");
-      break;
-    case "failure":
-      await import("./stop-failure.js");
-      break;
-    case "end":
-      await import("./session-end.js");
-      break;
-  }
-  // Hooks are executable entrypoints, not exported functions. Their only timer
-  // is Stop's unchanged 200ms transcript flush delay.
+  const { HOOK_EVENTS } = await import("./registry.js");
+  await HOOK_EVENTS[HOOK_EVENT_BY_NAME[name]]();
+  // Awaiting the handler already covers Stop's unchanged 200ms transcript
+  // flush delay. The settle below lets the SDK's unawaited posts land.
   await new Promise((resolve) => setTimeout(resolve, name === "stop" ? 250 : 15));
 }
 function topology() {

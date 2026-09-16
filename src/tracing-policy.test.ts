@@ -444,8 +444,9 @@ describe("actual UserPromptSubmit command prefix", () => {
     });
     mocks.init.mockReturnValue(null);
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
-    await import("./hooks/user-prompt-submit.js");
-    await vi.waitFor(() => expect(output).toHaveBeenCalled(), { timeout: 4000 });
+    const { HOOK_EVENTS } = await import("./hooks/registry.js");
+    await HOOK_EVENTS.UserPromptSubmit();
+    expect(output).toHaveBeenCalled();
     expect(mocks.init).not.toHaveBeenCalled();
     expect(mocks.tracing).not.toHaveBeenCalled();
     expect(mocks.state).not.toHaveBeenCalled();
@@ -519,8 +520,9 @@ describe("actual UserPromptSubmit command prefix", () => {
       session_id: "session",
     });
     mocks.init.mockReturnValue(null);
-    await import("./hooks/user-prompt-submit.js");
-    await vi.waitFor(() => expect(mocks.init).toHaveBeenCalledWith(dir));
+    const { HOOK_EVENTS } = await import("./hooks/registry.js");
+    await HOOK_EVENTS.UserPromptSubmit();
+    expect(mocks.init).toHaveBeenCalledWith(dir);
     expect(mocks.links).not.toHaveBeenCalled();
   });
 
@@ -615,8 +617,9 @@ describe("actual UserPromptSubmit command prefix", () => {
     mocks.stdin.mockResolvedValue({ prompt: "/langsmith-tracing:mute with args", cwd: dir });
     mocks.init.mockReturnValue(null);
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
-    await import("./hooks/user-prompt-submit.js");
-    await vi.waitFor(() => expect(mocks.init).toHaveBeenCalledWith(dir));
+    const { HOOK_EVENTS } = await import("./hooks/registry.js");
+    await HOOK_EVENTS.UserPromptSubmit();
+    expect(mocks.init).toHaveBeenCalledWith(dir);
     expect(mocks.config).not.toHaveBeenCalled();
     expect(output).not.toHaveBeenCalled();
     expect(existsSync(policy)).toBe(false);

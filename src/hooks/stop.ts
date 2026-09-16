@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Stop hook entry point.
  *
@@ -32,13 +31,12 @@ import {
 } from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
-import { runHookEntry } from "../utils/hook-entry.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { MUTED_TRACE_CONTENT } from "../privacy.js";
 import type { TaskRunEntry } from "../langsmith.js";
 import type { StopHookInput } from "../types.js";
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const startTime = Date.now();
 
   // Read hook input from stdin.
@@ -480,5 +478,3 @@ async function main(): Promise<void> {
     warn(`Hook took ${duration}s (>3min), consider optimizing`);
   }
 }
-
-runHookEntry("Stop", main);

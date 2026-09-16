@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * SessionEnd hook entry point.
  *
@@ -23,7 +22,6 @@ import {
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
-import { runHookEntry } from "../utils/hook-entry.js";
 import { readRuntimeVersion } from "../transcript.js";
 
 interface SessionEndHookInput {
@@ -34,7 +32,7 @@ interface SessionEndHookInput {
   reason: string;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: SessionEndHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -214,5 +212,3 @@ async function main(): Promise<void> {
 
   debug(`Session end cleanup complete (reason=${input.reason})`);
 }
-
-runHookEntry("SessionEnd", main);

@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * StopFailure hook entry point.
  *
@@ -15,7 +14,6 @@ import { initTracing, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
-import { runHookEntry } from "../utils/hook-entry.js";
 
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
 import { createRunTree } from "../privacy.js";
@@ -31,7 +29,7 @@ interface StopFailureHookInput {
   last_assistant_message?: string;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: StopFailureHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -115,5 +113,3 @@ async function main(): Promise<void> {
 
   await flushPendingTraces();
 }
-
-runHookEntry("StopFailure", main);

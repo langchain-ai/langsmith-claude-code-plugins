@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * PostToolUse hook entry point.
  *
@@ -19,7 +18,6 @@ import {
 } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
-import { runHookEntry } from "../utils/hook-entry.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
 import { createRunTree, runConfigForMode } from "../privacy.js";
 import { recordBackgroundRun } from "../background-runs.js";
@@ -39,7 +37,7 @@ interface PostToolUseHookInput {
   agent_type?: string;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: PostToolUseHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -281,5 +279,3 @@ async function main(): Promise<void> {
     await flushPendingTraces();
   }
 }
-
-runHookEntry("PostToolUse", main);
