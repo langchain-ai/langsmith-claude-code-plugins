@@ -1,5 +1,5 @@
 /**
- * UserPromptSubmit hook entry point.
+ * UserPromptSubmit hook handler.
  *
  * Invoked when a user submits a prompt, before Claude processes it.
  * Creates the initial RunTree for the turn and stores the run ID

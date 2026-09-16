@@ -1,5 +1,5 @@
 /**
- * SessionEnd hook entry point.
+ * SessionEnd hook handler.
  *
  * Fires when a Claude Code session ends (user exits, /clear, /resume, etc.).
  * If the session was interrupted (Stop never fired for the last turn), closes
