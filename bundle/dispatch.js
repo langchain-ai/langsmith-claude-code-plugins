@@ -16369,7 +16369,7 @@ async function main9() {
 }
 
 // dist/hooks/registry.js
-var HOOK_EVENTS = {
+var HOOK_HANDLERS = {
   UserPromptSubmit: main9,
   PreToolUse: main4,
   PostToolUse: main2,
@@ -16385,7 +16385,8 @@ var HOOK_EVENTS = {
 var argument = process.argv[2];
 var event = HOOK_EVENT_NAMES.find((name) => name === argument);
 if (event) {
-  runHookEntry(event, HOOK_EVENTS[event]);
+  runHookEntry(event, HOOK_HANDLERS[event]);
 } else {
+  initLogger(false);
   error(`Unknown hook event: ${argument ?? "(none)"}`);
 }

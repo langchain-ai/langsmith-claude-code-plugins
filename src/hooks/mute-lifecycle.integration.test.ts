@@ -150,7 +150,7 @@ function reset(mode: TracingMode) {
   h.errors = [];
   h.beforePost = undefined;
 }
-const HOOK_EVENT_BY_NAME: Record<string, HookEventName> = {
+const HOOK_EVENT_BY_NAME = {
   prompt: "UserPromptSubmit",
   pre: "PreToolUse",
   post: "PostToolUse",
@@ -160,8 +160,8 @@ const HOOK_EVENT_BY_NAME: Record<string, HookEventName> = {
   postcompact: "PostCompact",
   failure: "StopFailure",
   end: "SessionEnd",
-};
-async function hook(name: string, extra: Record<string, unknown> = {}) {
+} satisfies Record<string, HookEventName>;
+async function hook(name: keyof typeof HOOK_EVENT_BY_NAME, extra: Record<string, unknown> = {}) {
   h.input = {
     session_id: "session",
     cwd: "/repo",
@@ -176,11 +176,11 @@ async function hook(name: string, extra: Record<string, unknown> = {}) {
     ...extra,
   };
   vi.resetModules();
-  const { HOOK_EVENTS } = await import("./registry.js");
-  await HOOK_EVENTS[HOOK_EVENT_BY_NAME[name]]();
-  // Awaiting the handler already covers Stop's unchanged 200ms transcript
-  // flush delay. The settle below lets the SDK's unawaited posts land.
-  await new Promise((resolve) => setTimeout(resolve, name === "stop" ? 250 : 15));
+  const { HOOK_HANDLERS } = await import("./registry.js");
+  await HOOK_HANDLERS[HOOK_EVENT_BY_NAME[name]]();
+  // Awaiting the handler covers Stop's 200ms transcript flush, so this settle
+  // only has to let the SDK's unawaited posts land.
+  await new Promise((resolve) => setTimeout(resolve, 15));
 }
 function topology() {
   return h.operations.map(({ action, config: c }) => ({
