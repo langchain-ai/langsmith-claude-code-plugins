@@ -1,5 +1,5 @@
 /**
- * PreToolUse hook entry point.
+ * PreToolUse hook handler.
  *
  * Fires before a tool executes. Records the wall-clock start time so
  * PostToolUse can use an accurate start_time instead of Date.now()

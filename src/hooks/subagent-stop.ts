@@ -1,5 +1,5 @@
 /**
- * SubagentStop hook entry point.
+ * SubagentStop hook handler.
  *
  * Invoked when a Claude Code subagent finishes (including when aborted).
  *

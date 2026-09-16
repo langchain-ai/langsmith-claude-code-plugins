@@ -1,5 +1,5 @@
 /**
- * Stop hook entry point.
+ * Stop hook handler.
  *
  * Invoked by Claude Code when the main agent finishes responding.
  * Reads the transcript, identifies new messages since last run,

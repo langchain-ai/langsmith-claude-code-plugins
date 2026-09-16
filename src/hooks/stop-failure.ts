@@ -1,5 +1,5 @@
 /**
- * StopFailure hook entry point.
+ * StopFailure hook handler.
  *
  * Invoked when a turn ends due to an API error (rate limit, auth failure, etc.).
  * Closes out any open turn run in LangSmith with the error details so the

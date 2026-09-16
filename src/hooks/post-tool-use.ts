@@ -1,5 +1,5 @@
 /**
- * PostToolUse hook entry point.
+ * PostToolUse hook handler.
  *
  * Fires after a tool executes. For Task tools (subagent spawning), this
  * traces the tool call immediately and stores the run ID mapped to agent_id

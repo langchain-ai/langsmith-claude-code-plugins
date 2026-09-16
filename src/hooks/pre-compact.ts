@@ -1,5 +1,5 @@
 /**
- * PreCompact hook entry point.
+ * PreCompact hook handler.
  *
  * Fires before Claude Code runs a compact operation.
  * Records the start time so PostCompact can compute compaction duration.

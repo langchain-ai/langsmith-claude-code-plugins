@@ -1,5 +1,5 @@
 /**
- * PostCompact hook entry point.
+ * PostCompact hook handler.
  *
  * Fires after Claude Code completes a compact operation.
  * Creates a LangSmith run capturing the compaction event and summary.
