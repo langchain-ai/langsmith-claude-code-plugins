@@ -12,8 +12,4 @@ describe("HOOK_EVENT_NAMES", () => {
   it("lists every event hooks.json wires up, and no others", () => {
     expect([...HOOK_EVENT_NAMES].sort()).toEqual(Object.keys(manifest.hooks).sort());
   });
-
-  it("has no duplicates", () => {
-    expect(new Set(HOOK_EVENT_NAMES).size).toBe(HOOK_EVENT_NAMES.length);
-  });
 });
