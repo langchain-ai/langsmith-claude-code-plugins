@@ -9,13 +9,8 @@ import { main as stopFailure } from "./stop-failure.js";
 import { main as subagentStop } from "./subagent-stop.js";
 import { main as userPromptSubmit } from "./user-prompt-submit.js";
 
-/**
- * The handler for each lifecycle event.
- *
- * Typed as a complete `Record`, so adding an event to `HOOK_EVENT_NAMES`
- * without a handler here is a compile error.
- */
-export const HOOK_EVENTS: Record<HookEventName, () => Promise<void>> = {
+/** A complete `Record`, so a new `HOOK_EVENT_NAMES` entry without a handler fails to compile. */
+export const HOOK_HANDLERS: Record<HookEventName, () => Promise<void>> = {
   UserPromptSubmit: userPromptSubmit,
   PreToolUse: preToolUse,
   PostToolUse: postToolUse,

@@ -7,8 +7,7 @@ import { chmodSync, readFileSync } from "node:fs";
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"));
 
 await build({
-  // One entry for all nine events. dispatch.js runs the handler its argument
-  // names, so the LangSmith SDK is bundled once rather than once per hook.
+  // One entry bundles the LangSmith SDK once rather than once per hook.
   entryPoints: ["dist/hooks/dispatch.js"],
   bundle: true,
   platform: "node",
@@ -23,7 +22,6 @@ await build({
   },
 });
 
-// Make the dispatcher executable
 chmodSync("bundle/dispatch.js", 0o755);
 
 console.log("Bundled the tracing hook dispatcher into bundle/");

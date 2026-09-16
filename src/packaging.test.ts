@@ -40,7 +40,7 @@ function hookBundles(pluginRoot: string): string[] {
         expect(match, hook.command).not.toBeNull();
         // The dispatcher runs whichever event it is given, so a mislabelled
         // argument would quietly run the wrong hook.
-        if (match![2]) expect(match![2], hook.command).toBe(` ${event}`);
+        if (match![1] === "bundle/dispatch.js") expect(match![2], hook.command).toBe(` ${event}`);
         const path = resolve(pluginRoot, match![1]);
         expect(path.startsWith(resolve(pluginRoot) + sep)).toBe(true);
         expect(existsSync(path), path).toBe(true);

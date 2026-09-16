@@ -258,8 +258,8 @@ describe("initHook", () => {
           tool_input: { content: "PRIVATE_CONTENT_MUST_NOT_UPLOAD" },
           tool_response: "PRIVATE_CONTENT_MUST_NOT_UPLOAD",
         });
-        const { HOOK_EVENTS } = await import("./hooks/registry.js");
-        await HOOK_EVENTS[event]();
+        const { HOOK_HANDLERS } = await import("./hooks/registry.js");
+        await HOOK_HANDLERS[event]();
       }
       expect(readStdin).toHaveBeenCalledTimes(HOOK_EVENT_NAMES.length);
       expect(initTracing).not.toHaveBeenCalled();
@@ -296,8 +296,8 @@ describe("initHook", () => {
         prompt: "test prompt",
       });
       vi.resetModules();
-      const { HOOK_EVENTS } = await import("./hooks/registry.js");
-      await HOOK_EVENTS.UserPromptSubmit();
+      const { HOOK_HANDLERS } = await import("./hooks/registry.js");
+      await HOOK_HANDLERS.UserPromptSubmit();
       const { readFileSync, existsSync } = await import("node:fs");
       expect(existsSync(process.env.STATE_FILE!)).toBe(true);
       expect(

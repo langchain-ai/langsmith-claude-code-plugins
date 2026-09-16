@@ -7,16 +7,18 @@
  */
 
 import { HOOK_EVENT_NAMES } from "../constants.js";
-import { error } from "../logger.js";
+import { error, initLogger } from "../logger.js";
 import { runHookEntry } from "../utils/hook-entry.js";
-import { HOOK_EVENTS } from "./registry.js";
+import { HOOK_HANDLERS } from "./registry.js";
 
 const argument = process.argv[2];
 const event = HOOK_EVENT_NAMES.find((name) => name === argument);
 
 if (event) {
-  runHookEntry(event, HOOK_EVENTS[event]);
+  runHookEntry(event, HOOK_HANDLERS[event]);
 } else {
   // Only a bad hooks.json reaches this, so log it rather than failing the hook.
+  // No handler ran, so nothing has created the log directory yet.
+  initLogger(false);
   error(`Unknown hook event: ${argument ?? "(none)"}`);
 }
