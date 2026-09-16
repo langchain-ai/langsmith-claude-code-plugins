@@ -6,25 +6,14 @@ import { chmodSync, readFileSync } from "node:fs";
 // at runtime — esbuild `define` substitutes the literal into the bundle instead.
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"));
 
-const entryPoints = [
-  "dist/hooks/user-prompt-submit.js",
-  "dist/hooks/pre-tool-use.js",
-  "dist/hooks/post-tool-use.js",
-  "dist/hooks/stop.js",
-  "dist/hooks/stop-failure.js",
-  "dist/hooks/subagent-stop.js",
-  "dist/hooks/pre-compact.js",
-  "dist/hooks/post-compact.js",
-  "dist/hooks/session-end.js",
-];
-
 await build({
-  entryPoints,
+  // One entry for all nine events. dispatch.js runs the handler its argument
+  // names, so the LangSmith SDK is bundled once rather than once per hook.
+  entryPoints: ["dist/hooks/dispatch.js"],
   bundle: true,
   platform: "node",
   format: "esm",
   outdir: "bundle",
-  // tsc output already has shebangs; esbuild strips them during bundling
   // Mark node builtins as external (they're available at runtime)
   external: ["node:*"],
   define: {
@@ -34,13 +23,10 @@ await build({
   },
 });
 
-// Make hooks executable
-for (const entry of entryPoints) {
-  const filename = entry.split("/").pop();
-  chmodSync(`bundle/${filename}`, 0o755);
-}
+// Make the dispatcher executable
+chmodSync("bundle/dispatch.js", 0o755);
 
-console.log(`Bundled ${entryPoints.length} hooks into bundle/`);
+console.log("Bundled the tracing hook dispatcher into bundle/");
 
 // A separate installable plugin; all runtime code is bundled within its root.
 // Its package.json supplies ESM mode on Node 20 without the tracing package.

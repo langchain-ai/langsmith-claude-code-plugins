@@ -20,6 +20,7 @@ import { isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { HOOK_EVENT_NAMES } from "./constants.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const gatewayRoot = join(root, "plugins/langsmith-gateway");
@@ -29,12 +30,17 @@ type Hooks = Record<string, { hooks: { type: string; command: string }[] }[]>;
 
 function hookBundles(pluginRoot: string): string[] {
   const hooks: Hooks = json(join(pluginRoot, "hooks/hooks.json")).hooks;
-  return Object.values(hooks).flatMap((groups) =>
+  return Object.entries(hooks).flatMap(([event, groups]) =>
     groups.flatMap((group) =>
       group.hooks.map((hook) => {
         expect(hook.type).toBe("command");
-        const match = /^node "\$\{CLAUDE_PLUGIN_ROOT\}\/(bundle\/[^" ]+\.js)"$/.exec(hook.command);
+        const match = /^node "\$\{CLAUDE_PLUGIN_ROOT\}\/(bundle\/[^" ]+\.js)"( \S+)?$/.exec(
+          hook.command,
+        );
         expect(match, hook.command).not.toBeNull();
+        // The dispatcher runs whichever event it is given, so a mislabelled
+        // argument would quietly run the wrong hook.
+        if (match![2]) expect(match![2], hook.command).toBe(` ${event}`);
         const path = resolve(pluginRoot, match![1]);
         expect(path.startsWith(resolve(pluginRoot) + sep)).toBe(true);
         expect(existsSync(path), path).toBe(true);
@@ -60,7 +66,7 @@ describe("separate marketplace packages", () => {
       expect(manifest.name).toBe(entry.name);
       if (entry.name === "langsmith-tracing") {
         expect(manifest.version).toBe(json(join(root, "package.json")).version);
-        expect(hookBundles(pluginRoot)).not.toContain("bundle/gateway.js");
+        expect(hookBundles(pluginRoot)).toEqual(HOOK_EVENT_NAMES.map(() => "bundle/dispatch.js"));
         expect(existsSync(join(pluginRoot, "bundle/gateway.js"))).toBe(false);
       } else {
         expect(manifest.version).toBe("0.1.0");

@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * SubagentStop hook entry point.
  *
@@ -37,10 +36,9 @@ import { finalizeNotificationChain } from "../finalize.js";
 import { WORKFLOW_SUBAGENT_TYPE, handleWorkflowSubagentStop } from "../workflows.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
-import { runHookEntry } from "../utils/hook-entry.js";
 import type { SubagentStopHookInput, OpenTurn } from "../types.js";
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: SubagentStopHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -211,5 +209,3 @@ async function main(): Promise<void> {
 
   await flushPendingTraces();
 }
-
-runHookEntry("SubagentStop", main);

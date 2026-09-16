@@ -15,6 +15,7 @@ vi.mock("./logger.js", () => ({
   initLogger: vi.fn(),
 }));
 
+import { HOOK_EVENT_NAMES } from "./constants.js";
 import { initHook } from "./utils/hook-init.js";
 import { readStdin } from "./utils/stdin.js";
 import { initTracing } from "./langsmith.js";
@@ -245,20 +246,10 @@ describe("initHook", () => {
       vi.stubGlobal("fetch", fetch);
       expect(initHook(cwd)).toBeNull();
 
-      // Real hook entrypoints, with only stdin and the HTTP boundary replaced.
+      // Every real hook handler, with only stdin and the HTTP boundary replaced.
       // Assert the SDK is never initialized, covering primary and replica uploads
       // via POST /runs, PATCH /runs/:id, /runs/batch and /runs/multipart alike.
-      for (const runHook of [
-        () => import("./hooks/user-prompt-submit.js"),
-        () => import("./hooks/pre-tool-use.js"),
-        () => import("./hooks/post-tool-use.js"),
-        () => import("./hooks/pre-compact.js"),
-        () => import("./hooks/post-compact.js"),
-        () => import("./hooks/stop.js"),
-        () => import("./hooks/stop-failure.js"),
-        () => import("./hooks/subagent-stop.js"),
-        () => import("./hooks/session-end.js"),
-      ]) {
+      for (const event of HOOK_EVENT_NAMES) {
         vi.resetModules();
         vi.mocked(readStdin).mockResolvedValue({
           cwd,
@@ -267,10 +258,10 @@ describe("initHook", () => {
           tool_input: { content: "PRIVATE_CONTENT_MUST_NOT_UPLOAD" },
           tool_response: "PRIVATE_CONTENT_MUST_NOT_UPLOAD",
         });
-        await runHook();
-        await new Promise((resolve) => setImmediate(resolve));
+        const { HOOK_EVENTS } = await import("./hooks/registry.js");
+        await HOOK_EVENTS[event]();
       }
-      expect(readStdin).toHaveBeenCalledTimes(9);
+      expect(readStdin).toHaveBeenCalledTimes(HOOK_EVENT_NAMES.length);
       expect(initTracing).not.toHaveBeenCalled();
       expect(fetch).not.toHaveBeenCalled();
       expect(error).not.toHaveBeenCalled();
@@ -305,14 +296,13 @@ describe("initHook", () => {
         prompt: "test prompt",
       });
       vi.resetModules();
-      await import("./hooks/user-prompt-submit.js");
+      const { HOOK_EVENTS } = await import("./hooks/registry.js");
+      await HOOK_EVENTS.UserPromptSubmit();
       const { readFileSync, existsSync } = await import("node:fs");
-      await vi.waitFor(() => {
-        expect(existsSync(process.env.STATE_FILE!)).toBe(true);
-        expect(
-          JSON.parse(readFileSync(process.env.STATE_FILE!, "utf8"))["env-enabled"],
-        ).toMatchObject({ current_turn_tracing: "full" });
-      });
+      expect(existsSync(process.env.STATE_FILE!)).toBe(true);
+      expect(
+        JSON.parse(readFileSync(process.env.STATE_FILE!, "utf8"))["env-enabled"],
+      ).toMatchObject({ current_turn_tracing: "full" });
       expect(initTracing).toHaveBeenCalled();
       expect(post).toHaveBeenCalledOnce();
       expect(fetch).not.toHaveBeenCalled();

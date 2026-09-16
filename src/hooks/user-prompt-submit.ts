@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * UserPromptSubmit hook entry point.
  *
@@ -29,7 +28,6 @@ import {
 import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
-import { runHookEntry } from "../utils/hook-entry.js";
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
 import { codingAgentMetadata } from "../metadata.js";
 import { createRunTree } from "../privacy.js";
@@ -62,7 +60,7 @@ interface UserPromptSubmitHookInput {
  */
 const KILLED_NOTIFICATION_STATUS = "killed";
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const hookStartTime = Date.now();
   const input: UserPromptSubmitHookInput = await readStdin();
 
@@ -365,5 +363,3 @@ async function main(): Promise<void> {
   const duration = ((Date.now() - hookStartTime) / 1000).toFixed(1);
   debug(`UserPromptSubmit hook completed in ${duration}s`);
 }
-
-runHookEntry("UserPromptSubmit", main);

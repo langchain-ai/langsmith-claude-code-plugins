@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * PostCompact hook entry point.
  *
@@ -13,7 +12,6 @@ import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
-import { runHookEntry } from "../utils/hook-entry.js";
 import { createRunTree } from "../privacy.js";
 import { codingAgentMetadata } from "../metadata.js";
 
@@ -26,7 +24,7 @@ interface PostCompactHookInput {
   compact_summary: string;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: PostCompactHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -121,5 +119,3 @@ async function main(): Promise<void> {
     };
   });
 }
-
-runHookEntry("PostCompact", main);

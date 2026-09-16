@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * PreToolUse hook entry point.
  *
@@ -12,7 +11,6 @@ import { debug } from "../logger.js";
 import { atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
-import { runHookEntry } from "../utils/hook-entry.js";
 
 interface PreToolUseHookInput {
   session_id: string;
@@ -22,7 +20,7 @@ interface PreToolUseHookInput {
   tool_name: string;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: PreToolUseHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -56,5 +54,3 @@ async function main(): Promise<void> {
     };
   });
 }
-
-runHookEntry("PreToolUse", main);
