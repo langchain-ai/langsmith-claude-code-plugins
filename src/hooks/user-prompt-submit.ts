@@ -29,6 +29,7 @@ import {
 import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { runHookEntry } from "../utils/hook-entry.js";
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
 import { codingAgentMetadata } from "../metadata.js";
 import { createRunTree } from "../privacy.js";
@@ -365,11 +366,4 @@ async function main(): Promise<void> {
   debug(`UserPromptSubmit hook completed in ${duration}s`);
 }
 
-main().catch((err) => {
-  try {
-    error(`UserPromptSubmit hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0); // Always exit 0 so Claude Code isn't affected.
-});
+runHookEntry("UserPromptSubmit", main);

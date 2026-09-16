@@ -23,6 +23,7 @@ import {
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { runHookEntry } from "../utils/hook-entry.js";
 import { readRuntimeVersion } from "../transcript.js";
 
 interface SessionEndHookInput {
@@ -214,11 +215,4 @@ async function main(): Promise<void> {
   debug(`Session end cleanup complete (reason=${input.reason})`);
 }
 
-main().catch((err) => {
-  try {
-    error(`SessionEnd hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0);
-});
+runHookEntry("SessionEnd", main);

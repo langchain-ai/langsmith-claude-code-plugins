@@ -19,6 +19,7 @@ import {
 } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { runHookEntry } from "../utils/hook-entry.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
 import { createRunTree, runConfigForMode } from "../privacy.js";
 import { recordBackgroundRun } from "../background-runs.js";
@@ -281,11 +282,4 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  try {
-    error(`PostToolUse hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0); // Always exit 0 so Claude Code isn't affected.
-});
+runHookEntry("PostToolUse", main);

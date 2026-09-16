@@ -13963,6 +13963,17 @@ function readStdin() {
   });
 }
 
+// dist/utils/hook-entry.js
+function runHookEntry(event, main2) {
+  main2().catch((err) => {
+    try {
+      error(`${event} hook fatal error: ${err}`);
+    } catch {
+    }
+    process.exit(0);
+  });
+}
+
 // dist/hooks/stop-failure.js
 async function main() {
   const input = await readStdin();
@@ -14024,10 +14035,4 @@ async function main() {
   });
   await flushPendingTraces();
 }
-main().catch((err) => {
-  try {
-    error(`StopFailure hook fatal error: ${err}`);
-  } catch {
-  }
-  process.exit(0);
-});
+runHookEntry("StopFailure", main);

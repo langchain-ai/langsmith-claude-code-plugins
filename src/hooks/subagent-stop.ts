@@ -37,6 +37,7 @@ import { finalizeNotificationChain } from "../finalize.js";
 import { WORKFLOW_SUBAGENT_TYPE, handleWorkflowSubagentStop } from "../workflows.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { runHookEntry } from "../utils/hook-entry.js";
 import type { SubagentStopHookInput, OpenTurn } from "../types.js";
 
 async function main(): Promise<void> {
@@ -211,11 +212,4 @@ async function main(): Promise<void> {
   await flushPendingTraces();
 }
 
-main().catch((err) => {
-  try {
-    error(`SubagentStop hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0);
-});
+runHookEntry("SubagentStop", main);

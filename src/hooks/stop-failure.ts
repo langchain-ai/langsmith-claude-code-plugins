@@ -15,6 +15,7 @@ import { initTracing, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { runHookEntry } from "../utils/hook-entry.js";
 
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
 import { createRunTree } from "../privacy.js";
@@ -115,11 +116,4 @@ async function main(): Promise<void> {
   await flushPendingTraces();
 }
 
-main().catch((err) => {
-  try {
-    error(`StopFailure hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0);
-});
+runHookEntry("StopFailure", main);

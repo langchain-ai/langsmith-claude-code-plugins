@@ -14845,6 +14845,17 @@ function readStdin() {
   });
 }
 
+// dist/utils/hook-entry.js
+function runHookEntry(event, main2) {
+  main2().catch((err) => {
+    try {
+      error(`${event} hook fatal error: ${err}`);
+    } catch {
+    }
+    process.exit(0);
+  });
+}
+
 // dist/hooks/session-end.js
 async function main() {
   const input = await readStdin();
@@ -14980,10 +14991,4 @@ async function main() {
   });
   debug(`Session end cleanup complete (reason=${input.reason})`);
 }
-main().catch((err) => {
-  try {
-    error(`SessionEnd hook fatal error: ${err}`);
-  } catch {
-  }
-  process.exit(0);
-});
+runHookEntry("SessionEnd", main);

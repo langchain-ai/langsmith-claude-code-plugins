@@ -15065,6 +15065,17 @@ function readStdin() {
   });
 }
 
+// dist/utils/hook-entry.js
+function runHookEntry(event, main2) {
+  main2().catch((err) => {
+    try {
+      error(`${event} hook fatal error: ${err}`);
+    } catch {
+    }
+    process.exit(0);
+  });
+}
+
 // dist/thread-link.js
 var LOOKUP_TIMEOUT_MS = 4e3;
 function terminalLink(url) {
@@ -15313,10 +15324,4 @@ async function main() {
   const duration = ((Date.now() - hookStartTime) / 1e3).toFixed(1);
   debug(`UserPromptSubmit hook completed in ${duration}s`);
 }
-main().catch((err) => {
-  try {
-    error(`UserPromptSubmit hook fatal error: ${err}`);
-  } catch {
-  }
-  process.exit(0);
-});
+runHookEntry("UserPromptSubmit", main);
