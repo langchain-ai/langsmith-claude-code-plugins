@@ -13,6 +13,7 @@ import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { runHookEntry } from "../utils/hook-entry.js";
 import { createRunTree } from "../privacy.js";
 import { codingAgentMetadata } from "../metadata.js";
 
@@ -121,11 +122,4 @@ async function main(): Promise<void> {
   });
 }
 
-main().catch((err) => {
-  try {
-    error(`PostCompact hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0); // Always exit 0 so Claude Code isn't affected.
-});
+runHookEntry("PostCompact", main);

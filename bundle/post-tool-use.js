@@ -13988,6 +13988,17 @@ function readStdin() {
   });
 }
 
+// dist/utils/hook-entry.js
+function runHookEntry(event, main2) {
+  main2().catch((err) => {
+    try {
+      error(`${event} hook fatal error: ${err}`);
+    } catch {
+    }
+    process.exit(0);
+  });
+}
+
 // dist/background-runs.js
 function recordBackgroundRun(session, turn, backgroundId, entry) {
   const existing = session.open_turns?.[turn.run_id];
@@ -14184,10 +14195,4 @@ async function main() {
     await flushPendingTraces();
   }
 }
-main().catch((err) => {
-  try {
-    error(`PostToolUse hook fatal error: ${err}`);
-  } catch {
-  }
-  process.exit(0);
-});
+runHookEntry("PostToolUse", main);

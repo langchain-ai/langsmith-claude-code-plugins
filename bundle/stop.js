@@ -14797,6 +14797,17 @@ function readStdin() {
   });
 }
 
+// dist/utils/hook-entry.js
+function runHookEntry(event, main2) {
+  main2().catch((err) => {
+    try {
+      error(`${event} hook fatal error: ${err}`);
+    } catch {
+    }
+    process.exit(0);
+  });
+}
+
 // dist/finalize.js
 async function finalizeNotificationChain(opts) {
   const { stateFilePath, sessionId, project, customMetadata, runtimeVersion } = opts;
@@ -15163,10 +15174,4 @@ async function main() {
     warn(`Hook took ${duration}s (>3min), consider optimizing`);
   }
 }
-main().catch((err) => {
-  try {
-    error(`Stop hook fatal error: ${err}`);
-  } catch {
-  }
-  process.exit(0);
-});
+runHookEntry("Stop", main);

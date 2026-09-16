@@ -8,10 +8,11 @@
  */
 
 import { resolveTurnTracingMode } from "../tracing-mode.js";
-import { debug, error } from "../logger.js";
+import { debug } from "../logger.js";
 import { atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { runHookEntry } from "../utils/hook-entry.js";
 
 interface PreToolUseHookInput {
   session_id: string;
@@ -56,11 +57,4 @@ async function main(): Promise<void> {
   });
 }
 
-main().catch((err) => {
-  try {
-    error(`PreToolUse hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0);
-});
+runHookEntry("PreToolUse", main);

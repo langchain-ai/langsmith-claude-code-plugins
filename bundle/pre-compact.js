@@ -601,6 +601,17 @@ function readStdin() {
   });
 }
 
+// dist/utils/hook-entry.js
+function runHookEntry(event, main2) {
+  main2().catch((err) => {
+    try {
+      error(`${event} hook fatal error: ${err}`);
+    } catch {
+    }
+    process.exit(0);
+  });
+}
+
 // dist/hooks/pre-compact.js
 async function main() {
   const input = await readStdin();
@@ -621,10 +632,4 @@ async function main() {
   });
   debug(`Recorded compaction start time for session ${input.session_id}`);
 }
-main().catch((err) => {
-  try {
-    debug(`PreCompact hook error: ${err}`);
-  } catch {
-  }
-  process.exit(0);
-});
+runHookEntry("PreCompact", main);

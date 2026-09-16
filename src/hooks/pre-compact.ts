@@ -11,6 +11,7 @@ import { debug } from "../logger.js";
 import { atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { runHookEntry } from "../utils/hook-entry.js";
 
 interface PreCompactHookInput {
   session_id: string;
@@ -51,11 +52,4 @@ async function main(): Promise<void> {
   debug(`Recorded compaction start time for session ${input.session_id}`);
 }
 
-main().catch((err) => {
-  try {
-    debug(`PreCompact hook error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0); // Always exit 0 so Claude Code isn't affected.
-});
+runHookEntry("PreCompact", main);

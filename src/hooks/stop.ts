@@ -32,6 +32,7 @@ import {
 } from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { runHookEntry } from "../utils/hook-entry.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { MUTED_TRACE_CONTENT } from "../privacy.js";
 import type { TaskRunEntry } from "../langsmith.js";
@@ -480,11 +481,4 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  try {
-    error(`Stop hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0); // Always exit 0 so Claude Code isn't affected.
-});
+runHookEntry("Stop", main);
