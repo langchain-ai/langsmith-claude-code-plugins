@@ -66,7 +66,9 @@ describe("separate marketplace packages", () => {
       expect(manifest.name).toBe(entry.name);
       if (entry.name === "langsmith-tracing") {
         expect(manifest.version).toBe(json(join(root, "package.json")).version);
-        expect(hookBundles(pluginRoot)).toEqual(HOOK_EVENT_NAMES.map(() => "bundle/dispatch.js"));
+        expect(hookBundles(pluginRoot)).toEqual(
+          Array(HOOK_EVENT_NAMES.length).fill("bundle/dispatch.js"),
+        );
         expect(existsSync(join(pluginRoot, "bundle/gateway.js"))).toBe(false);
       } else {
         expect(manifest.version).toBe("0.1.0");
