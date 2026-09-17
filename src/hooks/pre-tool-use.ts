@@ -1,6 +1,5 @@
-#!/usr/bin/env node
 /**
- * PreToolUse hook entry point.
+ * PreToolUse hook handler.
  *
  * Fires before a tool executes. Records the wall-clock start time so
  * PostToolUse can use an accurate start_time instead of Date.now()
@@ -8,7 +7,7 @@
  */
 
 import { resolveTurnTracingMode } from "../tracing-mode.js";
-import { debug, error } from "../logger.js";
+import { debug } from "../logger.js";
 import { atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
@@ -21,7 +20,7 @@ interface PreToolUseHookInput {
   tool_name: string;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: PreToolUseHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -55,12 +54,3 @@ async function main(): Promise<void> {
     };
   });
 }
-
-main().catch((err) => {
-  try {
-    error(`PreToolUse hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0);
-});

@@ -1,6 +1,5 @@
-#!/usr/bin/env node
 /**
- * SessionEnd hook entry point.
+ * SessionEnd hook handler.
  *
  * Fires when a Claude Code session ends (user exits, /clear, /resume, etc.).
  * If the session was interrupted (Stop never fired for the last turn), closes
@@ -33,7 +32,7 @@ interface SessionEndHookInput {
   reason: string;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: SessionEndHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -213,12 +212,3 @@ async function main(): Promise<void> {
 
   debug(`Session end cleanup complete (reason=${input.reason})`);
 }
-
-main().catch((err) => {
-  try {
-    error(`SessionEnd hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0);
-});

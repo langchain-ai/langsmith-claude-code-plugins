@@ -1,6 +1,5 @@
-#!/usr/bin/env node
 /**
- * UserPromptSubmit hook entry point.
+ * UserPromptSubmit hook handler.
  *
  * Invoked when a user submits a prompt, before Claude processes it.
  * Creates the initial RunTree for the turn and stores the run ID
@@ -61,7 +60,7 @@ interface UserPromptSubmitHookInput {
  */
 const KILLED_NOTIFICATION_STATUS = "killed";
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const hookStartTime = Date.now();
   const input: UserPromptSubmitHookInput = await readStdin();
 
@@ -364,12 +363,3 @@ async function main(): Promise<void> {
   const duration = ((Date.now() - hookStartTime) / 1000).toFixed(1);
   debug(`UserPromptSubmit hook completed in ${duration}s`);
 }
-
-main().catch((err) => {
-  try {
-    error(`UserPromptSubmit hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0); // Always exit 0 so Claude Code isn't affected.
-});

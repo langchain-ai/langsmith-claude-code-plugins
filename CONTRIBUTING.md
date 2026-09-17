@@ -18,13 +18,16 @@ pnpm install
 The plugin is a set of **Claude Code lifecycle hooks** that read the session's
 JSONL transcript and emit [LangSmith](https://smith.langchain.com) runs. Each
 hook is a short-lived Node process wired up in `hooks/hooks.json` as
-`node "${CLAUDE_PLUGIN_ROOT}/bundle/<hook>.js"`, one per event:
+`node "${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js" <Event>`, one entry per event:
 `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `StopFailure`,
-`SubagentStop`, `PreCompact`, `PostCompact`, `SessionEnd`.
+`SubagentStop`, `PreCompact`, `PostCompact`, `SessionEnd`. All nine share one
+bundle, and `dispatch.js` runs the handler its argument names.
 
 Source layout (`src/`):
 
-- `hooks/` — one entry point per lifecycle event (the files above).
+- `constants.ts` — `HOOK_EVENT_NAMES` is the source of truth for that event list.
+- `hooks/` — one handler per lifecycle event, plus `registry.ts` (event to
+  handler map) and `dispatch.ts` (the entry point all nine go through).
 - `langsmith.ts` — LangSmith `RunTree` construction/submission (turns, subagent
   chains, workflow runs, turn completion).
 - `transcript.ts` — parse the JSONL transcript into turns.
@@ -74,7 +77,7 @@ and [TESTING.md](./TESTING.md#experimental-gateway-tests) for the isolated test 
 ## The build → bundle directories relationship (important)
 
 `pnpm build` runs `tsc`, then preserves the tracing esbuild invocation into
-`bundle/*.js` and uses a separate invocation for
+`bundle/dispatch.js` and uses a separate invocation for
 `plugins/langsmith-gateway/bundle/gateway.js`. There is no root `bundle/gateway.js`.
 **Both bundle directories are committed and are what actually runs**, not `src/`.
 

@@ -1,6 +1,5 @@
-#!/usr/bin/env node
 /**
- * StopFailure hook entry point.
+ * StopFailure hook handler.
  *
  * Invoked when a turn ends due to an API error (rate limit, auth failure, etc.).
  * Closes out any open turn run in LangSmith with the error details so the
@@ -30,7 +29,7 @@ interface StopFailureHookInput {
   last_assistant_message?: string;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: StopFailureHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -114,12 +113,3 @@ async function main(): Promise<void> {
 
   await flushPendingTraces();
 }
-
-main().catch((err) => {
-  try {
-    error(`StopFailure hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0);
-});

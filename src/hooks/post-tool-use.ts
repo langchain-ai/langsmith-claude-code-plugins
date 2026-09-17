@@ -1,6 +1,5 @@
-#!/usr/bin/env node
 /**
- * PostToolUse hook entry point.
+ * PostToolUse hook handler.
  *
  * Fires after a tool executes. For Task tools (subagent spawning), this
  * traces the tool call immediately and stores the run ID mapped to agent_id
@@ -38,7 +37,7 @@ interface PostToolUseHookInput {
   agent_type?: string;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: PostToolUseHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -280,12 +279,3 @@ async function main(): Promise<void> {
     await flushPendingTraces();
   }
 }
-
-main().catch((err) => {
-  try {
-    error(`PostToolUse hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0); // Always exit 0 so Claude Code isn't affected.
-});

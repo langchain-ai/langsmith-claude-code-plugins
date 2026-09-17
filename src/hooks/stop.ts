@@ -1,6 +1,5 @@
-#!/usr/bin/env node
 /**
- * Stop hook entry point.
+ * Stop hook handler.
  *
  * Invoked by Claude Code when the main agent finishes responding.
  * Reads the transcript, identifies new messages since last run,
@@ -37,7 +36,7 @@ import { MUTED_TRACE_CONTENT } from "../privacy.js";
 import type { TaskRunEntry } from "../langsmith.js";
 import type { StopHookInput } from "../types.js";
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const startTime = Date.now();
 
   // Read hook input from stdin.
@@ -479,12 +478,3 @@ async function main(): Promise<void> {
     warn(`Hook took ${duration}s (>3min), consider optimizing`);
   }
 }
-
-main().catch((err) => {
-  try {
-    error(`Stop hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0); // Always exit 0 so Claude Code isn't affected.
-});

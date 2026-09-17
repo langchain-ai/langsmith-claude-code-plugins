@@ -1,6 +1,5 @@
-#!/usr/bin/env node
 /**
- * PreCompact hook entry point.
+ * PreCompact hook handler.
  *
  * Fires before Claude Code runs a compact operation.
  * Records the start time so PostCompact can compute compaction duration.
@@ -21,7 +20,7 @@ interface PreCompactHookInput {
   custom_instructions: string;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: PreCompactHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -50,12 +49,3 @@ async function main(): Promise<void> {
 
   debug(`Recorded compaction start time for session ${input.session_id}`);
 }
-
-main().catch((err) => {
-  try {
-    debug(`PreCompact hook error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0); // Always exit 0 so Claude Code isn't affected.
-});

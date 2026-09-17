@@ -1,6 +1,5 @@
-#!/usr/bin/env node
 /**
- * PostCompact hook entry point.
+ * PostCompact hook handler.
  *
  * Fires after Claude Code completes a compact operation.
  * Creates a LangSmith run capturing the compaction event and summary.
@@ -25,7 +24,7 @@ interface PostCompactHookInput {
   compact_summary: string;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: PostCompactHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -120,12 +119,3 @@ async function main(): Promise<void> {
     };
   });
 }
-
-main().catch((err) => {
-  try {
-    error(`PostCompact hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0); // Always exit 0 so Claude Code isn't affected.
-});

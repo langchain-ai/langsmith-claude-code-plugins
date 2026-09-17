@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/user-prompt-submit.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" UserPromptSubmit",
             "timeout": 30
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/pre-tool-use.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PreToolUse",
             "timeout": 10
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/post-tool-use.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PostToolUse",
             "timeout": 30,
             "async": true
           }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/stop.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" Stop",
             "timeout": 120
           }
         ]
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/stop-failure.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" StopFailure",
             "timeout": 30
           }
         ]
@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/subagent-stop.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" SubagentStop",
             "timeout": 60,
             "async": true
           }
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/pre-compact.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PreCompact",
             "timeout": 10
           }
         ]
@@ -85,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/post-compact.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PostCompact",
             "timeout": 30,
             "async": true
           }
@@ -97,7 +97,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/session-end.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" SessionEnd",
             "timeout": 10
           }
         ]

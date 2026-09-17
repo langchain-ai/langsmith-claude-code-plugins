@@ -1,6 +1,5 @@
-#!/usr/bin/env node
 /**
- * SubagentStop hook entry point.
+ * SubagentStop hook handler.
  *
  * Invoked when a Claude Code subagent finishes (including when aborted).
  *
@@ -39,7 +38,7 @@ import { initHook, expandHome } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
 import type { SubagentStopHookInput, OpenTurn } from "../types.js";
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const input: SubagentStopHookInput = await readStdin();
 
   const config = initHook(input.cwd);
@@ -210,12 +209,3 @@ async function main(): Promise<void> {
 
   await flushPendingTraces();
 }
-
-main().catch((err) => {
-  try {
-    error(`SubagentStop hook fatal error: ${err}`);
-  } catch {
-    // Last resort
-  }
-  process.exit(0);
-});
