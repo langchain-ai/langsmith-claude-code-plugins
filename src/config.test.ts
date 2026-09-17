@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, openSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -11,7 +11,7 @@ vi.mock("node:os", { spy: true });
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  vi.mocked(readFileSync).mockReset();
+  vi.mocked(openSync).mockReset();
   vi.mocked(execSync).mockReset();
 });
 
@@ -162,10 +162,10 @@ describe("loadConfig", () => {
           symlinkSync(join(tmpHome, "missing.json"), paths[scope]);
         } else {
           writeFileSync(paths[scope], "{}");
-          const read = vi.mocked(readFileSync).getMockImplementation()!;
-          vi.mocked(readFileSync).mockImplementation((...args: Parameters<typeof readFileSync>) => {
+          const open = vi.mocked(openSync).getMockImplementation()!;
+          vi.mocked(openSync).mockImplementation((...args: Parameters<typeof openSync>) => {
             if (args[0] === paths[scope]) throw Object.assign(new Error("unreadable"), { code });
-            return read(...args);
+            return open(...args);
           });
         }
         expect(loadConfig({ cwd: projectDir })).toMatchObject({
@@ -215,7 +215,7 @@ describe("loadConfig", () => {
           defaultMuted: false,
           project: "claude",
         });
-        expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === oldRoot)).toBe(false);
+        expect(vi.mocked(openSync).mock.calls.some(([path]) => path === oldRoot)).toBe(false);
       },
     );
 
@@ -245,7 +245,7 @@ describe("loadConfig", () => {
           apiKey: "hidden-key",
           project: "hidden-home",
         });
-        expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === oldHome)).toBe(false);
+        expect(vi.mocked(openSync).mock.calls.some(([path]) => path === oldHome)).toBe(false);
       },
     );
 
@@ -282,9 +282,9 @@ describe("loadConfig", () => {
       writeFileSync(paths[1], "{");
       writeFileSync(paths[2], "{");
       expect(loadConfig({ cwd: projectDir })).toMatchObject({ enabled: true, defaultMuted: false });
-      expect(
-        vi.mocked(readFileSync).mock.calls.some(([p]) => p === paths[1] || p === paths[2]),
-      ).toBe(true);
+      expect(vi.mocked(openSync).mock.calls.some(([p]) => p === paths[1] || p === paths[2])).toBe(
+        true,
+      );
     });
 
     it("uses only resolved cwd, without ancestor traversal, and defaults false/false", () => {
@@ -463,7 +463,7 @@ describe("loadConfig", () => {
           enabled: false,
           defaultMuted: false,
         });
-        expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === oldHome)).toBe(false);
+        expect(vi.mocked(openSync).mock.calls.some(([path]) => path === oldHome)).toBe(false);
       },
     );
 
@@ -575,10 +575,10 @@ describe("loadConfig", () => {
     )("fails closed on $scope read error $code", ({ scope, code }) => {
       const path = scope === "project" ? projectPath : userPath;
       writeFileSync(userPath, '{"defaultMuted":false}');
-      const read = vi.mocked(readFileSync).getMockImplementation()!;
-      vi.mocked(readFileSync).mockImplementation((...args: Parameters<typeof readFileSync>) => {
+      const open = vi.mocked(openSync).getMockImplementation()!;
+      vi.mocked(openSync).mockImplementation((...args: Parameters<typeof openSync>) => {
         if (args[0] === path) throw Object.assign(new Error("unreadable"), { code });
-        return read(...args);
+        return open(...args);
       });
       expect(loadConfig({ cwd: projectDir }).defaultMuted).toBe(true);
     });
@@ -674,10 +674,10 @@ describe("loadConfig", () => {
       const path = scope === "project" ? projectPath : userPath;
       writeFileSync(userPath, '{"enabled":true}');
       if (scope === "project") writeFileSync(projectPath, "{}");
-      const read = vi.mocked(readFileSync).getMockImplementation()!;
-      vi.mocked(readFileSync).mockImplementation((...args: Parameters<typeof readFileSync>) => {
+      const open = vi.mocked(openSync).getMockImplementation()!;
+      vi.mocked(openSync).mockImplementation((...args: Parameters<typeof openSync>) => {
         if (args[0] === path) throw Object.assign(new Error("unreadable"), { code });
-        return read(...args);
+        return open(...args);
       });
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(false);
     });
@@ -685,15 +685,22 @@ describe("loadConfig", () => {
     it.each(["true", "false", ""])("env %j overrides unreadable project file", (env) => {
       process.env.TRACE_TO_LANGSMITH = env;
       writeFileSync(projectPath, "{}");
-      const read = vi.mocked(readFileSync).getMockImplementation()!;
-      vi.mocked(readFileSync).mockImplementation((...args: Parameters<typeof readFileSync>) => {
+      const open = vi.mocked(openSync).getMockImplementation()!;
+      vi.mocked(openSync).mockImplementation((...args: Parameters<typeof openSync>) => {
         if (args[0] === projectPath || args[0] === userPath)
           throw new Error("unreadable switch file");
-        return read(...args);
+        return open(...args);
       });
       expect(loadConfig({ cwd: projectDir }).enabled).toBe(env === "true");
-      expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === projectPath)).toBe(true);
-      expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === userPath)).toBe(false);
+      expect(vi.mocked(openSync).mock.calls.some(([path]) => path === projectPath)).toBe(true);
+      expect(
+        vi
+          .mocked(openSync)
+          .mock.calls.some(
+            ([path], index) =>
+              path === userPath && vi.mocked(openSync).mock.results[index].type === "return",
+          ),
+      ).toBe(false);
     });
 
     it.each([true, false])(
@@ -701,7 +708,14 @@ describe("loadConfig", () => {
       (enabled) => {
         writeFileSync(projectPath, JSON.stringify({ enabled, defaultMuted: false }));
         expect(loadConfig({ cwd: projectDir }).enabled).toBe(enabled);
-        expect(vi.mocked(readFileSync).mock.calls.some(([path]) => path === userPath)).toBe(false);
+        expect(
+          vi
+            .mocked(openSync)
+            .mock.calls.some(
+              ([path], index) =>
+                path === userPath && vi.mocked(openSync).mock.results[index].type === "return",
+            ),
+        ).toBe(false);
       },
     );
 

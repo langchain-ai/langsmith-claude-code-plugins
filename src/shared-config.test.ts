@@ -15,7 +15,12 @@ import {
 vi.mock("node:fs", { spy: true });
 
 const restrictive = { enabled: false, defaultMuted: true };
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  for (const fn of [fs.openSync, fs.fstatSync, fs.readFileSync, fs.closeSync, fs.lstatSync]) {
+    vi.mocked(fn).mockReset();
+  }
+});
 
 describe("canonical common schema fixtures", () => {
   it.each([null, [], true, false, 1, "", "{}"])("rejects nonobjects: %j", (value) => {
@@ -290,10 +295,33 @@ describe("filesystem fixtures", () => {
     expect(readCommonConfigFile(dir)).toMatchObject({ status: "invalid", common: restrictive });
   });
 
-  it.skipIf(process.platform === "win32")("rejects FIFO without opening/blocking", () => {
+  it("reads and closes the checked descriptor when the path is replaced", async () => {
+    const path = setup();
+    fs.writeFileSync(path, '{"enabled":false}');
+    const { fstatSync: fstat } = await vi.importActual<typeof fs>("node:fs");
+    const stat = vi.spyOn(fs, "fstatSync").mockImplementationOnce((fd) => {
+      const result = fstat(fd);
+      fs.renameSync(path, join(dir, "original"));
+      fs.writeFileSync(path, '{"enabled":true}');
+      return result;
+    });
+    expect(readCommonConfigFile(path)).toMatchObject({
+      status: "valid",
+      common: { enabled: false },
+    });
+    const fd = stat.mock.calls[0][0];
+    expect(fs.readFileSync).toHaveBeenCalledWith(fd, "utf8");
+    expect(fs.closeSync).toHaveBeenCalledWith(fd);
+    expect(() => fstat(fd)).toThrow();
+  });
+
+  it.skipIf(process.platform === "win32")("rejects FIFO without reading/blocking", () => {
     const path = setup();
     execFileSync("mkfifo", [path]);
     expect(readCommonConfigFile(path)).toMatchObject({ status: "invalid", common: restrictive });
+    expect(fs.openSync).toHaveBeenCalledWith(path, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(fs.closeSync).toHaveBeenCalledWith(vi.mocked(fs.openSync).mock.results[0].value);
   });
 
   it.each(["", "{SECRET", "null", "[]", '"SECRET"'])(
@@ -317,18 +345,30 @@ describe("filesystem fixtures", () => {
         throw Object.assign(new Error("SECRET"), { code });
       });
       expect(readCommonConfigFile(path)).toMatchObject({ status: "invalid", common: restrictive });
+      expect(fs.closeSync).toHaveBeenCalledWith(vi.mocked(fs.readFileSync).mock.calls[0][0]);
     },
   );
 
-  it.each(["EACCES", "EPERM", "EIO", "ENOTDIR"])("restricts stat failure %s", (code) => {
+  it.each(["EACCES", "EPERM", "EIO", "ENOTDIR"])("restricts open failure %s", (code) => {
     const path = setup();
-    vi.spyOn(fs, "statSync").mockImplementation(() => {
+    vi.spyOn(fs, "openSync").mockImplementation(() => {
       throw Object.assign(new Error("SECRET"), { code });
     });
     expect(readCommonConfigFile(path)).toMatchObject({ status: "invalid", common: restrictive });
   });
 
-  it("stat ENOENT plus inaccessible lstat is not absence", () => {
+  it("closes the descriptor when fstat fails", () => {
+    const path = setup();
+    fs.writeFileSync(path, "{}");
+    vi.mocked(fs.openSync).mockClear();
+    vi.spyOn(fs, "fstatSync").mockImplementation(() => {
+      throw Object.assign(new Error("SECRET"), { code: "EIO" });
+    });
+    expect(readCommonConfigFile(path)).toMatchObject({ status: "invalid", common: restrictive });
+    expect(fs.closeSync).toHaveBeenCalledWith(vi.mocked(fs.openSync).mock.results[0].value);
+  });
+
+  it("open ENOENT plus inaccessible lstat is not absence", () => {
     const path = setup();
     vi.spyOn(fs, "lstatSync").mockImplementation(() => {
       throw Object.assign(new Error("SECRET"), { code: "EACCES" });

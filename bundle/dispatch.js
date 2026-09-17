@@ -14630,7 +14630,7 @@ async function closeAgentToolRun(options) {
 import { readFileSync as readFileSync7 } from "node:fs";
 
 // dist/shared-config.js
-import { lstatSync as lstatSync2, readFileSync as readFileSync6, statSync as statSync4 } from "node:fs";
+import { closeSync as closeSync3, constants, fstatSync as fstatSync2, lstatSync as lstatSync2, openSync as openSync3, readFileSync as readFileSync6 } from "node:fs";
 var COMMON_BOOLEAN_SETTINGS = {
   enabled: { default: false, restrictive: false },
   defaultMuted: { default: false, restrictive: true }
@@ -14740,9 +14740,9 @@ function parseCommonConfig(value) {
   return { status: "valid", common, raw: value, diagnostics };
 }
 function readCommonConfigFile(path3) {
+  let fd;
   try {
-    if (!statSync4(path3).isFile())
-      return invalid();
+    fd = openSync3(path3, constants.O_RDONLY | constants.O_NONBLOCK);
   } catch (error2) {
     if (error2.code === "ENOENT") {
       try {
@@ -14756,9 +14756,13 @@ function readCommonConfigFile(path3) {
     return invalid();
   }
   try {
-    return parseCommonConfig(JSON.parse(readFileSync6(path3, "utf8")));
+    if (!fstatSync2(fd).isFile())
+      return invalid();
+    return parseCommonConfig(JSON.parse(readFileSync6(fd, "utf8")));
   } catch {
     return invalid();
+  } finally {
+    closeSync3(fd);
   }
 }
 function resolveField(sources, field) {
