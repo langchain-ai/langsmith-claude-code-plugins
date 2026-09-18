@@ -8,6 +8,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/build-binary.yml
+      - install.sh
       - esbuild.sea.config.mjs
       - sea-config.json
       - package.json
@@ -102,8 +103,13 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "bin/$ASSET_NAME" --clobber
           else
+            case "$GITHUB_REF_NAME" in
+              *-*) PRERELEASE=true ;;
+              *) PRERELEASE=false ;;
+            esac
             gh release create "$GITHUB_REF_NAME" "bin/$ASSET_NAME" \
               --draft \
               --verify-tag \
-              --generate-notes
+              --generate-notes \
+              --prerelease="$PRERELEASE"
           fi

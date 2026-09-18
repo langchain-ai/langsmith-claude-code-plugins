@@ -12,6 +12,8 @@
     "dev": "tsc --watch",
     "format": "oxfmt --write",
     "test": "vitest run",
+    "test:install": "bash test/install/cases.sh",
+    "test:install:variants": "bash test/install/variants.sh",
     "test:watch": "vitest",
     "tsx": "tsx",
     "lint": "oxlint",

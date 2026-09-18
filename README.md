@@ -12,6 +12,11 @@ A Claude Code plugin that traces conversations, tool calls, subagent executions,
 
 ## Installation
 
+Every option below installs the same tracing integration. Only the delivery
+differs. The plugin runs on the Node on your PATH and the marketplace manages
+it. The standalone binary carries its own Node and you manage it. You are
+picking an install method, not a different product.
+
 ### As a Claude Code plugin
 
 From within Claude Code, run:
@@ -29,31 +34,53 @@ To update, run:
 /reload-plugins
 ```
 
-### As a standalone binary (macOS arm64, experimental)
+### As a standalone binary (beta, macOS arm64)
 
-The binary carries its own Node runtime, so nothing here needs the Node on your
-PATH. macOS arm64 is the only platform it is built for. Download a release
-asset and run it:
+The same integration as the plugin, delivered as one file. It carries its own
+Node runtime so it needs no Node on your PATH. You install and update it
+yourself. The plugin is the supported path. This binary is the beta we are
+trialling and macOS arm64 is the only build.
 
-```bash
-chmod +x langsmith-claude-code-tracing-darwin-arm64-<tag>-unsigned
-xattr -d com.apple.quarantine langsmith-claude-code-tracing-darwin-arm64-<tag>-unsigned
-./langsmith-claude-code-tracing-darwin-arm64-<tag>-unsigned --install
-```
+Two things are not live yet, so the command below fails today:
 
-`--install` copies the binary you ran to
-`~/.langsmith/langsmith-claude-code-tracing` and adds the hooks to
-`~/.claude/settings.json`. It downloads nothing. Use `--project` for
-`./.claude/settings.json`, `--print` to see the result first, or `--tag 0.4.0`
-to fetch a different release.
+- No release carries the binary. Build it with `pnpm build:sea` and run that
+  binary with `--install`.
+- The short link is not registered. It redirects to the LangChain homepage, so
+  piping it to bash runs HTML. Use
+  `https://raw.githubusercontent.com/langchain-ai/langsmith-claude-code-plugins/main/install.sh`
+  instead.
 
-The binary never updates itself. Run it with `--update` when you want a newer
-release, or `--version` to see what is installed.
+1. Run the installer:
 
-No release carries the binary yet, so there is nothing to install today.
+   ```bash
+   curl -LsSf https://langch.in/claude-tracing | bash -s -- --beta
+   ```
 
-Do not run the `langsmith-tracing` plugin and the binary together. Both trace
-the same session.
+   `--beta` takes the newest prerelease. Drop it once a stable release carries
+   the binary. The plain command takes the newest stable release and never a
+   prerelease, so it fails while a prerelease is the only published build.
+
+   The installer checks the download against the SHA-256 the release publishes.
+   It puts the binary at `~/.langsmith/langsmith-claude-code-tracing` and adds
+   the tracing hooks to `~/.claude/settings.json`. Run it with `--help` for
+   version pinning and the other options.
+
+2. Set `enabled`, `api_key` and `project` in `~/.claude/langsmith.json`.
+   `enabled` is false by default, so without this the hooks run and trace
+   nothing:
+
+   ```json
+   { "enabled": true, "api_key": "lsv2_pt_...", "project": "my-project" }
+   ```
+
+3. Restart Claude Code.
+
+The binary never updates itself. Run
+`~/.langsmith/langsmith-claude-code-tracing --update` for a newer release.
+
+To download a release asset by hand instead: `chmod +x` it, clear the macOS
+quarantine flag with `xattr -d com.apple.quarantine`, then run it with
+`--install`. The binary is unsigned.
 
 ### As a Claude Cowork plugin
 

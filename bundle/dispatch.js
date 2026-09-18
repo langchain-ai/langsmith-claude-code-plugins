@@ -1119,19 +1119,34 @@ function taggedReleaseUrl(releasesApi, tag) {
   return url.href;
 }
 function parseVersion(version) {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : void 0;
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([a-z]+)\.(\d+))?$/.exec(version.trim());
+  if (!match)
+    return void 0;
+  return {
+    numbers: [Number(match[1]), Number(match[2]), Number(match[3])],
+    final: match[4] === void 0 ? 1 : 0,
+    label: match[4] ?? "",
+    iteration: match[5] === void 0 ? 0 : Number(match[5])
+  };
+}
+function compareVersions(next, installed) {
+  for (let index = 0; index < next.numbers.length; index += 1) {
+    if (next.numbers[index] !== installed.numbers[index]) {
+      return next.numbers[index] - installed.numbers[index];
+    }
+  }
+  if (next.final !== installed.final)
+    return next.final - installed.final;
+  if (next.label !== installed.label)
+    return next.label < installed.label ? -1 : 1;
+  return next.iteration - installed.iteration;
 }
 function isVersionNewer(candidate, current) {
   const next = parseVersion(candidate);
   const installed = parseVersion(current);
   if (!next || !installed)
     return false;
-  for (let index = 0; index < next.length; index += 1) {
-    if (next[index] !== installed[index])
-      return next[index] > installed[index];
-  }
-  return false;
+  return compareVersions(next, installed) > 0;
 }
 function githubRequestHeaders(currentVersion) {
   return {
@@ -1273,7 +1288,7 @@ function asNamedAsset(value, assetName) {
   }
   return asset;
 }
-function parseReleases(value, platform, arch) {
+function parseReleases(value, platform, arch, allowPrerelease = false) {
   if (!Array.isArray(value))
     throw new Error("GitHub returned no list of releases");
   if (!isPublishedTarget(platform, arch))
@@ -1283,7 +1298,9 @@ function parseReleases(value, platform, arch) {
     if (!entry || typeof entry !== "object")
       continue;
     const release = entry;
-    if (release.draft === true || release.prerelease === true)
+    if (release.draft === true)
+      continue;
+    if (release.prerelease === true && !allowPrerelease)
       continue;
     if (typeof release.tag_name !== "string" || !parseVersion(release.tag_name))
       continue;
@@ -1323,7 +1340,7 @@ async function fetchReleaseList(fetchImpl, releasesApi, currentVersion, platform
 async function fetchTaggedRelease(fetchImpl, releasesApi, currentVersion, platform, arch, tag) {
   const url = taggedReleaseUrl(releasesApi, tag);
   const tagged = await fetchReleaseJson(fetchImpl, url, currentVersion);
-  return parseReleases([tagged], platform, arch)[0];
+  return parseReleases([tagged], platform, arch, true)[0];
 }
 
 // dist/installer.js

@@ -34,19 +34,40 @@ export function taggedReleaseUrl(releasesApi: string, tag: string): string {
   return url.href;
 }
 
-export function parseVersion(version: string): [number, number, number] | undefined {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
+export type ParsedVersion = {
+  numbers: [number, number, number];
+  final: number;
+  label: string;
+  iteration: number;
+};
+
+export function parseVersion(version: string): ParsedVersion | undefined {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([a-z]+)\.(\d+))?$/.exec(version.trim());
+  if (!match) return undefined;
+  return {
+    numbers: [Number(match[1]), Number(match[2]), Number(match[3])],
+    final: match[4] === undefined ? 1 : 0,
+    label: match[4] ?? "",
+    iteration: match[5] === undefined ? 0 : Number(match[5]),
+  };
+}
+
+function compareVersions(next: ParsedVersion, installed: ParsedVersion): number {
+  for (let index = 0; index < next.numbers.length; index += 1) {
+    if (next.numbers[index] !== installed.numbers[index]) {
+      return next.numbers[index] - installed.numbers[index];
+    }
+  }
+  if (next.final !== installed.final) return next.final - installed.final;
+  if (next.label !== installed.label) return next.label < installed.label ? -1 : 1;
+  return next.iteration - installed.iteration;
 }
 
 export function isVersionNewer(candidate: string, current: string): boolean {
   const next = parseVersion(candidate);
   const installed = parseVersion(current);
   if (!next || !installed) return false;
-  for (let index = 0; index < next.length; index += 1) {
-    if (next[index] !== installed[index]) return next[index] > installed[index];
-  }
-  return false;
+  return compareVersions(next, installed) > 0;
 }
 
 export function githubRequestHeaders(currentVersion: string): Record<string, string> {
