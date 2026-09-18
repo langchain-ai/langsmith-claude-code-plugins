@@ -1,0 +1,107 @@
+{
+  "description": "LangSmith tracing hooks, run by the standalone binary instead of Node. Traces Claude Code sessions, tool calls, and subagents to LangSmith",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${HOME}/.langsmith/langsmith-claude-code-tracing\" UserPromptSubmit",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${HOME}/.langsmith/langsmith-claude-code-tracing\" PreToolUse",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${HOME}/.langsmith/langsmith-claude-code-tracing\" PostToolUse",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${HOME}/.langsmith/langsmith-claude-code-tracing\" Stop",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${HOME}/.langsmith/langsmith-claude-code-tracing\" StopFailure",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${HOME}/.langsmith/langsmith-claude-code-tracing\" SubagentStop",
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${HOME}/.langsmith/langsmith-claude-code-tracing\" PreCompact",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${HOME}/.langsmith/langsmith-claude-code-tracing\" PostCompact",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${HOME}/.langsmith/langsmith-claude-code-tracing\" SessionEnd",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

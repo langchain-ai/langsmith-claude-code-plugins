@@ -29,6 +29,32 @@ To update, run:
 /reload-plugins
 ```
 
+### As a standalone binary (macOS arm64, experimental)
+
+The binary carries its own Node runtime, so nothing here needs the Node on your
+PATH. macOS arm64 is the only platform it is built for. Download a release
+asset and run it:
+
+```bash
+chmod +x langsmith-claude-code-tracing-darwin-arm64-<tag>-unsigned
+xattr -d com.apple.quarantine langsmith-claude-code-tracing-darwin-arm64-<tag>-unsigned
+./langsmith-claude-code-tracing-darwin-arm64-<tag>-unsigned --install
+```
+
+`--install` copies the binary you ran to
+`~/.langsmith/langsmith-claude-code-tracing` and adds the hooks to
+`~/.claude/settings.json`. It downloads nothing. Use `--project` for
+`./.claude/settings.json`, `--print` to see the result first, or `--tag 0.4.0`
+to fetch a different release.
+
+The binary never updates itself. Run it with `--update` when you want a newer
+release, or `--version` to see what is installed.
+
+No release carries the binary yet, so there is nothing to install today.
+
+Do not run the `langsmith-tracing` plugin and the binary together. Both trace
+the same session.
+
 ### As a Claude Cowork plugin
 
 Claude Cowork runs Claude Code in a sandboxed VM, thus the plugin needs to be added separately.

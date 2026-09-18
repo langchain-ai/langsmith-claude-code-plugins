@@ -19,6 +19,9 @@ await build({
     // Build-time injection of the plugin (integration) version. Consumed by
     // config.ts via `typeof __LS_INTEGRATION_VERSION__`.
     __LS_INTEGRATION_VERSION__: JSON.stringify(pkg.version),
+    __LS_SEA_HOOKS__: JSON.stringify(
+      readFileSync(new URL("./hooks/hooks.sea.json", import.meta.url), "utf-8"),
+    ),
   },
 });
 

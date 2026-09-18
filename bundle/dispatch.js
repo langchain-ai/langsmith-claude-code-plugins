@@ -593,23 +593,179 @@ var require_dist = __commonJS({
   }
 });
 
-// dist/constants.js
-var USER_PROMPT_TURN_NAME = "Claude Code Turn";
-var ASSISTANT_RUN_NAME = "Claude";
-var HOOK_EVENT_NAMES = [
-  "UserPromptSubmit",
-  "PreToolUse",
-  "PostToolUse",
-  "Stop",
-  "StopFailure",
-  "SubagentStop",
-  "PreCompact",
-  "PostCompact",
-  "SessionEnd"
-];
+// dist/config.js
+import { readFileSync as readFileSync2 } from "node:fs";
+
+// dist/shared-config.js
+import { lstatSync, readFileSync, statSync } from "node:fs";
+var COMMON_BOOLEAN_SETTINGS = {
+  enabled: { default: false, restrictive: false },
+  defaultMuted: { default: false, restrictive: true }
+};
+function object(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function invalid(raw) {
+  return {
+    status: "invalid",
+    common: { enabled: false, defaultMuted: true },
+    ...raw === void 0 ? {} : { raw },
+    diagnostics: [
+      "Invalid or unreadable common config; ordinary fields discarded, privacy switches restricted."
+    ]
+  };
+}
+function parseReplica(value) {
+  if (!object(value))
+    return void 0;
+  const replica = {};
+  for (const [canonical, alias] of [
+    ["api_url", "apiUrl"],
+    ["api_key", "apiKey"],
+    ["project", "projectName"]
+  ]) {
+    const selected = Object.hasOwn(value, canonical) ? canonical : alias;
+    if (Object.hasOwn(value, selected)) {
+      const entry = value[selected];
+      if (typeof entry !== "string")
+        return void 0;
+      replica[canonical] = entry;
+    }
+  }
+  if (Object.hasOwn(value, "updates")) {
+    if (!object(value.updates))
+      return void 0;
+    replica.updates = value.updates;
+  }
+  return replica;
+}
+function parseCommonConfig(value) {
+  if (!object(value))
+    return invalid();
+  const common = {};
+  const diagnostics = [];
+  for (const field of ["enabled", "defaultMuted"]) {
+    if (!Object.hasOwn(value, field))
+      continue;
+    const entry = value[field];
+    common[field] = typeof entry === "boolean" ? entry : COMMON_BOOLEAN_SETTINGS[field].restrictive;
+    if (typeof entry !== "boolean")
+      diagnostics.push(`Invalid ${field}; using restrictive value.`);
+  }
+  for (const field of ["api_key", "api_url", "project"]) {
+    if (!Object.hasOwn(value, field))
+      continue;
+    if (typeof value[field] !== "string")
+      return invalid(value);
+    common[field] = value[field];
+  }
+  if (Object.hasOwn(value, "redact")) {
+    if (typeof value.redact !== "boolean")
+      return invalid(value);
+    common.redact = value.redact;
+  }
+  if (Object.hasOwn(value, "metadata")) {
+    if (!object(value.metadata))
+      return invalid(value);
+    common.metadata = value.metadata;
+  }
+  if (Object.hasOwn(value, "replicas")) {
+    if (!Array.isArray(value.replicas))
+      return invalid(value);
+    const replicas2 = [];
+    for (const entry of value.replicas) {
+      const replica = parseReplica(entry);
+      if (replica === void 0)
+        return invalid(value);
+      replicas2.push(replica);
+    }
+    common.replicas = replicas2;
+  }
+  if (Object.hasOwn(value, "redact_extra_rules")) {
+    if (!Array.isArray(value.redact_extra_rules))
+      return invalid(value);
+    const rules = [];
+    for (const rule of value.redact_extra_rules) {
+      if (!object(rule) || typeof rule.pattern !== "string" || !Object.hasOwn(rule, "pattern")) {
+        return invalid(value);
+      }
+      const hasReplace = Object.hasOwn(rule, "replace");
+      if (hasReplace && typeof rule.replace !== "string")
+        return invalid(value);
+      try {
+        new RegExp(rule.pattern, "g");
+      } catch {
+        return invalid(value);
+      }
+      rules.push({
+        pattern: rule.pattern,
+        ...hasReplace ? { replace: rule.replace } : {}
+      });
+    }
+    common.redact_extra_rules = rules;
+  }
+  return { status: "valid", common, raw: value, diagnostics };
+}
+function readCommonConfigFile(path3) {
+  try {
+    if (!statSync(path3).isFile())
+      return invalid();
+  } catch (error2) {
+    if (error2.code === "ENOENT") {
+      try {
+        lstatSync(path3);
+      } catch (lstatError) {
+        if (lstatError.code === "ENOENT") {
+          return { status: "absent", common: {}, diagnostics: [] };
+        }
+      }
+    }
+    return invalid();
+  }
+  try {
+    return parseCommonConfig(JSON.parse(readFileSync(path3, "utf8")));
+  } catch {
+    return invalid();
+  }
+}
+function resolveField(sources, field) {
+  return sources.find((source) => source[field] !== void 0)?.[field];
+}
+function mergeCommonConfig(sources, options = {}) {
+  const { harness = {}, root = {}, user = {}, userRoot = {}, env = {}, defaults: defaults2 = {} } = sources;
+  const files = [harness, root, user, userRoot];
+  const precedence = [env, ...files, defaults2];
+  const switches = options.envFirst ? precedence : [...files, env, defaults2];
+  const merged = { enabled: false, defaultMuted: false, redact: true };
+  for (const field of ["enabled", "defaultMuted"]) {
+    merged[field] = resolveField(switches, field) ?? COMMON_BOOLEAN_SETTINGS[field].default;
+  }
+  merged.api_key = resolveField(precedence, "api_key");
+  merged.api_url = resolveField(precedence, "api_url");
+  merged.project = resolveField(precedence, "project");
+  merged.replicas = resolveField(precedence, "replicas");
+  merged.redact = resolveField(precedence, "redact") ?? true;
+  merged.redact_extra_rules = resolveField(precedence, "redact_extra_rules");
+  if (precedence.some((source) => source.metadata !== void 0)) {
+    merged.metadata = [...precedence].reverse().reduce((metadata, source) => ({ ...metadata, ...source.metadata }), {});
+  }
+  return merged;
+}
+function toSdkReplicas(replicas2) {
+  return replicas2?.map((replica) => ({
+    ...replica.api_url === void 0 ? {} : { apiUrl: replica.api_url },
+    ...replica.api_key === void 0 ? {} : { apiKey: replica.api_key },
+    ...replica.project === void 0 ? {} : { projectName: replica.project },
+    ...replica.updates === void 0 ? {} : { updates: replica.updates }
+  }));
+}
+
+// dist/config.js
+import { homedir, userInfo } from "node:os";
+import { join } from "node:path";
 
 // dist/logger.js
-import { appendFileSync, mkdirSync, statSync, renameSync } from "node:fs";
+import { appendFileSync, mkdirSync, statSync as statSync2, renameSync } from "node:fs";
 import { dirname } from "node:path";
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
 var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
@@ -620,7 +776,7 @@ function initLogger(debug2) {
 }
 function rotateIfNeeded() {
   try {
-    if (statSync(LOG_FILE).size >= MAX_LOG_BYTES) {
+    if (statSync2(LOG_FILE).size >= MAX_LOG_BYTES) {
       renameSync(LOG_FILE, `${LOG_FILE}.1`);
     }
   } catch {
@@ -651,6 +807,679 @@ function debug(message) {
   }
 }
 
+// dist/config.js
+import { execSync } from "node:child_process";
+var LS_INTEGRATION_VERSION = true ? "0.3.1" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var PROVIDER_HOSTS = {
+  github: "github.com",
+  gitlab: "gitlab.com",
+  bitbucket: "bitbucket.org",
+  devAzure: "dev.azure.com"
+};
+function readAnthropicUserId() {
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
+  if (!homeDir)
+    return void 0;
+  const configPath = join(homeDir, ".claude.json");
+  try {
+    const raw = readFileSync2(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    const userId = parsed?.userID;
+    if (typeof userId === "string" && userId.length > 0) {
+      return userId;
+    }
+  } catch (err) {
+    debug(`Could not read Anthropic user ID from ${configPath}: ${err}`);
+  }
+  return void 0;
+}
+function readLocalUsername() {
+  return userInfo().username;
+}
+var GIT_PROVIDERS = {
+  "github.com": "github",
+  "gitlab.com": "gitlab",
+  "bitbucket.org": "bitbucket",
+  "dev.azure.com": "devAzure"
+};
+function parseRepoName(remoteUrl) {
+  const value = remoteUrl.trim();
+  try {
+    const url = new URL(value);
+    const provider = GIT_PROVIDERS[url.hostname.toLowerCase()];
+    const name = url.pathname.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "");
+    if (provider && name)
+      return { provider, name };
+  } catch {
+  }
+  const scpMatch = value.match(/^(?:[^@]+@)?([^:]+):\/?(.+)$/);
+  if (scpMatch) {
+    const provider = GIT_PROVIDERS[scpMatch[1].toLowerCase()];
+    const name = scpMatch[2].replace(/\/+$/, "").replace(/\.git$/, "");
+    if (provider && name)
+      return { provider, name };
+  }
+  return void 0;
+}
+function getRepoName(cwd) {
+  try {
+    const output = execSync("git remote -v", { cwd, encoding: "utf-8", timeout: 5e3 });
+    const lines = output.trim().split("\n").filter(Boolean);
+    const remotes = [];
+    for (const line of lines) {
+      const parts = line.split(/\s+/);
+      if (parts.length >= 2 && line.includes("(fetch)")) {
+        remotes.push({ name: parts[0], url: parts[1] });
+      }
+    }
+    const origin = remotes.find((r) => r.name === "origin");
+    if (origin) {
+      const name = parseRepoName(origin.url + " ");
+      if (name)
+        return name;
+    }
+    for (const remote of remotes) {
+      const name = parseRepoName(remote.url + " ");
+      if (name)
+        return name;
+    }
+  } catch {
+  }
+  return void 0;
+}
+function getGitInfo(cwd) {
+  const result = {};
+  try {
+    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+      cwd,
+      encoding: "utf-8",
+      timeout: 5e3
+    }).trim();
+    if (branch && branch !== "HEAD")
+      result.branch = branch;
+  } catch {
+  }
+  try {
+    const commit = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8", timeout: 5e3 }).trim();
+    if (commit)
+      result.commit = commit;
+  } catch {
+  }
+  return result;
+}
+var BOOLEAN_SETTINGS = {
+  enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
+  defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted }
+};
+function envBoolean(field) {
+  const setting = BOOLEAN_SETTINGS[field];
+  const env = process.env[setting.env]?.toLowerCase();
+  if (env === void 0)
+    return void 0;
+  if (env === "true")
+    return true;
+  if (env === "false")
+    return false;
+  return setting.restrictive;
+}
+function loadConfig(options) {
+  const cwd = options?.cwd ?? process.cwd();
+  const homeDir = homedir();
+  const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
+  const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
+  let replicas2;
+  const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
+  if (providedReplicas !== void 0) {
+    try {
+      replicas2 = JSON.parse(providedReplicas);
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_RUNS_ENDPOINTS. Please make sure they are valid JSON.");
+    }
+  }
+  const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
+  let customMetadata;
+  const providedMetadata = process.env.CC_LANGSMITH_METADATA;
+  if (providedMetadata !== void 0) {
+    try {
+      const parsed = JSON.parse(providedMetadata);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        customMetadata = parsed;
+      } else {
+        error("CC_LANGSMITH_METADATA must be a JSON object (not an array or primitive).");
+      }
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
+    }
+  }
+  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").trim().toLowerCase();
+  const redact = !["0", "false", "no", "off"].includes(redactEnv);
+  let redactExtraRules;
+  const providedExtra = process.env.CC_LANGSMITH_REDACT_EXTRA;
+  if (providedExtra !== void 0) {
+    try {
+      const parsed = JSON.parse(providedExtra);
+      if (!Array.isArray(parsed)) {
+        error("CC_LANGSMITH_REDACT_EXTRA must be a JSON array of { pattern, replace }.");
+      } else {
+        const validRules = [];
+        for (const rule of parsed) {
+          if (typeof rule !== "object" || rule === null || typeof rule.pattern !== "string" || rule.replace !== void 0 && typeof rule.replace !== "string") {
+            error(`Skipping invalid CC_LANGSMITH_REDACT_EXTRA rule (expected { pattern: string, replace?: string }): ${JSON.stringify(rule)}`);
+            continue;
+          }
+          try {
+            new RegExp(rule.pattern);
+          } catch {
+            error(`Skipping CC_LANGSMITH_REDACT_EXTRA rule with an invalid regex pattern: ${rule.pattern}`);
+            continue;
+          }
+          validRules.push(rule);
+        }
+        if (validRules.length > 0 || parsed.length === 0)
+          redactExtraRules = validRules;
+      }
+    } catch {
+      error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");
+    }
+  }
+  const common = mergeCommonConfig({
+    harness: readCommonConfigFile(join(cwd, ".claude", "langsmith.json")).common,
+    root: readCommonConfigFile(join(cwd, "langsmith-plugins.json")).common,
+    user: homeDir ? readCommonConfigFile(join(homeDir, ".claude", "langsmith.json")).common : void 0,
+    userRoot: homeDir ? readCommonConfigFile(join(homeDir, ".langsmith-plugins.json")).common : void 0,
+    env: {
+      enabled: envBoolean("enabled"),
+      defaultMuted: envBoolean("defaultMuted"),
+      api_key: process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY,
+      api_url: process.env.LANGSMITH_ENDPOINT,
+      project: process.env.CC_LANGSMITH_PROJECT,
+      metadata: customMetadata,
+      redact: process.env.CC_LANGSMITH_REDACT === void 0 ? void 0 : redact
+      // Environment rules retain the existing tolerant parser.
+    },
+    defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" }
+  }, { envFirst: true });
+  if (replicas2 === void 0)
+    replicas2 = toSdkReplicas(common.replicas);
+  redactExtraRules ??= common.redact_extra_rules;
+  customMetadata = common.metadata;
+  const anthropicUserId = readAnthropicUserId();
+  const localUsername = readLocalUsername();
+  const identityMetadata = { local_username: localUsername };
+  if (anthropicUserId) {
+    identityMetadata.user_id = anthropicUserId;
+    identityMetadata.anthropic_user_id = anthropicUserId;
+  }
+  const contractMetadata = {
+    ls_agent_purpose: "coding",
+    ls_integration: "claude-code",
+    ls_agent_runtime: "Claude Code",
+    ls_trace_schema_version: "coding-agent-v1",
+    cwd
+  };
+  if (LS_INTEGRATION_VERSION) {
+    contractMetadata.ls_integration_version = LS_INTEGRATION_VERSION;
+  }
+  const repoMetadata = {};
+  const repoName = getRepoName(cwd);
+  if (repoName != null) {
+    repoMetadata.repository_name = repoName.name;
+    repoMetadata.repository_provider = repoName.provider;
+    const host = PROVIDER_HOSTS[repoName.provider];
+    if (host)
+      repoMetadata.repository_url = `https://${host}/${repoName.name}`;
+  }
+  const gitInfo = getGitInfo(cwd);
+  if (gitInfo.branch)
+    repoMetadata.git_branch = gitInfo.branch;
+  if (gitInfo.commit)
+    repoMetadata.git_commit_sha = gitInfo.commit;
+  customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
+  return {
+    enabled: common.enabled,
+    defaultMuted: common.defaultMuted,
+    apiKey: common.api_key,
+    project: common.project,
+    apiBaseUrl: common.api_url,
+    stateFilePath,
+    debug: debug2,
+    parentDottedOrder,
+    replicas: replicas2,
+    customMetadata,
+    redact: common.redact,
+    redactExtraRules
+  };
+}
+
+// dist/constants.js
+var USER_PROMPT_TURN_NAME = "Claude Code Turn";
+var ASSISTANT_RUN_NAME = "Claude";
+var HOOK_EVENT_NAMES = [
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUse",
+  "Stop",
+  "StopFailure",
+  "SubagentStop",
+  "PreCompact",
+  "PostCompact",
+  "SessionEnd"
+];
+
+// dist/installer.js
+import * as fs3 from "node:fs/promises";
+import { arch as osArch, homedir as homedir3, platform as osPlatform } from "node:os";
+import { basename, dirname as dirname2, join as join3 } from "node:path";
+
+// dist/sea-constants.js
+var REPOSITORY = "langchain-ai/langsmith-claude-code-plugins";
+var RELEASES_API = `https://api.github.com/repos/${REPOSITORY}/releases?per_page=30`;
+var DOWNLOAD_PREFIX = `https://github.com/${REPOSITORY}/releases/download/`;
+var LOOPBACK_HOSTS = ["127.0.0.1", "[::1]", "localhost"];
+var EXECUTABLE_NAME = "langsmith-claude-code-tracing";
+var PUBLISHED_TARGETS = { darwin: ["arm64"] };
+var OLDER_THAN_ANY_RELEASE = "0.0.0";
+var LOCK_MAX_AGE_MS = 10 * 60 * 1e3;
+var LIST_TIMEOUT_MS = 15e3;
+var DOWNLOAD_TIMEOUT_MS = 5 * 6e4;
+var MAX_ASSET_BYTES = 250 * 1024 * 1024;
+var LOCK_FILE = ".update.lock";
+
+// dist/updater-install.js
+import { execFileSync } from "node:child_process";
+import * as fs2 from "node:fs/promises";
+import { homedir as homedir2 } from "node:os";
+import { join as join2 } from "node:path";
+
+// dist/updater-download.js
+import { createHash } from "node:crypto";
+import * as fs from "node:fs/promises";
+
+// dist/updater-utils.js
+function isPublishedTarget(platform, arch) {
+  return PUBLISHED_TARGETS[platform]?.includes(arch) ?? false;
+}
+function releaseAssetName(platform, arch, version) {
+  return `${EXECUTABLE_NAME}-${platform}-${arch}-${version}-unsigned`;
+}
+function loopbackOverride(value) {
+  try {
+    return value && LOOPBACK_HOSTS.includes(new URL(value).hostname) ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function configuredReleasesApi(override = process.env.CC_LANGSMITH_RELEASES_API) {
+  return loopbackOverride(override) ?? RELEASES_API;
+}
+function taggedReleaseUrl(releasesApi, tag) {
+  const url = new URL(releasesApi);
+  url.search = "";
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/tags/${encodeURIComponent(tag)}`;
+  return url.href;
+}
+function parseVersion(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : void 0;
+}
+function isVersionNewer(candidate, current) {
+  const next = parseVersion(candidate);
+  const installed = parseVersion(current);
+  if (!next || !installed)
+    return false;
+  for (let index = 0; index < next.length; index += 1) {
+    if (next[index] !== installed[index])
+      return next[index] > installed[index];
+  }
+  return false;
+}
+function githubRequestHeaders(currentVersion) {
+  return {
+    Accept: "application/vnd.github+json",
+    "User-Agent": `langsmith-claude-code/${currentVersion}`,
+    "X-GitHub-Api-Version": "2022-11-28"
+  };
+}
+function expectedSha256(asset) {
+  const match = /^sha256:([a-f0-9]{64})$/i.exec(asset.digest ?? "");
+  if (!match)
+    throw new Error(`release asset ${asset.name} has no SHA-256 digest`);
+  return match[1].toLowerCase();
+}
+function trustedDownloadUrl(asset, releasesApi) {
+  const url = new URL(asset.browser_download_url);
+  const trusted = releasesApi === RELEASES_API ? url.href.startsWith(DOWNLOAD_PREFIX) : url.origin === new URL(releasesApi).origin;
+  if (!trusted)
+    throw new Error("release asset has an unexpected download URL");
+  return url;
+}
+
+// dist/updater-download.js
+async function writeFully(handle, chunk) {
+  let offset = 0;
+  while (offset < chunk.byteLength) {
+    const { bytesWritten } = await handle.write(chunk, offset);
+    if (bytesWritten === 0)
+      throw new Error("could not write the release asset");
+    offset += bytesWritten;
+  }
+}
+async function downloadAsset(asset, destination, fetchImpl, releasesApi, currentVersion) {
+  if (asset.size <= 0 || asset.size > MAX_ASSET_BYTES) {
+    throw new Error(`release asset size ${asset.size} is outside the allowed range`);
+  }
+  const digest = expectedSha256(asset);
+  const response = await fetchImpl(trustedDownloadUrl(asset, releasesApi), {
+    headers: githubRequestHeaders(currentVersion),
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`failed to download the release asset: HTTP ${response.status}`);
+  }
+  const handle = await fs.open(destination, "wx", 448);
+  const hash = createHash("sha256");
+  let written = 0;
+  try {
+    for await (const rawChunk of response.body) {
+      const chunk = Buffer.from(rawChunk);
+      written += chunk.byteLength;
+      if (written > asset.size) {
+        throw new Error("the release asset download exceeds its declared size");
+      }
+      hash.update(chunk);
+      await writeFully(handle, chunk);
+    }
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  if (written !== asset.size) {
+    throw new Error(`release asset size mismatch: expected ${asset.size}, got ${written}`);
+  }
+  if (hash.digest("hex") !== digest)
+    throw new Error("release asset SHA-256 mismatch");
+}
+
+// dist/updater-install.js
+function installDirectory(home = homedir2()) {
+  return join2(home, ".langsmith");
+}
+function installedBinaryPath(installDir) {
+  return join2(installDir, EXECUTABLE_NAME);
+}
+async function runningAsInstalledBinary(executablePath, target) {
+  const [running, installed] = await Promise.all([
+    fs2.realpath(executablePath).catch(() => void 0),
+    fs2.realpath(target).catch(() => void 0)
+  ]);
+  return running !== void 0 && running === installed;
+}
+async function acquireLock(path3, now) {
+  try {
+    return await fs2.open(path3, "wx", 384);
+  } catch (err) {
+    if (err.code !== "EEXIST")
+      throw err;
+  }
+  const abandoned = await fs2.stat(path3).then((stats) => now - stats.mtimeMs > LOCK_MAX_AGE_MS, () => false);
+  if (!abandoned)
+    return void 0;
+  try {
+    await fs2.unlink(path3);
+    return await fs2.open(path3, "wx", 384);
+  } catch {
+    return void 0;
+  }
+}
+async function releaseLock(path3, lock) {
+  await lock.close().catch(() => void 0);
+  await fs2.unlink(path3).catch(() => void 0);
+}
+function assertReportsVersion(executable, expected) {
+  const reported = execFileSync(executable, ["--version"], { encoding: "utf-8" }).trim();
+  if (reported !== expected) {
+    throw new Error(`the downloaded binary reports version ${reported}, expected ${expected}`);
+  }
+}
+async function stageInstall(installDir, version, fill) {
+  await fs2.mkdir(installDir, { recursive: true, mode: 448 });
+  const temporary = join2(installDir, `.${EXECUTABLE_NAME}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    await fill(temporary);
+    await fs2.chmod(temporary, 493);
+    assertReportsVersion(temporary, version);
+    await fs2.rename(temporary, installedBinaryPath(installDir));
+  } catch (err) {
+    await fs2.unlink(temporary).catch(() => void 0);
+    throw err;
+  }
+}
+async function installRelease(release, installDir, fetchImpl, releasesApi, currentVersion) {
+  await stageInstall(installDir, release.version, (temporary) => downloadAsset(release.asset, temporary, fetchImpl, releasesApi, currentVersion));
+}
+async function installRunningBinary(executablePath, installDir, version) {
+  await stageInstall(installDir, version, (temporary) => fs2.copyFile(executablePath, temporary));
+}
+
+// dist/updater-releases.js
+function asNamedAsset(value, assetName) {
+  if (!value || typeof value !== "object")
+    return void 0;
+  const asset = value;
+  if (asset.name !== assetName)
+    return void 0;
+  if (typeof asset.browser_download_url !== "string" || typeof asset.size !== "number") {
+    return void 0;
+  }
+  return asset;
+}
+function parseReleases(value, platform, arch) {
+  if (!Array.isArray(value))
+    throw new Error("GitHub returned no list of releases");
+  if (!isPublishedTarget(platform, arch))
+    return [];
+  const releases = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object")
+      continue;
+    const release = entry;
+    if (release.draft === true || release.prerelease === true)
+      continue;
+    if (typeof release.tag_name !== "string" || !parseVersion(release.tag_name))
+      continue;
+    if (!Array.isArray(release.assets))
+      continue;
+    const version = release.tag_name.trim();
+    const asset = release.assets.map((candidate) => asNamedAsset(candidate, releaseAssetName(platform, arch, version))).find((candidate) => candidate !== void 0);
+    if (asset)
+      releases.push({ version, asset });
+  }
+  return releases;
+}
+function pickNewestRelease(releases, currentVersion) {
+  let newest;
+  for (const release of releases) {
+    if (!isVersionNewer(release.version, currentVersion))
+      continue;
+    if (!newest || isVersionNewer(release.version, newest.version))
+      newest = release;
+  }
+  return newest;
+}
+async function fetchReleaseJson(fetchImpl, url, currentVersion) {
+  const response = await fetchImpl(url, {
+    headers: githubRequestHeaders(currentVersion),
+    signal: AbortSignal.timeout(LIST_TIMEOUT_MS)
+  });
+  if (!response.ok) {
+    throw new Error(`failed to read the GitHub releases: HTTP ${response.status}`);
+  }
+  return response.json();
+}
+async function fetchReleaseList(fetchImpl, releasesApi, currentVersion, platform, arch) {
+  const listed = await fetchReleaseJson(fetchImpl, releasesApi, currentVersion);
+  return parseReleases(listed, platform, arch);
+}
+async function fetchTaggedRelease(fetchImpl, releasesApi, currentVersion, platform, arch, tag) {
+  const url = taggedReleaseUrl(releasesApi, tag);
+  const tagged = await fetchReleaseJson(fetchImpl, url, currentVersion);
+  return parseReleases([tagged], platform, arch)[0];
+}
+
+// dist/installer.js
+async function runningCompiledBinary() {
+  const sea = await import("node:sea").catch(() => void 0);
+  return sea?.isSea() === true;
+}
+function mergeHooks(existing, manifest) {
+  const merged = { ...existing.hooks };
+  for (const [event2, groups] of Object.entries(manifest)) {
+    const current = Array.isArray(merged[event2]) ? merged[event2] : [];
+    const present = new Set(current.flatMap((group) => (group?.hooks ?? []).map((hook) => hook?.command)));
+    merged[event2] = [
+      ...current,
+      ...groups.filter((group) => (group.hooks ?? []).every((hook) => !present.has(hook.command)))
+    ];
+  }
+  return { ...existing, hooks: merged };
+}
+function compiledHooksManifest() {
+  const compiled = false ? void 0 : '{\n  "description": "LangSmith tracing hooks, run by the standalone binary instead of Node. Traces Claude Code sessions, tool calls, and subagents to LangSmith",\n  "hooks": {\n    "UserPromptSubmit": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" UserPromptSubmit",\n            "timeout": 30\n          }\n        ]\n      }\n    ],\n    "PreToolUse": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" PreToolUse",\n            "timeout": 10\n          }\n        ]\n      }\n    ],\n    "PostToolUse": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" PostToolUse",\n            "timeout": 30,\n            "async": true\n          }\n        ]\n      }\n    ],\n    "Stop": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" Stop",\n            "timeout": 120\n          }\n        ]\n      }\n    ],\n    "StopFailure": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" StopFailure",\n            "timeout": 30\n          }\n        ]\n      }\n    ],\n    "SubagentStop": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" SubagentStop",\n            "timeout": 60,\n            "async": true\n          }\n        ]\n      }\n    ],\n    "PreCompact": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" PreCompact",\n            "timeout": 10\n          }\n        ]\n      }\n    ],\n    "PostCompact": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" PostCompact",\n            "timeout": 30,\n            "async": true\n          }\n        ]\n      }\n    ],\n    "SessionEnd": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" SessionEnd",\n            "timeout": 10\n          }\n        ]\n      }\n    ]\n  }\n}\n';
+  const hooks = compiled ? JSON.parse(compiled).hooks : void 0;
+  if (!hooks || typeof hooks !== "object" || Array.isArray(hooks)) {
+    throw new Error("this build carries no hooks manifest");
+  }
+  return hooks;
+}
+function requestedTag(args) {
+  const index = args.indexOf("--tag");
+  if (index === -1)
+    return void 0;
+  const tag = args[index + 1];
+  if (!tag || tag.startsWith("-")) {
+    throw new Error("--tag needs a release tag, for example --tag 0.4.0");
+  }
+  return tag;
+}
+async function readSettings(path3) {
+  return fs3.readFile(path3, "utf-8").then((text) => JSON.parse(text), () => ({}));
+}
+async function writeSettings(path3, contents) {
+  await fs3.mkdir(dirname2(path3), { recursive: true });
+  const mode = await fs3.stat(path3).then((stats) => stats.mode & 511, () => 384);
+  const temporary = join3(dirname2(path3), `.${basename(path3)}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    await fs3.writeFile(temporary, contents, { mode: 384 });
+    await fs3.chmod(temporary, mode);
+    await fs3.rename(temporary, path3);
+  } catch (err) {
+    await fs3.unlink(temporary).catch(() => void 0);
+    throw err;
+  }
+}
+async function install(options = {}) {
+  const args = options.args ?? [];
+  const tag = requestedTag(args);
+  const platform = options.runtimePlatform ?? osPlatform();
+  const arch = options.runtimeArch ?? osArch();
+  if (!isPublishedTarget(platform, arch)) {
+    throw new Error(`no binary is published for ${platform}-${arch}. Install the Node plugin with '/plugin install langsmith-tracing@langsmith-claude-code-plugins' instead`);
+  }
+  const home = options.home ?? homedir3();
+  const settingsPath = args.includes("--project") ? join3(options.cwd ?? process.cwd(), ".claude", "settings.json") : join3(home, ".claude", "settings.json");
+  const manifest = options.hooksManifest ?? compiledHooksManifest();
+  const merged = mergeHooks(await readSettings(settingsPath), manifest);
+  const settings = `${JSON.stringify(merged, null, 2)}
+`;
+  const out = options.out ?? console.log;
+  if (args.includes("--print")) {
+    out(settings.trimEnd());
+    return settingsPath;
+  }
+  const currentVersion = options.currentVersion ?? LS_INTEGRATION_VERSION ?? OLDER_THAN_ANY_RELEASE;
+  const executablePath = options.executablePath ?? process.execPath;
+  const copyable = !tag && (options.compiledBinary ?? await runningCompiledBinary());
+  const installDir = installDirectory(home);
+  let installedVersion = currentVersion;
+  if (copyable) {
+    await installRunningBinary(executablePath, installDir, currentVersion);
+  } else {
+    const releasesApi = options.releasesApi ?? configuredReleasesApi();
+    const fetchImpl = options.fetchImpl ?? fetch;
+    const release = tag ? await fetchTaggedRelease(fetchImpl, releasesApi, currentVersion, platform, arch, tag) : pickNewestRelease(await fetchReleaseList(fetchImpl, releasesApi, currentVersion, platform, arch), OLDER_THAN_ANY_RELEASE);
+    if (!release) {
+      throw new Error(`no published release carries a ${platform}-${arch} binary for ${tag ?? "this plugin"} yet`);
+    }
+    await installRelease(release, installDir, fetchImpl, releasesApi, currentVersion);
+    installedVersion = release.version;
+  }
+  await writeSettings(settingsPath, settings);
+  for (const line of [
+    `Installed ${installedBinaryPath(installDir)} (${installedVersion})`,
+    `Added the LangSmith tracing hooks to ${settingsPath}`,
+    "",
+    "Next:",
+    "  1. Set enabled, api_key and project in ~/.claude/langsmith.json.",
+    "  2. Restart Claude Code so it reloads the settings.",
+    "  3. Uninstall the langsmith-tracing plugin, or both will trace the same session."
+  ]) {
+    out(line);
+  }
+  return settingsPath;
+}
+async function runInstall(args) {
+  try {
+    await install({ args });
+  } catch (err) {
+    console.error(`Install failed: ${err instanceof Error ? err.message : err}`);
+    process.exitCode = 1;
+  }
+}
+
+// dist/updater.js
+import { join as join4 } from "node:path";
+import { arch as osArch2, platform as osPlatform2 } from "node:os";
+async function updateFromGitHub(options = {}) {
+  const currentVersion = options.currentVersion ?? LS_INTEGRATION_VERSION;
+  const platform = options.runtimePlatform ?? osPlatform2();
+  const arch = options.runtimeArch ?? osArch2();
+  if (!currentVersion || !isPublishedTarget(platform, arch))
+    return { status: "unsupported" };
+  const installDir = options.installDir ?? installDirectory();
+  const executablePath = options.executablePath ?? process.execPath;
+  if (!await runningAsInstalledBinary(executablePath, installedBinaryPath(installDir))) {
+    debug(`Skipping the update check outside the install path: ${executablePath}`);
+    return { status: "not-installed" };
+  }
+  const now = (options.now ?? Date.now)();
+  const lockFile = join4(installDir, LOCK_FILE);
+  const lock = await acquireLock(lockFile, now);
+  if (!lock)
+    return { status: "busy" };
+  try {
+    const releasesApi = options.releasesApi ?? configuredReleasesApi();
+    const fetchImpl = options.fetchImpl ?? fetch;
+    const releases = await fetchReleaseList(fetchImpl, releasesApi, currentVersion, platform, arch);
+    const release = pickNewestRelease(releases, currentVersion);
+    if (!release)
+      return { status: "current" };
+    await installRelease(release, installDir, fetchImpl, releasesApi, currentVersion);
+    return { status: "updated", version: release.version };
+  } finally {
+    await releaseLock(lockFile, lock);
+  }
+}
+async function runUpdateCheck() {
+  try {
+    const result = await updateFromGitHub();
+    log(`Update check: ${result.status}${result.status === "updated" ? ` (${result.version})` : ""}`);
+    return result;
+  } catch (err) {
+    warn(`Update check failed: ${err}`);
+    return void 0;
+  }
+}
+
 // dist/utils/hook-entry.js
 function runHookEntry(event2, main10) {
   main10().catch((err) => {
@@ -664,9 +1493,9 @@ function runHookEntry(event2, main10) {
 
 // dist/tracing-policy.js
 import { randomUUID } from "node:crypto";
-import { lstatSync, readFileSync } from "node:fs";
-import { mkdir, open, rename, rmdir, unlink } from "node:fs/promises";
-import { dirname as dirname2 } from "node:path";
+import { lstatSync as lstatSync2, readFileSync as readFileSync3 } from "node:fs";
+import { mkdir as mkdir3, open as open3, rename as rename3, rmdir, unlink as unlink3 } from "node:fs/promises";
+import { dirname as dirname3 } from "node:path";
 import { performance as performance2 } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 function isMode(value) {
@@ -681,11 +1510,11 @@ function hasCode(error2, code) {
 function readPolicy(path3) {
   let raw;
   try {
-    raw = readFileSync(path3, "utf8");
+    raw = readFileSync3(path3, "utf8");
   } catch (error2) {
     if (hasCode(error2, "ENOENT")) {
       try {
-        lstatSync(path3);
+        lstatSync2(path3);
       } catch (statError) {
         if (hasCode(statError, "ENOENT"))
           return { threads: {} };
@@ -728,12 +1557,12 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
   }
   const path3 = tracingPolicyPath(stateFilePath);
   const lockPath2 = `${path3}.lock`;
-  await mkdir(dirname2(path3), { recursive: true });
+  await mkdir3(dirname3(path3), { recursive: true });
   const deadline = performance2.now() + 2e3;
   let locked = false;
   while (!locked) {
     try {
-      await mkdir(lockPath2, { mode: 448 });
+      await mkdir3(lockPath2, { mode: 448 });
       locked = true;
     } catch (error2) {
       if (!hasCode(error2, "EEXIST"))
@@ -762,7 +1591,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     }
     policy.threads = { ...policy.threads, [sessionId]: mode };
     tempPath = `${path3}.${process.pid}.${randomUUID()}.tmp`;
-    const temp = await open(tempPath, "wx", 384);
+    const temp = await open3(tempPath, "wx", 384);
     try {
       await temp.writeFile(`${JSON.stringify(policy)}
 `, "utf8");
@@ -772,10 +1601,10 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
       throw error2;
     }
     await temp.close();
-    await rename(tempPath, path3);
+    await rename3(tempPath, path3);
     tempPath = void 0;
     await bestEffort(async () => {
-      const directory = await open(dirname2(path3), "r");
+      const directory = await open3(dirname3(path3), "r");
       try {
         await directory.sync();
       } finally {
@@ -784,7 +1613,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     }, "Preference is effective, but crash durability could not be confirmed; retry saving");
   } finally {
     if (tempPath) {
-      await bestEffort(() => unlink(tempPath), "Temporary file cleanup failed");
+      await bestEffort(() => unlink3(tempPath), "Temporary file cleanup failed");
     }
     await bestEffort(() => rmdir(lockPath2), `Preference lock cleanup failed at ${lockPath2}. Before retrying, remove the lock only after confirming no preference writer is running`);
   }
@@ -5555,7 +6384,7 @@ import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 var path2 = nodePath;
-async function mkdir3(dir) {
+async function mkdir5(dir) {
   await nodeFsPromises.mkdir(dir, { recursive: true });
 }
 async function writeFileAtomic(filePath, content) {
@@ -5569,7 +6398,7 @@ async function writeFileAtomic(filePath, content) {
 async function readdir2(dir) {
   return nodeFsPromises.readdir(dir);
 }
-async function stat2(filePath) {
+async function stat4(filePath) {
   return nodeFsPromises.stat(filePath);
 }
 function existsSync2(p) {
@@ -5587,7 +6416,7 @@ function renameSync3(oldPath, newPath) {
 function unlinkSync2(filePath) {
   nodeFs.unlinkSync(filePath);
 }
-function readFileSync3(filePath) {
+function readFileSync5(filePath) {
   return nodeFs.readFileSync(filePath, "utf-8");
 }
 async function mkdirExclusive(dir) {
@@ -5795,7 +6624,7 @@ var PromptCache = class {
     }
     let entries;
     try {
-      const content = readFileSync3(filePath);
+      const content = readFileSync5(filePath);
       const data = JSON.parse(content);
       entries = data.entries ?? null;
     } catch {
@@ -5915,7 +6744,7 @@ function isEEXIST(err) {
 }
 function lockMetadataLines(lockDir) {
   try {
-    return readFileSync3(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
+    return readFileSync5(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
   } catch {
     return void 0;
   }
@@ -5949,7 +6778,7 @@ async function acquireOAuthRefreshLock(configPath, deadline) {
   const lockDir = `${configPath}.oauth.lock.lock`;
   const parent = path2.dirname(lockDir);
   if (parent) {
-    await mkdir3(parent);
+    await mkdir5(parent);
   }
   const owner = globalThis.crypto.randomUUID();
   for (; ; ) {
@@ -6030,7 +6859,7 @@ function loadProfileState() {
     return void 0;
   }
   try {
-    const config = JSON.parse(readFileSync3(configPath));
+    const config = JSON.parse(readFileSync5(configPath));
     const profileName = resolveProfileName(config);
     const profile = profileName ? config.profiles?.[profileName] : void 0;
     if (!profileName || !profile) {
@@ -6260,7 +7089,7 @@ var ProfileAuth = class {
   }
   reloadProfile() {
     try {
-      const config = JSON.parse(readFileSync3(this.state.configPath));
+      const config = JSON.parse(readFileSync5(this.state.configPath));
       const profile = config.profiles?.[this.state.profileName];
       if (!profile) {
         return void 0;
@@ -8180,7 +9009,7 @@ var Client = class _Client {
       const filename = `trace_${Date.now()}_${v4_default().slice(0, 8)}.json`;
       const filepath = path2.join(directory, filename);
       if (!_Client._fallbackDirsCreated.has(directory)) {
-        await mkdir3(directory);
+        await mkdir5(directory);
         _Client._fallbackDirsCreated.add(directory);
       }
       if (maxBytes !== void 0 && maxBytes > 0) {
@@ -8189,7 +9018,7 @@ var Client = class _Client {
           const traceFiles = entries.filter((f2) => f2.startsWith("trace_") && f2.endsWith(".json"));
           let total = 0;
           for (const name of traceFiles) {
-            const { size } = await stat2(path2.join(directory, name));
+            const { size } = await stat4(path2.join(directory, name));
             total += size;
           }
           if (total >= maxBytes) {
@@ -13365,17 +14194,17 @@ function createSecretAnonymizer(options) {
 }
 
 // dist/transcript.js
-import { readFileSync as readFileSync4, statSync as statSync3, fstatSync, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync as readFileSync6, statSync as statSync4, fstatSync, openSync, readSync, closeSync } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
   let size;
   try {
-    size = statSync3(filePath).size;
+    size = statSync4(filePath).size;
   } catch {
     return { messages: [], lastLine: afterLine };
   }
   if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync4(filePath, "utf-8");
+    const raw = readFileSync6(filePath, "utf-8");
     const lines = raw.split("\n").filter((l) => l.trim() !== "");
     const messages = [];
     let lastLine = afterLine;
@@ -13437,11 +14266,11 @@ function readTranscript(filePath, afterLine = -1) {
 }
 function getTranscriptEndLine(filePath) {
   try {
-    const size = statSync3(filePath).size;
+    const size = statSync4(filePath).size;
     if (size === 0)
       return -1;
     if (size <= MAX_FULL_READ_BYTES) {
-      const raw = readFileSync4(filePath, "utf-8");
+      const raw = readFileSync6(filePath, "utf-8");
       const lines = raw.split("\n").filter((l) => l.trim() !== "");
       return lines.length > 0 ? lines.length - 1 : -1;
     }
@@ -13669,8 +14498,8 @@ function groupIntoTurns(messages) {
 }
 
 // dist/state.js
-import { readFileSync as readFileSync5, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
-import { dirname as dirname3 } from "node:path";
+import { readFileSync as readFileSync7, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
+import { dirname as dirname4 } from "node:path";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
 function lockPath(stateFilePath) {
@@ -13679,10 +14508,10 @@ function lockPath(stateFilePath) {
 function sleep3(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-async function acquireLock(stateFilePath) {
+async function acquireLock2(stateFilePath) {
   const lock = lockPath(stateFilePath);
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync4(dirname3(stateFilePath), { recursive: true });
+  mkdirSync4(dirname4(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
       const fd = openSync2(lock, "wx");
@@ -13697,24 +14526,24 @@ async function acquireLock(stateFilePath) {
   } catch {
   }
 }
-function releaseLock(stateFilePath) {
+function releaseLock2(stateFilePath) {
   try {
     unlinkSync3(lockPath(stateFilePath));
   } catch {
   }
 }
 async function atomicUpdateState(stateFilePath, fn) {
-  await acquireLock(stateFilePath);
+  await acquireLock2(stateFilePath);
   try {
     const state = loadState(stateFilePath);
     writeFileSync3(stateFilePath, JSON.stringify(fn(state), null, 2));
   } finally {
-    releaseLock(stateFilePath);
+    releaseLock2(stateFilePath);
   }
 }
 function loadState(stateFilePath) {
   try {
-    const raw = readFileSync5(stateFilePath, "utf-8");
+    const raw = readFileSync7(stateFilePath, "utf-8");
     return JSON.parse(raw);
   } catch {
     return {};
@@ -14624,419 +15453,6 @@ async function closeAgentToolRun(options) {
   } else {
     await runTree.postRun();
   }
-}
-
-// dist/config.js
-import { readFileSync as readFileSync7 } from "node:fs";
-
-// dist/shared-config.js
-import { lstatSync as lstatSync2, readFileSync as readFileSync6, statSync as statSync4 } from "node:fs";
-var COMMON_BOOLEAN_SETTINGS = {
-  enabled: { default: false, restrictive: false },
-  defaultMuted: { default: false, restrictive: true }
-};
-function object(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function invalid(raw) {
-  return {
-    status: "invalid",
-    common: { enabled: false, defaultMuted: true },
-    ...raw === void 0 ? {} : { raw },
-    diagnostics: [
-      "Invalid or unreadable common config; ordinary fields discarded, privacy switches restricted."
-    ]
-  };
-}
-function parseReplica(value) {
-  if (!object(value))
-    return void 0;
-  const replica = {};
-  for (const [canonical, alias] of [
-    ["api_url", "apiUrl"],
-    ["api_key", "apiKey"],
-    ["project", "projectName"]
-  ]) {
-    const selected = Object.hasOwn(value, canonical) ? canonical : alias;
-    if (Object.hasOwn(value, selected)) {
-      const entry = value[selected];
-      if (typeof entry !== "string")
-        return void 0;
-      replica[canonical] = entry;
-    }
-  }
-  if (Object.hasOwn(value, "updates")) {
-    if (!object(value.updates))
-      return void 0;
-    replica.updates = value.updates;
-  }
-  return replica;
-}
-function parseCommonConfig(value) {
-  if (!object(value))
-    return invalid();
-  const common = {};
-  const diagnostics = [];
-  for (const field of ["enabled", "defaultMuted"]) {
-    if (!Object.hasOwn(value, field))
-      continue;
-    const entry = value[field];
-    common[field] = typeof entry === "boolean" ? entry : COMMON_BOOLEAN_SETTINGS[field].restrictive;
-    if (typeof entry !== "boolean")
-      diagnostics.push(`Invalid ${field}; using restrictive value.`);
-  }
-  for (const field of ["api_key", "api_url", "project"]) {
-    if (!Object.hasOwn(value, field))
-      continue;
-    if (typeof value[field] !== "string")
-      return invalid(value);
-    common[field] = value[field];
-  }
-  if (Object.hasOwn(value, "redact")) {
-    if (typeof value.redact !== "boolean")
-      return invalid(value);
-    common.redact = value.redact;
-  }
-  if (Object.hasOwn(value, "metadata")) {
-    if (!object(value.metadata))
-      return invalid(value);
-    common.metadata = value.metadata;
-  }
-  if (Object.hasOwn(value, "replicas")) {
-    if (!Array.isArray(value.replicas))
-      return invalid(value);
-    const replicas2 = [];
-    for (const entry of value.replicas) {
-      const replica = parseReplica(entry);
-      if (replica === void 0)
-        return invalid(value);
-      replicas2.push(replica);
-    }
-    common.replicas = replicas2;
-  }
-  if (Object.hasOwn(value, "redact_extra_rules")) {
-    if (!Array.isArray(value.redact_extra_rules))
-      return invalid(value);
-    const rules = [];
-    for (const rule of value.redact_extra_rules) {
-      if (!object(rule) || typeof rule.pattern !== "string" || !Object.hasOwn(rule, "pattern")) {
-        return invalid(value);
-      }
-      const hasReplace = Object.hasOwn(rule, "replace");
-      if (hasReplace && typeof rule.replace !== "string")
-        return invalid(value);
-      try {
-        new RegExp(rule.pattern, "g");
-      } catch {
-        return invalid(value);
-      }
-      rules.push({
-        pattern: rule.pattern,
-        ...hasReplace ? { replace: rule.replace } : {}
-      });
-    }
-    common.redact_extra_rules = rules;
-  }
-  return { status: "valid", common, raw: value, diagnostics };
-}
-function readCommonConfigFile(path3) {
-  try {
-    if (!statSync4(path3).isFile())
-      return invalid();
-  } catch (error2) {
-    if (error2.code === "ENOENT") {
-      try {
-        lstatSync2(path3);
-      } catch (lstatError) {
-        if (lstatError.code === "ENOENT") {
-          return { status: "absent", common: {}, diagnostics: [] };
-        }
-      }
-    }
-    return invalid();
-  }
-  try {
-    return parseCommonConfig(JSON.parse(readFileSync6(path3, "utf8")));
-  } catch {
-    return invalid();
-  }
-}
-function resolveField(sources, field) {
-  return sources.find((source) => source[field] !== void 0)?.[field];
-}
-function mergeCommonConfig(sources, options = {}) {
-  const { harness = {}, root = {}, user = {}, userRoot = {}, env = {}, defaults: defaults2 = {} } = sources;
-  const files = [harness, root, user, userRoot];
-  const precedence = [env, ...files, defaults2];
-  const switches = options.envFirst ? precedence : [...files, env, defaults2];
-  const merged = { enabled: false, defaultMuted: false, redact: true };
-  for (const field of ["enabled", "defaultMuted"]) {
-    merged[field] = resolveField(switches, field) ?? COMMON_BOOLEAN_SETTINGS[field].default;
-  }
-  merged.api_key = resolveField(precedence, "api_key");
-  merged.api_url = resolveField(precedence, "api_url");
-  merged.project = resolveField(precedence, "project");
-  merged.replicas = resolveField(precedence, "replicas");
-  merged.redact = resolveField(precedence, "redact") ?? true;
-  merged.redact_extra_rules = resolveField(precedence, "redact_extra_rules");
-  if (precedence.some((source) => source.metadata !== void 0)) {
-    merged.metadata = [...precedence].reverse().reduce((metadata, source) => ({ ...metadata, ...source.metadata }), {});
-  }
-  return merged;
-}
-function toSdkReplicas(replicas2) {
-  return replicas2?.map((replica) => ({
-    ...replica.api_url === void 0 ? {} : { apiUrl: replica.api_url },
-    ...replica.api_key === void 0 ? {} : { apiKey: replica.api_key },
-    ...replica.project === void 0 ? {} : { projectName: replica.project },
-    ...replica.updates === void 0 ? {} : { updates: replica.updates }
-  }));
-}
-
-// dist/config.js
-import { homedir, userInfo } from "node:os";
-import { join } from "node:path";
-import { execSync } from "node:child_process";
-var LS_INTEGRATION_VERSION = true ? "0.3.1" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
-var PROVIDER_HOSTS = {
-  github: "github.com",
-  gitlab: "gitlab.com",
-  bitbucket: "bitbucket.org",
-  devAzure: "dev.azure.com"
-};
-function readAnthropicUserId() {
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
-  if (!homeDir)
-    return void 0;
-  const configPath = join(homeDir, ".claude.json");
-  try {
-    const raw = readFileSync7(configPath, "utf-8");
-    const parsed = JSON.parse(raw);
-    const userId = parsed?.userID;
-    if (typeof userId === "string" && userId.length > 0) {
-      return userId;
-    }
-  } catch (err) {
-    debug(`Could not read Anthropic user ID from ${configPath}: ${err}`);
-  }
-  return void 0;
-}
-function readLocalUsername() {
-  return userInfo().username;
-}
-var GIT_PROVIDERS = {
-  "github.com": "github",
-  "gitlab.com": "gitlab",
-  "bitbucket.org": "bitbucket",
-  "dev.azure.com": "devAzure"
-};
-function parseRepoName(remoteUrl) {
-  const value = remoteUrl.trim();
-  try {
-    const url = new URL(value);
-    const provider = GIT_PROVIDERS[url.hostname.toLowerCase()];
-    const name = url.pathname.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "");
-    if (provider && name)
-      return { provider, name };
-  } catch {
-  }
-  const scpMatch = value.match(/^(?:[^@]+@)?([^:]+):\/?(.+)$/);
-  if (scpMatch) {
-    const provider = GIT_PROVIDERS[scpMatch[1].toLowerCase()];
-    const name = scpMatch[2].replace(/\/+$/, "").replace(/\.git$/, "");
-    if (provider && name)
-      return { provider, name };
-  }
-  return void 0;
-}
-function getRepoName(cwd) {
-  try {
-    const output = execSync("git remote -v", { cwd, encoding: "utf-8", timeout: 5e3 });
-    const lines = output.trim().split("\n").filter(Boolean);
-    const remotes = [];
-    for (const line of lines) {
-      const parts = line.split(/\s+/);
-      if (parts.length >= 2 && line.includes("(fetch)")) {
-        remotes.push({ name: parts[0], url: parts[1] });
-      }
-    }
-    const origin = remotes.find((r) => r.name === "origin");
-    if (origin) {
-      const name = parseRepoName(origin.url + " ");
-      if (name)
-        return name;
-    }
-    for (const remote of remotes) {
-      const name = parseRepoName(remote.url + " ");
-      if (name)
-        return name;
-    }
-  } catch {
-  }
-  return void 0;
-}
-function getGitInfo(cwd) {
-  const result = {};
-  try {
-    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
-      cwd,
-      encoding: "utf-8",
-      timeout: 5e3
-    }).trim();
-    if (branch && branch !== "HEAD")
-      result.branch = branch;
-  } catch {
-  }
-  try {
-    const commit = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8", timeout: 5e3 }).trim();
-    if (commit)
-      result.commit = commit;
-  } catch {
-  }
-  return result;
-}
-var BOOLEAN_SETTINGS = {
-  enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
-  defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted }
-};
-function envBoolean(field) {
-  const setting = BOOLEAN_SETTINGS[field];
-  const env = process.env[setting.env]?.toLowerCase();
-  if (env === void 0)
-    return void 0;
-  if (env === "true")
-    return true;
-  if (env === "false")
-    return false;
-  return setting.restrictive;
-}
-function loadConfig(options) {
-  const cwd = options?.cwd ?? process.cwd();
-  const homeDir = homedir();
-  const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
-  const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
-  let replicas2;
-  const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
-  if (providedReplicas !== void 0) {
-    try {
-      replicas2 = JSON.parse(providedReplicas);
-    } catch {
-      error("Failed to parse provided CC_LANGSMITH_RUNS_ENDPOINTS. Please make sure they are valid JSON.");
-    }
-  }
-  const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
-  let customMetadata;
-  const providedMetadata = process.env.CC_LANGSMITH_METADATA;
-  if (providedMetadata !== void 0) {
-    try {
-      const parsed = JSON.parse(providedMetadata);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        customMetadata = parsed;
-      } else {
-        error("CC_LANGSMITH_METADATA must be a JSON object (not an array or primitive).");
-      }
-    } catch {
-      error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
-    }
-  }
-  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").trim().toLowerCase();
-  const redact = !["0", "false", "no", "off"].includes(redactEnv);
-  let redactExtraRules;
-  const providedExtra = process.env.CC_LANGSMITH_REDACT_EXTRA;
-  if (providedExtra !== void 0) {
-    try {
-      const parsed = JSON.parse(providedExtra);
-      if (!Array.isArray(parsed)) {
-        error("CC_LANGSMITH_REDACT_EXTRA must be a JSON array of { pattern, replace }.");
-      } else {
-        const validRules = [];
-        for (const rule of parsed) {
-          if (typeof rule !== "object" || rule === null || typeof rule.pattern !== "string" || rule.replace !== void 0 && typeof rule.replace !== "string") {
-            error(`Skipping invalid CC_LANGSMITH_REDACT_EXTRA rule (expected { pattern: string, replace?: string }): ${JSON.stringify(rule)}`);
-            continue;
-          }
-          try {
-            new RegExp(rule.pattern);
-          } catch {
-            error(`Skipping CC_LANGSMITH_REDACT_EXTRA rule with an invalid regex pattern: ${rule.pattern}`);
-            continue;
-          }
-          validRules.push(rule);
-        }
-        if (validRules.length > 0 || parsed.length === 0)
-          redactExtraRules = validRules;
-      }
-    } catch {
-      error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");
-    }
-  }
-  const common = mergeCommonConfig({
-    harness: readCommonConfigFile(join(cwd, ".claude", "langsmith.json")).common,
-    root: readCommonConfigFile(join(cwd, "langsmith-plugins.json")).common,
-    user: homeDir ? readCommonConfigFile(join(homeDir, ".claude", "langsmith.json")).common : void 0,
-    userRoot: homeDir ? readCommonConfigFile(join(homeDir, ".langsmith-plugins.json")).common : void 0,
-    env: {
-      enabled: envBoolean("enabled"),
-      defaultMuted: envBoolean("defaultMuted"),
-      api_key: process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY,
-      api_url: process.env.LANGSMITH_ENDPOINT,
-      project: process.env.CC_LANGSMITH_PROJECT,
-      metadata: customMetadata,
-      redact: process.env.CC_LANGSMITH_REDACT === void 0 ? void 0 : redact
-      // Environment rules retain the existing tolerant parser.
-    },
-    defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" }
-  }, { envFirst: true });
-  if (replicas2 === void 0)
-    replicas2 = toSdkReplicas(common.replicas);
-  redactExtraRules ??= common.redact_extra_rules;
-  customMetadata = common.metadata;
-  const anthropicUserId = readAnthropicUserId();
-  const localUsername = readLocalUsername();
-  const identityMetadata = { local_username: localUsername };
-  if (anthropicUserId) {
-    identityMetadata.user_id = anthropicUserId;
-    identityMetadata.anthropic_user_id = anthropicUserId;
-  }
-  const contractMetadata = {
-    ls_agent_purpose: "coding",
-    ls_integration: "claude-code",
-    ls_agent_runtime: "Claude Code",
-    ls_trace_schema_version: "coding-agent-v1",
-    cwd
-  };
-  if (LS_INTEGRATION_VERSION) {
-    contractMetadata.ls_integration_version = LS_INTEGRATION_VERSION;
-  }
-  const repoMetadata = {};
-  const repoName = getRepoName(cwd);
-  if (repoName != null) {
-    repoMetadata.repository_name = repoName.name;
-    repoMetadata.repository_provider = repoName.provider;
-    const host = PROVIDER_HOSTS[repoName.provider];
-    if (host)
-      repoMetadata.repository_url = `https://${host}/${repoName.name}`;
-  }
-  const gitInfo = getGitInfo(cwd);
-  if (gitInfo.branch)
-    repoMetadata.git_branch = gitInfo.branch;
-  if (gitInfo.commit)
-    repoMetadata.git_commit_sha = gitInfo.commit;
-  customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
-  return {
-    enabled: common.enabled,
-    defaultMuted: common.defaultMuted,
-    apiKey: common.api_key,
-    project: common.project,
-    apiBaseUrl: common.api_url,
-    stateFilePath,
-    debug: debug2,
-    parentDottedOrder,
-    replicas: replicas2,
-    customMetadata,
-    redact: common.redact,
-    redactExtraRules
-  };
 }
 
 // dist/utils/hook-init.js
@@ -16382,10 +16798,37 @@ var HOOK_HANDLERS = {
 };
 
 // dist/hooks/dispatch.js
+var USAGE = `Usage:
+  ${EXECUTABLE_NAME} <HookEventName>
+  ${EXECUTABLE_NAME} --install [--print] [--project] [--tag VERSION]
+  ${EXECUTABLE_NAME} --update
+  ${EXECUTABLE_NAME} --version
+
+Options:
+  --help, -h     Show this help and exit
+  --version, -v  Print the installed version and exit
+  --install      Install this binary and add the hooks to settings.json
+  --print        With --install, print the merged settings and change nothing
+  --project      Use .claude/settings.json in the current directory
+  --tag VERSION  Install a published release instead of this binary
+  --update       Replace the installed binary with the newest release`;
 var argument = process.argv[2];
 var event = HOOK_EVENT_NAMES.find((name) => name === argument);
-if (event) {
+if (argument === "--help" || argument === "-h") {
+  console.log(USAGE);
+} else if (argument === "--version" || argument === "-v") {
+  console.log(LS_INTEGRATION_VERSION ?? "development");
+} else if (argument === "--install") {
+  void runInstall(process.argv.slice(3));
+} else if (argument === "--update") {
+  initLogger(false);
+  void runUpdateCheck();
+} else if (event) {
   runHookEntry(event, HOOK_HANDLERS[event]);
+} else if (argument?.startsWith("-")) {
+  console.error(`unknown option: ${argument}`);
+  console.error(USAGE);
+  process.exitCode = 1;
 } else {
   initLogger(false);
   error(`Unknown hook event: ${argument ?? "(none)"}`);

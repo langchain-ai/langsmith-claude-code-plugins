@@ -9,6 +9,7 @@ import { HOOK_EVENT_NAMES } from "../constants.js";
 
 const root = new URL("../../", import.meta.url);
 const seaConfig = JSON.parse(readFileSync(new URL("sea-config.json", root), "utf8"));
+const { version } = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
 const binary = fileURLToPath(new URL(seaConfig.output, root));
 const built = existsSync(binary);
 
@@ -45,6 +46,14 @@ function dispatch(args: string[], prompt = "ordinary prompt") {
 const logDir = () => join(home, ".claude", "state");
 
 describe.skipIf(!built)("the standalone binary, bin/langsmith-claude-code-tracing", () => {
+  it("prints the package version for --version", () => {
+    const result = dispatch(["--version"]);
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.trim()).toBe(version);
+    expect(existsSync(logDir())).toBe(false);
+  });
+
   it.each(HOOK_EVENT_NAMES)(
     "runs the %s handler and writes no state while tracing is off",
     (event) => {
@@ -64,6 +73,24 @@ describe.skipIf(!built)("the standalone binary, bin/langsmith-claude-code-tracin
     expect(result.status, result.stderr).toBe(0);
     const decision = result.stdout === "" ? undefined : JSON.parse(result.stdout).decision;
     expect(decision).toBe(event === "UserPromptSubmit" ? "block" : undefined);
+  });
+
+  it.each(["--help", "-h"])("prints the usage for %s and runs no handler", (flag) => {
+    const result = dispatch([flag]);
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("Usage:");
+    expect(result.stdout).toContain("--help, -h");
+    expect(existsSync(logDir())).toBe(false);
+  });
+
+  it("rejects an unknown option with the usage and runs no handler", () => {
+    const result = dispatch(["--instal"]);
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("unknown option: --instal");
+    expect(existsSync(logDir())).toBe(false);
   });
 
   it.each([[], ["NotAnEvent"], ["SessionStart"], ["userpromptsubmit"]])(

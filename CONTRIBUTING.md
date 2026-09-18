@@ -99,6 +99,7 @@ the workflow pins that version, and the plugin itself still runs on Node 20.
 
 - The build only targets macOS arm64, and refuses to run anywhere else.
 - CI builds the binary and runs it against all nine hook events on any PR that touches the build.
+- The build asks the binary for its `--version` and fails unless it matches `package.json`.
 - Publishing is manual. Run the workflow from the Actions tab against a release tag, and it
   attaches the binary to that tag's release as a draft.
 
@@ -109,6 +110,19 @@ that on the downloaded file before running it:
 xattr -d com.apple.quarantine <downloaded-binary>
 chmod +x <downloaded-binary>
 ```
+
+### Installing the binary
+
+```bash
+bin/langsmith-claude-code-tracing --install   # add --print to see the settings instead
+```
+
+The binary installs itself, so users need no Node or clone. It copies itself into
+`~/.langsmith` and merges its hooks into a settings file, leaving `hooks/hooks.json`
+alone. Only `--tag` downloads, and that download is checksummed.
+
+`esbuild.sea.config.mjs` compiles `hooks/hooks.sea.json` in. It mirrors `hooks/hooks.json`
+and changes only the command. A test fails if they drift.
 
 ## Dev loop
 
