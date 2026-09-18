@@ -1,0 +1,76 @@
+name: Build Binary
+
+on:
+  # The only way to publish. A tag push deliberately does not trigger this.
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - .github/workflows/build-binary.yml
+      - esbuild.sea.config.mjs
+      - sea-config.json
+      - package.json
+      - src/hooks/dispatch.ts
+      - src/hooks/dispatch.sea.test.ts
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned:
+    name: Build Unsigned Binary
+    runs-on: macos-26
+    steps:
+      - name: Check Out the Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Install Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # --build-sea needs Node >= 25.5.
+          node-version: 26.8.2
+          architecture: arm64
+          cache: pnpm
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build the Unsigned Binary
+        run: pnpm build:sea
+      - name: Test the Binary
+        run: pnpm test src/hooks/dispatch.sea.test.ts
+      - name: Upload the Binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: langsmith-claude-code-tracing-darwin-arm64-unsigned
+          path: bin/langsmith-claude-code-tracing
+          if-no-files-found: error
+
+  publish-unsigned:
+    name: Publish Unsigned Binary
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build-unsigned
+    # Only downloads and uploads the artifact, so it does not need a Mac.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the Binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: langsmith-claude-code-tracing-darwin-arm64-unsigned
+          path: bin
+      - name: Attach the Binary to the Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASSET_NAME: langsmith-claude-code-tracing-darwin-arm64-${{ github.ref_name }}-unsigned
+        run: |
+          mv bin/langsmith-claude-code-tracing "bin/$ASSET_NAME"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "bin/$ASSET_NAME" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "bin/$ASSET_NAME" \
+              --draft \
+              --verify-tag \
+              --generate-notes
+          fi
