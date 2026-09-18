@@ -13,6 +13,16 @@ on:
       - package.json
       - src/hooks/dispatch.ts
       - src/hooks/dispatch.sea.test.ts
+      - hooks/hooks.sea.json
+      - src/install-sea.test.ts
+      - src/installer.ts
+      - src/sea-constants.ts
+      - src/sea-models.ts
+      - src/updater.ts
+      - src/updater-download.ts
+      - src/updater-install.ts
+      - src/updater-releases.ts
+      - src/updater-utils.ts
 
 permissions:
   contents: read
@@ -38,7 +48,7 @@ jobs:
       - name: Build the Unsigned Binary
         run: pnpm build:sea
       - name: Test the Binary
-        run: pnpm test src/hooks/dispatch.sea.test.ts
+        run: pnpm test src/hooks/dispatch.sea.test.ts src/install-sea.test.ts
       - name: Upload the Binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

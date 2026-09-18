@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HOOK_EVENT_NAMES } from "./constants.js";
+import { releaseAssetName } from "./updater-utils.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const gatewayRoot = join(root, "plugins/langsmith-gateway");
@@ -49,6 +50,34 @@ function hookBundles(pluginRoot: string): string[] {
     ),
   );
 }
+
+describe("the standalone binary manifest", () => {
+  it("mirrors the Node manifest and changes only the command", () => {
+    const node: Hooks = json(join(root, "hooks/hooks.json")).hooks;
+    const sea: Hooks = json(join(root, "hooks/hooks.sea.json")).hooks;
+    expect(Object.keys(sea)).toEqual(Object.keys(node));
+    for (const [event, groups] of Object.entries(node)) {
+      expect(sea[event]).toEqual(
+        groups.map((group) => ({
+          ...group,
+          hooks: group.hooks.map((hook) => ({
+            ...hook,
+            command: `"\${HOME}/.langsmith/langsmith-claude-code-tracing" ${event}`,
+          })),
+        })),
+      );
+    }
+  });
+
+  it("names the asset the release workflow publishes for a tag", () => {
+    const workflow = readFileSync(join(root, ".github/workflows/build-binary.yml"), "utf8");
+    const published = /^\s*ASSET_NAME:[ \t]*(.+?)[ \t]*$/m.exec(workflow)?.[1];
+    expect(published).toContain("${{ github.ref_name }}");
+    expect(published?.replace("${{ github.ref_name }}", "0.4.1")).toBe(
+      releaseAssetName("darwin", "arm64", "0.4.1"),
+    );
+  });
+});
 
 describe("separate marketplace packages", () => {
   it("resolves marketplace sources to matching independent manifests and local hook bundles", () => {

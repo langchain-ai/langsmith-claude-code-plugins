@@ -2,7 +2,7 @@ import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, statSync } from "node:fs";
 import { arch, platform } from "node:os";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const MINIMUM_NODE = { major: 25, minor: 5 };
@@ -45,6 +45,7 @@ await build({
   external: ["node:*"],
   define: {
     __LS_INTEGRATION_VERSION__: JSON.stringify(version),
+    __LS_SEA_HOOKS__: JSON.stringify(readFileSync("hooks/hooks.sea.json", "utf-8")),
   },
 });
 
@@ -53,5 +54,12 @@ execFileSync(process.execPath, ["--build-sea", seaConfigPath], { stdio: "inherit
 
 // macOS kills an unsigned arm64 binary, and the `-` identity needs no certificate.
 execFileSync("/usr/bin/codesign", ["--force", "--sign", "-", binaryPath], { stdio: "inherit" });
+
+const reportedVersion = execFileSync(resolve(binaryPath), ["--version"], {
+  encoding: "utf-8",
+}).trim();
+if (reportedVersion !== version) {
+  throw new Error(`The built binary reports version ${reportedVersion}, expected ${version}`);
+}
 
 console.log(`Built the ${target} binary ${binaryPath} (${statSync(binaryPath).size} bytes)`);
