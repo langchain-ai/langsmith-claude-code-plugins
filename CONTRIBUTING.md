@@ -127,12 +127,14 @@ and changes only the command. A test fails if they drift.
 ## Dev loop
 
 ```bash
-pnpm build        # tsc + regenerate both plugin bundle directories
-pnpm build:sea    # tsc + the standalone macOS arm64 binary in bin/
-pnpm test         # vitest
-pnpm lint         # oxlint
-pnpm format       # oxfmt --write
-pnpm dev          # tsc --watch
+pnpm build                 # tsc + regenerate both plugin bundle directories
+pnpm build:sea             # tsc + the standalone macOS arm64 binary in bin/
+pnpm test                  # vitest
+pnpm test:install          # install.sh against release fixtures
+pnpm test:install:variants # every edit in variants.txt must fail those cases
+pnpm lint                  # oxlint
+pnpm format                # oxfmt --write
+pnpm dev                   # tsc --watch
 ```
 
 To try the plugin locally against a real session:

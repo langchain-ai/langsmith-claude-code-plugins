@@ -9,6 +9,21 @@ permissions:
   contents: read
 
 jobs:
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - run: shellcheck install.sh test/install/cases.sh test/install/variants.sh
+
+  installer:
+    name: Installer Shell Tests
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - run: /bin/bash test/install/cases.sh
+      - run: /bin/bash test/install/variants.sh
+
   test:
     runs-on: ubuntu-latest
     steps:

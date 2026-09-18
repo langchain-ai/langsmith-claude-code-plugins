@@ -19,14 +19,20 @@ function asNamedAsset(value: unknown, assetName: string): ReleaseAsset | undefin
   return asset as unknown as ReleaseAsset;
 }
 
-export function parseReleases(value: unknown, platform: string, arch: string): Release[] {
+export function parseReleases(
+  value: unknown,
+  platform: string,
+  arch: string,
+  allowPrerelease = false,
+): Release[] {
   if (!Array.isArray(value)) throw new Error("GitHub returned no list of releases");
   if (!isPublishedTarget(platform, arch)) return [];
   const releases: Release[] = [];
   for (const entry of value) {
     if (!entry || typeof entry !== "object") continue;
     const release = entry as Record<string, unknown>;
-    if (release.draft === true || release.prerelease === true) continue;
+    if (release.draft === true) continue;
+    if (release.prerelease === true && !allowPrerelease) continue;
     if (typeof release.tag_name !== "string" || !parseVersion(release.tag_name)) continue;
     if (!Array.isArray(release.assets)) continue;
     const version = release.tag_name.trim();
@@ -86,5 +92,5 @@ export async function fetchTaggedRelease(
 ): Promise<Release | undefined> {
   const url = taggedReleaseUrl(releasesApi, tag);
   const tagged = await fetchReleaseJson(fetchImpl, url, currentVersion);
-  return parseReleases([tagged], platform, arch)[0];
+  return parseReleases([tagged], platform, arch, true)[0];
 }

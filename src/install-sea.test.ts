@@ -139,6 +139,17 @@ it("downloads a release for a pinned tag, and when it is not the compiled binary
   await run({ compiledBinary: false, fetchImpl: serving(listed, newest) });
   expect(fs.readFileSync(installedBinary())).toEqual(newest);
   expect(printed[0]).toBe(`Installed ${installedBinary()} (0.4.0)`);
+
+  printed.length = 0;
+  const beta = fakeBinary("0.5.0-beta.1");
+  const betaJson = { ...releaseJson("0.5.0-beta.1", beta), prerelease: true };
+  await run({ args: ["--tag", "0.5.0-beta.1"], fetchImpl: serving(betaJson, beta) });
+  expect(fs.readFileSync(installedBinary())).toEqual(beta);
+  expect(printed[0]).toBe(`Installed ${installedBinary()} (0.5.0-beta.1)`);
+
+  printed.length = 0;
+  await run({ compiledBinary: false, fetchImpl: serving([...listed, betaJson], newest) });
+  expect(printed[0]).toBe(`Installed ${installedBinary()} (0.4.0)`);
 });
 
 it("keeps unrelated settings and adds the hooks only once", async () => {

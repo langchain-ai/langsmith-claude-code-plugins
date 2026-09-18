@@ -1,0 +1,50 @@
+the asset name pattern is not depth anchored|||s/^        \"name\"|||s/.*\"name\"
+the asset name pattern is anchored at release depth|||s/^        \"name\"|||s/^    \"name\"
+drafts are not skipped|||s/^    "draft": *true.*/S/p|||s/^zzz-never-a-draft$/S/p
+prereleases are not skipped|||s/^    "prerelease": *true.*/P/p|||s/^zzz-never-a-prerelease$/P/p
+the draft flag leaves the release usable|||        drafted=1|||        drafted=0
+a digest with uppercase hex is rejected|||[0-9a-fA-F]|||[0-9a-f]
+an asset without a digest counts as verified|||if [[ -n "$digest" ]]; then|||if true; then
+the newest path falls back to an older verified release|||  [[ -n "$SELECTED" ]] ||\n    die "Release $newest is the newest carrying a macOS arm64 binary and publishes it without a SHA-256 digest, so it cannot be verified."|||  if [[ -z "$SELECTED" ]]; then SELECTED="$(head -n 1 <<<"$VERIFIED")"; fi
+the pinned path blames a missing release for a missing digest|||      die "Release $TARGET_VERSION publishes its macOS arm64 binary without a SHA-256 digest, so it cannot be verified."|||      :
+the page size drops back to 30|||RELEASE_PAGE_SIZE=100|||RELEASE_PAGE_SIZE=30
+the parser exit status is discarded|||  tokens="$(tokenize_releases <<<"$1")" ||\n    die "Could not read the release list returned by $RELEASES_API."|||  tokens="$(tokenize_releases <<<"$1")" || true
+version sorting is lexicographic|||LC_ALL=C sort -k1,1n -k2,2n -k3,3n -k4,4n -k5,5 -k6,6n|||LC_ALL=C sort
+the asset version need not match the tag|||if [[ "$usable" == 1 && "$value" == "$tag" ]]; then|||if [[ "$usable" == 1 ]]; then
+the digest is compared without lowercasing|||$(lowercase "$digest")|||$digest
+the digest comparison is inverted|||if [[ "$actual_sha" != "$expected_sha" ]]; then|||if [[ "$actual_sha" == "$expected_sha" ]]; then
+the downloaded file is not made executable|||  chmod +x "$TEMP_BINARY"|||  :
+unrecognized options are rejected instead of forwarded|||        BINARY_ARGUMENTS=("$argument" "$@")\n        break|||        die_usage "Unrecognized argument: $argument."
+the temp binary is never removed|||  trap cleanup EXIT|||  :
+the platform gate is removed|||  if [[ "$platform" != "Darwin-arm64" ]]; then|||  if false; then
+main is not invoked|||main "$@"|||:
+the release lookup is silent|||  say "Finding the release to install."|||  :
+the download is silent|||  say "Downloading $asset."|||  :
+the handoff is silent|||  say "Installing $tag."|||  :
+the download names no version||| "Downloading $asset."||| "Downloading the binary."
+progress is written to stdout||| >&2\n}|||\n}
+the prerelease filter is removed|||        if [[ -z "$TARGET_VERSION" && "$prereleased" != "$WANT_BETA" ]]; then usable=0; fi|||        :
+the prerelease filter also applies to a pinned target|||if [[ -z "$TARGET_VERSION" && "$prereleased" != "$WANT_BETA" ]]|||if [[ "$prereleased" != "$WANT_BETA" ]]
+the prerelease filter is inverted|||"$prereleased" != "$WANT_BETA"|||"$prereleased" == "$WANT_BETA"
+the prerelease filter keeps stables in beta mode|||"$prereleased" != "$WANT_BETA"|||"$prereleased" == 1 && "$WANT_BETA" == 0
+a draft is tokenized as a prerelease|||-e 's/^    "draft": *true.*/S/p'|||-e 's/^    "draft": *true.*/P/p'
+the prerelease rank is left out of the sort|||-k4,4n |||
+the prerelease iteration is sorted as text|||-k6,6n|||-k6,6
+the prerelease label is dropped from the key|||\4 \5 &/p|||- \5 &/p
+an unparsable tag reaches the sort|||    sed -n \\n|||    sed \\n
+a suffixed target is refused|||^[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$|||^[0-9]+\.[0-9]+\.[0-9]+$
+a bare suffix is an accepted target|||(-[a-z]+\.[0-9]+)?$|||(-[a-z.0-9]*)?$
+the newest candidate becomes the oldest|||    tail -n 1|||    head -n 1
+a failed download is not fatal|||  curl -fsSL -o "$TEMP_BINARY" "$DOWNLOAD_BASE/$tag/$asset" ||\n    die "Could not download $asset from $DOWNLOAD_BASE/$tag/."|||  curl -fsSL -o "$TEMP_BINARY" "$DOWNLOAD_BASE/$tag/$asset" || true
+the no-candidates guard is removed|||  if [[ -z "$newest" ]]; then\n    if [[ "$WANT_BETA" == 1 ]]; then\n      die "None of the newest $RELEASE_PAGE_SIZE releases is a prerelease carrying a macOS arm64 binary."\n    fi\n    die "None of the newest $RELEASE_PAGE_SIZE releases carries a macOS arm64 binary."\n  fi|||  :
+an empty beta scan reuses the stable message|||    if [[ "$WANT_BETA" == 1 ]]; then\n      die "None of the newest $RELEASE_PAGE_SIZE releases is a prerelease carrying a macOS arm64 binary."\n    fi|||    :
+a failed releases request is not fatal|||  releases="$(fetch_releases)" ||\n    die "Could not read the releases API at $RELEASES_API."|||  releases="$(fetch_releases || true)"
+--help stops exiting zero|||        print_help\n        exit 0|||        print_help\n        exit 3
+the version format check is removed|||        if [[ ! "$argument" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$ ]]; then|||        if false; then
+the duplicate target guard is removed|||        if [[ -n "$TARGET_VERSION" ]]; then|||        if false; then
+the pinned lookup ignores the requested version|||SELECTED="$(grep "^$pattern " <<<"$VERIFIED" || true)"|||SELECTED="$(head -n 1 <<<"$VERIFIED")"
+releases without a digest drop out of the newest scan|||printf '%s%s' "$VERIFIED" "$UNVERIFIED"|||printf '%s' "$VERIFIED"
+--beta reaches the forwarding branch|||      --beta)|||      --beta-unclaimed)
+--beta does not select prereleases|||        WANT_BETA=1|||        WANT_BETA=0
+--beta and a target are allowed together|||  if [[ "$WANT_BETA" == 1 && -n "$TARGET_VERSION" ]]; then|||  if false; then
+--help leaves out --beta|||  --beta            Install the newest prerelease instead of the newest release|||  --beta
