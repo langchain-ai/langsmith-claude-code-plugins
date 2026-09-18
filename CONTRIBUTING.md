@@ -90,10 +90,31 @@ and [TESTING.md](./TESTING.md#experimental-gateway-tests) for the isolated test 
 Locally, hooks re-read `bundle/` on every invocation, so after `pnpm build` your
 next hook picks up the change without restarting the session.
 
+## Standalone binary (macOS arm64)
+
+`pnpm build:sea` runs `tsc`, bundles the hook dispatcher into one file, and embeds it in
+a copy of Node under `bin/`. The result runs the tracing hooks on a machine with no Node
+installed, which is why it is large. Building it needs a newer Node than the plugin does;
+the workflow pins that version, and the plugin itself still runs on Node 20.
+
+- The build only targets macOS arm64, and refuses to run anywhere else.
+- CI builds the binary and runs it against all nine hook events on any PR that touches the build.
+- Publishing is manual. Run the workflow from the Actions tab against a release tag, and it
+  attaches the binary to that tag's release as a draft.
+
+The binary is ad-hoc signed, not Apple signed, so macOS quarantines it on download. Clear
+that on the downloaded file before running it:
+
+```bash
+xattr -d com.apple.quarantine <downloaded-binary>
+chmod +x <downloaded-binary>
+```
+
 ## Dev loop
 
 ```bash
 pnpm build        # tsc + regenerate both plugin bundle directories
+pnpm build:sea    # tsc + the standalone macOS arm64 binary in bin/
 pnpm test         # vitest
 pnpm lint         # oxlint
 pnpm format       # oxfmt --write
