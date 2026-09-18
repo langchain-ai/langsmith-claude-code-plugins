@@ -13,7 +13,9 @@ import { error, initLogger } from "../logger.js";
 import { EXECUTABLE_NAME } from "../sea-constants.js";
 import { runUpdateCheck } from "../updater.js";
 import { runHookEntry } from "../utils/hook-entry.js";
+import { drainStdinToAvoidEpipe } from "../utils/stdin.js";
 import { HOOK_HANDLERS } from "./registry.js";
+import { pluginShouldStandDown } from "./stand-down.js";
 
 const USAGE = `Usage:
   ${EXECUTABLE_NAME} <HookEventName>
@@ -43,7 +45,9 @@ if (argument === "--help" || argument === "-h") {
   initLogger(false);
   void runUpdateCheck();
 } else if (event) {
-  runHookEntry(event, HOOK_HANDLERS[event]);
+  void pluginShouldStandDown().then((standDown) =>
+    standDown ? drainStdinToAvoidEpipe() : runHookEntry(event, HOOK_HANDLERS[event]),
+  );
 } else if (argument?.startsWith("-")) {
   console.error(`unknown option: ${argument}`);
   console.error(USAGE);

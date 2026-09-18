@@ -42,8 +42,9 @@ Environment variables:
   LANGSMITH_CC_RELEASES_API    GitHub releases API to install from
   LANGSMITH_CC_DOWNLOAD_BASE   Release download base URL
 
-Only macOS arm64 is published. Uninstall the langsmith-tracing plugin first, or
-every turn is traced twice, and restart Claude Code when this finishes.
+Only macOS arm64 is published. The langsmith-tracing plugin stops tracing while
+this binary is installed, so the plugin is safe to remove. Restart Claude Code
+when this finishes.
 HELP
 }
 

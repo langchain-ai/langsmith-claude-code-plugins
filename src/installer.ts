@@ -4,6 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { LS_INTEGRATION_VERSION } from "./config.js";
 import { OLDER_THAN_ANY_RELEASE } from "./sea-constants.js";
 import type { HooksManifest, InstallOptions, SettingsFile } from "./sea-models.js";
+import { runningCompiledBinary } from "./sea-runtime.js";
 import {
   installDirectory,
   installedBinaryPath,
@@ -15,10 +16,7 @@ import { configuredReleasesApi, isPublishedTarget } from "./updater-utils.js";
 
 declare const __LS_SEA_HOOKS__: string;
 
-async function runningCompiledBinary(): Promise<boolean> {
-  const sea = await import("node:sea").catch(() => undefined);
-  return sea?.isSea() === true;
-}
+const TRACING_PLUGIN_ID = "langsmith-tracing@langsmith-claude-code-plugins";
 
 export function mergeHooks(existing: SettingsFile, manifest: HooksManifest): SettingsFile {
   const merged: HooksManifest = { ...existing.hooks };
@@ -61,6 +59,15 @@ async function readSettings(path: string): Promise<SettingsFile> {
   );
 }
 
+async function tracingPluginIsEnabled(home: string): Promise<boolean> {
+  try {
+    const { enabledPlugins } = await readSettings(join(home, ".claude", "settings.json"));
+    return (enabledPlugins as Record<string, unknown> | undefined)?.[TRACING_PLUGIN_ID] === true;
+  } catch {
+    return false;
+  }
+}
+
 async function writeSettings(path: string, contents: string): Promise<void> {
   await fs.mkdir(dirname(path), { recursive: true });
   const mode = await fs.stat(path).then(
@@ -85,7 +92,7 @@ export async function install(options: InstallOptions = {}): Promise<string> {
   const arch = options.runtimeArch ?? osArch();
   if (!isPublishedTarget(platform, arch)) {
     throw new Error(
-      `no binary is published for ${platform}-${arch}. Install the Node plugin with '/plugin install langsmith-tracing@langsmith-claude-code-plugins' instead`,
+      `no binary is published for ${platform}-${arch}. Install the Node plugin with '/plugin install ${TRACING_PLUGIN_ID}' instead`,
     );
   }
 
@@ -138,9 +145,20 @@ export async function install(options: InstallOptions = {}): Promise<string> {
     "Next:",
     "  1. Set enabled, api_key and project in ~/.claude/langsmith.json.",
     "  2. Restart Claude Code so it reloads the settings.",
-    "  3. Uninstall the langsmith-tracing plugin, or both will trace the same session.",
   ]) {
     out(line);
+  }
+
+  if (await tracingPluginIsEnabled(home)) {
+    for (const line of [
+      "",
+      "LangSmith tracing is now installed twice, as a plugin and as this binary.",
+      "Only the binary traces. The plugin still starts a process on every hook.",
+      "Remove it with:",
+      `  claude plugin uninstall ${TRACING_PLUGIN_ID}`,
+    ]) {
+      out(line);
+    }
   }
   return settingsPath;
 }

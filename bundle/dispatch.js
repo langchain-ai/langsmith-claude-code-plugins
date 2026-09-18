@@ -1073,10 +1073,12 @@ import { basename, dirname as dirname2, join as join3 } from "node:path";
 
 // dist/sea-constants.js
 var REPOSITORY = "langchain-ai/langsmith-claude-code-plugins";
-var RELEASES_API = `https://api.github.com/repos/${REPOSITORY}/releases?per_page=30`;
+var RELEASE_PAGE_SIZE = 100;
+var RELEASES_API = `https://api.github.com/repos/${REPOSITORY}/releases?per_page=${RELEASE_PAGE_SIZE}`;
 var DOWNLOAD_PREFIX = `https://github.com/${REPOSITORY}/releases/download/`;
 var LOOPBACK_HOSTS = ["127.0.0.1", "[::1]", "localhost"];
 var EXECUTABLE_NAME = "langsmith-claude-code-tracing";
+var INSTALL_DIRECTORY_NAME = ".langsmith";
 var PUBLISHED_TARGETS = { darwin: ["arm64"] };
 var OLDER_THAN_ANY_RELEASE = "0.0.0";
 var LOCK_MAX_AGE_MS = 10 * 60 * 1e3;
@@ -1084,6 +1086,12 @@ var LIST_TIMEOUT_MS = 15e3;
 var DOWNLOAD_TIMEOUT_MS = 5 * 6e4;
 var MAX_ASSET_BYTES = 250 * 1024 * 1024;
 var LOCK_FILE = ".update.lock";
+
+// dist/sea-runtime.js
+async function runningCompiledBinary() {
+  const sea = await import("node:sea").catch(() => void 0);
+  return sea?.isSea() === true;
+}
 
 // dist/updater-install.js
 import { execFileSync } from "node:child_process";
@@ -1217,7 +1225,7 @@ async function downloadAsset(asset, destination, fetchImpl, releasesApi, current
 
 // dist/updater-install.js
 function installDirectory(home = homedir2()) {
-  return join2(home, ".langsmith");
+  return join2(home, INSTALL_DIRECTORY_NAME);
 }
 function installedBinaryPath(installDir) {
   return join2(installDir, EXECUTABLE_NAME);
@@ -1344,10 +1352,7 @@ async function fetchTaggedRelease(fetchImpl, releasesApi, currentVersion, platfo
 }
 
 // dist/installer.js
-async function runningCompiledBinary() {
-  const sea = await import("node:sea").catch(() => void 0);
-  return sea?.isSea() === true;
-}
+var TRACING_PLUGIN_ID = "langsmith-tracing@langsmith-claude-code-plugins";
 function mergeHooks(existing, manifest) {
   const merged = { ...existing.hooks };
   for (const [event2, groups] of Object.entries(manifest)) {
@@ -1381,6 +1386,14 @@ function requestedTag(args) {
 async function readSettings(path3) {
   return fs3.readFile(path3, "utf-8").then((text) => JSON.parse(text), () => ({}));
 }
+async function tracingPluginIsEnabled(home) {
+  try {
+    const { enabledPlugins } = await readSettings(join3(home, ".claude", "settings.json"));
+    return enabledPlugins?.[TRACING_PLUGIN_ID] === true;
+  } catch {
+    return false;
+  }
+}
 async function writeSettings(path3, contents) {
   await fs3.mkdir(dirname2(path3), { recursive: true });
   const mode = await fs3.stat(path3).then((stats) => stats.mode & 511, () => 384);
@@ -1400,7 +1413,7 @@ async function install(options = {}) {
   const platform = options.runtimePlatform ?? osPlatform();
   const arch = options.runtimeArch ?? osArch();
   if (!isPublishedTarget(platform, arch)) {
-    throw new Error(`no binary is published for ${platform}-${arch}. Install the Node plugin with '/plugin install langsmith-tracing@langsmith-claude-code-plugins' instead`);
+    throw new Error(`no binary is published for ${platform}-${arch}. Install the Node plugin with '/plugin install ${TRACING_PLUGIN_ID}' instead`);
   }
   const home = options.home ?? homedir3();
   const settingsPath = args.includes("--project") ? join3(options.cwd ?? process.cwd(), ".claude", "settings.json") : join3(home, ".claude", "settings.json");
@@ -1437,10 +1450,20 @@ async function install(options = {}) {
     "",
     "Next:",
     "  1. Set enabled, api_key and project in ~/.claude/langsmith.json.",
-    "  2. Restart Claude Code so it reloads the settings.",
-    "  3. Uninstall the langsmith-tracing plugin, or both will trace the same session."
+    "  2. Restart Claude Code so it reloads the settings."
   ]) {
     out(line);
+  }
+  if (await tracingPluginIsEnabled(home)) {
+    for (const line of [
+      "",
+      "LangSmith tracing is now installed twice, as a plugin and as this binary.",
+      "Only the binary traces. The plugin still starts a process on every hook.",
+      "Remove it with:",
+      `  claude plugin uninstall ${TRACING_PLUGIN_ID}`
+    ]) {
+      out(line);
+    }
   }
   return settingsPath;
 }
@@ -1505,6 +1528,40 @@ function runHookEntry(event2, main10) {
     } catch {
     }
     process.exit(0);
+  });
+}
+
+// dist/utils/stdin.js
+var DRAIN_TIMEOUT_MS = 2e3;
+function drainStdinToAvoidEpipe(timeoutMs = DRAIN_TIMEOUT_MS) {
+  return new Promise((resolve) => {
+    if (process.stdin.isTTY)
+      return resolve();
+    let timer;
+    const finish = () => {
+      clearTimeout(timer);
+      process.stdin.pause();
+      resolve();
+    };
+    timer = setTimeout(finish, timeoutMs);
+    process.stdin.once("end", finish);
+    process.stdin.once("error", finish);
+    process.stdin.resume();
+  });
+}
+function readStdin() {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    process.stdin.setEncoding("utf-8");
+    process.stdin.on("data", (chunk) => data += chunk);
+    process.stdin.on("end", () => {
+      try {
+        resolve(JSON.parse(data));
+      } catch (err) {
+        reject(new Error(`Failed to parse hook input: ${err}`));
+      }
+    });
+    process.stdin.on("error", reject);
   });
 }
 
@@ -15490,23 +15547,6 @@ function expandHome(path3) {
   return path3?.replace(/^~/, process.env.HOME ?? "");
 }
 
-// dist/utils/stdin.js
-function readStdin() {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => data += chunk);
-    process.stdin.on("end", () => {
-      try {
-        resolve(JSON.parse(data));
-      } catch (err) {
-        reject(new Error(`Failed to parse hook input: ${err}`));
-      }
-    });
-    process.stdin.on("error", reject);
-  });
-}
-
 // dist/hooks/post-compact.js
 async function main() {
   const input = await readStdin();
@@ -16815,6 +16855,33 @@ var HOOK_HANDLERS = {
   SessionEnd: main5
 };
 
+// dist/hooks/stand-down.js
+import { existsSync as existsSync3, readFileSync as readFileSync8 } from "node:fs";
+import { homedir as homedir4 } from "node:os";
+import { join as join5 } from "node:path";
+var REGISTERED_COMMAND = `/${INSTALL_DIRECTORY_NAME}/${EXECUTABLE_NAME}`;
+async function pluginShouldStandDown(home = homedir4(), cwd = process.cwd()) {
+  try {
+    if (await runningCompiledBinary())
+      return false;
+    if (!existsSync3(installedBinaryPath(installDirectory(home))))
+      return false;
+    return [join5(home, ".claude", "settings.json"), join5(cwd, ".claude", "settings.json")].some(registersTheBinary);
+  } catch {
+    return false;
+  }
+}
+function registersTheBinary(settingsPath) {
+  try {
+    if (!existsSync3(settingsPath))
+      return false;
+    const settings = JSON.parse(readFileSync8(settingsPath, "utf-8"));
+    return Object.values(settings.hooks ?? {}).some((groups) => groups.some((group) => group?.hooks?.some((hook) => hook?.command?.includes(REGISTERED_COMMAND))));
+  } catch {
+    return false;
+  }
+}
+
 // dist/hooks/dispatch.js
 var USAGE = `Usage:
   ${EXECUTABLE_NAME} <HookEventName>
@@ -16842,7 +16909,7 @@ if (argument === "--help" || argument === "-h") {
   initLogger(false);
   void runUpdateCheck();
 } else if (event) {
-  runHookEntry(event, HOOK_HANDLERS[event]);
+  void pluginShouldStandDown().then((standDown) => standDown ? drainStdinToAvoidEpipe() : runHookEntry(event, HOOK_HANDLERS[event]));
 } else if (argument?.startsWith("-")) {
   console.error(`unknown option: ${argument}`);
   console.error(USAGE);

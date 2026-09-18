@@ -150,9 +150,7 @@ describe("the build workflow", () => {
   });
 
   it("skips the signing step unless the job found every credential", () => {
-    expect(workflow).toContain(
-      "if: steps.release-gate.outputs.publishing == 'true' && env.HAS_APPLE_CREDENTIALS == 'true'",
-    );
+    expect(workflow).toContain("if: env.HAS_APPLE_CREDENTIALS == 'true'");
     for (const name of credentials) expect(workflow).toContain(`secrets.${name} != ''`);
   });
 
@@ -168,11 +166,17 @@ describe("the build workflow", () => {
     );
   });
 
-  it("downloads the artifact the build uploaded", () => {
+  it("moves one artifact name through build, signing and publishing", () => {
+    const artifact = "langsmith-claude-code-tracing-darwin-arm64-unsigned";
     const names = [...workflow.matchAll(/^ {10}name: (\S+)$/gm)].map((match) => match[1]);
-    expect(names).toEqual([
-      "langsmith-claude-code-tracing-darwin-arm64-unsigned",
-      "langsmith-claude-code-tracing-darwin-arm64-unsigned",
-    ]);
+    expect(names).toEqual([artifact, artifact, artifact, artifact]);
+  });
+
+  it("waits for signing before it publishes", () => {
+    expect(workflow).toContain("needs: [build-unsigned, sign-and-notarize]");
+  });
+
+  it("replaces the unsigned artifact with the signed one", () => {
+    expect(workflow).toContain("overwrite: true");
   });
 });

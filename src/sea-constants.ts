@@ -1,10 +1,12 @@
 const REPOSITORY = "langchain-ai/langsmith-claude-code-plugins";
 
-export const RELEASES_API = `https://api.github.com/repos/${REPOSITORY}/releases?per_page=30`;
+export const RELEASE_PAGE_SIZE = 100;
+export const RELEASES_API = `https://api.github.com/repos/${REPOSITORY}/releases?per_page=${RELEASE_PAGE_SIZE}`;
 export const DOWNLOAD_PREFIX = `https://github.com/${REPOSITORY}/releases/download/`;
 export const LOOPBACK_HOSTS = ["127.0.0.1", "[::1]", "localhost"];
 
 export const EXECUTABLE_NAME = "langsmith-claude-code-tracing";
+export const INSTALL_DIRECTORY_NAME = ".langsmith";
 export const PUBLISHED_TARGETS: Record<string, readonly string[]> = { darwin: ["arm64"] };
 export const OLDER_THAN_ANY_RELEASE = "0.0.0";
 

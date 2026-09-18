@@ -2,12 +2,12 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { EXECUTABLE_NAME, LOCK_MAX_AGE_MS } from "./sea-constants.js";
+import { EXECUTABLE_NAME, INSTALL_DIRECTORY_NAME, LOCK_MAX_AGE_MS } from "./sea-constants.js";
 import type { Release } from "./sea-models.js";
 import { downloadAsset } from "./updater-download.js";
 
 export function installDirectory(home = homedir()): string {
-  return join(home, ".langsmith");
+  return join(home, INSTALL_DIRECTORY_NAME);
 }
 
 export function installedBinaryPath(installDir: string): string {
