@@ -21,10 +21,12 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HOOK_EVENT_NAMES } from "./constants.js";
+import { RELEASE_PAGE_SIZE, RELEASES_API } from "./sea-constants.js";
 import { releaseAssetName } from "./updater-utils.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const gatewayRoot = join(root, "plugins/langsmith-gateway");
+const workflow = readFileSync(join(root, ".github/workflows/build-binary.yml"), "utf8");
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 const events = ["SessionStart", "UserPromptSubmit", "SessionEnd"];
 type Hooks = Record<string, { hooks: { type: string; command: string }[] }[]>;
@@ -70,12 +72,68 @@ describe("the standalone binary manifest", () => {
   });
 
   it("names the asset the release workflow publishes for a tag", () => {
-    const workflow = readFileSync(join(root, ".github/workflows/build-binary.yml"), "utf8");
     const published = /^\s*ASSET_NAME:[ \t]*(.+?)[ \t]*$/m.exec(workflow)?.[1];
     expect(published).toContain("${{ github.ref_name }}");
     expect(published?.replace("${{ github.ref_name }}", "0.4.1")).toBe(
       releaseAssetName("darwin", "arm64", "0.4.1"),
     );
+  });
+
+  it("walks the same release page as the shell installer", () => {
+    const shell = /^RELEASE_PAGE_SIZE=(\d+)$/m.exec(readFileSync(join(root, "install.sh"), "utf8"));
+
+    expect(RELEASE_PAGE_SIZE).toBe(100);
+    expect(shell?.[1]).toBe(String(RELEASE_PAGE_SIZE));
+    expect(new URL(RELEASES_API).searchParams.get("per_page")).toBe(String(RELEASE_PAGE_SIZE));
+  });
+
+  it("refuses to publish a binary whose version is not the tag it is published under", () => {
+    const step = /Check the Version Against the Tag[\s\S]*?\n {8}run: \|\n([\s\S]*?)(?=\n {6}- )/;
+    const script = (step.exec(workflow)?.[1] ?? "").replace(/^ {10}/gm, "");
+    expect(script).toContain("package.json");
+
+    const check = (TAG: string) =>
+      spawnSync("bash", ["-euo", "pipefail", "-c", script], {
+        cwd: root,
+        env: { ...process.env, TAG },
+        encoding: "utf8",
+      });
+
+    const { version } = json(join(root, "package.json"));
+    expect(check(version).status).toBe(0);
+    for (const wrong of ["9.9.9", `v${version}`, "0.3", "", "0.3.1 "]) {
+      expect(check(wrong).status, wrong).toBe(1);
+      expect(check(wrong).stderr, wrong).toContain("Bump the version");
+    }
+  });
+
+  it("gates the version check and the upload on one tag check", () => {
+    expect(workflow.match(/startsWith\(github\.ref, 'refs\/tags\/'\)/g)).toHaveLength(1);
+    expect(workflow).toContain("publishing: ${{ steps.release-gate.outputs.publishing }}");
+    expect(workflow).toContain("if: steps.release-gate.outputs.publishing == 'true'");
+    expect(
+      workflow.match(/if: needs\.build-unsigned\.outputs\.publishing == 'true'/g),
+    ).toHaveLength(2);
+  });
+
+  it("reaches the Apple environment secrets from a job no pull request can trigger", () => {
+    const jobs = workflow.split(/\n {2}(?=[a-z-]+:\n)/);
+    const signing = jobs.find((job) => job.includes("pnpm sign:sea")) ?? "";
+
+    expect(signing).toContain("environment: macos-signing");
+    expect(signing).toContain("if: needs.build-unsigned.outputs.publishing == 'true'");
+    for (const secret of [
+      "CSC_LINK",
+      "CSC_KEY_PASSWORD",
+      "APPLE_API_KEY",
+      "APPLE_API_KEY_ID",
+      "APPLE_API_ISSUER",
+    ]) {
+      expect(
+        jobs.filter((job) => job.includes(`secrets.${secret}`)),
+        secret,
+      ).toEqual([signing]);
+    }
   });
 });
 

@@ -1,3 +1,21 @@
+export const DRAIN_TIMEOUT_MS = 2_000;
+
+export function drainStdinToAvoidEpipe(timeoutMs = DRAIN_TIMEOUT_MS): Promise<void> {
+  return new Promise((resolve) => {
+    if (process.stdin.isTTY) return resolve();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = () => {
+      clearTimeout(timer);
+      process.stdin.pause();
+      resolve();
+    };
+    timer = setTimeout(finish, timeoutMs);
+    process.stdin.once("end", finish);
+    process.stdin.once("error", finish);
+    process.stdin.resume();
+  });
+}
+
 /** Read all of stdin and parse it as JSON. */
 export function readStdin<T>(): Promise<T> {
   return new Promise((resolve, reject) => {

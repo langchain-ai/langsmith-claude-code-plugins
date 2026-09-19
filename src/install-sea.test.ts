@@ -203,6 +203,91 @@ it("keeps the settings the user already had when the write dies partway", async 
   expect(fs.readdirSync(join(home, ".claude"))).toEqual(["settings.json"]);
 });
 
+const UNINSTALL = "  claude plugin uninstall langsmith-tracing@langsmith-claude-code-plugins";
+
+function writeHomeSettings(body: string) {
+  fs.mkdirSync(join(home, ".claude"), { recursive: true });
+  fs.writeFileSync(settingsFile(), body);
+}
+
+const enabledPlugins = (plugins: Record<string, boolean>) =>
+  JSON.stringify({ enabledPlugins: plugins });
+
+it("tells the user about the second install when the plugin is enabled", async () => {
+  const untouched = vi.fn<typeof fetch>();
+  const say = async (body?: string) => {
+    fs.rmSync(join(home, ".claude"), { recursive: true, force: true });
+    if (body !== undefined) writeHomeSettings(body);
+    printed.length = 0;
+    await run({ fetchImpl: untouched });
+    return printed;
+  };
+
+  const both = { "langsmith-tracing@langsmith-claude-code-plugins": true };
+  expect(await say(enabledPlugins(both))).toContain(UNINSTALL);
+  expect(printed.join("\n")).toContain("installed twice");
+  expect(printed.join("\n")).toContain("Only the binary traces");
+  expect(printed.join("\n")).toContain("starts a process on");
+  expect(printed.join("\n")).not.toContain("gateway");
+
+  const gateway = "langsmith-gateway@langsmith-claude-code-plugins";
+  for (const body of [
+    enabledPlugins({ "langsmith-tracing@langsmith-claude-code-plugins": false }),
+    enabledPlugins({ [gateway]: true }),
+    JSON.stringify({ model: "keep-me" }),
+    undefined,
+  ]) {
+    const lines = await say(body);
+    expect(lines.join("\n"), `${body}`).not.toContain("plugin uninstall");
+    expect(lines.at(-1), `${body}`).toBe("  2. Restart Claude Code so it reloads the settings.");
+  }
+
+  const wrong = { "langsmith-tracing": true, "langsmith-tracing@other-marketplace": true };
+  expect((await say(enabledPlugins(wrong))).join("\n")).not.toContain("plugin uninstall");
+});
+
+it("still installs when the home settings cannot be read", async () => {
+  const untouched = vi.fn<typeof fetch>();
+  const projectSettings = join(project, ".claude", "settings.json");
+
+  writeHomeSettings("{ not json");
+  await expect(run({ args: ["--project"], fetchImpl: untouched })).resolves.toBe(projectSettings);
+  expect(printed[0]).toBe(`Installed ${installedBinary()} (0.4.0)`);
+  expect(printed.join("\n")).not.toContain("plugin uninstall");
+  expect(commandsIn(projectSettings)).toHaveLength(HOOK_EVENT_NAMES.length);
+
+  for (const mode of [0o000, 0o200]) {
+    fs.rmSync(join(home, ".claude"), { recursive: true, force: true });
+    writeHomeSettings(enabledPlugins({ "langsmith-tracing@langsmith-claude-code-plugins": true }));
+    fs.chmodSync(settingsFile(), mode);
+    printed.length = 0;
+    await expect(run({ args: ["--project"], fetchImpl: untouched })).resolves.toBe(projectSettings);
+    expect(printed[0], `${mode}`).toBe(`Installed ${installedBinary()} (0.4.0)`);
+    expect(printed.join("\n"), `${mode}`).not.toContain("plugin uninstall");
+    fs.chmodSync(settingsFile(), 0o600);
+  }
+});
+
+it("says nothing about the plugin while only printing the settings", async () => {
+  writeHomeSettings(enabledPlugins({ "langsmith-tracing@langsmith-claude-code-plugins": true }));
+
+  await run({ args: ["--print"], fetchImpl: vi.fn<typeof fetch>() });
+
+  expect(printed.join("\n")).not.toContain("plugin uninstall");
+  expect(Object.keys(JSON.parse(printed.join("")).hooks)).toEqual([...HOOK_EVENT_NAMES]);
+});
+
+it("reads the plugin list from home even when the hooks go to the project", async () => {
+  writeHomeSettings(enabledPlugins({ "langsmith-tracing@langsmith-claude-code-plugins": true }));
+
+  await run({ args: ["--project"], fetchImpl: vi.fn<typeof fetch>() });
+
+  expect(printed).toContain(UNINSTALL);
+  expect(printed[1]).toBe(
+    `Added the LangSmith tracing hooks to ${join(project, ".claude", "settings.json")}`,
+  );
+});
+
 it("installs nothing it cannot fully trust", async () => {
   const body = fakeBinary("0.4.0");
   const mislabelled = fakeBinary("0.1.0");
@@ -228,6 +313,8 @@ it("installs nothing it cannot fully trust", async () => {
   expect(installedFiles()).toEqual([]);
   expect(fs.existsSync(settingsFile())).toBe(false);
 });
+
+const TIMEOUT_FOR_TWENTY_BINARY_SPAWNS = 60_000;
 
 const hookInput = (prompt?: string) =>
   JSON.stringify({ session_id: "sea", transcript_path: join(home, "gone"), cwd: home, prompt });
@@ -287,7 +374,7 @@ it.skipIf(!built)("installs itself without a download, then runs every hook even
   expect(fs.readFileSync(join(home, ".claude", "state", "hook.log"), "utf8")).toContain(
     "Update check failed",
   );
-});
+}, TIMEOUT_FOR_TWENTY_BINARY_SPAWNS);
 
 it.skipIf(!built)("downloads the release a pinned tag names", async () => {
   const body = fs.readFileSync(realBinary);
