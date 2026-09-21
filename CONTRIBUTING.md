@@ -182,6 +182,16 @@ Users install and update it straight from this repo:
 /plugin marketplace update langsmith-claude-code-plugins
 ```
 
+Then, in a terminal, followed by a restart:
+
+```bash
+claude plugin update langsmith-tracing@langsmith-claude-code-plugins
+```
+
+The marketplace update refreshes the catalog. It does not repoint the install,
+so tell users both steps. Marketplace auto-update does both, but third-party
+marketplaces default to off.
+
 The tracing marketplace entry (`.claude-plugin/marketplace.json`) has `source: "./"`, so
 the plugin _is_ this repository — a `marketplace update` pulls the latest commit
 on `main`. **There is no separate publish/npm step: merging to `main` is what
@@ -238,7 +248,9 @@ ships.** The following are therefore load-bearing on every release:
 ### After releasing
 
 - Verify as a user: in a separate session run
-  `/plugin marketplace update langsmith-claude-code-plugins`, confirm the reported
-  version matches, and check a real session traces end-to-end.
+  `/plugin marketplace update langsmith-claude-code-plugins`, then
+  `claude plugin update langsmith-tracing@langsmith-claude-code-plugins` and
+  restart. Confirm the reported version matches, and check a real session traces
+  end-to-end.
 - Cowork / CI consumers pull the marketplace the same way (see the README) — no
   extra step; they pick up `main`.
