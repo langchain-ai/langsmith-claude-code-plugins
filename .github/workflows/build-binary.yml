@@ -146,6 +146,7 @@ jobs:
       - name: Attach the Binary to the Release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           ASSET_NAME: langsmith-claude-code-tracing-darwin-arm64-${{ github.ref_name }}-unsigned
         run: |
           mv bin/langsmith-claude-code-tracing "bin/$ASSET_NAME"
