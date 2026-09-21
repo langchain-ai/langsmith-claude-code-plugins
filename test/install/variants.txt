@@ -32,15 +32,15 @@ the prerelease rank is left out of the sort|||-k4,4n |||
 the prerelease iteration is sorted as text|||-k6,6n|||-k6,6
 the prerelease label is dropped from the key|||\4 \5 &/p|||- \5 &/p
 an unparsable tag reaches the sort|||    sed -n \\n|||    sed \\n
-a suffixed target is refused|||^[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$|||^[0-9]+\.[0-9]+\.[0-9]+$
-a bare suffix is an accepted target|||(-[a-z]+\.[0-9]+)?$|||(-[a-z.0-9]*)?$
+a suffixed target is refused|||^[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+(\.[0-9]+)?)?$|||^[0-9]+\.[0-9]+\.[0-9]+$
+any suffix is an accepted target|||(-[a-z]+(\.[0-9]+)?)?$|||(-[a-z.0-9]*)?$
 the newest candidate becomes the oldest|||    tail -n 1|||    head -n 1
-a failed download is not fatal|||  curl -fsSL -o "$TEMP_BINARY" "$DOWNLOAD_BASE/$tag/$asset" ||\n    die "Could not download $asset from $DOWNLOAD_BASE/$tag/."|||  curl -fsSL -o "$TEMP_BINARY" "$DOWNLOAD_BASE/$tag/$asset" || true
+a failed download is not fatal|||  curl -f -L --progress-bar -o "$TEMP_BINARY" "$DOWNLOAD_BASE/$tag/$asset" ||\n    die "Could not download $asset from $DOWNLOAD_BASE/$tag/."|||  curl -f -L --progress-bar -o "$TEMP_BINARY" "$DOWNLOAD_BASE/$tag/$asset" || true
 the no-candidates guard is removed|||  if [[ -z "$newest" ]]; then\n    if [[ "$WANT_BETA" == 1 ]]; then\n      die "None of the newest $RELEASE_PAGE_SIZE releases is a prerelease carrying a macOS arm64 binary."\n    fi\n    die "None of the newest $RELEASE_PAGE_SIZE releases carries a macOS arm64 binary."\n  fi|||  :
 an empty beta scan reuses the stable message|||    if [[ "$WANT_BETA" == 1 ]]; then\n      die "None of the newest $RELEASE_PAGE_SIZE releases is a prerelease carrying a macOS arm64 binary."\n    fi|||    :
 a failed releases request is not fatal|||  releases="$(fetch_releases)" ||\n    die "Could not read the releases API at $RELEASES_API."|||  releases="$(fetch_releases || true)"
 --help stops exiting zero|||        print_help\n        exit 0|||        print_help\n        exit 3
-the version format check is removed|||        if [[ ! "$argument" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$ ]]; then|||        if false; then
+the version format check is removed|||        if [[ ! "$argument" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+(\.[0-9]+)?)?$ ]]; then|||        if false; then
 the duplicate target guard is removed|||        if [[ -n "$TARGET_VERSION" ]]; then|||        if false; then
 the pinned lookup ignores the requested version|||SELECTED="$(grep "^$pattern " <<<"$VERIFIED" || true)"|||SELECTED="$(head -n 1 <<<"$VERIFIED")"
 releases without a digest drop out of the newest scan|||printf '%s%s' "$VERIFIED" "$UNVERIFIED"|||printf '%s' "$VERIFIED"
@@ -48,3 +48,7 @@ releases without a digest drop out of the newest scan|||printf '%s%s' "$VERIFIED
 --beta does not select prereleases|||        WANT_BETA=1|||        WANT_BETA=0
 --beta and a target are allowed together|||  if [[ "$WANT_BETA" == 1 && -n "$TARGET_VERSION" ]]; then|||  if false; then
 --help leaves out --beta|||  --beta            Install the newest prerelease instead of the newest release|||  --beta
+the binary download is silent|||--progress-bar|||-s
+a bare suffix target is refused|||(-[a-z]+(\.[0-9]+)?)?$|||(-[a-z]+\.[0-9]+)?$
+the bare prerelease pattern is dropped|||-\([a-z][a-z]*\)$/\1 \2 \3 0 \4 0 &/p|||-\([a-z][a-z]*\)zzz$/\1 \2 \3 0 \4 0 &/p
+a bare prerelease outranks its iterations|||0 \4 0 &/p|||0 \4 9 &/p

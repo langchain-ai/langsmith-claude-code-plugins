@@ -246,8 +246,26 @@ write_releases betaladder \
 
 write_releases unparsabletag \
   "$(stable v9.9.9 "$(binary_asset_json v9.9.9 "sha256:$SHA_999")")" \
-  "$(stable 9.9.9-beta "$(binary_asset_json 9.9.9-beta "sha256:$SHA_999")")" \
+  "$(stable 9.9.9-Beta.1 "$(binary_asset_json 9.9.9-Beta.1 "sha256:$SHA_999")")" \
   "$(stable 0.4.0 "$(binary_asset_json 0.4.0 "sha256:$SHA_040")")"
+
+SHA_040BETA="$(publish_binary 0.4.0-beta)"
+
+write_releases bareonly \
+  "$(stable 0.4.0-beta "$(binary_asset_json 0.4.0-beta "sha256:$SHA_040BETA")")"
+
+write_releases bareladder \
+  "$(stable 0.4.0-beta "$(binary_asset_json 0.4.0-beta "sha256:$SHA_040BETA")")" \
+  "$(stable 0.4.0-beta.1 "$(binary_asset_json 0.4.0-beta.1 "sha256:$SHA_040BETA1")")"
+
+write_releases bareladderstable \
+  "$(stable 0.4.0-beta "$(binary_asset_json 0.4.0-beta "sha256:$SHA_040BETA")")" \
+  "$(stable 0.4.0-beta.1 "$(binary_asset_json 0.4.0-beta.1 "sha256:$SHA_040BETA1")")" \
+  "$(stable 0.4.0 "$(binary_asset_json 0.4.0 "sha256:$SHA_040")")"
+
+write_releases barebeta \
+  "$(beta 0.4.0-beta "$(binary_asset_json 0.4.0-beta "sha256:$SHA_040BETA")")" \
+  "$(stable 0.3.0 "$(binary_asset_json 0.3.0 "sha256:$SHA_030")")"
 
 MANY=()
 for index in $(seq 40 -1 11); do
@@ -301,7 +319,13 @@ a mislabelled prerelease still loses to the release|betamislabelled||RAN 0.5.0 a
 beta.10 sorts above beta.2 and above alpha.99|betaladder||RAN 0.5.0-beta.10 args=--install|0
 an unparsable tag cannot be newest|unparsabletag||RAN 0.4.0 args=--install|0
 a version with a suffix is a valid target|good|0.5.0-beta.1|None of the newest 100 releases is 0.5.0-beta.1|1
-a bare suffix is refused|good|0.5.0-beta|Invalid version target|2
+a bare suffix is a valid target|barebeta|0.4.0-beta|RAN 0.4.0-beta args=--install|0
+a trailing dash is refused|good|0.4.0-|Invalid version target|2
+an uppercase suffix is refused|good|0.4.0-Beta|Invalid version target|2
+a bare prerelease can be the newest|bareonly||RAN 0.4.0-beta args=--install|0
+a bare prerelease sorts below its first iteration|bareladder||RAN 0.4.0-beta.1 args=--install|0
+the release outranks both of its prereleases|bareladderstable||RAN 0.4.0 args=--install|0
+--beta selects a bare-tagged prerelease|barebeta|--beta|RAN 0.4.0-beta args=--install|0
 --beta installs the newest prerelease|betaladderpre|--beta|RAN 0.5.0-beta.10 args=--install|0
 the same ladder without --beta installs the stable|betaladderpre||RAN 0.4.0 args=--install|0
 --beta passes over a newer stable|betaolder|--beta|RAN 0.4.0-beta.1 args=--install|0
@@ -339,6 +363,24 @@ LAST_OUTPUT="$(cat "$WORK/url.txt" 2>/dev/null)"
 LAST_STATUS=0
 expect_output "the default API asks for 100 releases" "per_page=100" 0
 rm -f "$WORK/shim/curl"
+
+REAL_CURL="$(command -v curl)"
+rm -f "$WORK/curl-args.txt"
+shim curl <<EOF
+#!/bin/bash
+printf '%s\n' "\$*" >>"$WORK/curl-args.txt"
+exec "$REAL_CURL" "\$@"
+EOF
+run_installer good
+rm -f "$WORK/shim/curl"
+LAST_OUTPUT="$(cat "$WORK/curl-args.txt" 2>/dev/null)"
+LISTING="$(grep -- per_page "$WORK/curl-args.txt")"
+DOWNLOAD="$(grep -v -- per_page "$WORK/curl-args.txt")"
+if [[ "$DOWNLOAD" == *"--progress-bar"* && "$LISTING" != *"--progress-bar"* ]]; then
+  report "the binary download shows progress and the release list stays quiet" ok
+else
+  report "the binary download shows progress and the release list stays quiet" no
+fi
 
 head -c $(($(wc -c <"$INSTALLER") - 11)) "$INSTALLER" >"$WORK/truncated.sh"
 LAST_OUTPUT="$(/bin/bash "$WORK/truncated.sh" 2>&1)"

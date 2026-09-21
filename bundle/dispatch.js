@@ -1377,6 +1377,14 @@ function compiledHooksManifest() {
   }
   return hooks;
 }
+function underHome(path3, home) {
+  if (path3 === home)
+    return "~";
+  return path3.startsWith(`${home}/`) ? `~/${path3.slice(home.length + 1)}` : path3;
+}
+function hookCount(manifest) {
+  return Object.values(manifest).reduce((total, groups) => total + groups.reduce((inGroups, group) => inGroups + (group.hooks ?? []).length, 0), 0);
+}
 function requestedTag(args) {
   const index = args.indexOf("--tag");
   if (index === -1)
@@ -1448,22 +1456,26 @@ async function install(options = {}) {
     installedVersion = release.version;
   }
   await writeSettings(settingsPath, settings);
+  const configPath = join3(dirname2(settingsPath), "langsmith.json");
   for (const line of [
-    `Installed ${installedBinaryPath(installDir)} (${installedVersion})`,
-    `Added the LangSmith tracing hooks to ${settingsPath}`,
+    `Installed ${EXECUTABLE_NAME} ${installedVersion} to ${underHome(installDir, home)}`,
+    `Registered ${hookCount(manifest)} hooks in ${underHome(settingsPath, home)}`,
     "",
     "Next:",
-    "  1. Set enabled, api_key and project in ~/.claude/langsmith.json.",
-    "  2. Restart Claude Code so it reloads the settings."
+    `  1. Create ${underHome(configPath, home)} (if it doesn't exist already):`,
+    `       {"enabled": true, "api_key": "<your-api-key>", "project": "my-project"}`,
+    "  2. Restart Claude Code"
   ]) {
     out(line);
   }
   if (await tracingPluginIsEnabled(home)) {
     for (const line of [
       "",
-      "LangSmith tracing is now installed twice, as a plugin and as this binary.",
-      "Only the binary traces. The plugin still starts a process on every hook.",
-      "Remove it with:",
+      "You have LangSmith tracing installed two ways: through the Claude Code",
+      "marketplace and as this standalone binary. The binary handles tracing",
+      "from now on and the marketplace copy goes quiet by itself. Removing it",
+      "saves a process on each hook and will not affect the binary:",
+      "",
       `  claude plugin uninstall ${TRACING_PLUGIN_ID}`
     ]) {
       out(line);
