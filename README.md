@@ -27,12 +27,28 @@ From within Claude Code, run:
 /reload-plugins
 ```
 
-To update, run:
+To update, refresh the marketplace from within Claude Code:
 
 ```
 /plugin marketplace update langsmith-claude-code-plugins
-/reload-plugins
 ```
+
+then move the install onto the new version from your shell:
+
+```bash
+claude plugin update langsmith-tracing@langsmith-claude-code-plugins
+```
+
+and restart Claude Code.
+
+The marketplace update on its own only refreshes the catalog clone. Your
+install stays pinned to the version directory it was installed from, so the
+hooks keep running the old bundle until `claude plugin update` moves it.
+
+To skip both steps next time, run `/plugin`, open **Marketplaces** →
+`langsmith-claude-code-plugins` and choose **Enable auto-update**. Third-party
+marketplaces have it off by default; enabling it updates the marketplace and
+its installed plugins together.
 
 ### As a standalone binary (beta, macOS arm64)
 
