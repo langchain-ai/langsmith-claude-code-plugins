@@ -57,6 +57,7 @@ const settingsFile = () => join(home, ".claude", "settings.json");
 const installDir = () => join(home, ".langsmith");
 const installedBinary = () => join(installDir(), EXECUTABLE);
 const installedFiles = () => (fs.existsSync(installDir()) ? fs.readdirSync(installDir()) : []);
+const installedLine = (version: string) => `Installed ${EXECUTABLE} ${version} to ~/.langsmith`;
 const settings = (path = settingsFile()) => JSON.parse(fs.readFileSync(path, "utf8"));
 const commandsIn = (path?: string) =>
   Object.entries(settings(path).hooks as Record<string, { hooks: { command: string }[] }[]>).map(
@@ -113,7 +114,7 @@ it("copies the running binary without a download, and writes only where it is to
   expect(untouched).not.toHaveBeenCalled();
   expect(fs.readFileSync(installedBinary())).toEqual(fakeBinary("0.4.0"));
   expect(fs.statSync(installedBinary()).mode & 0o777).toBe(0o755);
-  expect(printed[0]).toBe(`Installed ${installedBinary()} (0.4.0)`);
+  expect(printed[0]).toBe(installedLine("0.4.0"));
   expect(installedFiles()).toEqual([EXECUTABLE]);
   expect(commandsIn()).toEqual(HOOK_EVENT_NAMES.map((event) => [event, [hookCommand(event)]]));
 });
@@ -133,23 +134,23 @@ it("downloads a release for a pinned tag, and when it is not the compiled binary
   await run({ args: ["--tag", "0.3.9"], fetchImpl: tagged });
   expect(tagged.mock.calls[0][0]).toBe(`${ORIGIN}/releases/tags/0.3.9`);
   expect(fs.readFileSync(installedBinary())).toEqual(pinned);
-  expect(printed[0]).toBe(`Installed ${installedBinary()} (0.3.9)`);
+  expect(printed[0]).toBe(installedLine("0.3.9"));
 
   printed.length = 0;
   await run({ compiledBinary: false, fetchImpl: serving(listed, newest) });
   expect(fs.readFileSync(installedBinary())).toEqual(newest);
-  expect(printed[0]).toBe(`Installed ${installedBinary()} (0.4.0)`);
+  expect(printed[0]).toBe(installedLine("0.4.0"));
 
   printed.length = 0;
   const beta = fakeBinary("0.5.0-beta.1");
   const betaJson = { ...releaseJson("0.5.0-beta.1", beta), prerelease: true };
   await run({ args: ["--tag", "0.5.0-beta.1"], fetchImpl: serving(betaJson, beta) });
   expect(fs.readFileSync(installedBinary())).toEqual(beta);
-  expect(printed[0]).toBe(`Installed ${installedBinary()} (0.5.0-beta.1)`);
+  expect(printed[0]).toBe(installedLine("0.5.0-beta.1"));
 
   printed.length = 0;
   await run({ compiledBinary: false, fetchImpl: serving([...listed, betaJson], newest) });
-  expect(printed[0]).toBe(`Installed ${installedBinary()} (0.4.0)`);
+  expect(printed[0]).toBe(installedLine("0.4.0"));
 });
 
 it("keeps unrelated settings and adds the hooks only once", async () => {
@@ -213,6 +214,30 @@ function writeHomeSettings(body: string) {
 const enabledPlugins = (plugins: Record<string, boolean>) =>
   JSON.stringify({ enabledPlugins: plugins });
 
+it("prints the whole install summary the user was shown", async () => {
+  writeHomeSettings(enabledPlugins({ "langsmith-tracing@langsmith-claude-code-plugins": true }));
+
+  await run({ fetchImpl: vi.fn<typeof fetch>() });
+
+  expect(printed).toEqual([
+    `Installed ${EXECUTABLE} 0.4.0 to ~/.langsmith`,
+    "Registered 9 hooks in ~/.claude/settings.json",
+    "",
+    "Next:",
+    "  1. Create ~/.claude/langsmith.json (if it doesn't exist already):",
+    `       {"enabled": true, "api_key": "<your-api-key>", "project": "my-project"}`,
+    "  2. Restart Claude Code",
+    "",
+    "You have LangSmith tracing installed two ways: through the Claude Code",
+    "marketplace and as this standalone binary. The binary handles tracing",
+    "from now on and the marketplace copy goes quiet by itself. Removing it",
+    "saves a process on each hook and will not affect the binary:",
+    "",
+    UNINSTALL,
+  ]);
+  expect(HOOK_EVENT_NAMES).toHaveLength(9);
+});
+
 it("tells the user about the second install when the plugin is enabled", async () => {
   const untouched = vi.fn<typeof fetch>();
   const say = async (body?: string) => {
@@ -225,9 +250,9 @@ it("tells the user about the second install when the plugin is enabled", async (
 
   const both = { "langsmith-tracing@langsmith-claude-code-plugins": true };
   expect(await say(enabledPlugins(both))).toContain(UNINSTALL);
-  expect(printed.join("\n")).toContain("installed twice");
-  expect(printed.join("\n")).toContain("Only the binary traces");
-  expect(printed.join("\n")).toContain("starts a process on");
+  expect(printed.join("\n")).toContain("installed two ways");
+  expect(printed.join("\n")).toContain("The binary handles tracing");
+  expect(printed.join("\n")).toContain("saves a process on each hook");
   expect(printed.join("\n")).not.toContain("gateway");
 
   const gateway = "langsmith-gateway@langsmith-claude-code-plugins";
@@ -239,7 +264,7 @@ it("tells the user about the second install when the plugin is enabled", async (
   ]) {
     const lines = await say(body);
     expect(lines.join("\n"), `${body}`).not.toContain("plugin uninstall");
-    expect(lines.at(-1), `${body}`).toBe("  2. Restart Claude Code so it reloads the settings.");
+    expect(lines.at(-1), `${body}`).toBe("  2. Restart Claude Code");
   }
 
   const wrong = { "langsmith-tracing": true, "langsmith-tracing@other-marketplace": true };
@@ -252,7 +277,7 @@ it("still installs when the home settings cannot be read", async () => {
 
   writeHomeSettings("{ not json");
   await expect(run({ args: ["--project"], fetchImpl: untouched })).resolves.toBe(projectSettings);
-  expect(printed[0]).toBe(`Installed ${installedBinary()} (0.4.0)`);
+  expect(printed[0]).toBe(installedLine("0.4.0"));
   expect(printed.join("\n")).not.toContain("plugin uninstall");
   expect(commandsIn(projectSettings)).toHaveLength(HOOK_EVENT_NAMES.length);
 
@@ -262,7 +287,7 @@ it("still installs when the home settings cannot be read", async () => {
     fs.chmodSync(settingsFile(), mode);
     printed.length = 0;
     await expect(run({ args: ["--project"], fetchImpl: untouched })).resolves.toBe(projectSettings);
-    expect(printed[0], `${mode}`).toBe(`Installed ${installedBinary()} (0.4.0)`);
+    expect(printed[0], `${mode}`).toBe(installedLine("0.4.0"));
     expect(printed.join("\n"), `${mode}`).not.toContain("plugin uninstall");
     fs.chmodSync(settingsFile(), 0o600);
   }
@@ -284,7 +309,7 @@ it("reads the plugin list from home even when the hooks go to the project", asyn
 
   expect(printed).toContain(UNINSTALL);
   expect(printed[1]).toBe(
-    `Added the LangSmith tracing hooks to ${join(project, ".claude", "settings.json")}`,
+    `Registered ${HOOK_EVENT_NAMES.length} hooks in ${join(project, ".claude", "settings.json")}`,
   );
 });
 
@@ -344,7 +369,7 @@ it.skipIf(!built)(
   "installs itself without a download, then runs every hook event",
   async () => {
     const installed = await installFromBinary([], `${ORIGIN}/releases`);
-    expect(installed.stdout).toContain(`Installed ${installedBinary()} (${packageVersion})`);
+    expect(installed.stdout).toContain(installedLine(packageVersion));
     expect(commandsIn()).toEqual(HOOK_EVENT_NAMES.map((event) => [event, [hookCommand(event)]]));
 
     const binary = installedBinary();
@@ -394,7 +419,7 @@ it.skipIf(!built)("downloads the release a pinned tag names", async () => {
   origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 
   const installed = await installFromBinary(["--tag", packageVersion], `${origin}/releases`);
-  expect(installed.stdout).toContain(`Installed ${installedBinary()} (${packageVersion})`);
+  expect(installed.stdout).toContain(installedLine(packageVersion));
   expect(fs.statSync(installedBinary()).size).toBe(fs.statSync(realBinary).size);
   expect(dispatch(installedBinary(), ["--version"]).stdout.trim()).toBe(packageVersion);
 });

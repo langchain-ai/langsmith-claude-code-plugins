@@ -32,8 +32,8 @@ Options:
 
 Target:
   VERSION           Install an exact release, e.g. 0.4.0. A prerelease such as
-                    0.5.0-beta.1 is installed only when you name it or pass
-                    --beta. VERSION and --beta cannot be combined.
+                    0.5.0-beta or 0.5.0-beta.1 is installed only when you name
+                    it or pass --beta. VERSION and --beta cannot be combined.
 
 Any other option, and everything after it, is passed to the binary's --install,
 which takes --print, --project and --tag VERSION.
@@ -100,8 +100,8 @@ parse_arguments() {
         if [[ -n "$TARGET_VERSION" ]]; then
           die_usage "Only one target is allowed. Got both $TARGET_VERSION and $argument."
         fi
-        if [[ ! "$argument" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$ ]]; then
-          die_usage "Invalid version target: $argument. Use an exact release like 0.4.0 or 0.5.0-beta.1."
+        if [[ ! "$argument" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+(\.[0-9]+)?)?$ ]]; then
+          die_usage "Invalid version target: $argument. Use an exact release like 0.4.0, 0.5.0-beta or 0.5.0-beta.1."
         fi
         TARGET_VERSION="$argument"
         ;;
@@ -187,7 +187,8 @@ newest_version() {
   cut -d' ' -f1 |
     sed -n \
       -e 's/^\([0-9][0-9]*\)\.\([0-9][0-9]*\)\.\([0-9][0-9]*\)$/\1 \2 \3 1 - 0 &/p' \
-      -e 's/^\([0-9][0-9]*\)\.\([0-9][0-9]*\)\.\([0-9][0-9]*\)-\([a-z][a-z]*\)\.\([0-9][0-9]*\)$/\1 \2 \3 0 \4 \5 &/p' |
+      -e 's/^\([0-9][0-9]*\)\.\([0-9][0-9]*\)\.\([0-9][0-9]*\)-\([a-z][a-z]*\)\.\([0-9][0-9]*\)$/\1 \2 \3 0 \4 \5 &/p' \
+      -e 's/^\([0-9][0-9]*\)\.\([0-9][0-9]*\)\.\([0-9][0-9]*\)-\([a-z][a-z]*\)$/\1 \2 \3 0 \4 0 &/p' |
     LC_ALL=C sort -k1,1n -k2,2n -k3,3n -k4,4n -k5,5 -k6,6n |
     tail -n 1 |
     cut -d' ' -f7
@@ -227,7 +228,7 @@ install_selected() {
 
   say "Downloading $asset."
   TEMP_BINARY="$(mktemp "${TMPDIR:-/tmp}/$EXECUTABLE.XXXXXX")"
-  curl -fsSL -o "$TEMP_BINARY" "$DOWNLOAD_BASE/$tag/$asset" ||
+  curl -f -L --progress-bar -o "$TEMP_BINARY" "$DOWNLOAD_BASE/$tag/$asset" ||
     die "Could not download $asset from $DOWNLOAD_BASE/$tag/."
 
   actual_sha="$(shasum -a 256 "$TEMP_BINARY" | sed 's/ .*//')"

@@ -2,15 +2,10 @@ import * as fs from "node:fs/promises";
 import { arch as osArch, homedir, platform as osPlatform } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { LS_INTEGRATION_VERSION } from "./config.js";
-import { OLDER_THAN_ANY_RELEASE } from "./sea-constants.js";
+import { EXECUTABLE_NAME, OLDER_THAN_ANY_RELEASE } from "./sea-constants.js";
 import type { HooksManifest, InstallOptions, SettingsFile } from "./sea-models.js";
 import { runningCompiledBinary } from "./sea-runtime.js";
-import {
-  installDirectory,
-  installedBinaryPath,
-  installRelease,
-  installRunningBinary,
-} from "./updater-install.js";
+import { installDirectory, installRelease, installRunningBinary } from "./updater-install.js";
 import { fetchReleaseList, fetchTaggedRelease, pickNewestRelease } from "./updater-releases.js";
 import { configuredReleasesApi, isPublishedTarget } from "./updater-utils.js";
 
@@ -40,6 +35,19 @@ function compiledHooksManifest(): HooksManifest {
     throw new Error("this build carries no hooks manifest");
   }
   return hooks;
+}
+
+function underHome(path: string, home: string): string {
+  if (path === home) return "~";
+  return path.startsWith(`${home}/`) ? `~/${path.slice(home.length + 1)}` : path;
+}
+
+function hookCount(manifest: HooksManifest): number {
+  return Object.values(manifest).reduce(
+    (total, groups) =>
+      total + groups.reduce((inGroups, group) => inGroups + (group.hooks ?? []).length, 0),
+    0,
+  );
 }
 
 function requestedTag(args: string[]): string | undefined {
@@ -138,13 +146,15 @@ export async function install(options: InstallOptions = {}): Promise<string> {
 
   await writeSettings(settingsPath, settings);
 
+  const configPath = join(dirname(settingsPath), "langsmith.json");
   for (const line of [
-    `Installed ${installedBinaryPath(installDir)} (${installedVersion})`,
-    `Added the LangSmith tracing hooks to ${settingsPath}`,
+    `Installed ${EXECUTABLE_NAME} ${installedVersion} to ${underHome(installDir, home)}`,
+    `Registered ${hookCount(manifest)} hooks in ${underHome(settingsPath, home)}`,
     "",
     "Next:",
-    "  1. Set enabled, api_key and project in ~/.claude/langsmith.json.",
-    "  2. Restart Claude Code so it reloads the settings.",
+    `  1. Create ${underHome(configPath, home)} (if it doesn't exist already):`,
+    `       {"enabled": true, "api_key": "<your-api-key>", "project": "my-project"}`,
+    "  2. Restart Claude Code",
   ]) {
     out(line);
   }
@@ -152,9 +162,11 @@ export async function install(options: InstallOptions = {}): Promise<string> {
   if (await tracingPluginIsEnabled(home)) {
     for (const line of [
       "",
-      "LangSmith tracing is now installed twice, as a plugin and as this binary.",
-      "Only the binary traces. The plugin still starts a process on every hook.",
-      "Remove it with:",
+      "You have LangSmith tracing installed two ways: through the Claude Code",
+      "marketplace and as this standalone binary. The binary handles tracing",
+      "from now on and the marketplace copy goes quiet by itself. Removing it",
+      "saves a process on each hook and will not affect the binary:",
+      "",
       `  claude plugin uninstall ${TRACING_PLUGIN_ID}`,
     ]) {
       out(line);
