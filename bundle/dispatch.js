@@ -809,7 +809,7 @@ function debug(message) {
 
 // dist/config.js
 import { execSync } from "node:child_process";
-var LS_INTEGRATION_VERSION = true ? "0.3.1" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var LS_INTEGRATION_VERSION = true ? "0.4.0-beta" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var PROVIDER_HOSTS = {
   github: "github.com",
   gitlab: "gitlab.com",
@@ -14696,7 +14696,7 @@ function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, c
 }
 
 // dist/metadata.js
-var TRUSTED_INTEGRATION_VERSION = true ? "0.3.1" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var TRUSTED_INTEGRATION_VERSION = true ? "0.4.0-beta" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var TRUSTED_METADATA = /* @__PURE__ */ Symbol("coding-agent trusted metadata");
 function trustedCodingAgentMetadata(metadata) {
   return metadata?.[TRUSTED_METADATA];
