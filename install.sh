@@ -129,7 +129,7 @@ tokenize_releases() {
     -e 's/^    "tag_name": *"\([^"]*\)".*/T \1/p' \
     -e 's/^    "draft": *true.*/S/p' \
     -e 's/^    "prerelease": *true.*/P/p' \
-    -e "s/^        \"name\": *\"$EXECUTABLE-darwin-arm64-\([^\"]*\)-unsigned\".*/A \1/p" \
+    -e "s/^        \"name\": *\"$EXECUTABLE-darwin-arm64-\([^\"]*\)\".*/A \1/p" \
     -e 's/^        "digest": *"[Ss][Hh][Aa]256:\([0-9a-fA-F]\{64\}\)".*/H \1/p' \
     -e 's/^        "browser_download_url":.*/E/p'
 }
@@ -223,7 +223,7 @@ install_selected() {
   local tag expected_sha asset actual_sha
   tag="${SELECTED%% *}"
   expected_sha="${SELECTED##* }"
-  asset="$EXECUTABLE-darwin-arm64-$tag-unsigned"
+  asset="$EXECUTABLE-darwin-arm64-$tag"
 
   say "Downloading $asset."
   TEMP_BINARY="$(mktemp "${TMPDIR:-/tmp}/$EXECUTABLE.XXXXXX")"

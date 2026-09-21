@@ -72,6 +72,29 @@ describe("bundle/dispatch.js", () => {
     },
   );
 
+  it("leaves stderr silent when git runs outside a repository", () => {
+    const result = spawnSync(process.execPath, [bundle, "UserPromptSubmit"], {
+      cwd: home,
+      env: {
+        HOME: home,
+        PATH: process.env.PATH ?? "",
+        TRACE_TO_LANGSMITH: "false",
+        STATE_FILE: join(home, "state.json"),
+      },
+      input: JSON.stringify({
+        session_id: "dispatch-test",
+        transcript_path: join(home, "missing.jsonl"),
+        cwd: home,
+        prompt: "ordinary prompt",
+      }),
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
   // Only UserPromptSubmit answers the trace command, so its reply pins the routing.
   it.each(HOOK_EVENT_NAMES)("routes %s to that event's own handler", (event) => {
     const result = dispatch([event], "/langsmith-tracing:trace");

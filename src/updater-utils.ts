@@ -12,7 +12,7 @@ export function isPublishedTarget(platform: string, arch: string): boolean {
 }
 
 export function releaseAssetName(platform: string, arch: string, version: string): string {
-  return `${EXECUTABLE_NAME}-${platform}-${arch}-${version}-unsigned`;
+  return `${EXECUTABLE_NAME}-${platform}-${arch}-${version}`;
 }
 
 function loopbackOverride(value: string | undefined): string | undefined {

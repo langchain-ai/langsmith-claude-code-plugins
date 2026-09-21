@@ -861,9 +861,17 @@ function parseRepoName(remoteUrl) {
   }
   return void 0;
 }
+function gitOutput(command, cwd) {
+  return execSync(command, {
+    cwd,
+    encoding: "utf-8",
+    timeout: 5e3,
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+}
 function getRepoName(cwd) {
   try {
-    const output = execSync("git remote -v", { cwd, encoding: "utf-8", timeout: 5e3 });
+    const output = gitOutput("git remote -v", cwd);
     const lines = output.trim().split("\n").filter(Boolean);
     const remotes = [];
     for (const line of lines) {
@@ -890,17 +898,13 @@ function getRepoName(cwd) {
 function getGitInfo(cwd) {
   const result = {};
   try {
-    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
-      cwd,
-      encoding: "utf-8",
-      timeout: 5e3
-    }).trim();
+    const branch = gitOutput("git rev-parse --abbrev-ref HEAD", cwd).trim();
     if (branch && branch !== "HEAD")
       result.branch = branch;
   } catch {
   }
   try {
-    const commit = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8", timeout: 5e3 }).trim();
+    const commit = gitOutput("git rev-parse HEAD", cwd).trim();
     if (commit)
       result.commit = commit;
   } catch {
@@ -1108,7 +1112,7 @@ function isPublishedTarget(platform, arch) {
   return PUBLISHED_TARGETS[platform]?.includes(arch) ?? false;
 }
 function releaseAssetName(platform, arch, version) {
-  return `${EXECUTABLE_NAME}-${platform}-${arch}-${version}-unsigned`;
+  return `${EXECUTABLE_NAME}-${platform}-${arch}-${version}`;
 }
 function loopbackOverride(value) {
   try {

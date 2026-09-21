@@ -19,7 +19,7 @@ LAST_STATUS=0
 publish_binary() {
   local tag="$1" asset dir
   dir="$WORK/dl/$tag"
-  asset="$EXECUTABLE-darwin-arm64-$tag-unsigned"
+  asset="$EXECUTABLE-darwin-arm64-$tag"
   mkdir -p "$dir"
   cat >"$dir/$asset" <<EOF
 #!/bin/bash
@@ -48,7 +48,7 @@ asset_json() {
 }
 
 binary_asset_json() {
-  asset_json "$EXECUTABLE-darwin-arm64-$1-unsigned" "$2"
+  asset_json "$EXECUTABLE-darwin-arm64-$1" "$2"
 }
 
 release_json() {
@@ -71,7 +71,7 @@ release_json() {
   done
   if [[ $first -eq 0 ]]; then printf '\n'; fi
   printf '    ],\n'
-  printf '    "body": "Notes quoting \\"draft\\": true and \\"prerelease\\": true and \\"tag_name\\": \\"9.9.9\\" and \\"name\\": \\"%s-darwin-arm64-9.9.9-unsigned\\""\n' "$EXECUTABLE"
+  printf '    "body": "Notes quoting \\"draft\\": true and \\"prerelease\\": true and \\"tag_name\\": \\"9.9.9\\" and \\"name\\": \\"%s-darwin-arm64-9.9.9\\""\n' "$EXECUTABLE"
   printf '  }'
 }
 
@@ -162,12 +162,12 @@ write_releases good \
   "$(stable 0.3.0 "$(binary_asset_json 0.3.0 "sha256:$SHA_030")")"
 
 write_releases titled \
-  "$(release_json 9.9.9 "$EXECUTABLE-darwin-arm64-9.9.9-unsigned" false true \
+  "$(release_json 9.9.9 "$EXECUTABLE-darwin-arm64-9.9.9" false true \
     "$(asset_json notes.txt "sha256:$SHA_999")")" \
   "$(stable 0.4.0 "$(binary_asset_json 0.4.0 "sha256:$SHA_040")")"
 
 write_releases titled-stable \
-  "$(release_json 9.9.9 "$EXECUTABLE-darwin-arm64-9.9.9-unsigned" false false \
+  "$(release_json 9.9.9 "$EXECUTABLE-darwin-arm64-9.9.9" false false \
     "$(asset_json notes.txt "sha256:$SHA_999")")" \
   "$(stable 0.4.0 "$(binary_asset_json 0.4.0 "sha256:$SHA_040")")"
 
@@ -289,7 +289,7 @@ a target and a forwarded flag coexist|good|0.3.0 --print|RAN 0.3.0 args=--instal
 two targets are refused|good|0.1.0 0.2.0|Only one target is allowed|2
 a non-version target is refused|good|nope|Invalid version target|2
 the release lookup is announced|good||Finding the release to install.|0
-the download names the resolved version|good||Downloading langsmith-claude-code-tracing-darwin-arm64-0.4.0-unsigned.|0
+the download names the resolved version|good||Downloading langsmith-claude-code-tracing-darwin-arm64-0.4.0.|0
 the handoff to the binary is announced|good||Installing 0.4.0.|0
 a pinned install announces the pinned version|good|0.3.0|Installing 0.3.0.|0
 a prerelease never wins on its own|beta||RAN 0.4.0 args=--install|0
