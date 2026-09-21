@@ -1131,7 +1131,7 @@ function taggedReleaseUrl(releasesApi, tag) {
   return url.href;
 }
 function parseVersion(version) {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([a-z]+)\.(\d+))?$/.exec(version.trim());
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([a-z]+)(?:\.(\d+))?)?$/.exec(version.trim());
   if (!match)
     return void 0;
   return {

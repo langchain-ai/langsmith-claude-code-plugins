@@ -63,10 +63,8 @@ const files = (directory = dir) => fs.readdirSync(directory).sort();
 it("compares tags, targets and hosts the way the update flow relies on", () => {
   expect(utils.isPublishedTarget("darwin", "x64")).toBe(false);
   const newerThanInstalled = (tag: string) => utils.isVersionNewer(tag, "0.3.1");
-  expect(["0.4.0", "0.3.2", "0.4.0-beta.1"].every(newerThanInstalled)).toBe(true);
-  expect(["0.3.1", "0.3.0", "v0.4.0", "0.4.0-beta", "0.4.0-Beta.1"].some(newerThanInstalled)).toBe(
-    false,
-  );
+  expect(["0.4.0", "0.3.2", "0.4.0-beta.1", "0.4.0-beta"].every(newerThanInstalled)).toBe(true);
+  expect(["0.3.1", "0.3.0", "v0.4.0", "0.4.0-Beta.1"].some(newerThanInstalled)).toBe(false);
   expect(utils.isVersionNewer("1.0.0", "0.99.99")).toBe(true);
 
   const loopback = ["http://127.0.0.1:1234/releases", "http://localhost:9/r"];
@@ -87,6 +85,24 @@ it("orders a prerelease below the release it leads to", () => {
   expect(newer("0.5.0-alpha.99", "0.5.0-beta.1")).toBe(false);
   expect(newer("0.5.0-beta.1", "0.5.0-beta.1")).toBe(false);
   expect(newer("0.6.0-beta.1", "0.5.0")).toBe(true);
+});
+
+it("parses a bare prerelease and sorts it as the first iteration of its label", () => {
+  expect(utils.parseVersion("0.4.0-beta")).toEqual({
+    numbers: [0, 4, 0],
+    final: 0,
+    label: "beta",
+    iteration: 0,
+  });
+
+  const newer = utils.isVersionNewer;
+  expect(newer("0.4.0-beta.1", "0.4.0-beta")).toBe(true);
+  expect(newer("0.4.0-beta", "0.4.0-beta.1")).toBe(false);
+  expect(newer("0.4.0", "0.4.0-beta")).toBe(true);
+  expect(newer("0.4.0-beta", "0.4.0")).toBe(false);
+  expect(newer("0.4.0-beta", "0.4.0-alpha")).toBe(true);
+  expect(newer("0.4.0-alpha", "0.4.0-beta")).toBe(false);
+  expect(newer("0.4.0-beta", "0.4.0-beta")).toBe(false);
 });
 
 async function expectReplaces(installDir: string, target: string) {
