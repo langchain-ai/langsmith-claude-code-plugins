@@ -350,7 +350,21 @@ shim uname <<'EOF'
 if [ "$1" = "-m" ]; then printf 'x86_64\n'; else printf 'Darwin\n'; fi
 EOF
 run_installer good
-expect_output "an unsupported platform is refused" "published only for macOS arm64, not Darwin-x86_64" 1
+expect_output "an unsupported platform is refused" "The standalone binary is macOS arm64 only. This machine reports Darwin-x86_64." 1
+expect_output "an unsupported platform gives the plugin commands" "The plugin does the same tracing and works on Windows, Linux and Intel Macs.
+From within Claude Code:
+
+  /plugin marketplace add langchain-ai/langsmith-claude-code-plugins
+  /plugin install langsmith-tracing@langsmith-claude-code-plugins
+  /reload-plugins" 1
+rm -f "$WORK/shim/uname"
+
+shim uname <<'EOF'
+#!/bin/bash
+if [ "$1" = "-m" ]; then printf 'x86_64\n'; else printf 'MINGW64_NT-10.0-22631\n'; fi
+EOF
+run_installer good
+expect_output "an unsupported platform is named verbatim" "This machine reports MINGW64_NT-10.0-22631-x86_64." 1
 rm -f "$WORK/shim/uname"
 
 shim curl <<EOF

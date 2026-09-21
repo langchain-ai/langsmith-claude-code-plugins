@@ -116,7 +116,14 @@ require_supported_platform() {
   local platform
   platform="$(uname -s)-$(uname -m)"
   if [[ "$platform" != "Darwin-arm64" ]]; then
-    die "The standalone binary is published only for macOS arm64, not $platform. Install the langsmith-tracing plugin instead."
+    die "The standalone binary is macOS arm64 only. This machine reports $platform.
+
+The plugin does the same tracing and works on Windows, Linux and Intel Macs.
+From within Claude Code:
+
+  /plugin marketplace add langchain-ai/langsmith-claude-code-plugins
+  /plugin install langsmith-tracing@langsmith-claude-code-plugins
+  /reload-plugins"
   fi
 }
 
