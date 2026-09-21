@@ -121,13 +121,22 @@ export function parseRepoName(remoteUrl: string): { provider: string; name: stri
   return undefined;
 }
 
+function gitOutput(command: string, cwd: string): string {
+  return execSync(command, {
+    cwd,
+    encoding: "utf-8",
+    timeout: 5000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
 /**
  * Detect the git repo name from remotes in the given directory.
  * Gives precedence to "origin", then picks the first remote matching a known host.
  */
 export function getRepoName(cwd: string): { provider: string; name: string } | undefined {
   try {
-    const output = execSync("git remote -v", { cwd, encoding: "utf-8", timeout: 5000 });
+    const output = gitOutput("git remote -v", cwd);
     const lines = output.trim().split("\n").filter(Boolean);
 
     // Parse all remotes: [name, url, type]
@@ -161,18 +170,14 @@ export function getRepoName(cwd: string): { provider: string; name: string } | u
 export function getGitInfo(cwd: string): { branch?: string; commit?: string } {
   const result: { branch?: string; commit?: string } = {};
   try {
-    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
-      cwd,
-      encoding: "utf-8",
-      timeout: 5000,
-    }).trim();
+    const branch = gitOutput("git rev-parse --abbrev-ref HEAD", cwd).trim();
     // "HEAD" means detached — no branch name available.
     if (branch && branch !== "HEAD") result.branch = branch;
   } catch {
     // Not a git repo / git unavailable — skip.
   }
   try {
-    const commit = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8", timeout: 5000 }).trim();
+    const commit = gitOutput("git rev-parse HEAD", cwd).trim();
     if (commit) result.commit = commit;
   } catch {
     // Not a git repo / git unavailable — skip.

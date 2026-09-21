@@ -44,7 +44,7 @@ const printed: string[] = [];
 beforeEach(() => {
   home = fs.mkdtempSync(join(tmpdir(), "ls-install-home-"));
   project = fs.mkdtempSync(join(tmpdir(), "ls-install-project-"));
-  source = join(project, "langsmith-claude-code-tracing-darwin-arm64-0.4.0-unsigned");
+  source = join(project, "langsmith-claude-code-tracing-darwin-arm64-0.4.0");
   fs.writeFileSync(source, fakeBinary("0.4.0"), { mode: 0o755 });
   printed.length = 0;
 });
@@ -340,41 +340,45 @@ const installFromBinary = (args: string[], releasesApi: string) =>
     env: { HOME: home, PATH: "", CC_LANGSMITH_RELEASES_API: releasesApi },
   });
 
-it.skipIf(!built)("installs itself without a download, then runs every hook event", async () => {
-  const installed = await installFromBinary([], `${ORIGIN}/releases`);
-  expect(installed.stdout).toContain(`Installed ${installedBinary()} (${packageVersion})`);
-  expect(commandsIn()).toEqual(HOOK_EVENT_NAMES.map((event) => [event, [hookCommand(event)]]));
+it.skipIf(!built)(
+  "installs itself without a download, then runs every hook event",
+  async () => {
+    const installed = await installFromBinary([], `${ORIGIN}/releases`);
+    expect(installed.stdout).toContain(`Installed ${installedBinary()} (${packageVersion})`);
+    expect(commandsIn()).toEqual(HOOK_EVENT_NAMES.map((event) => [event, [hookCommand(event)]]));
 
-  const binary = installedBinary();
-  expect(fs.statSync(binary).size).toBe(fs.statSync(realBinary).size);
-  expect(dispatch(binary, ["--version"]).stdout.trim()).toBe(packageVersion);
+    const binary = installedBinary();
+    expect(fs.statSync(binary).size).toBe(fs.statSync(realBinary).size);
+    expect(dispatch(binary, ["--version"]).stdout.trim()).toBe(packageVersion);
 
-  for (const event of HOOK_EVENT_NAMES) {
-    const plain = dispatch(binary, [event]);
-    expect(plain.status, `${event}: ${plain.stderr}`).toBe(0);
-    expect(plain.stdout, event).toBe("");
-    expect(fs.existsSync(join(home, ".claude", "state")), event).toBe(true);
+    for (const event of HOOK_EVENT_NAMES) {
+      const plain = dispatch(binary, [event]);
+      expect(plain.status, `${event}: ${plain.stderr}`).toBe(0);
+      expect(plain.stdout, event).toBe("");
+      expect(fs.existsSync(join(home, ".claude", "state")), event).toBe(true);
 
-    const command = dispatch(binary, [event], "/langsmith-tracing:trace");
-    expect(command.status, `${event}: ${command.stderr}`).toBe(0);
-    const decision = command.stdout === "" ? undefined : JSON.parse(command.stdout).decision;
-    expect(decision, event).toBe(event === "UserPromptSubmit" ? "block" : undefined);
-  }
+      const command = dispatch(binary, [event], "/langsmith-tracing:trace");
+      expect(command.status, `${event}: ${command.stderr}`).toBe(0);
+      const decision = command.stdout === "" ? undefined : JSON.parse(command.stdout).decision;
+      expect(decision, event).toBe(event === "UserPromptSubmit" ? "block" : undefined);
+    }
 
-  const shell = spawnSync("/bin/sh", ["-c", settings().hooks.Stop.at(-1).hooks[0].command], {
-    cwd: home,
-    env: { HOME: home, PATH: "", TRACE_TO_LANGSMITH: "false", STATE_FILE: join(home, "s.json") },
-    input: hookInput(),
-    encoding: "utf8",
-    timeout: 20000,
-  });
-  expect(shell.status, shell.stderr).toBe(0);
+    const shell = spawnSync("/bin/sh", ["-c", settings().hooks.Stop.at(-1).hooks[0].command], {
+      cwd: home,
+      env: { HOME: home, PATH: "", TRACE_TO_LANGSMITH: "false", STATE_FILE: join(home, "s.json") },
+      input: hookInput(),
+      encoding: "utf8",
+      timeout: 20000,
+    });
+    expect(shell.status, shell.stderr).toBe(0);
 
-  expect(dispatch(binary, ["--update"]).status).toBe(0);
-  expect(fs.readFileSync(join(home, ".claude", "state", "hook.log"), "utf8")).toContain(
-    "Update check failed",
-  );
-}, TIMEOUT_FOR_TWENTY_BINARY_SPAWNS);
+    expect(dispatch(binary, ["--update"]).status).toBe(0);
+    expect(fs.readFileSync(join(home, ".claude", "state", "hook.log"), "utf8")).toContain(
+      "Update check failed",
+    );
+  },
+  TIMEOUT_FOR_TWENTY_BINARY_SPAWNS,
+);
 
 it.skipIf(!built)("downloads the release a pinned tag names", async () => {
   const body = fs.readFileSync(realBinary);

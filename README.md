@@ -80,9 +80,9 @@ Two things are not live yet, so the command below fails today:
 The binary never updates itself. Run
 `~/.langsmith/langsmith-claude-code-tracing --update` for a newer release.
 
-To download a release asset by hand instead: `chmod +x` it, clear the macOS
-quarantine flag with `xattr -d com.apple.quarantine`, then run it with
-`--install`. The binary is unsigned.
+To download a release asset by hand instead: `chmod +x` it, then run it with
+`--install`. The binary is signed and notarized, so macOS clears it after one
+online Gatekeeper check.
 
 ### As a Claude Cowork plugin
 
