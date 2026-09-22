@@ -206,13 +206,19 @@ describe("the build workflow", () => {
     expect(body.match(/runner: macos-26-intel\n/g)).toHaveLength(1);
   });
 
-  it("runs the same suite against the unsigned, the Intel and the signed binary", () => {
-    const command = /pnpm test .+/;
-    const built = job("build-unsigned").match(command)?.[0];
+  it("runs one named suite against the unsigned, the Intel and the signed binary", () => {
+    for (const name of ["build-unsigned", "run-on-intel", "sign-and-notarize"]) {
+      expect(job(name), name).toContain("run: pnpm test:binary\n");
+    }
 
-    expect(built).toContain("src/build-binary.test.ts");
-    expect(job("run-on-intel").match(command)?.[0]).toBe(built);
-    expect(job("sign-and-notarize").match(command)?.[0]).toBe(built);
+    const { scripts } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    for (const file of [
+      "src/build-binary.test.ts",
+      "src/hooks/dispatch.binary.test.ts",
+      "src/install-binary.test.ts",
+    ]) {
+      expect(scripts["test:binary"]).toContain(file);
+    }
   });
 
   it("restores the executable bit once per job that downloads a binary", () => {

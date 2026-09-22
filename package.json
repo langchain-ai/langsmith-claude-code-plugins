@@ -12,6 +12,7 @@
     "dev": "tsc --watch",
     "format": "oxfmt --write",
     "test": "vitest run",
+    "test:binary": "vitest run src/build-binary.test.ts src/hooks/dispatch.binary.test.ts src/install-binary.test.ts",
     "test:install": "bash test/install/cases.sh",
     "test:install:variants": "bash test/install/variants.sh",
     "test:watch": "vitest",

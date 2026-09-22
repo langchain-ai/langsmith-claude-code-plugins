@@ -144,7 +144,8 @@ and changes only the command. A test fails if they drift.
 pnpm build                 # tsc + regenerate both plugin bundle directories
 pnpm build:binary          # the standalone macOS binary for this machine, in bin/
 pnpm test                  # vitest
-pnpm test:install          # install.sh against release fixtures
+pnpm test:binary           # just the suites that exercise the built binary
+pnpm test:install          # install.sh against release fixtures, once per chip
 pnpm test:install:variants # every edit in variants.txt must fail those cases
 pnpm lint                  # oxlint
 pnpm format                # oxfmt --write

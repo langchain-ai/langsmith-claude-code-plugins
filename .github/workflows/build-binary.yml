@@ -75,7 +75,7 @@ jobs:
       - name: Build the Unsigned Binaries
         run: pnpm build:binary -- --arch=all
       - name: Test the Binary
-        run: pnpm test src/build-binary.test.ts src/hooks/dispatch.binary.test.ts src/install-binary.test.ts
+        run: pnpm test:binary
       - name: Upload the arm64 Binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -114,7 +114,7 @@ jobs:
       - name: Restore the Executable Bit
         run: chmod +x bin/langsmith-claude-code-tracing
       - name: Test the Binary
-        run: pnpm test src/build-binary.test.ts src/hooks/dispatch.binary.test.ts src/install-binary.test.ts
+        run: pnpm test:binary
 
   sign-and-notarize:
     name: Sign and Notarize the ${{ matrix.arch }} Binary
@@ -159,7 +159,7 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
       - name: Test the Signed Binary
-        run: pnpm test src/build-binary.test.ts src/hooks/dispatch.binary.test.ts src/install-binary.test.ts
+        run: pnpm test:binary
       - name: Upload the Signed Binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
