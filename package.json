@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc && pnpm bundle",
-    "build:binary": "tsc && node esbuild.sea.config.mjs",
+    "build:binary": "node scripts/build.binary.mjs",
     "sign:binary": "node scripts/sign.binary.mjs",
     "bundle": "node esbuild.config.mjs",
     "dev": "tsc --watch",

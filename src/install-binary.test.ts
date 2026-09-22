@@ -5,14 +5,16 @@ import { writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 
+import { PUBLISHED_TARGETS } from "./binary-constants.js";
 import { HOOK_EVENT_NAMES } from "./constants.js";
 import { install } from "./installer.js";
 import type { InstallOptions } from "./binary-models.js";
 import { releaseAssetName } from "./updater-utils.js";
+
+const { outputPath } = await import("../scripts/build.binary.mjs");
 
 vi.mock("node:fs/promises", { spy: true });
 
@@ -29,10 +31,9 @@ const fakeBinary = (version: string) => Buffer.from(`#!/bin/sh\necho ${version}\
 const { version: packageVersion } = JSON.parse(
   fs.readFileSync(new URL("package.json", root), "utf8"),
 );
-const seaConfig = JSON.parse(fs.readFileSync(new URL("sea-config.json", root), "utf8"));
-const realBinary = fileURLToPath(new URL(seaConfig.output, root));
+const realBinary = outputPath(process.arch);
 const built = fs.existsSync(realBinary);
-if (!built && process.env.CI && process.platform === "darwin" && process.arch === "arm64") {
+if (!built && process.env.CI && PUBLISHED_TARGETS[process.platform]?.includes(process.arch)) {
   throw new Error(`Expected 'pnpm build:binary' to have produced ${realBinary}`);
 }
 
@@ -64,15 +65,28 @@ const commandsIn = (path?: string) =>
     ([event, groups]) => [event, groups.flatMap((group) => group.hooks.map((h) => h.command))],
   );
 
-function releaseJson(version: string, body: Buffer, extra: Record<string, unknown> = {}) {
-  const asset = {
-    name: releaseAssetName("darwin", "arm64", version),
-    browser_download_url: `${ORIGIN}/download/${version}`,
+function assetJson(version: string, body: Buffer, arch: string, extra: Record<string, unknown>) {
+  return {
+    name: releaseAssetName("darwin", arch, version),
+    browser_download_url: `${ORIGIN}/download/${arch}/${version}`,
     size: body.byteLength,
     digest: `sha256:${createHash("sha256").update(body).digest("hex")}`,
     ...extra,
   };
-  return { tag_name: version, assets: [asset] };
+}
+
+function releaseJson(
+  version: string,
+  body: Buffer,
+  extra: Record<string, unknown> = {},
+  arch = "arm64",
+) {
+  return { tag_name: version, assets: [assetJson(version, body, arch, extra)] };
+}
+
+function everyArchRelease(version: string, bodies: Record<string, Buffer>, reversed = false) {
+  const assets = Object.entries(bodies).map(([arch, body]) => assetJson(version, body, arch, {}));
+  return { tag_name: version, assets: reversed ? assets.reverse() : assets };
 }
 
 const serving = (listed: unknown, body: Buffer) =>
@@ -331,13 +345,54 @@ it("installs nothing it cannot fully trust", async () => {
   await expect(run({ compiledBinary: false, fetchImpl: serving(assetless, body) })).rejects.toThrow(
     "no published release carries a darwin-arm64 binary for this plugin yet",
   );
-  await expect(run({ runtimeArch: "x64" })).rejects.toThrow(
-    "no binary is published for darwin-x64",
+  await expect(run({ runtimeArch: "ia32" })).rejects.toThrow(
+    "no binary is published for darwin-ia32",
+  );
+  await expect(run({ runtimePlatform: "win32", runtimeArch: "x64" })).rejects.toThrow(
+    "no binary is published for win32-x64",
   );
   await expect(run({ args: ["--tag"] })).rejects.toThrow("needs a release tag");
   expect(installedFiles()).toEqual([]);
   expect(fs.existsSync(settingsFile())).toBe(false);
 });
+
+const ARM_BODY = fakeBinary("0.4.0");
+const INTEL_BODY = Buffer.from("#!/bin/sh\necho 0.4.0\n# intel\n");
+
+it.each([
+  ["listed Apple Silicon first", false],
+  ["listed Intel first", true],
+])(
+  "installs the binary matching this Mac when a release carries both, %s",
+  async (_l, reversed) => {
+    for (const [arch, body] of [
+      ["arm64", ARM_BODY],
+      ["x64", INTEL_BODY],
+    ] as const) {
+      fs.rmSync(installDir(), { recursive: true, force: true });
+      const listed = [everyArchRelease("0.4.0", { arm64: ARM_BODY, x64: INTEL_BODY }, reversed)];
+      const fetchImpl = serving(listed, body);
+
+      await run({ compiledBinary: false, runtimeArch: arch, fetchImpl });
+
+      expect(String(fetchImpl.mock.calls[1][0]), arch).toBe(`${ORIGIN}/download/${arch}/0.4.0`);
+      expect(fs.readFileSync(installedBinary()), arch).toEqual(body);
+    }
+  },
+);
+
+it.each(["arm64", "x64"])(
+  "refuses a release carrying only the other architecture, on %s",
+  async (arch) => {
+    const other = arch === "arm64" ? "x64" : "arm64";
+    const listed = [releaseJson("0.4.0", ARM_BODY, {}, other)];
+
+    await expect(
+      run({ compiledBinary: false, runtimeArch: arch, fetchImpl: serving(listed, ARM_BODY) }),
+    ).rejects.toThrow(`no published release carries a darwin-${arch} binary for this plugin yet`);
+    expect(installedFiles()).toEqual([]);
+  },
+);
 
 const TIMEOUT_FOR_TWENTY_BINARY_SPAWNS = 60_000;
 

@@ -1083,7 +1083,7 @@ var DOWNLOAD_PREFIX = `https://github.com/${REPOSITORY}/releases/download/`;
 var LOOPBACK_HOSTS = ["127.0.0.1", "[::1]", "localhost"];
 var EXECUTABLE_NAME = "langsmith-claude-code-tracing";
 var INSTALL_DIRECTORY_NAME = ".langsmith";
-var PUBLISHED_TARGETS = { darwin: ["arm64"] };
+var PUBLISHED_TARGETS = { darwin: ["arm64", "x64"] };
 var OLDER_THAN_ANY_RELEASE = "0.0.0";
 var LOCK_MAX_AGE_MS = 10 * 60 * 1e3;
 var LIST_TIMEOUT_MS = 15e3;
@@ -1092,9 +1092,10 @@ var MAX_ASSET_BYTES = 250 * 1024 * 1024;
 var LOCK_FILE = ".update.lock";
 
 // dist/binary-runtime.js
-async function runningCompiledBinary() {
-  const sea = await import("node:sea").catch(() => void 0);
-  return sea?.isSea() === true;
+var COMPILED_ROOT = "/$bunfs/";
+function runningCompiledBinary() {
+  const main10 = globalThis.Bun?.main;
+  return typeof main10 === "string" && main10.startsWith(COMPILED_ROOT);
 }
 
 // dist/updater-install.js
@@ -1440,7 +1441,7 @@ async function install(options = {}) {
   }
   const currentVersion = options.currentVersion ?? LS_INTEGRATION_VERSION ?? OLDER_THAN_ANY_RELEASE;
   const executablePath = options.executablePath ?? process.execPath;
-  const copyable = !tag && (options.compiledBinary ?? await runningCompiledBinary());
+  const copyable = !tag && (options.compiledBinary ?? runningCompiledBinary());
   const installDir = installDirectory(home);
   let installedVersion = currentVersion;
   if (copyable) {
@@ -16878,7 +16879,7 @@ import { join as join5 } from "node:path";
 var REGISTERED_COMMAND = `/${INSTALL_DIRECTORY_NAME}/${EXECUTABLE_NAME}`;
 async function pluginShouldStandDown(home = homedir4(), cwd = process.cwd()) {
   try {
-    if (await runningCompiledBinary())
+    if (runningCompiledBinary())
       return false;
     if (!existsSync3(installedBinaryPath(installDirectory(home))))
       return false;

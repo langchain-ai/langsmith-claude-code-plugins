@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { EXECUTABLE_NAME, PUBLISHED_TARGETS } from "./binary-constants.js";
 import { releaseAssetName } from "./updater-utils.js";
 
 const {
@@ -18,6 +19,9 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const workflow = readFileSync(join(root, ".github/workflows/build-binary.yml"), "utf8");
 const entitlements = readFileSync(join(root, "macos-entitlements.plist"), "utf8");
 const credentials: string[] = APPLE_CREDENTIALS;
+const arches = PUBLISHED_TARGETS.darwin as string[];
+const jobs = workflow.split(/\n {2}(?=[a-z-]+:\n)/);
+const job = (name: string) => jobs.find((body) => body.startsWith(`${name}:\n`)) ?? "";
 const allSet = Object.fromEntries(credentials.map((name) => [name, "set"]));
 const missing = (env: Record<string, string>): string[] => [...missingAppleCredentials(env)].sort();
 
@@ -50,27 +54,20 @@ describe("the Apple credentials", () => {
 describe("sign", () => {
   const absent = join(root, "bin/no-such-binary");
 
-  it("keeps the ad-hoc signature and names what is absent when nothing is set", async () => {
+  it("refuses to run and names every credential when nothing is set", async () => {
     const lines: string[] = [];
-    await expect(
-      sign({ binaryPath: absent, env: {}, out: (line: string) => lines.push(line) }),
-    ).resolves.toBeUndefined();
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain("Keeping the ad-hoc signature");
-    for (const name of credentials) expect(lines[0]).toContain(name);
+    const attempt = sign({ binaryPath: absent, env: {}, out: (line: string) => lines.push(line) });
+
+    await expect(attempt).rejects.toThrow("these Apple credentials are not set");
+    for (const name of credentials) await expect(attempt).rejects.toThrow(name);
+    expect(lines).toEqual([]);
   });
 
-  it("keeps the ad-hoc signature when only some credentials are set", async () => {
-    const lines: string[] = [];
-    await expect(
-      sign({
-        binaryPath: absent,
-        env: { ...allSet, APPLE_API_ISSUER: "" },
-        out: (line: string) => lines.push(line),
-      }),
-    ).resolves.toBeUndefined();
-    expect(lines[0]).toContain("APPLE_API_ISSUER");
-    expect(lines[0]).not.toContain("CSC_LINK");
+  it("refuses to run when only some credentials are set", async () => {
+    const attempt = sign({ binaryPath: absent, env: { ...allSet, APPLE_API_ISSUER: "" } });
+
+    await expect(attempt).rejects.toThrow("APPLE_API_ISSUER");
+    await expect(attempt).rejects.not.toThrow("CSC_LINK");
   });
 });
 
@@ -138,45 +135,120 @@ describe("the macOS entitlements", () => {
 });
 
 describe("the build workflow", () => {
-  it("rebuilds the binary when any signing input changes", () => {
+  it("rebuilds the binary when any signing or build input changes", () => {
     const paths = /paths:\n((?:\s+- \S+\n)+)/.exec(workflow)?.[1] ?? "";
     for (const path of [
       "macos-entitlements.plist",
+      "scripts/build.binary.mjs",
       "scripts/sign.binary.mjs",
+      "src/build-binary.test.ts",
       "src/sign-binary.test.ts",
     ]) {
       expect(paths).toContain(`- ${path}\n`);
     }
   });
 
-  it("skips the signing step unless the job found every credential", () => {
-    expect(workflow).toContain("if: env.HAS_APPLE_CREDENTIALS == 'true'");
-    for (const name of credentials) expect(workflow).toContain(`secrets.${name} != ''`);
+  it("always signs, so a release can never go out unsigned", () => {
+    const step = /- name: Sign and Notarize the Binary\n((?: {8}.+\n|\n)+)/.exec(
+      job("sign-and-notarize"),
+    )?.[1];
+
+    expect(step).toBeDefined();
+    expect(step).not.toContain("if:");
+    for (const name of credentials) expect(step).toContain(`${name}: \${{ secrets.${name} }}`);
+    expect(workflow).not.toContain("HAS_APPLE_CREDENTIALS");
   });
 
   it("gates signing and publishing on one tag check", () => {
     expect(workflow.match(/startsWith\(github\.ref, 'refs\/tags\/'\)/g)).toHaveLength(1);
     expect(workflow).toContain("publishing: ${{ steps.release-gate.outputs.publishing }}");
-    expect(workflow).toContain("if: needs.build-unsigned.outputs.publishing == 'true'");
+    expect(workflow).toContain("if: steps.release-gate.outputs.publishing == 'true'");
+    expect(
+      workflow.match(/if: needs\.build-unsigned\.outputs\.publishing == 'true'/g),
+    ).toHaveLength(2);
   });
 
-  it("publishes the asset name the updater and the installer look for", () => {
-    expect(/^ +ASSET_NAME: (.+)$/m.exec(workflow)?.[1]).toBe(
-      releaseAssetName("darwin", "arm64", "${{ github.ref_name }}"),
-    );
+  it("cross compiles every published architecture in one build job", () => {
+    const body = job("build-unsigned");
+
+    expect(body).toContain("runs-on: macos-26\n");
+    expect(body).toContain("pnpm build:binary -- --arch=all");
+    expect(body).not.toContain("matrix.");
   });
 
-  it("moves one artifact name through build, signing and publishing", () => {
-    const artifact = "langsmith-claude-code-tracing-darwin-arm64-unsigned";
-    const names = [...workflow.matchAll(/^ {10}name: (\S+)$/gm)].map((match) => match[1]);
-    expect(names).toEqual([artifact, artifact, artifact, artifact]);
+  it("uploads each unsigned architecture under its own name", () => {
+    const body = job("build-unsigned");
+    const uploaded = [...body.matchAll(/^ {10}path: (\S+)$/gm)].map((match) => match[1]);
+
+    expect(uploaded).toEqual([`bin/${EXECUTABLE_NAME}`, `bin/darwin-x64/${EXECUTABLE_NAME}`]);
+    for (const arch of arches) {
+      expect(body, arch).toContain(`name: ${EXECUTABLE_NAME}-darwin-${arch}-unsigned\n`);
+    }
+  });
+
+  it("runs the x64 binary on a real Intel runner on every build", () => {
+    const body = job("run-on-intel");
+
+    expect(body).toContain("runs-on: macos-26-intel");
+    expect(body).toContain("needs: build-unsigned");
+    expect(body).not.toContain("publishing == 'true'");
+    expect(body).toContain(`name: ${EXECUTABLE_NAME}-darwin-x64-unsigned`);
+  });
+
+  it("signs each published architecture on a runner of that architecture", () => {
+    const body = job("sign-and-notarize");
+    const legs = [...body.matchAll(/^ {10}- arch: (\S+)$/gm)].map((match) => match[1]);
+
+    expect(legs).toEqual(arches);
+    expect(body).toContain("runs-on: ${{ matrix.runner }}");
+    expect(body).toContain("architecture: ${{ matrix.arch }}");
+    expect(body.match(/runner: macos-26\n/g)).toHaveLength(1);
+    expect(body.match(/runner: macos-26-intel\n/g)).toHaveLength(1);
+  });
+
+  it("runs the same suite against the unsigned, the Intel and the signed binary", () => {
+    const command = /pnpm test .+/;
+    const built = job("build-unsigned").match(command)?.[0];
+
+    expect(built).toContain("src/build-binary.test.ts");
+    expect(job("run-on-intel").match(command)?.[0]).toBe(built);
+    expect(job("sign-and-notarize").match(command)?.[0]).toBe(built);
+  });
+
+  it("restores the executable bit once per job that downloads a binary", () => {
+    for (const name of ["run-on-intel", "sign-and-notarize"]) {
+      const body = job(name);
+      expect(body.match(/- name: Restore the Executable Bit/g), name).toHaveLength(1);
+      expect(body, name).toContain(`chmod +x bin/${EXECUTABLE_NAME}`);
+    }
   });
 
   it("waits for signing before it publishes", () => {
     expect(workflow).toContain("needs: [build-unsigned, sign-and-notarize]");
   });
 
-  it("replaces the unsigned artifact with the signed one", () => {
-    expect(workflow).toContain("overwrite: true");
+  it("publishes only what the signing job signed, never the unsigned build", () => {
+    const signing = job("sign-and-notarize");
+
+    expect(signing).toContain(`name: ${EXECUTABLE_NAME}-darwin-\${{ matrix.arch }}-unsigned`);
+    expect(signing).toContain(`name: ${EXECUTABLE_NAME}-darwin-\${{ matrix.arch }}-signed`);
+    expect(signing).not.toContain("overwrite: true");
+    expect(job("publish")).toContain(`pattern: ${EXECUTABLE_NAME}-darwin-*-signed`);
+
+    const artifacts = [
+      ...job("publish").matchAll(new RegExp(`${EXECUTABLE_NAME}-darwin-\\S*?-(un)?signed`, "g")),
+    ];
+    expect(artifacts.length).toBeGreaterThan(0);
+    expect(artifacts.filter((match) => match[1] !== undefined)).toEqual([]);
+  });
+
+  it("publishes the asset name the updater and the installer look for", () => {
+    const body = job("publish");
+
+    expect(/^ +ASSET_NAME="(.+)"$/m.exec(body)?.[1]).toBe(
+      releaseAssetName("darwin", "$ARCH", "$TAG"),
+    );
+    expect(body).toContain(`for ARCH in ${arches.join(" ")}; do`);
+    expect(body.match(/gh release (upload|create) "\$TAG" "\$\{ASSETS\[@\]\}"/g)).toHaveLength(2);
   });
 });

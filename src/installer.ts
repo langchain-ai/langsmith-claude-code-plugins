@@ -120,7 +120,7 @@ export async function install(options: InstallOptions = {}): Promise<string> {
 
   const currentVersion = options.currentVersion ?? LS_INTEGRATION_VERSION ?? OLDER_THAN_ANY_RELEASE;
   const executablePath = options.executablePath ?? process.execPath;
-  const copyable = !tag && (options.compiledBinary ?? (await runningCompiledBinary()));
+  const copyable = !tag && (options.compiledBinary ?? runningCompiledBinary());
   const installDir = installDirectory(home);
   let installedVersion = currentVersion;
 

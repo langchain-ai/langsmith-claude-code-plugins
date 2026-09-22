@@ -61,7 +61,11 @@ const update = (options: UpdateOptions) =>
 const files = (directory = dir) => fs.readdirSync(directory).sort();
 
 it("compares tags, targets and hosts the way the update flow relies on", () => {
-  expect(utils.isPublishedTarget("darwin", "x64")).toBe(false);
+  expect(utils.isPublishedTarget("darwin", "arm64")).toBe(true);
+  expect(utils.isPublishedTarget("darwin", "x64")).toBe(true);
+  expect(utils.isPublishedTarget("darwin", "ia32")).toBe(false);
+  expect(utils.isPublishedTarget("win32", "x64")).toBe(false);
+  expect(utils.isPublishedTarget("linux", "arm64")).toBe(false);
   const newerThanInstalled = (tag: string) => utils.isVersionNewer(tag, "0.3.1");
   expect(["0.4.0", "0.3.2", "0.4.0-beta.1", "0.4.0-beta"].every(newerThanInstalled)).toBe(true);
   expect(["0.3.1", "0.3.0", "v0.4.0", "0.4.0-Beta.1"].some(newerThanInstalled)).toBe(false);

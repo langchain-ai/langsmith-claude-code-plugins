@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { outputPath } from "./build.binary.mjs";
 
 const DEVELOPER_ID_PREFIX = "Developer ID Application:";
 const IDENTITY_LINE = /^\s*\d+\)\s+[0-9A-Fa-f]{40}\s+"([^"]+)"$/gm;
@@ -175,19 +176,13 @@ async function signAndNotarize(binaryPath, env) {
   }
 }
 
-async function defaultBinaryPath() {
-  const { output } = JSON.parse(await readFile(join(repoRoot, "sea-config.json"), "utf-8"));
-  return join(repoRoot, output);
-}
-
 export async function sign({ binaryPath, env = process.env, out = console.log } = {}) {
   const missing = missingAppleCredentials(env);
   if (missing.length > 0) {
-    out(`Keeping the ad-hoc signature, these are not set: ${missing.join(", ")}`);
-    return undefined;
+    throw new Error(`these Apple credentials are not set: ${missing.join(", ")}`);
   }
 
-  const target = binaryPath ?? (await defaultBinaryPath());
+  const target = binaryPath ?? outputPath(process.arch);
   const { identity, submissionId } = await signAndNotarize(target, env);
   out(`Signed ${target} as ${identity}`);
   out(`Apple notarization ${submissionId} accepted`);

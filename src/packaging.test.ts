@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HOOK_EVENT_NAMES } from "./constants.js";
-import { RELEASE_PAGE_SIZE, RELEASES_API } from "./binary-constants.js";
+import { PUBLISHED_TARGETS, RELEASE_PAGE_SIZE, RELEASES_API } from "./binary-constants.js";
 import { releaseAssetName } from "./updater-utils.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -71,12 +71,14 @@ describe("the standalone binary manifest", () => {
     }
   });
 
-  it("names the asset the release workflow publishes for a tag", () => {
-    const published = /^\s*ASSET_NAME:[ \t]*(.+?)[ \t]*$/m.exec(workflow)?.[1];
-    expect(published).toContain("${{ github.ref_name }}");
-    expect(published?.replace("${{ github.ref_name }}", "0.4.1")).toBe(
-      releaseAssetName("darwin", "arm64", "0.4.1"),
-    );
+  it("names the assets the release workflow publishes for a tag", () => {
+    const published = /^\s*ASSET_NAME="(.+?)"$/m.exec(workflow)?.[1];
+    expect(published).toBe(releaseAssetName("darwin", "$ARCH", "$TAG"));
+    for (const arch of PUBLISHED_TARGETS.darwin) {
+      expect(published?.replace("$ARCH", arch).replace("$TAG", "0.4.1"), arch).toBe(
+        releaseAssetName("darwin", arch, "0.4.1"),
+      );
+    }
   });
 
   it("walks the same release page as the shell installer", () => {

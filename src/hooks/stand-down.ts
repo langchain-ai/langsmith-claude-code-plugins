@@ -14,7 +14,7 @@ export async function pluginShouldStandDown(
   cwd = process.cwd(),
 ): Promise<boolean> {
   try {
-    if (await runningCompiledBinary()) return false;
+    if (runningCompiledBinary()) return false;
     if (!existsSync(installedBinaryPath(installDirectory(home)))) return false;
     return [join(home, ".claude", "settings.json"), join(cwd, ".claude", "settings.json")].some(
       registersTheBinary,

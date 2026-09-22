@@ -90,18 +90,24 @@ and [TESTING.md](./TESTING.md#experimental-gateway-tests) for the isolated test 
 Locally, hooks re-read `bundle/` on every invocation, so after `pnpm build` your
 next hook picks up the change without restarting the session.
 
-## Standalone binary (macOS arm64)
+## Standalone binary (macOS arm64 and x64)
 
-`pnpm build:binary` runs `tsc`, bundles the hook dispatcher into one file, and embeds it in
-a copy of Node under `bin/`. The result runs the tracing hooks on a machine with no Node
-installed, which is why it is large. Building it needs a newer Node than the plugin does;
-the workflow pins that version, and the plugin itself still runs on Node 20.
+`pnpm build:binary` compiles the hook dispatcher into one file with `bun build --compile`,
+so it needs Bun on your PATH. The result carries its own JavaScript runtime and runs the
+tracing hooks on a machine with no Node installed, which is why it is large.
 
-- The build only targets macOS arm64, and refuses to run anywhere else.
-- CI builds the binary and runs it against all nine hook events on any PR that touches the build.
+- One Mac builds both architectures. Pass `--arch=x64` or `--arch=all` to cross compile.
+- The binary for this machine lands at `bin/langsmith-claude-code-tracing`, where the tests
+  and `pnpm sign:binary` look for it. A cross compiled one lands in `bin/darwin-<arch>/`
+  under the same name.
+- The build reads the architecture back out of each file it produced and fails if it is
+  not the one asked for.
 - The build asks the binary for its `--version` and fails unless it matches `package.json`.
+  Only the binary for this machine is asked, because the other one cannot run here.
+- CI builds both, runs the x64 one on a real Intel runner, and runs all nine hook events
+  against both on any PR that touches the build.
 - Publishing is manual. Run the workflow from the Actions tab against a release tag, and it
-  attaches the binary to that tag's release as a draft.
+  attaches an arm64 binary and an x64 binary to that tag's release as a draft.
 
 The binary is ad-hoc signed, not Apple signed, so macOS quarantines it on download. Clear
 that on the downloaded file before running it:
@@ -111,9 +117,9 @@ xattr -d com.apple.quarantine <downloaded-binary>
 chmod +x <downloaded-binary>
 ```
 
-`pnpm sign:binary` replaces that with a Developer ID signature and notarizes the result. It skips
-while any of `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID` and
-`APPLE_API_ISSUER` is unset. Store `CSC_LINK` and `APPLE_API_KEY` base64 encoded with
+`pnpm sign:binary` replaces that with a Developer ID signature and notarizes the result. It fails
+if any of `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID` and
+`APPLE_API_ISSUER` is unset, so a release can never go out unsigned. Store `CSC_LINK` and `APPLE_API_KEY` base64 encoded with
 `base64 -i <file>`. `macos-entitlements.plist` grants `allow-jit`, without which the binary aborts
 with `Failed to reserve virtual memory for CodeRange` under the hardened runtime. Apple staples no
 ticket to a bare executable, so a notarized binary still needs one online Gatekeeper check on
@@ -129,14 +135,14 @@ The binary installs itself, so users need no Node or clone. It copies itself int
 `~/.langsmith` and merges its hooks into a settings file, leaving `hooks/hooks.json`
 alone. Only `--tag` downloads, and that download is checksummed.
 
-`esbuild.sea.config.mjs` compiles `hooks/hooks.binary.json` in. It mirrors `hooks/hooks.json`
+`scripts/build.binary.mjs` compiles `hooks/hooks.binary.json` in. It mirrors `hooks/hooks.json`
 and changes only the command. A test fails if they drift.
 
 ## Dev loop
 
 ```bash
 pnpm build                 # tsc + regenerate both plugin bundle directories
-pnpm build:binary             # tsc + the standalone macOS arm64 binary in bin/
+pnpm build:binary          # the standalone macOS binary for this machine, in bin/
 pnpm test                  # vitest
 pnpm test:install          # install.sh against release fixtures
 pnpm test:install:variants # every edit in variants.txt must fail those cases

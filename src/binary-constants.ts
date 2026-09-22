@@ -7,7 +7,7 @@ export const LOOPBACK_HOSTS = ["127.0.0.1", "[::1]", "localhost"];
 
 export const EXECUTABLE_NAME = "langsmith-claude-code-tracing";
 export const INSTALL_DIRECTORY_NAME = ".langsmith";
-export const PUBLISHED_TARGETS: Record<string, readonly string[]> = { darwin: ["arm64"] };
+export const PUBLISHED_TARGETS: Record<string, readonly string[]> = { darwin: ["arm64", "x64"] };
 export const OLDER_THAN_ANY_RELEASE = "0.0.0";
 
 export const LOCK_MAX_AGE_MS = 10 * 60 * 1000;
