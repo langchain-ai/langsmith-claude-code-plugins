@@ -84,9 +84,11 @@ function releaseJson(
   return { tag_name: version, assets: [assetJson(version, body, arch, extra)] };
 }
 
-function everyArchRelease(version: string, bodies: Record<string, Buffer>, reversed = false) {
-  const assets = Object.entries(bodies).map(([arch, body]) => assetJson(version, body, arch, {}));
-  return { tag_name: version, assets: reversed ? assets.reverse() : assets };
+function everyArchRelease(version: string, bodies: Record<string, Buffer>) {
+  return {
+    tag_name: version,
+    assets: Object.entries(bodies).map(([arch, body]) => assetJson(version, body, arch, {})),
+  };
 }
 
 const serving = (listed: unknown, body: Buffer) =>

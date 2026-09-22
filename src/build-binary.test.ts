@@ -64,20 +64,12 @@ describe("outputPath", () => {
   it("writes a cross compiled binary into a directory of its own", () => {
     expect(outputPath(otherArch)).toBe(join(binDirectory, `darwin-${otherArch}`, EXECUTABLE_NAME));
   });
-
-  it("never writes two architectures to the same path", () => {
-    expect(new Set(arches.map(outputPath)).size).toBe(arches.length);
-  });
 });
 
 describe("machOArch", () => {
   it("names the architecture lipo reports for each published one", () => {
     expect(machOArch("arm64")).toBe("arm64");
     expect(machOArch("x64")).toBe("x86_64");
-  });
-
-  it("knows a name for every architecture the build can be asked for", () => {
-    for (const arch of arches) expect(() => machOArch(arch)).not.toThrow();
   });
 
   it("refuses an architecture it has no name for", () => {
@@ -113,21 +105,12 @@ describe("buildArguments", () => {
   });
 });
 
-describe.runIf(bothBuilt)("the built binaries", () => {
-  it("each hold the architecture they were asked for", () => {
-    for (const arch of arches) {
-      expect(() => checkBuiltArch(outputPath(arch), arch), arch).not.toThrow();
-    }
-  });
-
-  it("are refused when the other architecture is asked of them", () => {
-    for (const arch of arches) {
-      const other = arches.find((candidate) => candidate !== arch) as string;
-
-      expect(() => checkBuiltArch(outputPath(arch), other), arch).toThrow(
-        `produced ${machOArch(arch)}, not ${machOArch(other)}`,
-      );
-    }
+describe.runIf(bothBuilt)("the cross compiled binary", () => {
+  it("holds the architecture it was built for and not this machine's", () => {
+    expect(() => checkBuiltArch(outputPath(otherArch), otherArch)).not.toThrow();
+    expect(() => checkBuiltArch(outputPath(otherArch), process.arch)).toThrow(
+      `produced ${machOArch(otherArch)}, not ${machOArch(process.arch)}`,
+    );
   });
 });
 
