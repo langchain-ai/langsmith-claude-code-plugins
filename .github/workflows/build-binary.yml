@@ -170,7 +170,7 @@ jobs:
   publish:
     name: Publish the Binaries to the Release
     if: needs.build-unsigned.outputs.publishing == 'true'
-    needs: [build-unsigned, sign-and-notarize]
+    needs: [build-unsigned, run-on-intel, sign-and-notarize]
     # Only downloads and uploads the artifacts, so it does not need a Mac.
     runs-on: ubuntu-latest
     permissions:

@@ -38,10 +38,6 @@ export function outputPath(arch) {
   return join(binDirectory, `${PUBLISHED_PLATFORM}-${arch}`, EXECUTABLE_NAME);
 }
 
-function defineFlag(name, value) {
-  return ["--define", `${name}=${JSON.stringify(value)}`];
-}
-
 export function buildArguments(arch, version, binary) {
   return [
     "build",
@@ -53,6 +49,10 @@ export function buildArguments(arch, version, binary) {
     "--outfile",
     binary,
   ];
+}
+
+function defineFlag(name, value) {
+  return ["--define", `${name}=${JSON.stringify(value)}`];
 }
 
 export function checkBuiltArch(binary, arch) {

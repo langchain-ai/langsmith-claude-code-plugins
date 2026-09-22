@@ -45,9 +45,9 @@ if (argument === "--help" || argument === "-h") {
   initLogger(false);
   void runUpdateCheck();
 } else if (event) {
-  void pluginShouldStandDown().then((standDown) =>
-    standDown ? drainStdinToAvoidEpipe() : runHookEntry(event, HOOK_HANDLERS[event]),
-  );
+  void (pluginShouldStandDown()
+    ? drainStdinToAvoidEpipe()
+    : runHookEntry(event, HOOK_HANDLERS[event]));
 } else if (argument?.startsWith("-")) {
   console.error(`unknown option: ${argument}`);
   console.error(USAGE);

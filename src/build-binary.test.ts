@@ -132,6 +132,13 @@ describe.runIf(bothBuilt)("the built binaries", () => {
 });
 
 describe.runIf(existsSync(outputPath(process.arch)))("this machine's built binary", () => {
+  it("holds this machine's architecture", () => {
+    expect(() => checkBuiltArch(outputPath(process.arch), process.arch)).not.toThrow();
+    expect(() => checkBuiltArch(outputPath(process.arch), otherArch)).toThrow(
+      `produced ${machOArch(process.arch)}, not ${machOArch(otherArch)}`,
+    );
+  });
+
   it("reports the package version", () => {
     expect(() => checkReportedVersion(outputPath(process.arch), version)).not.toThrow();
   });

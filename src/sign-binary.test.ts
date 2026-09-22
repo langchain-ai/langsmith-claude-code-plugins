@@ -223,8 +223,9 @@ describe("the build workflow", () => {
     }
   });
 
-  it("waits for signing before it publishes", () => {
-    expect(workflow).toContain("needs: [build-unsigned, sign-and-notarize]");
+  it("publishes nothing until the Intel run and every signing leg have passed", () => {
+    expect(job("publish")).toContain("needs: [build-unsigned, run-on-intel, sign-and-notarize]");
+    expect(job("sign-and-notarize")).toContain("fail-fast: false");
   });
 
   it("publishes only what the signing job signed, never the unsigned build", () => {

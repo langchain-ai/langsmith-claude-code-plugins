@@ -16877,7 +16877,7 @@ import { existsSync as existsSync3, readFileSync as readFileSync8 } from "node:f
 import { homedir as homedir4 } from "node:os";
 import { join as join5 } from "node:path";
 var REGISTERED_COMMAND = `/${INSTALL_DIRECTORY_NAME}/${EXECUTABLE_NAME}`;
-async function pluginShouldStandDown(home = homedir4(), cwd = process.cwd()) {
+function pluginShouldStandDown(home = homedir4(), cwd = process.cwd()) {
   try {
     if (runningCompiledBinary())
       return false;
@@ -16926,7 +16926,7 @@ if (argument === "--help" || argument === "-h") {
   initLogger(false);
   void runUpdateCheck();
 } else if (event) {
-  void pluginShouldStandDown().then((standDown) => standDown ? drainStdinToAvoidEpipe() : runHookEntry(event, HOOK_HANDLERS[event]));
+  void (pluginShouldStandDown() ? drainStdinToAvoidEpipe() : runHookEntry(event, HOOK_HANDLERS[event]));
 } else if (argument?.startsWith("-")) {
   console.error(`unknown option: ${argument}`);
   console.error(USAGE);

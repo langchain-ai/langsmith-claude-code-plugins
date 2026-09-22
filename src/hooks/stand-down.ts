@@ -9,10 +9,7 @@ import { installDirectory, installedBinaryPath } from "../updater-install.js";
 
 const REGISTERED_COMMAND = `/${INSTALL_DIRECTORY_NAME}/${EXECUTABLE_NAME}`;
 
-export async function pluginShouldStandDown(
-  home = homedir(),
-  cwd = process.cwd(),
-): Promise<boolean> {
+export function pluginShouldStandDown(home = homedir(), cwd = process.cwd()): boolean {
   try {
     if (runningCompiledBinary()) return false;
     if (!existsSync(installedBinaryPath(installDirectory(home)))) return false;
