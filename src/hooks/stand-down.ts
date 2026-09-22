@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { EXECUTABLE_NAME, INSTALL_DIRECTORY_NAME } from "../sea-constants.js";
-import type { SettingsFile } from "../sea-models.js";
-import { runningCompiledBinary } from "../sea-runtime.js";
+import { EXECUTABLE_NAME, INSTALL_DIRECTORY_NAME } from "../binary-constants.js";
+import type { SettingsFile } from "../binary-models.js";
+import { runningCompiledBinary } from "../binary-runtime.js";
 import { installDirectory, installedBinaryPath } from "../updater-install.js";
 
 const REGISTERED_COMMAND = `/${INSTALL_DIRECTORY_NAME}/${EXECUTABLE_NAME}`;

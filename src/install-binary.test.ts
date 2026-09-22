@@ -11,7 +11,7 @@ import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 
 import { HOOK_EVENT_NAMES } from "./constants.js";
 import { install } from "./installer.js";
-import type { InstallOptions } from "./sea-models.js";
+import type { InstallOptions } from "./binary-models.js";
 import { releaseAssetName } from "./updater-utils.js";
 
 vi.mock("node:fs/promises", { spy: true });
@@ -21,7 +21,7 @@ const EXECUTABLE = "langsmith-claude-code-tracing";
 const DARWIN = { runtimePlatform: "darwin", runtimeArch: "arm64" } as const;
 const ORIGIN = "http://127.0.0.1:1";
 const hooksManifest = JSON.parse(
-  fs.readFileSync(new URL("hooks/hooks.sea.json", root), "utf8"),
+  fs.readFileSync(new URL("hooks/hooks.binary.json", root), "utf8"),
 ).hooks;
 const hookCommand = (event: string) => `"\${HOME}/.langsmith/${EXECUTABLE}" ${event}`;
 const fakeBinary = (version: string) => Buffer.from(`#!/bin/sh\necho ${version}\n`);
@@ -33,7 +33,7 @@ const seaConfig = JSON.parse(fs.readFileSync(new URL("sea-config.json", root), "
 const realBinary = fileURLToPath(new URL(seaConfig.output, root));
 const built = fs.existsSync(realBinary);
 if (!built && process.env.CI && process.platform === "darwin" && process.arch === "arm64") {
-  throw new Error(`Expected 'pnpm build:sea' to have produced ${realBinary}`);
+  throw new Error(`Expected 'pnpm build:binary' to have produced ${realBinary}`);
 }
 
 let home: string;
@@ -342,7 +342,7 @@ it("installs nothing it cannot fully trust", async () => {
 const TIMEOUT_FOR_TWENTY_BINARY_SPAWNS = 60_000;
 
 const hookInput = (prompt?: string) =>
-  JSON.stringify({ session_id: "sea", transcript_path: join(home, "gone"), cwd: home, prompt });
+  JSON.stringify({ session_id: "binary", transcript_path: join(home, "gone"), cwd: home, prompt });
 
 const dispatch = (binary: string, args: string[], prompt = "ordinary prompt") =>
   spawnSync(binary, args, {

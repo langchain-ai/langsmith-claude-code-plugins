@@ -6,8 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc && pnpm bundle",
-    "build:sea": "tsc && node esbuild.sea.config.mjs",
-    "sign:sea": "node scripts/sign.sea.mjs",
+    "build:binary": "tsc && node esbuild.sea.config.mjs",
+    "sign:binary": "node scripts/sign.binary.mjs",
     "bundle": "node esbuild.config.mjs",
     "dev": "tsc --watch",
     "format": "oxfmt --write",

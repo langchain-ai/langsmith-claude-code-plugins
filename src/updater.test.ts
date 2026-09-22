@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { EXECUTABLE_NAME, LOCK_FILE } from "./sea-constants.js";
-import type { UpdateOptions } from "./sea-models.js";
+import { EXECUTABLE_NAME, LOCK_FILE } from "./binary-constants.js";
+import type { UpdateOptions } from "./binary-models.js";
 import * as utils from "./updater-utils.js";
 import { updateFromGitHub } from "./updater.js";
 

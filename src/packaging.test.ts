@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HOOK_EVENT_NAMES } from "./constants.js";
-import { RELEASE_PAGE_SIZE, RELEASES_API } from "./sea-constants.js";
+import { RELEASE_PAGE_SIZE, RELEASES_API } from "./binary-constants.js";
 import { releaseAssetName } from "./updater-utils.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -56,10 +56,10 @@ function hookBundles(pluginRoot: string): string[] {
 describe("the standalone binary manifest", () => {
   it("mirrors the Node manifest and changes only the command", () => {
     const node: Hooks = json(join(root, "hooks/hooks.json")).hooks;
-    const sea: Hooks = json(join(root, "hooks/hooks.sea.json")).hooks;
-    expect(Object.keys(sea)).toEqual(Object.keys(node));
+    const binary: Hooks = json(join(root, "hooks/hooks.binary.json")).hooks;
+    expect(Object.keys(binary)).toEqual(Object.keys(node));
     for (const [event, groups] of Object.entries(node)) {
-      expect(sea[event]).toEqual(
+      expect(binary[event]).toEqual(
         groups.map((group) => ({
           ...group,
           hooks: group.hooks.map((hook) => ({
@@ -118,7 +118,7 @@ describe("the standalone binary manifest", () => {
 
   it("reaches the Apple environment secrets from a job no pull request can trigger", () => {
     const jobs = workflow.split(/\n {2}(?=[a-z-]+:\n)/);
-    const signing = jobs.find((job) => job.includes("pnpm sign:sea")) ?? "";
+    const signing = jobs.find((job) => job.includes("pnpm sign:binary")) ?? "";
 
     expect(signing).toContain("environment: macos-signing");
     expect(signing).toContain("if: needs.build-unsigned.outputs.publishing == 'true'");

@@ -10,7 +10,7 @@ import { LS_INTEGRATION_VERSION } from "../config.js";
 import { HOOK_EVENT_NAMES } from "../constants.js";
 import { runInstall } from "../installer.js";
 import { error, initLogger } from "../logger.js";
-import { EXECUTABLE_NAME } from "../sea-constants.js";
+import { EXECUTABLE_NAME } from "../binary-constants.js";
 import { runUpdateCheck } from "../updater.js";
 import { runHookEntry } from "../utils/hook-entry.js";
 import { drainStdinToAvoidEpipe } from "../utils/stdin.js";

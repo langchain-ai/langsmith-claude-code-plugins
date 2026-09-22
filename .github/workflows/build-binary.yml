@@ -14,16 +14,16 @@ on:
       - package.json
       - macos-entitlements.plist
       - src/hooks/dispatch.ts
-      - src/hooks/dispatch.sea.test.ts
+      - src/hooks/dispatch.binary.test.ts
       - src/hooks/stand-down.ts
-      - hooks/hooks.sea.json
-      - src/install-sea.test.ts
+      - hooks/hooks.binary.json
+      - src/install-binary.test.ts
       - src/installer.ts
-      - scripts/sign.sea.mjs
-      - src/sea-constants.ts
-      - src/sea-models.ts
-      - src/sea-runtime.ts
-      - src/sign-sea.test.ts
+      - scripts/sign.binary.mjs
+      - src/binary-constants.ts
+      - src/binary-models.ts
+      - src/binary-runtime.ts
+      - src/sign-binary.test.ts
       - src/updater.ts
       - src/updater-download.ts
       - src/updater-install.ts
@@ -70,9 +70,9 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Build the Unsigned Binary
-        run: pnpm build:sea
+        run: pnpm build:binary
       - name: Test the Binary
-        run: pnpm test src/hooks/dispatch.sea.test.ts src/install-sea.test.ts
+        run: pnpm test src/hooks/dispatch.binary.test.ts src/install-binary.test.ts
       - name: Upload the Binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -112,7 +112,7 @@ jobs:
         run: chmod +x bin/langsmith-claude-code-tracing
       - name: Sign and Notarize the Binary
         if: env.HAS_APPLE_CREDENTIALS == 'true'
-        run: pnpm sign:sea
+        run: pnpm sign:binary
         env:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
@@ -120,7 +120,7 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
       - name: Test the Signed Binary
-        run: pnpm test src/hooks/dispatch.sea.test.ts src/install-sea.test.ts
+        run: pnpm test src/hooks/dispatch.binary.test.ts src/install-binary.test.ts
       - name: Upload the Signed Binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

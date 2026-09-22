@@ -2,8 +2,8 @@ import { join } from "node:path";
 import { arch as osArch, platform as osPlatform } from "node:os";
 import { LS_INTEGRATION_VERSION } from "./config.js";
 import { debug, log, warn } from "./logger.js";
-import { LOCK_FILE } from "./sea-constants.js";
-import type { UpdateOptions, UpdateResult } from "./sea-models.js";
+import { LOCK_FILE } from "./binary-constants.js";
+import type { UpdateOptions, UpdateResult } from "./binary-models.js";
 import {
   acquireLock,
   installDirectory,

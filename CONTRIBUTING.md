@@ -92,7 +92,7 @@ next hook picks up the change without restarting the session.
 
 ## Standalone binary (macOS arm64)
 
-`pnpm build:sea` runs `tsc`, bundles the hook dispatcher into one file, and embeds it in
+`pnpm build:binary` runs `tsc`, bundles the hook dispatcher into one file, and embeds it in
 a copy of Node under `bin/`. The result runs the tracing hooks on a machine with no Node
 installed, which is why it is large. Building it needs a newer Node than the plugin does;
 the workflow pins that version, and the plugin itself still runs on Node 20.
@@ -111,7 +111,7 @@ xattr -d com.apple.quarantine <downloaded-binary>
 chmod +x <downloaded-binary>
 ```
 
-`pnpm sign:sea` replaces that with a Developer ID signature and notarizes the result. It skips
+`pnpm sign:binary` replaces that with a Developer ID signature and notarizes the result. It skips
 while any of `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID` and
 `APPLE_API_ISSUER` is unset. Store `CSC_LINK` and `APPLE_API_KEY` base64 encoded with
 `base64 -i <file>`. `macos-entitlements.plist` grants `allow-jit`, without which the binary aborts
@@ -129,14 +129,14 @@ The binary installs itself, so users need no Node or clone. It copies itself int
 `~/.langsmith` and merges its hooks into a settings file, leaving `hooks/hooks.json`
 alone. Only `--tag` downloads, and that download is checksummed.
 
-`esbuild.sea.config.mjs` compiles `hooks/hooks.sea.json` in. It mirrors `hooks/hooks.json`
+`esbuild.sea.config.mjs` compiles `hooks/hooks.binary.json` in. It mirrors `hooks/hooks.json`
 and changes only the command. A test fails if they drift.
 
 ## Dev loop
 
 ```bash
 pnpm build                 # tsc + regenerate both plugin bundle directories
-pnpm build:sea             # tsc + the standalone macOS arm64 binary in bin/
+pnpm build:binary             # tsc + the standalone macOS arm64 binary in bin/
 pnpm test                  # vitest
 pnpm test:install          # install.sh against release fixtures
 pnpm test:install:variants # every edit in variants.txt must fail those cases

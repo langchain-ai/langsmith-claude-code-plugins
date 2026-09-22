@@ -4,8 +4,8 @@ import {
   LOOPBACK_HOSTS,
   PUBLISHED_TARGETS,
   RELEASES_API,
-} from "./sea-constants.js";
-import type { ReleaseAsset } from "./sea-models.js";
+} from "./binary-constants.js";
+import type { ReleaseAsset } from "./binary-models.js";
 
 export function isPublishedTarget(platform: string, arch: string): boolean {
   return PUBLISHED_TARGETS[platform]?.includes(arch) ?? false;

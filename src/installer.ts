@@ -2,14 +2,14 @@ import * as fs from "node:fs/promises";
 import { arch as osArch, homedir, platform as osPlatform } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { LS_INTEGRATION_VERSION } from "./config.js";
-import { EXECUTABLE_NAME, OLDER_THAN_ANY_RELEASE } from "./sea-constants.js";
-import type { HooksManifest, InstallOptions, SettingsFile } from "./sea-models.js";
-import { runningCompiledBinary } from "./sea-runtime.js";
+import { EXECUTABLE_NAME, OLDER_THAN_ANY_RELEASE } from "./binary-constants.js";
+import type { HooksManifest, InstallOptions, SettingsFile } from "./binary-models.js";
+import { runningCompiledBinary } from "./binary-runtime.js";
 import { installDirectory, installRelease, installRunningBinary } from "./updater-install.js";
 import { fetchReleaseList, fetchTaggedRelease, pickNewestRelease } from "./updater-releases.js";
 import { configuredReleasesApi, isPublishedTarget } from "./updater-utils.js";
 
-declare const __LS_SEA_HOOKS__: string;
+declare const __LS_BINARY_HOOKS__: string;
 
 const TRACING_PLUGIN_ID = "langsmith-tracing@langsmith-claude-code-plugins";
 
@@ -29,7 +29,7 @@ export function mergeHooks(existing: SettingsFile, manifest: HooksManifest): Set
 }
 
 function compiledHooksManifest(): HooksManifest {
-  const compiled = typeof __LS_SEA_HOOKS__ === "undefined" ? undefined : __LS_SEA_HOOKS__;
+  const compiled = typeof __LS_BINARY_HOOKS__ === "undefined" ? undefined : __LS_BINARY_HOOKS__;
   const hooks = compiled ? (JSON.parse(compiled) as SettingsFile).hooks : undefined;
   if (!hooks || typeof hooks !== "object" || Array.isArray(hooks)) {
     throw new Error("this build carries no hooks manifest");

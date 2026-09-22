@@ -78,7 +78,7 @@ async function writeCredentialFile(path, value, name) {
 }
 
 async function signAndNotarize(binaryPath, env) {
-  const workspace = await mkdtemp(join(tmpdir(), "langsmith-sea-signing-"));
+  const workspace = await mkdtemp(join(tmpdir(), "langsmith-binary-signing-"));
   const keychain = join(workspace, "signing.keychain-db");
   const password = randomBytes(32).toString("hex");
   const originalKeychains = userKeychains();

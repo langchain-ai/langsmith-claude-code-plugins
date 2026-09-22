@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { HOOK_EVENT_NAMES } from "../constants.js";
-import { EXECUTABLE_NAME } from "../sea-constants.js";
+import { EXECUTABLE_NAME } from "../binary-constants.js";
 
 const root = new URL("../../", import.meta.url);
 const bundle = fileURLToPath(new URL("bundle/dispatch.js", root));

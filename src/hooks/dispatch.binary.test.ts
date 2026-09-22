@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { HOOK_EVENT_NAMES } from "../constants.js";
-import { EXECUTABLE_NAME } from "../sea-constants.js";
+import { EXECUTABLE_NAME } from "../binary-constants.js";
 
 const root = new URL("../../", import.meta.url);
 const seaConfig = JSON.parse(readFileSync(new URL("sea-config.json", root), "utf8"));
@@ -24,11 +24,11 @@ const built = existsSync(binary);
 
 // A skip still exits 0, so a missing binary has to fail the runner that just built it.
 if (!built && process.env.CI && process.platform === "darwin" && process.arch === "arm64") {
-  throw new Error(`Expected 'pnpm build:sea' to have produced ${binary}`);
+  throw new Error(`Expected 'pnpm build:binary' to have produced ${binary}`);
 }
 
 let home: string;
-beforeEach(() => (home = mkdtempSync(join(tmpdir(), "ls-dispatch-sea-"))));
+beforeEach(() => (home = mkdtempSync(join(tmpdir(), "ls-dispatch-binary-"))));
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 function dispatch(args: string[], prompt = "ordinary prompt") {
@@ -41,7 +41,7 @@ function dispatch(args: string[], prompt = "ordinary prompt") {
       STATE_FILE: join(home, "state.json"),
     },
     input: JSON.stringify({
-      session_id: "dispatch-sea-test",
+      session_id: "dispatch-binary-test",
       transcript_path: join(home, "missing.jsonl"),
       cwd: home,
       prompt,

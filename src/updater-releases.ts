@@ -1,5 +1,5 @@
-import { LIST_TIMEOUT_MS } from "./sea-constants.js";
-import type { Release, ReleaseAsset } from "./sea-models.js";
+import { LIST_TIMEOUT_MS } from "./binary-constants.js";
+import type { Release, ReleaseAsset } from "./binary-models.js";
 import {
   githubRequestHeaders,
   isPublishedTarget,

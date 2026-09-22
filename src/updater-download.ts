@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
-import { DOWNLOAD_TIMEOUT_MS, MAX_ASSET_BYTES } from "./sea-constants.js";
-import type { ReleaseAsset } from "./sea-models.js";
+import { DOWNLOAD_TIMEOUT_MS, MAX_ASSET_BYTES } from "./binary-constants.js";
+import type { ReleaseAsset } from "./binary-models.js";
 import { expectedSha256, githubRequestHeaders, trustedDownloadUrl } from "./updater-utils.js";
 
 async function writeFully(handle: fs.FileHandle, chunk: Buffer): Promise<void> {

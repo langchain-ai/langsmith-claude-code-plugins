@@ -12,7 +12,7 @@ const {
   developerIdRequirement,
   missingAppleCredentials,
   sign,
-} = await import("../scripts/sign.sea.mjs");
+} = await import("../scripts/sign.binary.mjs");
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const workflow = readFileSync(join(root, ".github/workflows/build-binary.yml"), "utf8");
@@ -142,8 +142,8 @@ describe("the build workflow", () => {
     const paths = /paths:\n((?:\s+- \S+\n)+)/.exec(workflow)?.[1] ?? "";
     for (const path of [
       "macos-entitlements.plist",
-      "scripts/sign.sea.mjs",
-      "src/sign-sea.test.ts",
+      "scripts/sign.binary.mjs",
+      "src/sign-binary.test.ts",
     ]) {
       expect(paths).toContain(`- ${path}\n`);
     }

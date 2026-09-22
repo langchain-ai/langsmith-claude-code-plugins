@@ -1075,7 +1075,7 @@ import * as fs3 from "node:fs/promises";
 import { arch as osArch, homedir as homedir3, platform as osPlatform } from "node:os";
 import { basename, dirname as dirname2, join as join3 } from "node:path";
 
-// dist/sea-constants.js
+// dist/binary-constants.js
 var REPOSITORY = "langchain-ai/langsmith-claude-code-plugins";
 var RELEASE_PAGE_SIZE = 100;
 var RELEASES_API = `https://api.github.com/repos/${REPOSITORY}/releases?per_page=${RELEASE_PAGE_SIZE}`;
@@ -1091,7 +1091,7 @@ var DOWNLOAD_TIMEOUT_MS = 5 * 6e4;
 var MAX_ASSET_BYTES = 250 * 1024 * 1024;
 var LOCK_FILE = ".update.lock";
 
-// dist/sea-runtime.js
+// dist/binary-runtime.js
 async function runningCompiledBinary() {
   const sea = await import("node:sea").catch(() => void 0);
   return sea?.isSea() === true;

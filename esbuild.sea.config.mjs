@@ -45,7 +45,7 @@ await build({
   external: ["node:*"],
   define: {
     __LS_INTEGRATION_VERSION__: JSON.stringify(version),
-    __LS_SEA_HOOKS__: JSON.stringify(readFileSync("hooks/hooks.sea.json", "utf-8")),
+    __LS_BINARY_HOOKS__: JSON.stringify(readFileSync("hooks/hooks.binary.json", "utf-8")),
   },
 });
 
