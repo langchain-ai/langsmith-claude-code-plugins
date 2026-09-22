@@ -34,6 +34,12 @@ describe("the architectures the build knows about", () => {
   it("build to the name the installer registers as a hook", () => {
     for (const arch of arches) expect(outputPath(arch).endsWith(`/${EXECUTABLE_NAME}`)).toBe(true);
   });
+
+  it("are built by the script this file is checking", () => {
+    const { scripts } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+
+    expect(scripts["build:binary"]).toBe("node scripts/build.binary.mjs");
+  });
 });
 
 describe("requestedArches", () => {
