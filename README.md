@@ -59,15 +59,6 @@ trialling and macOS arm64 is the only build.
 
 The plugin stops tracing while the binary is installed and registered as a hook.
 
-Two things are not live yet, so the command below fails today:
-
-- No release carries the binary. Build it with `pnpm build:sea` and run that
-  binary with `--install`.
-- The short link is not registered. It redirects to the LangChain homepage, so
-  piping it to bash runs HTML. Use
-  `https://raw.githubusercontent.com/langchain-ai/langsmith-claude-code-plugins/main/install.sh`
-  instead.
-
 1. Run the installer:
 
    ```bash
