@@ -468,7 +468,7 @@ it.skipIf(!built)("downloads the release a pinned tag names", async () => {
   const server = createServer((request, response) => {
     if (request.url?.startsWith("/download/")) return void response.writeHead(200).end(body);
     const download = { browser_download_url: `${origin}/download/${packageVersion}` };
-    const tagged = JSON.stringify(releaseJson(packageVersion, body, download));
+    const tagged = JSON.stringify(releaseJson(packageVersion, body, download, process.arch));
     response.writeHead(200, { "content-type": "application/json" }).end(tagged);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

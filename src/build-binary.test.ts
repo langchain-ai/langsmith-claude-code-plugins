@@ -23,6 +23,7 @@ const arches: string[] = PUBLISHED_ARCHES;
 const otherArch = arches.find((arch) => arch !== process.arch) as string;
 const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const bothBuilt = arches.every((arch) => existsSync(outputPath(arch)));
+const TIMEOUT_FOR_TWO_LIPO_READS_OF_A_70MB_BINARY_ON_INTEL = 30_000;
 
 describe("the architectures the build knows about", () => {
   it("are the ones the installer and the updater will accept", () => {
@@ -121,12 +122,16 @@ describe.runIf(bothBuilt)("the cross compiled binary", () => {
 });
 
 describe.runIf(existsSync(outputPath(process.arch)))("this machine's built binary", () => {
-  it("holds this machine's architecture", () => {
-    expect(() => checkBuiltArch(outputPath(process.arch), process.arch)).not.toThrow();
-    expect(() => checkBuiltArch(outputPath(process.arch), otherArch)).toThrow(
-      `produced ${machOArch(process.arch)}, not ${machOArch(otherArch)}`,
-    );
-  });
+  it(
+    "holds this machine's architecture",
+    () => {
+      expect(() => checkBuiltArch(outputPath(process.arch), process.arch)).not.toThrow();
+      expect(() => checkBuiltArch(outputPath(process.arch), otherArch)).toThrow(
+        `produced ${machOArch(process.arch)}, not ${machOArch(otherArch)}`,
+      );
+    },
+    TIMEOUT_FOR_TWO_LIPO_READS_OF_A_70MB_BINARY_ON_INTEL,
+  );
 
   it("reports the package version", () => {
     expect(() => checkReportedVersion(outputPath(process.arch), version)).not.toThrow();
