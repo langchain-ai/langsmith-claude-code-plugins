@@ -12,10 +12,10 @@ A Claude Code plugin that traces conversations, tool calls, subagent executions,
 
 ## Installation
 
-Every option below installs the same tracing integration. Only the delivery
-differs. The plugin runs on the Node on your PATH and the marketplace manages
-it. The standalone binary carries its own Node and you manage it. You are
-picking an install method, not a different product.
+Every option below installs the same tracing integration and only the delivery
+differs, so you are picking an install method rather than a different product.
+The plugin runs on the Node on your PATH and the marketplace manages it, while
+the standalone binary carries its own JavaScript runtime and you manage it.
 
 ### As a Claude Code plugin
 
@@ -50,12 +50,13 @@ To skip both steps next time, run `/plugin`, open **Marketplaces** →
 marketplaces have it off by default; enabling it updates the marketplace and
 its installed plugins together.
 
-### As a standalone binary (beta, macOS arm64)
+### As a standalone binary (beta, macOS arm64 and x64)
 
-The same integration as the plugin, delivered as one file. It carries its own
-Node runtime so it needs no Node on your PATH. You install and update it
-yourself. The plugin is the supported path. This binary is the beta we are
-trialling and macOS arm64 is the only build.
+The same integration as the plugin, delivered as one file that carries its own
+JavaScript runtime so it needs no Node on your PATH. The plugin is still the
+supported path and this binary is the beta we are trialling, so you install and
+update it yourself. Only macOS arm64 and x64 are built and the installer picks
+whichever matches your Mac.
 
 The plugin stops tracing while the binary is installed and registered as a hook.
 
@@ -65,9 +66,10 @@ The plugin stops tracing while the binary is installed and registered as a hook.
    curl -LsSf https://langch.in/claude-tracing | bash -s -- --beta
    ```
 
-   `--beta` takes the newest prerelease. Drop it once a stable release carries
-   the binary. The plain command takes the newest stable release and never a
-   prerelease, so it fails while a prerelease is the only published build.
+   Adding `--beta` takes the newest prerelease and you can drop it once a
+   stable release carries the binary. Without it the installer takes the newest
+   stable release and never a prerelease, so it fails while a prerelease is the
+   only published build.
 
    The installer checks the download against the SHA-256 the release publishes.
    It puts the binary at `~/.langsmith/langsmith-claude-code-tracing` and adds
@@ -84,12 +86,14 @@ The plugin stops tracing while the binary is installed and registered as a hook.
 
 3. Restart Claude Code.
 
-The binary never updates itself. Run
-`~/.langsmith/langsmith-claude-code-tracing --update` for a newer release.
+The binary never updates itself, so run
+`~/.langsmith/langsmith-claude-code-tracing --update` when you want a newer
+release.
 
-To download a release asset by hand instead: `chmod +x` it, then run it with
-`--install`. The binary is signed and notarized, so macOS clears it after one
-online Gatekeeper check.
+To download a release asset by hand instead, take the `-arm64-` or `-x64-` asset
+matching your Mac and `chmod +x` it, then run it with `--install`. Released
+binaries are signed and notarized so macOS clears one after a single online
+Gatekeeper check.
 
 ### As a Claude Cowork plugin
 
@@ -156,12 +160,12 @@ With full tracing (the default), each LLM run includes:
 
 In full mode, all runs (LLM, tool, turn, subagent) automatically include identity metadata so you can attribute traces in LangSmith:
 
-- `anthropic_user_id` — read from the `userID` field in `~/.claude.json` (the Claude Code installation's stable hashed user ID). Omitted if the file is missing or unreadable.
-- `local_username` — the local OS username from `os.userInfo()`.
+- `anthropic_user_id`: read from the `userID` field in `~/.claude.json` (the Claude Code installation's stable hashed user ID). Omitted if the file is missing or unreadable.
+- `local_username`: the local OS username from `os.userInfo()`.
 
-To override either field, supply your own value via `CC_LANGSMITH_METADATA` — user-supplied keys always win.
+To override either field, supply your own value via `CC_LANGSMITH_METADATA` since user-supplied keys always win.
 
-Tool runs include the tool name, inputs, and output content. Skill tool runs additionally set `ls_skill_name` — the invoked skill's name, read from the tool's `skill` input — so per-skill usage is queryable in run stats.
+Tool runs include the tool name, inputs, and output content. Skill tool runs additionally set `ls_skill_name` to the invoked skill's name, read from the tool's `skill` input, so per-skill usage is queryable in run stats.
 
 Interrupted turns (where the user cancels mid-response) are marked with status `"interrupted"` in LangSmith.
 
@@ -180,8 +184,8 @@ you get one labelled link per project.
 
 Muting is off by default unless configured below. With tracing enabled, use these argument-free plugin commands:
 
-- `/langsmith-tracing:mute` — omit this thread's input/output content and unsafe metadata.
-- `/langsmith-tracing:unmute` — restore full tracing for subsequent turns.
+- `/langsmith-tracing:mute`: omit this thread's input/output content and unsafe metadata.
+- `/langsmith-tracing:unmute`: restore full tracing for subsequent turns.
 
 Claude Code namespaces plugin commands; neither command accepts `on`, `off`, or `status`. Run `/reload-plugins` or restart Claude Code after installing or changing command definitions.
 
@@ -202,7 +206,7 @@ Outputs use the same message content with role `assistant`. Raw errors, identity
 
 Preferences are sticky per thread and stored separately from transient tracing state in `langsmith_state.privacy.json` by default. The preference path replaces a trailing `.json` in the state-file path with `.privacy.json`; paths without a trailing `.json` append `.privacy.json`. Normal state cleanup does not remove them. If this preference file is unreadable or malformed, new turns use metadata-only tracing and commands refuse to overwrite it; repair the file or permissions before retrying. Deleting it removes all thread overrides and resets to the configured default (unmuted when unset).
 
-Both commands apply **from the next turn**; the confirmation explicitly says the current turn is unchanged. A turn's mode is fixed when it starts and inherited by its subagents. In-flight work retains its mode across later commands, so unmuting never backfills full content into a previously muted run. A new turn after unmuting—including a task-notification turn—uses full tracing and may include earlier content in its context. There is no retroactive purge or content-tracking policy across turns.
+Both commands apply **from the next turn**; the confirmation explicitly says the current turn is unchanged. A turn's mode is fixed when it starts and inherited by its subagents. In-flight work retains its mode across later commands, so unmuting never backfills full content into a previously muted run. A new turn after unmuting, including a task-notification turn, uses full tracing and may include earlier content in its context. There is no retroactive purge or content-tracking policy across turns.
 
 Commands save only the thread preference, never change run parent selection, and are handled without a model turn. The master switch always wins: when disabled, neither full nor metadata-only runs are uploaded.
 
@@ -228,7 +232,7 @@ Set `defaultMuted` to the JSON boolean `false` to default to full content. You m
 
 For **all shared fields**, precedence is **environment > `cwd/.claude/langsmith.json` > `cwd/langsmith-plugins.json` > `~/.claude/langsmith.json` > `~/.langsmith-plugins.json` > defaults**. Resolution is per field: an `enabled`-only file does not hide a lower-priority `defaultMuted`, and vice versa. Both project paths use the hook payload's resolved `cwd` (or the process working directory when omitted), not the plugin installation directory; no ancestor directories are searched. All four files support the full shared JSON contract below. A missing field falls through. Invalid present `defaultMuted` values restrict that source to muted, but a higher-priority field can override it. Environment values `true`/`false` are case-insensitive, without whitespace trimming; any other present value, including an empty string, conservatively means muted. An unset environment variable contributes no override; the final default is unmuted.
 
-This default applies only when a thread has **no explicit saved mute/unmute override**. A saved unmute wins even over default mute; a saved mute survives default unmute. Config changes affect the next turn of threads without overrides, including task-notification turns. Existing turn/tool/compaction/subagent launch snapshots remain unchanged. Recovery paths without snapshots use the same thread preference and configured default. Config lookup never creates or modifies the privacy preference file, and commands only save an explicit thread override—not a global default.
+This default applies only when a thread has **no explicit saved mute/unmute override**. A saved unmute wins even over default mute; a saved mute survives default unmute. Config changes affect the next turn of threads without overrides, including task-notification turns. Existing turn/tool/compaction/subagent launch snapshots remain unchanged. Recovery paths without snapshots use the same thread preference and configured default. Config lookup never creates or modifies the privacy preference file, and commands only save an explicit thread override and never a global default.
 
 The privacy file stores only explicit thread overrides, using the strict schema `{ "threads": { "thread-id": "metadata" } }`; each mode must be `"full"` or `"metadata"`, and no other top-level fields are allowed. Configuration alone owns the fallback default. A missing privacy file means no overrides and is not created by reads.
 
@@ -291,7 +295,7 @@ Credentials may come from files, including replica-only credentials, but never e
 
 ## Secret redaction
 
-By default, the plugin strips common secrets — provider API keys, JWTs, PEM blocks, and structural `NAME=value`, `Authorization`, and URL-credential shapes — from run inputs, outputs, and metadata **before they are uploaded** to LangSmith. Identity/attribution metadata (`anthropic_user_id`, `local_username`) is unaffected; only secret _values_ are redacted.
+By default, the plugin strips common secrets (provider API keys, JWTs, PEM blocks, and structural `NAME=value`, `Authorization`, and URL-credential shapes) from run inputs, outputs, and metadata **before they are uploaded** to LangSmith. Identity/attribution metadata (`anthropic_user_id`, `local_username`) is unaffected; only secret _values_ are redacted.
 
 - Set `CC_LANGSMITH_REDACT` to a falsy value (`false`, `0`, `no`, or `off`) to turn redaction off.
 - Set `CC_LANGSMITH_REDACT_EXTRA` to a JSON array of `{ "pattern": "...", "replace": "..." }` rules to redact additional custom patterns. `pattern` is a regular-expression string; `replace` (optional) is the replacement text. Malformed rules are skipped with a logged error.
@@ -312,15 +316,15 @@ The plugin respects the following environment variables:
 | ---------------------------------- | -------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `TRACE_TO_LANGSMITH`               | No       | File config, then off             | Overrides every file when present; `"true"` enables, any other value disables.                                                                   |
 | `CC_LANGSMITH_DEFAULT_MUTED`       | No       | File config, then `false`         | Overrides file defaults when present; metadata-only tracing for threads without overrides. Case-insensitive `true`/`false`; invalid values mute. |
-| `CC_LANGSMITH_API_KEY`             | No\*     | —                                 | LangSmith API key (falls back to `LANGSMITH_API_KEY`). \*Required unless `CC_LANGSMITH_RUNS_ENDPOINTS` is set.                                   |
+| `CC_LANGSMITH_API_KEY`             | No\*     | None                              | LangSmith API key (falls back to `LANGSMITH_API_KEY`). \*Required unless `CC_LANGSMITH_RUNS_ENDPOINTS` is set.                                   |
 | `CC_LANGSMITH_PROJECT`             | No       | `"claude-code"`                   | LangSmith project name                                                                                                                           |
 | `LANGSMITH_ENDPOINT`               | No       | `https://api.smith.langchain.com` | LangSmith API base URL                                                                                                                           |
 | `CC_LANGSMITH_DEBUG`               | No       | `"false"`                         | Enable debug logging                                                                                                                             |
-| `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | —                                 | Dotted-order of an existing run to nest all Claude Code traces under                                                                             |
-| `CC_LANGSMITH_METADATA`            | No       | —                                 | JSON object of custom metadata to attach to all runs (e.g. PR URL, author)                                                                       |
-| `CC_LANGSMITH_RUNS_ENDPOINTS`      | No       | —                                 | JSON array of replica destinations for multi-project tracing                                                                                     |
+| `CC_LANGSMITH_PARENT_DOTTED_ORDER` | No       | None                              | Dotted-order of an existing run to nest all Claude Code traces under                                                                             |
+| `CC_LANGSMITH_METADATA`            | No       | None                              | JSON object of custom metadata to attach to all runs (e.g. PR URL, author)                                                                       |
+| `CC_LANGSMITH_RUNS_ENDPOINTS`      | No       | None                              | JSON array of replica destinations for multi-project tracing                                                                                     |
 | `CC_LANGSMITH_REDACT`              | No       | `"true"`                          | Set to a falsy value (`false`/`0`/`no`/`off`) to disable client-side secret redaction before upload                                              |
-| `CC_LANGSMITH_REDACT_EXTRA`        | No       | —                                 | JSON array of `{ pattern, replace }` custom redaction rules, applied alongside the built-in secret patterns                                      |
+| `CC_LANGSMITH_REDACT_EXTRA`        | No       | None                              | JSON array of `{ pattern, replace }` custom redaction rules, applied alongside the built-in secret patterns                                      |
 
 ## Usage with GitHub Actions
 

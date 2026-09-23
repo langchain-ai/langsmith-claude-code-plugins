@@ -1,17 +1,19 @@
-import * as fs from "node:fs/promises";
 import { arch as osArch, homedir, platform as osPlatform } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
+import { binary } from "./binary-target.js";
 import { LS_INTEGRATION_VERSION } from "./config.js";
-import { EXECUTABLE_NAME, OLDER_THAN_ANY_RELEASE } from "./sea-constants.js";
-import type { HooksManifest, InstallOptions, SettingsFile } from "./sea-models.js";
-import { runningCompiledBinary } from "./sea-runtime.js";
-import { installDirectory, installRelease, installRunningBinary } from "./updater-install.js";
-import { fetchReleaseList, fetchTaggedRelease, pickNewestRelease } from "./updater-releases.js";
-import { configuredReleasesApi, isPublishedTarget } from "./updater-utils.js";
+import { OLDER_THAN_ANY_RELEASE, TRACING_PLUGIN_ID } from "./constants.js";
+import type { BinaryInstallOptions, HooksManifest, SettingsFile } from "./types.js";
+import { runningCompiledBinary } from "./utils/binary-runtime.js";
+import { underHome } from "./utils/paths.js";
+import {
+  projectSettingsPath,
+  readSettings,
+  userSettingsPath,
+  writeSettings,
+} from "./utils/settings.js";
 
-declare const __LS_SEA_HOOKS__: string;
-
-const TRACING_PLUGIN_ID = "langsmith-tracing@langsmith-claude-code-plugins";
+declare const __LS_BINARY_HOOKS__: string;
 
 export function mergeHooks(existing: SettingsFile, manifest: HooksManifest): SettingsFile {
   const merged: HooksManifest = { ...existing.hooks };
@@ -29,17 +31,12 @@ export function mergeHooks(existing: SettingsFile, manifest: HooksManifest): Set
 }
 
 function compiledHooksManifest(): HooksManifest {
-  const compiled = typeof __LS_SEA_HOOKS__ === "undefined" ? undefined : __LS_SEA_HOOKS__;
+  const compiled = typeof __LS_BINARY_HOOKS__ === "undefined" ? undefined : __LS_BINARY_HOOKS__;
   const hooks = compiled ? (JSON.parse(compiled) as SettingsFile).hooks : undefined;
   if (!hooks || typeof hooks !== "object" || Array.isArray(hooks)) {
     throw new Error("this build carries no hooks manifest");
   }
   return hooks;
-}
-
-function underHome(path: string, home: string): string {
-  if (path === home) return "~";
-  return path.startsWith(`${home}/`) ? `~/${path.slice(home.length + 1)}` : path;
 }
 
 function hookCount(manifest: HooksManifest): number {
@@ -60,45 +57,21 @@ function requestedTag(args: string[]): string | undefined {
   return tag;
 }
 
-async function readSettings(path: string): Promise<SettingsFile> {
-  return fs.readFile(path, "utf-8").then(
-    (text) => JSON.parse(text) as SettingsFile,
-    () => ({}),
-  );
-}
-
 async function tracingPluginIsEnabled(home: string): Promise<boolean> {
   try {
-    const { enabledPlugins } = await readSettings(join(home, ".claude", "settings.json"));
+    const { enabledPlugins } = await readSettings(userSettingsPath(home));
     return (enabledPlugins as Record<string, unknown> | undefined)?.[TRACING_PLUGIN_ID] === true;
   } catch {
     return false;
   }
 }
 
-async function writeSettings(path: string, contents: string): Promise<void> {
-  await fs.mkdir(dirname(path), { recursive: true });
-  const mode = await fs.stat(path).then(
-    (stats) => stats.mode & 0o777,
-    () => 0o600,
-  );
-  const temporary = join(dirname(path), `.${basename(path)}.${process.pid}.${Date.now()}.tmp`);
-  try {
-    await fs.writeFile(temporary, contents, { mode: 0o600 });
-    await fs.chmod(temporary, mode);
-    await fs.rename(temporary, path);
-  } catch (err) {
-    await fs.unlink(temporary).catch(() => undefined);
-    throw err;
-  }
-}
-
-export async function install(options: InstallOptions = {}): Promise<string> {
+export async function install(options: BinaryInstallOptions = {}): Promise<string> {
   const args = options.args ?? [];
   const tag = requestedTag(args);
   const platform = options.runtimePlatform ?? osPlatform();
   const arch = options.runtimeArch ?? osArch();
-  if (!isPublishedTarget(platform, arch)) {
+  if (!binary.supportsHost(platform, arch)) {
     throw new Error(
       `no binary is published for ${platform}-${arch}. Install the Node plugin with '/plugin install ${TRACING_PLUGIN_ID}' instead`,
     );
@@ -106,8 +79,8 @@ export async function install(options: InstallOptions = {}): Promise<string> {
 
   const home = options.home ?? homedir();
   const settingsPath = args.includes("--project")
-    ? join(options.cwd ?? process.cwd(), ".claude", "settings.json")
-    : join(home, ".claude", "settings.json");
+    ? projectSettingsPath(options.cwd ?? process.cwd())
+    : userSettingsPath(home);
   const manifest = options.hooksManifest ?? compiledHooksManifest();
   const merged = mergeHooks(await readSettings(settingsPath), manifest);
   const settings = `${JSON.stringify(merged, null, 2)}\n`;
@@ -120,35 +93,24 @@ export async function install(options: InstallOptions = {}): Promise<string> {
 
   const currentVersion = options.currentVersion ?? LS_INTEGRATION_VERSION ?? OLDER_THAN_ANY_RELEASE;
   const executablePath = options.executablePath ?? process.execPath;
-  const copyable = !tag && (options.compiledBinary ?? (await runningCompiledBinary()));
-  const installDir = installDirectory(home);
-  let installedVersion = currentVersion;
-
-  if (copyable) {
-    await installRunningBinary(executablePath, installDir, currentVersion);
-  } else {
-    const releasesApi = options.releasesApi ?? configuredReleasesApi();
-    const fetchImpl = options.fetchImpl ?? fetch;
-    const release = tag
-      ? await fetchTaggedRelease(fetchImpl, releasesApi, currentVersion, platform, arch, tag)
-      : pickNewestRelease(
-          await fetchReleaseList(fetchImpl, releasesApi, currentVersion, platform, arch),
-          OLDER_THAN_ANY_RELEASE,
-        );
-    if (!release) {
-      throw new Error(
-        `no published release carries a ${platform}-${arch} binary for ${tag ?? "this plugin"} yet`,
-      );
-    }
-    await installRelease(release, installDir, fetchImpl, releasesApi, currentVersion);
-    installedVersion = release.version;
-  }
+  const copyable = !tag && (options.compiledBinary ?? runningCompiledBinary());
+  const host = {
+    fetchImpl: options.fetchImpl,
+    home,
+    releasesApi: options.releasesApi,
+    runtimeArch: arch,
+    runtimePlatform: platform,
+    verifySignature: options.verifySignature,
+  };
+  const installed = copyable
+    ? await binary.installLocalCopy(executablePath, currentVersion, host)
+    : await binary.install({ ...host, currentVersion, tag });
 
   await writeSettings(settingsPath, settings);
 
   const configPath = join(dirname(settingsPath), "langsmith.json");
   for (const line of [
-    `Installed ${EXECUTABLE_NAME} ${installedVersion} to ${underHome(installDir, home)}`,
+    `Installed ${binary.target.executableName} ${installed.version} to ${underHome(dirname(installed.path), home)}`,
     `Registered ${hookCount(manifest)} hooks in ${underHome(settingsPath, home)}`,
     "",
     "Next:",

@@ -13,22 +13,22 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { binary as tracing } from "../binary-target.js";
 import { HOOK_EVENT_NAMES } from "../constants.js";
-import { EXECUTABLE_NAME } from "../sea-constants.js";
 
+const EXECUTABLE_NAME = tracing.target.executableName;
 const root = new URL("../../", import.meta.url);
-const seaConfig = JSON.parse(readFileSync(new URL("sea-config.json", root), "utf8"));
 const { version } = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
-const binary = fileURLToPath(new URL(seaConfig.output, root));
+const binary = fileURLToPath(new URL(`bin/${EXECUTABLE_NAME}`, root));
 const built = existsSync(binary);
 
 // A skip still exits 0, so a missing binary has to fail the runner that just built it.
-if (!built && process.env.CI && process.platform === "darwin" && process.arch === "arm64") {
-  throw new Error(`Expected 'pnpm build:sea' to have produced ${binary}`);
+if (!built && process.env.CI && process.platform === "darwin") {
+  throw new Error(`Expected 'pnpm build:binary' to have produced ${binary}`);
 }
 
 let home: string;
-beforeEach(() => (home = mkdtempSync(join(tmpdir(), "ls-dispatch-sea-"))));
+beforeEach(() => (home = mkdtempSync(join(tmpdir(), "ls-dispatch-binary-"))));
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 function dispatch(args: string[], prompt = "ordinary prompt") {
@@ -41,7 +41,7 @@ function dispatch(args: string[], prompt = "ordinary prompt") {
       STATE_FILE: join(home, "state.json"),
     },
     input: JSON.stringify({
-      session_id: "dispatch-sea-test",
+      session_id: "dispatch-binary-test",
       transcript_path: join(home, "missing.jsonl"),
       cwd: home,
       prompt,
@@ -134,13 +134,16 @@ describe.skipIf(!built)("the standalone binary, bin/langsmith-claude-code-tracin
     },
   );
 
-  it.each(HOOK_EVENT_NAMES)("runs the %s handler even though it is the registered binary", (event) => {
-    registerInstalledBinary(event);
-    const result = dispatch([event]);
-    expect(result.error).toBeUndefined();
-    expect(result.status, result.stderr).toBe(0);
-    expect(existsSync(logDir()), result.stderr).toBe(true);
-  });
+  it.each(HOOK_EVENT_NAMES)(
+    "runs the %s handler even though it is the registered binary",
+    (event) => {
+      registerInstalledBinary(event);
+      const result = dispatch([event]);
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stderr).toBe(0);
+      expect(existsSync(logDir()), result.stderr).toBe(true);
+    },
+  );
 
   it("runs the handler from a copy of itself saved under another name", () => {
     registerInstalledBinary("UserPromptSubmit");
