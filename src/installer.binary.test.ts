@@ -9,19 +9,19 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 
+import { binary as tracing } from "./binary-target.js";
 import { HOOK_EVENT_NAMES } from "./constants.js";
 import { install } from "./installer.js";
-import type { InstallOptions } from "./sea-models.js";
-import { releaseAssetName } from "./updater-utils.js";
+import type { BinaryInstallOptions } from "./types.js";
 
 vi.mock("node:fs/promises", { spy: true });
 
 const root = new URL("../", import.meta.url);
-const EXECUTABLE = "langsmith-claude-code-tracing";
+const EXECUTABLE = tracing.target.executableName;
 const DARWIN = { runtimePlatform: "darwin", runtimeArch: "arm64" } as const;
 const ORIGIN = "http://127.0.0.1:1";
 const hooksManifest = JSON.parse(
-  fs.readFileSync(new URL("hooks/hooks.sea.json", root), "utf8"),
+  fs.readFileSync(new URL("hooks/hooks.binary.json", root), "utf8"),
 ).hooks;
 const hookCommand = (event: string) => `"\${HOME}/.langsmith/${EXECUTABLE}" ${event}`;
 const fakeBinary = (version: string) => Buffer.from(`#!/bin/sh\necho ${version}\n`);
@@ -29,11 +29,10 @@ const fakeBinary = (version: string) => Buffer.from(`#!/bin/sh\necho ${version}\
 const { version: packageVersion } = JSON.parse(
   fs.readFileSync(new URL("package.json", root), "utf8"),
 );
-const seaConfig = JSON.parse(fs.readFileSync(new URL("sea-config.json", root), "utf8"));
-const realBinary = fileURLToPath(new URL(seaConfig.output, root));
+const realBinary = fileURLToPath(new URL(`bin/${EXECUTABLE}`, root));
 const built = fs.existsSync(realBinary);
-if (!built && process.env.CI && process.platform === "darwin" && process.arch === "arm64") {
-  throw new Error(`Expected 'pnpm build:sea' to have produced ${realBinary}`);
+if (!built && process.env.CI && process.platform === "darwin") {
+  throw new Error(`Expected 'pnpm build:binary' to have produced ${realBinary}`);
 }
 
 let home: string;
@@ -64,9 +63,14 @@ const commandsIn = (path?: string) =>
     ([event, groups]) => [event, groups.flatMap((group) => group.hooks.map((h) => h.command))],
   );
 
-function releaseJson(version: string, body: Buffer, extra: Record<string, unknown> = {}) {
+function releaseJson(
+  version: string,
+  body: Buffer,
+  extra: Record<string, unknown> = {},
+  arch = "arm64",
+) {
   const asset = {
-    name: releaseAssetName("darwin", "arm64", version),
+    name: tracing.assetName("darwin", arch, version),
     browser_download_url: `${ORIGIN}/download/${version}`,
     size: body.byteLength,
     digest: `sha256:${createHash("sha256").update(body).digest("hex")}`,
@@ -81,7 +85,7 @@ const serving = (listed: unknown, body: Buffer) =>
     .mockResolvedValueOnce(Response.json(listed))
     .mockResolvedValueOnce(new Response(body));
 
-const run = (extra: InstallOptions = {}) =>
+const run = (extra: BinaryInstallOptions = {}) =>
   install({
     ...DARWIN,
     home,
@@ -92,6 +96,7 @@ const run = (extra: InstallOptions = {}) =>
     releasesApi: `${ORIGIN}/releases`,
     hooksManifest,
     out: (line: string) => printed.push(line),
+    verifySignature: async () => {},
     ...extra,
   });
 
@@ -329,10 +334,10 @@ it("installs nothing it cannot fully trust", async () => {
 
   const assetless = [{ ...releaseJson("0.4.0", body), assets: [] }];
   await expect(run({ compiledBinary: false, fetchImpl: serving(assetless, body) })).rejects.toThrow(
-    "no published release carries a darwin-arm64 binary for this plugin yet",
+    "no published release carries a darwin-arm64 binary",
   );
-  await expect(run({ runtimeArch: "x64" })).rejects.toThrow(
-    "no binary is published for darwin-x64",
+  await expect(run({ runtimePlatform: "linux" })).rejects.toThrow(
+    "no binary is published for linux-arm64",
   );
   await expect(run({ args: ["--tag"] })).rejects.toThrow("needs a release tag");
   expect(installedFiles()).toEqual([]);
@@ -342,7 +347,7 @@ it("installs nothing it cannot fully trust", async () => {
 const TIMEOUT_FOR_TWENTY_BINARY_SPAWNS = 60_000;
 
 const hookInput = (prompt?: string) =>
-  JSON.stringify({ session_id: "sea", transcript_path: join(home, "gone"), cwd: home, prompt });
+  JSON.stringify({ session_id: "binary", transcript_path: join(home, "gone"), cwd: home, prompt });
 
 const dispatch = (binary: string, args: string[], prompt = "ordinary prompt") =>
   spawnSync(binary, args, {
@@ -411,7 +416,7 @@ it.skipIf(!built)("downloads the release a pinned tag names", async () => {
   const server = createServer((request, response) => {
     if (request.url?.startsWith("/download/")) return void response.writeHead(200).end(body);
     const download = { browser_download_url: `${origin}/download/${packageVersion}` };
-    const tagged = JSON.stringify(releaseJson(packageVersion, body, download));
+    const tagged = JSON.stringify(releaseJson(packageVersion, body, download, process.arch));
     response.writeHead(200, { "content-type": "application/json" }).end(tagged);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

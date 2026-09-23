@@ -13,8 +13,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { binary } from "../binary-target.js";
 import { HOOK_EVENT_NAMES } from "../constants.js";
-import { EXECUTABLE_NAME } from "../sea-constants.js";
+
+const EXECUTABLE_NAME = binary.target.executableName;
 
 const root = new URL("../../", import.meta.url);
 const bundle = fileURLToPath(new URL("bundle/dispatch.js", root));

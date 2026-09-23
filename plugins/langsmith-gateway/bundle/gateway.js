@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
-// dist/hooks/gateway.js
+// dist/src/hooks/gateway.js
 import { fileURLToPath } from "node:url";
 
-// dist/proxy/config.js
+// dist/src/proxy/config.js
 import { lstatSync as lstatSync2 } from "node:fs";
 import { isAbsolute, join as join2, normalize } from "node:path";
 import { userInfo } from "node:os";
 
-// dist/proxy/files.js
+// dist/src/proxy/files.js
 import { constants, closeSync, fstatSync, fsyncSync, lstatSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -111,7 +111,7 @@ function transaction(writes) {
   }
 }
 
-// dist/proxy/config.js
+// dist/src/proxy/config.js
 var ConfigError = class extends Error {
 };
 var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
@@ -189,12 +189,12 @@ function configStatus(home = userHome()) {
   };
 }
 
-// dist/proxy/server.js
+// dist/src/proxy/server.js
 import http from "node:http";
 import https from "node:https";
 import { createHash, timingSafeEqual } from "node:crypto";
 
-// dist/proxy/token.js
+// dist/src/proxy/token.js
 import { spawn } from "node:child_process";
 function cliEnvironment() {
   return { HOME: userHome(), PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
@@ -291,7 +291,7 @@ function loginGuidance(config) {
 `;
 }
 
-// dist/proxy/server.js
+// dist/src/proxy/server.js
 var identity = (c) => createHash("sha256").update(JSON.stringify([
   8,
   c.useClaudeSubscription,
@@ -713,7 +713,7 @@ function createProxy(config, options = {}) {
   return { server, sessions, drain };
 }
 
-// dist/proxy/options.js
+// dist/src/proxy/options.js
 var SetupError = class extends Error {
 };
 var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic.";
@@ -793,11 +793,11 @@ function parseGatewayCommand(prompt) {
   return { command, args };
 }
 
-// dist/proxy/settings.js
+// dist/src/proxy/settings.js
 import { accessSync as accessSync2, constants as constants3, mkdirSync as mkdirSync3, rmdirSync } from "node:fs";
 import { dirname as dirname3, isAbsolute as isAbsolute3, join as join5 } from "node:path";
 
-// dist/proxy/setup.js
+// dist/src/proxy/setup.js
 import { constants as constants2, accessSync, mkdirSync as mkdirSync2, realpathSync, statSync } from "node:fs";
 import { isAbsolute as isAbsolute2, join as join3 } from "node:path";
 import { randomBytes as randomBytes2 } from "node:crypto";
@@ -840,7 +840,7 @@ function createConfig(cli, profile, port, home = userHome(), urls = {}, useClaud
   atomic(path, jsonText(config), void 0);
 }
 
-// dist/proxy/lifecycle.js
+// dist/src/proxy/lifecycle.js
 import http2 from "node:http";
 import { connect } from "node:net";
 import { spawn as spawn2 } from "node:child_process";
@@ -930,7 +930,7 @@ async function waitForStopped(config, timeoutMs = 36e3) {
   throw new Error("Old proxy still draining or local port occupied");
 }
 
-// dist/proxy/scopes.js
+// dist/src/proxy/scopes.js
 import { realpathSync as realpathSync2 } from "node:fs";
 import { dirname as dirname2, join as join4, resolve } from "node:path";
 function targetPaths(home, scope, cwd) {
@@ -994,7 +994,7 @@ function routingTargets(home, cwd, config) {
   return [...paths].map((path) => ({ path, saved: routingSnapshot(path) }));
 }
 
-// dist/proxy/settings.js
+// dist/src/proxy/settings.js
 var fail = (message) => {
   throw new SetupError(message);
 };
@@ -1289,7 +1289,7 @@ function routingStatus(paths, config) {
   return prefix + (keys.length === 0 ? "local proxy authentication header is missing" : "local proxy authentication header does not match");
 }
 
-// dist/proxy/status.js
+// dist/src/proxy/status.js
 import { join as join6 } from "node:path";
 var STATUS_ERROR = "Gateway status unavailable; review config, settings, permissions and canonical project path privately. No changes made.";
 async function gatewayStatus(args, env, home, cwd) {
@@ -1319,7 +1319,7 @@ async function gatewayStatus(args, env, home, cwd) {
   }
 }
 
-// dist/proxy/commands.js
+// dist/src/proxy/commands.js
 async function handleGatewayInput(input, entry2, env = process.env, home = userHome(), output = (value) => process.stdout.write(JSON.stringify(value) + "\n")) {
   if (input.hook_event_name === "UserPromptSubmit" && typeof input.prompt === "string" && /^\/langsmith-gateway:(setup|disable|status)(?=\s|$)/.test(input.prompt)) {
     let reason;
@@ -1349,7 +1349,7 @@ async function handleGatewayInput(input, entry2, env = process.env, home = userH
   await gatewayHook(input.hook_event_name, input.session_id, entry2, home);
 }
 
-// dist/utils/stdin.js
+// dist/src/utils/stdin.js
 function readStdin() {
   return new Promise((resolve2, reject) => {
     let data = "";
@@ -1366,7 +1366,7 @@ function readStdin() {
   });
 }
 
-// dist/hooks/gateway.js
+// dist/src/hooks/gateway.js
 var entry = fileURLToPath(import.meta.url);
 async function main() {
   const [command, ...args] = process.argv.slice(2);

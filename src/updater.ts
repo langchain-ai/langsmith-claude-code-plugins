@@ -1,54 +1,32 @@
-import { join } from "node:path";
-import { arch as osArch, platform as osPlatform } from "node:os";
+import { binary } from "./binary-target.js";
 import { LS_INTEGRATION_VERSION } from "./config.js";
 import { debug, log, warn } from "./logger.js";
-import { LOCK_FILE } from "./sea-constants.js";
-import type { UpdateOptions, UpdateResult } from "./sea-models.js";
-import {
-  acquireLock,
-  installDirectory,
-  installedBinaryPath,
-  installRelease,
-  releaseLock,
-  runningAsInstalledBinary,
-} from "./updater-install.js";
-import { fetchReleaseList, pickNewestRelease } from "./updater-releases.js";
-import { configuredReleasesApi, isPublishedTarget } from "./updater-utils.js";
+import type { BinaryUpdateOptions, BinaryUpdateResult } from "./types.js";
 
-export async function updateFromGitHub(options: UpdateOptions = {}): Promise<UpdateResult> {
-  const currentVersion = options.currentVersion ?? LS_INTEGRATION_VERSION;
-  const platform = options.runtimePlatform ?? osPlatform();
-  const arch = options.runtimeArch ?? osArch();
-  if (!currentVersion || !isPublishedTarget(platform, arch)) return { status: "unsupported" };
-
-  const installDir = options.installDir ?? installDirectory();
+export async function updateFromGitHub(
+  options: BinaryUpdateOptions = {},
+): Promise<BinaryUpdateResult> {
+  const currentVersion = options.currentVersion ?? LS_INTEGRATION_VERSION ?? "";
   const executablePath = options.executablePath ?? process.execPath;
-  if (!(await runningAsInstalledBinary(executablePath, installedBinaryPath(installDir)))) {
+
+  // A stray copy in a build tree must never replace the one in the install directory.
+  if (!(await binary.isInstalledBinary(executablePath, options.home))) {
     debug(`Skipping the update check outside the install path: ${executablePath}`);
     return { status: "not-installed" };
   }
 
-  const now = (options.now ?? Date.now)();
-  const lockFile = join(installDir, LOCK_FILE);
-  const lock = await acquireLock(lockFile, now);
-  if (!lock) return { status: "busy" };
-
-  try {
-    const releasesApi = options.releasesApi ?? configuredReleasesApi();
-    const fetchImpl = options.fetchImpl ?? fetch;
-    const releases = await fetchReleaseList(fetchImpl, releasesApi, currentVersion, platform, arch);
-
-    const release = pickNewestRelease(releases, currentVersion);
-    if (!release) return { status: "current" };
-
-    await installRelease(release, installDir, fetchImpl, releasesApi, currentVersion);
-    return { status: "updated", version: release.version };
-  } finally {
-    await releaseLock(lockFile, lock);
-  }
+  return binary.update({
+    currentVersion,
+    fetchImpl: options.fetchImpl,
+    home: options.home,
+    releasesApi: options.releasesApi,
+    runtimeArch: options.runtimeArch,
+    runtimePlatform: options.runtimePlatform,
+    verifySignature: options.verifySignature,
+  });
 }
 
-export async function runUpdateCheck(): Promise<UpdateResult | undefined> {
+export async function runUpdateCheck(): Promise<BinaryUpdateResult | undefined> {
   try {
     const result = await updateFromGitHub();
     log(

@@ -1,9 +1,0 @@
-{
-  "main": "dist/sea/dispatch.cjs",
-  "mainFormat": "commonjs",
-  "output": "bin/langsmith-claude-code-tracing",
-  "disableExperimentalSEAWarning": true,
-  "useSnapshot": false,
-  "useCodeCache": false,
-  "execArgvExtension": "none"
-}

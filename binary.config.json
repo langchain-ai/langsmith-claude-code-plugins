@@ -1,0 +1,35 @@
+{
+  "executableName": "langsmith-claude-code-tracing",
+  "repository": "langchain-ai/langsmith-claude-code-plugins",
+  "installer": {
+    "productName": "Claude Code",
+    "shortUrl": "https://langch.in/claude-tracing",
+    "environmentPrefix": "LANGSMITH_CC",
+    "output": "install.sh",
+    "helpFooter": [
+      "Only macOS arm64 and x64 are published, and the matching one is picked for you.",
+      "The langsmith-tracing plugin stops tracing while this binary is installed, so the",
+      "plugin is safe to remove. Restart Claude Code when this finishes."
+    ],
+    "unsupportedPlatformHelp": [
+      "The plugin does the same tracing and works on Windows and Linux.",
+      "From within Claude Code:",
+      "",
+      "  /plugin marketplace add langchain-ai/langsmith-claude-code-plugins",
+      "  /plugin install langsmith-tracing@langsmith-claude-code-plugins",
+      "  /reload-plugins"
+    ]
+  },
+  "build": {
+    "entryPoint": "src/hooks/dispatch.ts",
+    "outputDirectory": "bin",
+    "versionFile": "package.json",
+    "minify": false,
+    "defines": {
+      "__LS_BINARY_HOOKS__": "hooks/hooks.binary.json"
+    }
+  },
+  "sign": {
+    "entitlements": "macos-entitlements.plist"
+  }
+}
