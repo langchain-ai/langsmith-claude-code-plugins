@@ -44,8 +44,8 @@ Environment variables:
   LANGSMITH_CC_DOWNLOAD_BASE   Release download base URL
 
 Only macOS arm64 and x64 are published, and the matching one is picked for you.
-The langsmith-tracing plugin stops tracing while this binary is installed, so the
-plugin is safe to remove. Restart Claude Code when this finishes.
+Leave the langsmith-tracing plugin enabled; it stops tracing while this binary is
+registered. Restart Claude Code when this finishes.
 HELP
 }
 
