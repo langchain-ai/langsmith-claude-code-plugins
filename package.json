@@ -1,6 +1,6 @@
 {
   "name": "@langchain/langsmith-claude-code-plugins",
-  "version": "0.3.1",
+  "version": "0.4.0-beta.2",
   "description": "Claude Code plugin for LangSmith tracing",
   "type": "module",
   "main": "dist/src/index.js",
@@ -28,7 +28,7 @@
     "langsmith": "^0.10.4"
   },
   "devDependencies": {
-    "@langchain/langsmith-plugin-binary": "github:langchain-ai/langsmith-plugin-binary#v0.1.0",
+    "@langchain/langsmith-plugin-binary": "github:langchain-ai/langsmith-plugin-binary#v0.2.0",
     "@types/node": "^26.6.1",
     "esbuild": "^0.28.1",
     "oxfmt": "^0.67.0",
