@@ -1,0 +1,5 @@
+# Configuration for GitHub's automatically generated release notes.
+changelog:
+  exclude:
+    authors:
+      - dependabot[bot]
