@@ -31,7 +31,7 @@
     "@langchain/langsmith-plugin-binary": "github:langchain-ai/langsmith-plugin-binary#v0.1.0",
     "@types/node": "^26.6.1",
     "esbuild": "^0.28.1",
-    "oxfmt": "^0.67.0",
+    "oxfmt": "^0.68.0",
     "oxlint": "^1.83.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
