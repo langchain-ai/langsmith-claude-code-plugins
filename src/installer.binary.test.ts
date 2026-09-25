@@ -328,8 +328,6 @@ it("installs nothing it cannot fully trust", async () => {
     }),
   ).rejects.toThrow("reports version 0.1.0");
 
-  fs.writeFileSync(source, mislabelled, { mode: 0o755 });
-  await expect(run()).rejects.toThrow("reports version 0.1.0");
   await expect(run({ hooksManifest: undefined })).rejects.toThrow("carries no hooks manifest");
 
   const assetless = [{ ...releaseJson("0.4.0", body), assets: [] }];

@@ -593,20 +593,16 @@ var require_dist = __commonJS({
   }
 });
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/binary.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/binary.js
 import { arch as osArch2, platform as osPlatform2 } from "node:os";
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/install-binary.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/install-binary.js
 import * as fs2 from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/download.js
-import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import * as fs from "node:fs/promises";
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/constants.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/constants.js
 var TEMPLATE_URL = new URL("../installer/install.sh.template", import.meta.url);
 var DEFAULT_PUBLISHED_TARGETS = {
   darwin: ["arm64", "x64"]
@@ -615,17 +611,37 @@ var RELEASES_PER_PAGE = 100;
 var LIST_TIMEOUT_MS = 15e3;
 var DOWNLOAD_TIMEOUT_MS = 5 * 6e4;
 var CODESIGN_TIMEOUT_MS = 12e4;
-var VERSION_CHECK_TIMEOUT_MS = 3e4;
+var VERSION_CHECK_BUDGET_MS = 1e4;
+var VERSION_CHECK_MINIMUM_ATTEMPT_MS = 2e3;
+var VERSION_CHECK_RETRY_PAUSES_MS = [300, 900];
+var CRASH_SIGNALS = /* @__PURE__ */ new Set([
+  "SIGABRT",
+  "SIGBUS",
+  "SIGEMT",
+  "SIGFPE",
+  "SIGILL",
+  "SIGSEGV",
+  "SIGSYS",
+  "SIGTRAP"
+]);
+var NODE_ERROR_PREFIX = "ERR_";
+var KERNEL_LOG_COMMAND = `log show --last 5m --predicate 'sender == "AppleMobileFileIntegrity" or sender == "AppleSystemPolicy"'`;
 var MAX_BINARY_BYTES = 250 * 1024 * 1024;
 var MAX_CHECKSUM_BYTES = 1024;
 var ABANDONED_LOCK_MS = 10 * 60 * 1e3;
 var LOCK_FILE_NAME = ".update.lock";
+var REJECTED_FILE_SUFFIX = ".rejected";
 var DEFAULT_INSTALL_DIRECTORY_NAME = ".langsmith";
 var LOOPBACK_HOSTS = /* @__PURE__ */ new Set(["127.0.0.1", "[::1]", "localhost"]);
 var VERSION = /^(\d+)\.(\d+)\.(\d+)(?:-([a-z]+)(?:\.(\d+))?)?$/;
 var OLDER_THAN_ANY_RELEASE = "0.0.0";
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/utils/http.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/download.js
+import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import * as fs from "node:fs/promises";
+
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/http.js
 function pointsAtThisMachine(override) {
   try {
     return LOOPBACK_HOSTS.has(new URL(override).hostname);
@@ -645,7 +661,7 @@ function listedReleasesUrl(releasesApi) {
   return url.href;
 }
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/target.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/target.js
 function resolveTarget(options) {
   for (const field of ["executableName", "repository", "userAgent"]) {
     if (typeof options[field] !== "string" || options[field].trim() === "") {
@@ -687,7 +703,7 @@ function configuredReleasesApi(target, environment = process.env) {
   return defaultReleasesApi(target);
 }
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/utils/checksum.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/checksum.js
 import { basename } from "node:path";
 function sha256FromDigestField(digest) {
   const match = /^sha256:([a-f0-9]{64})$/i.exec(digest ?? "");
@@ -701,7 +717,7 @@ function sha256FromChecksumFile(text, assetName) {
   return match[1].toLowerCase();
 }
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/utils/fs.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/fs.js
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 async function writeFully(handle, chunk) {
@@ -714,7 +730,7 @@ async function writeFully(handle, chunk) {
   }
 }
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/download.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/download.js
 function trustedDownloadUrl(asset, target, releasesApi) {
   const url = new URL(asset.browser_download_url);
   const trusted = releasesApi === defaultReleasesApi(target) ? url.href.startsWith(releaseDownloadPrefix(target)) : url.origin === new URL(releasesApi).origin;
@@ -782,15 +798,72 @@ var verifyAdHocSignature = (binary2) => new Promise((resolve2, reject) => {
   execFile("/usr/bin/codesign", ["--verify", "--strict", binary2], { timeout: CODESIGN_TIMEOUT_MS }, (error2) => error2 ? reject(error2) : resolve2());
 });
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/utils/process.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/process.js
 import { execFile as execFile2, execFileSync } from "node:child_process";
-function reportedVersion(executable) {
-  return new Promise((resolve2, reject) => {
-    execFile2(executable, ["--version"], { encoding: "utf-8", timeout: VERSION_CHECK_TIMEOUT_MS }, (error2, stdout) => error2 ? reject(error2) : resolve2(stdout.trim()));
+
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/errors.js
+function describe(error2) {
+  return error2 instanceof Error ? error2.message : String(error2);
+}
+
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/process.js
+function failureKind(error2, elapsed) {
+  const { killed, signal, code } = error2 ?? {};
+  if (killed)
+    return { kind: "timeout", seconds: Math.round(elapsed / 100) / 10 };
+  if (signal)
+    return { kind: CRASH_SIGNALS.has(signal) ? "crashed" : "stopped", signal };
+  if (typeof code === "number")
+    return { kind: "exit", status: code };
+  const refused = typeof code === "string" && !code.startsWith(NODE_ERROR_PREFIX);
+  const detail = typeof code === "string" ? code : describe(error2);
+  return { kind: refused ? "start" : "unclear", detail };
+}
+function reportedVersion(executable, timeout) {
+  const startedAt = Date.now();
+  return new Promise((resolve2) => {
+    execFile2(executable, ["--version"], { encoding: "utf-8", timeout, killSignal: "SIGKILL" }, (error2, stdout) => resolve2(error2 ? { ok: false, failure: failureKind(error2, Date.now() - startedAt) } : { ok: true, reported: stdout.trim() }));
   });
 }
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/install-binary.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/staging.js
+function keptLine(staged) {
+  return staged ? `
+The copy it tried to run is kept at ${staged} so you can run it yourself.` : "";
+}
+function worthRetrying(failure) {
+  return failure.kind === "stopped";
+}
+function worthKeeping(failure) {
+  return failure.kind !== "exit";
+}
+function whyTheVersionIsWrong(reported, expected) {
+  return `The downloaded binary reports version ${reported}, expected ${expected}.`;
+}
+function whyTheSignatureStoppedMatching(error2, staged) {
+  return `The downloaded binary no longer matches the signature we published (${describe(error2)}), so something altered the file after it landed here.${keptLine(staged)}`;
+}
+function whyTheVersionCheckFailed(failure, staged) {
+  switch (failure.kind) {
+    case "stopped":
+      return [
+        `The system killed the downloaded binary with ${failure.signal} before it could report its version, so something stopped the program rather than the program going wrong.`,
+        `Run ${KERNEL_LOG_COMMAND} to see what the system says about it, and nothing there means the kill came from somewhere else.${keptLine(staged)}`
+      ].join("\n");
+    case "crashed":
+      return `The downloaded binary crashed with ${failure.signal} before it could report its version, so the program itself failed rather than anything stopping it.${keptLine(staged)}`;
+    case "timeout":
+      return `The downloaded binary did not report its version, and gave up waiting after ${failure.seconds} seconds.${keptLine(staged)}`;
+    case "exit":
+      return `The downloaded binary exited with code ${failure.status} instead of reporting its version.`;
+    case "start":
+      return `The downloaded binary could not be started (${failure.detail}).${keptLine(staged)}`;
+    default:
+      return `The downloaded binary did not report its version (${failure.detail}).${keptLine(staged)}`;
+  }
+}
+
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/install-binary.js
 function installDirectory(target, home = homedir()) {
   return join(home, target.installDirectoryName);
 }
@@ -804,21 +877,48 @@ async function runningAsInstalledBinary(executablePath, installedPath) {
   ]);
   return running !== void 0 && running === installed;
 }
-async function stage(target, installDir, version, options, fill) {
+async function stage({ target, installDir, version, options, fill, confirmVersion }) {
   const now = (options.now ?? Date.now)();
   const verifySignature = options.verifySignature ?? verifyAdHocSignature;
+  const pause = options.pause ?? ((milliseconds) => sleep(milliseconds));
   await fs2.mkdir(installDir, { recursive: true, mode: 448 });
   const temporary = join(installDir, `.${target.executableName}.${process.pid}.${now}.tmp`);
+  const rejected = join(installDir, `.${target.executableName}${REJECTED_FILE_SUFFIX}`);
   const installed = installedBinaryPath(target, installDir);
+  const moveAsideForInspection = () => fs2.rename(temporary, rejected).then(() => rejected, () => void 0);
   try {
     await fill(temporary);
     await fs2.chmod(temporary, 493);
     await verifySignature(temporary);
-    const reported = await reportedVersion(temporary);
-    if (reported !== version) {
-      throw new Error(`the downloaded binary reports version ${reported}, expected ${version}`);
+    if (confirmVersion) {
+      const spendBy = Date.now() + (options.versionCheckBudget ?? VERSION_CHECK_BUDGET_MS);
+      const left = () => spendBy - Date.now();
+      let check = await reportedVersion(temporary, left());
+      for (const wait of VERSION_CHECK_RETRY_PAUSES_MS) {
+        if (check.ok || !worthRetrying(check.failure))
+          break;
+        if (left() - wait < VERSION_CHECK_MINIMUM_ATTEMPT_MS)
+          break;
+        await pause(wait);
+        try {
+          await verifySignature(temporary);
+        } catch (error2) {
+          throw new Error(whyTheSignatureStoppedMatching(error2, await moveAsideForInspection()), {
+            cause: error2
+          });
+        }
+        check = await reportedVersion(temporary, left());
+      }
+      if (!check.ok) {
+        const staged = worthKeeping(check.failure) ? await moveAsideForInspection() : void 0;
+        throw new Error(whyTheVersionCheckFailed(check.failure, staged));
+      }
+      if (check.reported !== version) {
+        throw new Error(whyTheVersionIsWrong(check.reported, version));
+      }
     }
     await fs2.rename(temporary, installed);
+    await fs2.unlink(rejected).catch(() => void 0);
     return installed;
   } catch (error2) {
     await fs2.unlink(temporary).catch(() => void 0);
@@ -826,18 +926,32 @@ async function stage(target, installDir, version, options, fill) {
   }
 }
 function installRelease(release, installDir, query, options = {}) {
-  return stage(query.target, installDir, release.version, options, (temporary) => downloadAsset(release, temporary, query));
+  return stage({
+    target: query.target,
+    installDir,
+    version: release.version,
+    options,
+    fill: (temporary) => downloadAsset(release, temporary, query),
+    confirmVersion: true
+  });
 }
 function installRunningBinary(target, executablePath, installDir, version, options = {}) {
-  return stage(target, installDir, version, options, (temporary) => fs2.copyFile(executablePath, temporary));
+  return stage({
+    target,
+    installDir,
+    version,
+    options,
+    fill: (temporary) => fs2.copyFile(executablePath, temporary),
+    confirmVersion: false
+  });
 }
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/update.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/update.js
 import { mkdir as mkdir2 } from "node:fs/promises";
 import { join as join2 } from "node:path";
 import { arch as osArch, platform as osPlatform } from "node:os";
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/utils/version.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/version.js
 function parseVersion(version) {
   const match = VERSION.exec(version.trim());
   if (!match)
@@ -872,7 +986,7 @@ function isVersionNewer(candidate, current) {
   return compare(next, installed) > 0;
 }
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/releases.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/releases.js
 function asAsset(value) {
   if (!value || typeof value !== "object")
     return void 0;
@@ -951,7 +1065,7 @@ async function fetchTaggedRelease(query, tag) {
   return parseReleases([tagged], query.target, query.platform, query.arch, true)[0];
 }
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/utils/lock.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/lock.js
 import * as fs3 from "node:fs/promises";
 async function acquireLock(lockFile, now) {
   try {
@@ -975,7 +1089,7 @@ async function releaseLock(lockFile, lock) {
   await fs3.unlink(lockFile).catch(() => void 0);
 }
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/update.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/update.js
 function releaseQuery(target, currentVersion, options) {
   return {
     target,
@@ -987,7 +1101,12 @@ function releaseQuery(target, currentVersion, options) {
   };
 }
 function stagingOptions(options) {
-  return { verifySignature: options.verifySignature, now: options.now };
+  return {
+    verifySignature: options.verifySignature,
+    now: options.now,
+    pause: options.pause,
+    versionCheckBudget: options.versionCheckBudget
+  };
 }
 function resolveInstallDir(target, options) {
   return options.installDir ?? installDirectory(target, options.home);
@@ -1044,7 +1163,7 @@ async function installLocalCopy(target, executablePath, version, options = {}) {
   return { path: path3, version };
 }
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_c8de650590e3d51aecb55426b47f0e53/node_modules/@langchain/langsmith-plugin-binary/dist/binary.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/binary.js
 function defineBinaryTarget(options) {
   const target = resolveTarget(options);
   return {
@@ -1549,6 +1668,9 @@ var HOOK_EVENT_NAMES = [
 ];
 var OLDER_THAN_ANY_RELEASE2 = "0.0.0";
 var TRACING_PLUGIN_ID = "langsmith-tracing@langsmith-claude-code-plugins";
+var HAND_INSTALLED_BINARY_WARNING_EVENT = "Stop";
+var HAND_INSTALLED_BINARY_WARNING_MARKER_SUFFIX = ".warned";
+var HAND_INSTALLED_BINARY_WARNING = "LangSmith tracing: the hand-installed binary at %s is still registered in settings.json, so it is doing the tracing and the plugin is standing aside. Delete that file and drop its hooks to let the plugin take over. You only see this once.";
 
 // dist/src/installer.js
 import { arch as osArch3, homedir as homedir3, platform as osPlatform3 } from "node:os";
@@ -1562,6 +1684,14 @@ function runningCompiledBinary() {
 }
 
 // dist/src/utils/paths.js
+import { realpathSync } from "node:fs";
+function isTheSameFile(one, other) {
+  try {
+    return realpathSync(one) === realpathSync(other);
+  } catch {
+    return one === other;
+  }
+}
 function underHome(path3, home) {
   if (path3 === home)
     return "~";
@@ -1782,6 +1912,60 @@ function readStdin() {
     });
     process.stdin.on("error", reject);
   });
+}
+
+// dist/src/hooks/hand-installed-binary.js
+import { rmSync, writeFileSync } from "node:fs";
+import { homedir as homedir5 } from "node:os";
+
+// dist/src/hooks/stand-down.js
+import { existsSync as existsSync2 } from "node:fs";
+import { homedir as homedir4 } from "node:os";
+var REGISTERED_COMMAND = `/${binary.target.installDirectoryName}/${binary.target.executableName}`;
+function runningTheInstalledBinary(home = homedir4()) {
+  return isTheSameFile(process.execPath, binary.installedBinaryPath(home));
+}
+function binaryOwnsAnyHook(home = homedir4(), cwd = process.cwd()) {
+  try {
+    if (!existsSync2(binary.installedBinaryPath(home)))
+      return false;
+    return [userSettingsPath(home), projectSettingsPath(cwd)].some(registersTheBinary);
+  } catch {
+    return false;
+  }
+}
+function pluginShouldStandDown(home = homedir4(), cwd = process.cwd()) {
+  if (runningTheInstalledBinary(home))
+    return false;
+  return binaryOwnsAnyHook(home, cwd);
+}
+function registersTheBinary(settingsPath) {
+  try {
+    const settings = readSettingsSync(settingsPath);
+    return Object.values(settings.hooks ?? {}).some((groups) => groups.some((group) => group?.hooks?.some((hook) => hook?.command?.includes(REGISTERED_COMMAND))));
+  } catch {
+    return false;
+  }
+}
+
+// dist/src/hooks/hand-installed-binary.js
+function warnAboutHandInstalledBinary(event2, out = console.log, home = homedir5()) {
+  try {
+    if (event2 !== HAND_INSTALLED_BINARY_WARNING_EVENT)
+      return;
+    if (runningTheInstalledBinary(home))
+      return;
+    const path3 = binary.installedBinaryPath(home);
+    const marker = `${path3}${HAND_INSTALLED_BINARY_WARNING_MARKER_SUFFIX}`;
+    if (!binaryOwnsAnyHook(home)) {
+      rmSync(marker, { force: true });
+      return;
+    }
+    writeFileSync(marker, "", { flag: "wx" });
+    out(JSON.stringify({ systemMessage: HAND_INSTALLED_BINARY_WARNING.replace("%s", path3) }));
+  } catch {
+    return;
+  }
 }
 
 // dist/src/tracing-policy.js
@@ -3397,7 +3581,7 @@ var safeJSON = (text) => {
 };
 
 // node_modules/.pnpm/langsmith@0.10.4/node_modules/langsmith/dist/_openapi_client/internal/utils/sleep.js
-var sleep = (ms) => new Promise((resolve2) => setTimeout(resolve2, ms));
+var sleep2 = (ms) => new Promise((resolve2) => setTimeout(resolve2, ms));
 
 // node_modules/.pnpm/langsmith@0.10.4/node_modules/langsmith/dist/_openapi_client/version.js
 var VERSION2 = "0.0.1";
@@ -5974,7 +6158,7 @@ var Langsmith = class {
       const maxRetries = options.maxRetries ?? this.maxRetries;
       timeoutMillis = this.calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries);
     }
-    await sleep(timeoutMillis);
+    await sleep2(timeoutMillis);
     return this.makeRequest(options, retriesRemaining - 1, requestLogID);
   }
   calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries) {
@@ -6694,13 +6878,13 @@ async function readdir2(dir) {
 async function stat4(filePath) {
   return nodeFsPromises.stat(filePath);
 }
-function existsSync3(p) {
+function existsSync4(p) {
   return nodeFs.existsSync(p);
 }
 function mkdirSync3(dir) {
   nodeFs.mkdirSync(dir, { recursive: true });
 }
-function writeFileSync2(filePath, content) {
+function writeFileSync3(filePath, content) {
   nodeFs.writeFileSync(filePath, content);
 }
 function renameSync3(oldPath, newPath) {
@@ -6890,15 +7074,15 @@ var PromptCache = class {
       entries[key] = entry.value;
     }
     const dir = path2.dirname(filePath);
-    if (!existsSync3(dir)) {
+    if (!existsSync4(dir)) {
       mkdirSync3(dir);
     }
     const tempPath = `${filePath}.tmp`;
     try {
-      writeFileSync2(tempPath, JSON.stringify({ entries }, null, 2));
+      writeFileSync3(tempPath, JSON.stringify({ entries }, null, 2));
       renameSync3(tempPath, filePath);
     } catch (e) {
-      if (existsSync3(tempPath)) {
+      if (existsSync4(tempPath)) {
         unlinkSync2(tempPath);
       }
       throw e;
@@ -6912,7 +7096,7 @@ var PromptCache = class {
    * @returns Number of entries loaded.
    */
   load(filePath) {
-    if (!existsSync3(filePath)) {
+    if (!existsSync4(filePath)) {
       return 0;
     }
     let entries;
@@ -7029,7 +7213,7 @@ var _getFetchImplementation = (debug2) => {
 var LOCK_POLL_INTERVAL_MS = 10;
 var LOCK_STALE_AFTER_MS = 1e4;
 var LOCK_METADATA_FILE = "created_at";
-function sleep2(ms) {
+function sleep3(ms) {
   return new Promise((resolve2) => setTimeout(resolve2, ms));
 }
 function isEEXIST(err) {
@@ -7085,7 +7269,7 @@ async function acquireOAuthRefreshLock(configPath, deadline) {
         if (Date.now() >= deadline) {
           throw new Error("timed out acquiring OAuth refresh lock");
         }
-        await sleep2(Math.min(LOCK_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())));
+        await sleep3(Math.min(LOCK_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())));
       }
       continue;
     }
@@ -7148,7 +7332,7 @@ function loadProfileState() {
     return void 0;
   }
   const configPath = getProfileConfigPath();
-  if (!configPath || !existsSync3(configPath)) {
+  if (!configPath || !existsSync4(configPath)) {
     return void 0;
   }
   try {
@@ -14792,14 +14976,14 @@ function groupIntoTurns(messages) {
 }
 
 // dist/src/state.js
-import { readFileSync as readFileSync9, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
+import { readFileSync as readFileSync9, writeFileSync as writeFileSync4, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
 import { dirname as dirname5 } from "node:path";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
 function lockPath(stateFilePath) {
   return `${stateFilePath}.lock`;
 }
-function sleep3(ms) {
+function sleep4(ms) {
   return new Promise((resolve2) => setTimeout(resolve2, ms));
 }
 async function acquireLock2(stateFilePath) {
@@ -14812,7 +14996,7 @@ async function acquireLock2(stateFilePath) {
       closeSync2(fd);
       return;
     } catch {
-      await sleep3(LOCK_RETRY_MS);
+      await sleep4(LOCK_RETRY_MS);
     }
   }
   try {
@@ -14830,7 +15014,7 @@ async function atomicUpdateState(stateFilePath, fn) {
   await acquireLock2(stateFilePath);
   try {
     const state = loadState(stateFilePath);
-    writeFileSync3(stateFilePath, JSON.stringify(fn(state), null, 2));
+    writeFileSync4(stateFilePath, JSON.stringify(fn(state), null, 2));
   } finally {
     releaseLock2(stateFilePath);
   }
@@ -17074,30 +17258,6 @@ var HOOK_HANDLERS = {
   SessionEnd: main5
 };
 
-// dist/src/hooks/stand-down.js
-import { existsSync as existsSync4 } from "node:fs";
-import { homedir as homedir4 } from "node:os";
-var REGISTERED_COMMAND = `/${binary.target.installDirectoryName}/${binary.target.executableName}`;
-function pluginShouldStandDown(home = homedir4(), cwd = process.cwd()) {
-  try {
-    if (runningCompiledBinary())
-      return false;
-    if (!existsSync4(binary.installedBinaryPath(home)))
-      return false;
-    return [userSettingsPath(home), projectSettingsPath(cwd)].some(registersTheBinary);
-  } catch {
-    return false;
-  }
-}
-function registersTheBinary(settingsPath) {
-  try {
-    const settings = readSettingsSync(settingsPath);
-    return Object.values(settings.hooks ?? {}).some((groups) => groups.some((group) => group?.hooks?.some((hook) => hook?.command?.includes(REGISTERED_COMMAND))));
-  } catch {
-    return false;
-  }
-}
-
 // dist/src/hooks/dispatch.js
 var EXECUTABLE_NAME = binary.target.executableName;
 var USAGE = `Usage:
@@ -17126,6 +17286,7 @@ if (argument === "--help" || argument === "-h") {
   initLogger(false);
   void runUpdateCheck();
 } else if (event) {
+  warnAboutHandInstalledBinary(event);
   if (pluginShouldStandDown())
     void drainStdinToAvoidEpipe();
   else

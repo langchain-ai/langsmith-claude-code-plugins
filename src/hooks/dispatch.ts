@@ -14,6 +14,7 @@ import { error, initLogger } from "../logger.js";
 import { runUpdateCheck } from "../updater.js";
 import { runHookEntry } from "../utils/hook-entry.js";
 import { drainStdinToAvoidEpipe } from "../utils/stdin.js";
+import { warnAboutHandInstalledBinary } from "./hand-installed-binary.js";
 import { HOOK_HANDLERS } from "./registry.js";
 import { pluginShouldStandDown } from "./stand-down.js";
 
@@ -47,6 +48,7 @@ if (argument === "--help" || argument === "-h") {
   initLogger(false);
   void runUpdateCheck();
 } else if (event) {
+  warnAboutHandInstalledBinary(event);
   if (pluginShouldStandDown()) void drainStdinToAvoidEpipe();
   else void runHookEntry(event, HOOK_HANDLERS[event]);
 } else if (argument?.startsWith("-")) {

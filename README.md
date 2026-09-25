@@ -8,14 +8,15 @@ A Claude Code plugin that traces conversations, tool calls, subagent executions,
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) v18+
+- [Node.js](https://nodejs.org/) v18+, needed only when the plugin carries no
+  build for your machine
 
 ## Installation
 
 Every option below installs the same tracing integration and only the delivery
 differs, so you are picking an install method rather than a different product.
-The plugin runs on the Node on your PATH and the marketplace manages it, while
-the standalone binary carries its own JavaScript runtime and you manage it.
+The marketplace manages the plugin, while the standalone binary carries its own
+JavaScript runtime and you manage it.
 
 ### As a Claude Code plugin
 
@@ -26,6 +27,13 @@ From within Claude Code, run:
 /plugin install langsmith-tracing@langsmith-claude-code-plugins
 /reload-plugins
 ```
+
+The hooks run a macOS build carried inside the plugin whenever one matches your
+machine, so on a Mac there is nothing to download and nothing to keep up to
+date beyond the plugin itself. Anywhere else, such as Linux and Windows, the
+same integration runs on the Node on your PATH. Either way the plugin shows up
+in `/plugin` with its name, version and enabled state, which is how you check
+that tracing is active.
 
 To update, refresh the marketplace from within Claude Code:
 
@@ -58,7 +66,11 @@ supported path and this binary is the beta we are trialling, so you install and
 update it yourself. Only macOS arm64 and x64 are built and the installer picks
 whichever matches your Mac.
 
-The plugin stops tracing while the binary is installed and registered as a hook.
+The plugin stops tracing while the binary is installed and registered as a hook,
+and says so once at the end of a turn so you know which copy is doing the work.
+Delete `~/.langsmith/langsmith-claude-code-tracing` and drop its hooks from
+`~/.claude/settings.json` when you move to the plugin, and if you ever install
+the binary again you get the same note again.
 
 1. Run the installer:
 

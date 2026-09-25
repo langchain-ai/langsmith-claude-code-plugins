@@ -54,9 +54,9 @@ function dispatch(args: string[], prompt = "ordinary prompt") {
 // A handler's initHook creates this directory, so it is proof the handler ran.
 const logDir = () => join(home, ".claude", "state");
 
-function registerInstalledBinary(event: string) {
+function registerInstalledBinary(event: string, installed = binary) {
   mkdirSync(join(home, ".langsmith"), { recursive: true });
-  writeFileSync(join(home, ".langsmith", EXECUTABLE_NAME), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  copyFileSync(installed, join(home, ".langsmith", EXECUTABLE_NAME));
   mkdirSync(join(home, ".claude"), { recursive: true });
   writeFileSync(
     join(home, ".claude", "settings.json"),
@@ -138,26 +138,29 @@ describe.skipIf(!built)("the standalone binary, bin/langsmith-claude-code-tracin
     "runs the %s handler even though it is the registered binary",
     (event) => {
       registerInstalledBinary(event);
-      const result = dispatch([event]);
+      const result = spawnSync(join(home, ".langsmith", EXECUTABLE_NAME), [event], {
+        cwd: home,
+        env: {
+          HOME: home,
+          PATH: "",
+          TRACE_TO_LANGSMITH: "false",
+          STATE_FILE: join(home, "s.json"),
+        },
+        input: JSON.stringify({ session_id: "installed", cwd: home, prompt: "ordinary prompt" }),
+        encoding: "utf8",
+        timeout: 10000,
+      });
       expect(result.error).toBeUndefined();
       expect(result.status, result.stderr).toBe(0);
       expect(existsSync(logDir()), result.stderr).toBe(true);
     },
   );
 
-  it("runs the handler from a copy of itself saved under another name", () => {
+  it("stands down when the registered binary is a different file", () => {
     registerInstalledBinary("UserPromptSubmit");
-    const renamed = join(home, "lstrace");
-    copyFileSync(binary, renamed);
-    const result = spawnSync(renamed, ["UserPromptSubmit"], {
-      cwd: home,
-      env: { HOME: home, PATH: "", TRACE_TO_LANGSMITH: "false", STATE_FILE: join(home, "s.json") },
-      input: JSON.stringify({ session_id: "renamed", cwd: home, prompt: "ordinary prompt" }),
-      encoding: "utf8",
-      timeout: 10000,
-    });
+    const result = dispatch(["UserPromptSubmit"]);
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
-    expect(existsSync(logDir()), result.stderr).toBe(true);
+    expect(existsSync(logDir()), result.stderr).toBe(false);
   });
 });

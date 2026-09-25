@@ -2,19 +2,27 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 
 import { binary } from "../binary-target.js";
-import { runningCompiledBinary } from "../utils/binary-runtime.js";
+import { isTheSameFile } from "../utils/paths.js";
 import { projectSettingsPath, readSettingsSync, userSettingsPath } from "../utils/settings.js";
 
 const REGISTERED_COMMAND = `/${binary.target.installDirectoryName}/${binary.target.executableName}`;
 
-export function pluginShouldStandDown(home = homedir(), cwd = process.cwd()): boolean {
+export function runningTheInstalledBinary(home = homedir()): boolean {
+  return isTheSameFile(process.execPath, binary.installedBinaryPath(home));
+}
+
+export function binaryOwnsAnyHook(home = homedir(), cwd = process.cwd()): boolean {
   try {
-    if (runningCompiledBinary()) return false;
     if (!existsSync(binary.installedBinaryPath(home))) return false;
     return [userSettingsPath(home), projectSettingsPath(cwd)].some(registersTheBinary);
   } catch {
     return false;
   }
+}
+
+export function pluginShouldStandDown(home = homedir(), cwd = process.cwd()): boolean {
+  if (runningTheInstalledBinary(home)) return false;
+  return binaryOwnsAnyHook(home, cwd);
 }
 
 function registersTheBinary(settingsPath: string): boolean {

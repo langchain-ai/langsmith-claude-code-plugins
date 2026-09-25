@@ -34,21 +34,36 @@ function hookBundles(pluginRoot: string): string[] {
     groups.flatMap((group) =>
       group.hooks.map((hook) => {
         expect(hook.type).toBe("command");
-        const match = /^node "\$\{CLAUDE_PLUGIN_ROOT\}\/(bundle\/[^" ]+\.js)"( \S+)?$/.exec(
-          hook.command,
-        );
+        const match =
+          /^(?:node "\$\{CLAUDE_PLUGIN_ROOT\}\/(bundle\/[^" ]+\.js)"|exec "\$\{CLAUDE_PLUGIN_ROOT\}\/(hooks\/[^" ]+)")( \S+)?$/.exec(
+            hook.command.split("\n")[0],
+          );
         expect(match, hook.command).not.toBeNull();
+        const entry = match![1] ?? match![2];
         // The dispatcher runs whichever event it is given, so a mislabelled
         // argument would quietly run the wrong hook.
-        if (match![1] === "bundle/dispatch.js") expect(match![2], hook.command).toBe(` ${event}`);
-        const path = resolve(pluginRoot, match![1]);
+        if (entry !== "bundle/gateway.js") expect(match![3], hook.command).toBe(` ${event}`);
+        const path = resolve(pluginRoot, entry);
         expect(path.startsWith(resolve(pluginRoot) + sep)).toBe(true);
         expect(existsSync(path), path).toBe(true);
-        return match![1];
+        return entry;
       }),
     ),
   );
 }
+
+describe("the caller workflow", () => {
+  it("builds with the same commit of the shared pipeline the repository installs", () => {
+    const workflow = readFileSync(join(root, ".github/workflows/build-binary.yml"), "utf8");
+    const lockfile = readFileSync(join(root, "pnpm-lock.yaml"), "utf8");
+    const pinned = /uses: langchain-ai\/langsmith-plugin-binary\/\S+@([0-9a-f]{40})/.exec(
+      workflow,
+    )?.[1];
+
+    expect(pinned).toBeDefined();
+    expect(lockfile).toContain(`langsmith-plugin-binary/tar.gz/${pinned}`);
+  });
+});
 
 describe("the standalone binary manifest", () => {
   it("mirrors the Node manifest and changes only the command", () => {
@@ -86,7 +101,7 @@ describe("separate marketplace packages", () => {
       if (entry.name === "langsmith-tracing") {
         expect(manifest.version).toBe(json(join(root, "package.json")).version);
         expect(hookBundles(pluginRoot)).toEqual(
-          Array(HOOK_EVENT_NAMES.length).fill("bundle/dispatch.js"),
+          Array(HOOK_EVENT_NAMES.length).fill("hooks/langsmith-tracing"),
         );
         expect(existsSync(join(pluginRoot, "bundle/gateway.js"))).toBe(false);
       } else {
