@@ -1,0 +1,55 @@
+name: Cross Shell Hook Probe
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows Shell Probe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: What is on PATH
+        shell: cmd
+        run: |
+          where sh || echo sh NOT ON PATH
+          where bash || echo bash NOT ON PATH
+          where node || echo node NOT ON PATH
+          where pwsh || echo pwsh NOT ON PATH
+
+      - name: Probe with Git Bash available
+        shell: cmd
+        run: node .github/shell-probe/probe.mjs
+
+      - name: Probe with Git stripped from PATH
+        shell: pwsh
+        run: |
+          $clean = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'Git' }) -join ';'
+          $env:PATH = $clean
+          Write-Output "sh resolves to: $((Get-Command sh -ErrorAction SilentlyContinue).Source)"
+          node .github/shell-probe/probe.mjs
+
+  macos:
+    name: macOS Shell Probe
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Probe
+        run: node .github/shell-probe/probe.mjs
+      - name: Probe with node removed from PATH
+        run: |
+          export PATH="$(echo "$PATH" | tr ':' '\n' | grep -v -i node | tr '\n' ':')"
+          command -v node || echo "node is gone, good"
+          /usr/bin/env node .github/shell-probe/probe.mjs || true
+        shell: bash
