@@ -1549,6 +1549,9 @@ var HOOK_EVENT_NAMES = [
 ];
 var OLDER_THAN_ANY_RELEASE2 = "0.0.0";
 var TRACING_PLUGIN_ID = "langsmith-tracing@langsmith-claude-code-plugins";
+var HAND_INSTALLED_BINARY_WARNING_EVENT = "Stop";
+var HAND_INSTALLED_BINARY_WARNING_MARKER_SUFFIX = ".warned";
+var HAND_INSTALLED_BINARY_WARNING = "LangSmith tracing: the hand-installed binary at %s is still registered in settings.json, so it is doing the tracing and the plugin is standing aside. Delete that file and drop its hooks to let the plugin take over. You only see this once.";
 
 // dist/src/installer.js
 import { arch as osArch3, homedir as homedir3, platform as osPlatform3 } from "node:os";
@@ -1562,6 +1565,14 @@ function runningCompiledBinary() {
 }
 
 // dist/src/utils/paths.js
+import { realpathSync } from "node:fs";
+function isTheSameFile(one, other) {
+  try {
+    return realpathSync(one) === realpathSync(other);
+  } catch {
+    return one === other;
+  }
+}
 function underHome(path3, home) {
   if (path3 === home)
     return "~";
@@ -1782,6 +1793,60 @@ function readStdin() {
     });
     process.stdin.on("error", reject);
   });
+}
+
+// dist/src/hooks/hand-installed-binary.js
+import { rmSync, writeFileSync } from "node:fs";
+import { homedir as homedir5 } from "node:os";
+
+// dist/src/hooks/stand-down.js
+import { existsSync as existsSync2 } from "node:fs";
+import { homedir as homedir4 } from "node:os";
+var REGISTERED_COMMAND = `/${binary.target.installDirectoryName}/${binary.target.executableName}`;
+function runningTheInstalledBinary(home = homedir4()) {
+  return isTheSameFile(process.execPath, binary.installedBinaryPath(home));
+}
+function binaryOwnsAnyHook(home = homedir4(), cwd = process.cwd()) {
+  try {
+    if (!existsSync2(binary.installedBinaryPath(home)))
+      return false;
+    return [userSettingsPath(home), projectSettingsPath(cwd)].some(registersTheBinary);
+  } catch {
+    return false;
+  }
+}
+function pluginShouldStandDown(home = homedir4(), cwd = process.cwd()) {
+  if (runningTheInstalledBinary(home))
+    return false;
+  return binaryOwnsAnyHook(home, cwd);
+}
+function registersTheBinary(settingsPath) {
+  try {
+    const settings = readSettingsSync(settingsPath);
+    return Object.values(settings.hooks ?? {}).some((groups) => groups.some((group) => group?.hooks?.some((hook) => hook?.command?.includes(REGISTERED_COMMAND))));
+  } catch {
+    return false;
+  }
+}
+
+// dist/src/hooks/hand-installed-binary.js
+function warnAboutHandInstalledBinary(event2, out = console.log, home = homedir5()) {
+  try {
+    if (event2 !== HAND_INSTALLED_BINARY_WARNING_EVENT)
+      return;
+    if (runningTheInstalledBinary(home))
+      return;
+    const path3 = binary.installedBinaryPath(home);
+    const marker = `${path3}${HAND_INSTALLED_BINARY_WARNING_MARKER_SUFFIX}`;
+    if (!binaryOwnsAnyHook(home)) {
+      rmSync(marker, { force: true });
+      return;
+    }
+    writeFileSync(marker, "", { flag: "wx" });
+    out(JSON.stringify({ systemMessage: HAND_INSTALLED_BINARY_WARNING.replace("%s", path3) }));
+  } catch {
+    return;
+  }
 }
 
 // dist/src/tracing-policy.js
@@ -6694,13 +6759,13 @@ async function readdir2(dir) {
 async function stat4(filePath) {
   return nodeFsPromises.stat(filePath);
 }
-function existsSync3(p) {
+function existsSync4(p) {
   return nodeFs.existsSync(p);
 }
 function mkdirSync3(dir) {
   nodeFs.mkdirSync(dir, { recursive: true });
 }
-function writeFileSync2(filePath, content) {
+function writeFileSync3(filePath, content) {
   nodeFs.writeFileSync(filePath, content);
 }
 function renameSync3(oldPath, newPath) {
@@ -6890,15 +6955,15 @@ var PromptCache = class {
       entries[key] = entry.value;
     }
     const dir = path2.dirname(filePath);
-    if (!existsSync3(dir)) {
+    if (!existsSync4(dir)) {
       mkdirSync3(dir);
     }
     const tempPath = `${filePath}.tmp`;
     try {
-      writeFileSync2(tempPath, JSON.stringify({ entries }, null, 2));
+      writeFileSync3(tempPath, JSON.stringify({ entries }, null, 2));
       renameSync3(tempPath, filePath);
     } catch (e) {
-      if (existsSync3(tempPath)) {
+      if (existsSync4(tempPath)) {
         unlinkSync2(tempPath);
       }
       throw e;
@@ -6912,7 +6977,7 @@ var PromptCache = class {
    * @returns Number of entries loaded.
    */
   load(filePath) {
-    if (!existsSync3(filePath)) {
+    if (!existsSync4(filePath)) {
       return 0;
     }
     let entries;
@@ -7148,7 +7213,7 @@ function loadProfileState() {
     return void 0;
   }
   const configPath = getProfileConfigPath();
-  if (!configPath || !existsSync3(configPath)) {
+  if (!configPath || !existsSync4(configPath)) {
     return void 0;
   }
   try {
@@ -14792,7 +14857,7 @@ function groupIntoTurns(messages) {
 }
 
 // dist/src/state.js
-import { readFileSync as readFileSync9, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
+import { readFileSync as readFileSync9, writeFileSync as writeFileSync4, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
 import { dirname as dirname5 } from "node:path";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
@@ -14830,7 +14895,7 @@ async function atomicUpdateState(stateFilePath, fn) {
   await acquireLock2(stateFilePath);
   try {
     const state = loadState(stateFilePath);
-    writeFileSync3(stateFilePath, JSON.stringify(fn(state), null, 2));
+    writeFileSync4(stateFilePath, JSON.stringify(fn(state), null, 2));
   } finally {
     releaseLock2(stateFilePath);
   }
@@ -17074,30 +17139,6 @@ var HOOK_HANDLERS = {
   SessionEnd: main5
 };
 
-// dist/src/hooks/stand-down.js
-import { existsSync as existsSync4 } from "node:fs";
-import { homedir as homedir4 } from "node:os";
-var REGISTERED_COMMAND = `/${binary.target.installDirectoryName}/${binary.target.executableName}`;
-function pluginShouldStandDown(home = homedir4(), cwd = process.cwd()) {
-  try {
-    if (runningCompiledBinary())
-      return false;
-    if (!existsSync4(binary.installedBinaryPath(home)))
-      return false;
-    return [userSettingsPath(home), projectSettingsPath(cwd)].some(registersTheBinary);
-  } catch {
-    return false;
-  }
-}
-function registersTheBinary(settingsPath) {
-  try {
-    const settings = readSettingsSync(settingsPath);
-    return Object.values(settings.hooks ?? {}).some((groups) => groups.some((group) => group?.hooks?.some((hook) => hook?.command?.includes(REGISTERED_COMMAND))));
-  } catch {
-    return false;
-  }
-}
-
 // dist/src/hooks/dispatch.js
 var EXECUTABLE_NAME = binary.target.executableName;
 var USAGE = `Usage:
@@ -17126,6 +17167,7 @@ if (argument === "--help" || argument === "-h") {
   initLogger(false);
   void runUpdateCheck();
 } else if (event) {
+  warnAboutHandInstalledBinary(event);
   if (pluginShouldStandDown())
     void drainStdinToAvoidEpipe();
   else

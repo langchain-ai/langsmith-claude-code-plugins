@@ -1,1 +1,3 @@
 bundle/** linguist-generated=true
+binary/langsmith-claude-code-tracing-* binary linguist-generated=true
+hooks/langsmith-tracing text eol=lf

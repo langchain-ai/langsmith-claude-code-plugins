@@ -14,9 +14,14 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { binary } from "../binary-target.js";
-import { HOOK_EVENT_NAMES } from "../constants.js";
+import { HAND_INSTALLED_BINARY_WARNING, HOOK_EVENT_NAMES } from "../constants.js";
 
 const EXECUTABLE_NAME = binary.target.executableName;
+
+const staleBinaryWarning = () =>
+  JSON.stringify({
+    systemMessage: HAND_INSTALLED_BINARY_WARNING.replace("%s", binary.installedBinaryPath(home)),
+  }) + "\n";
 
 const root = new URL("../../", import.meta.url);
 const bundle = fileURLToPath(new URL("bundle/dispatch.js", root));
@@ -192,7 +197,7 @@ describe("standing down for the installed binary", () => {
     const result = dispatch([event]);
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toBe("");
+    expect(result.stdout).toBe(event === "Stop" ? staleBinaryWarning() : "");
     expect(result.stderr).toBe("");
     expect(existsSync(logDir())).toBe(false);
   });

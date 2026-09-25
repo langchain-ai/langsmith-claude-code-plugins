@@ -18,6 +18,7 @@ on:
       - src/constants.ts
       - src/hooks/dispatch.binary.test.ts
       - src/hooks/dispatch.ts
+      - src/hooks/hand-installed-binary.ts
       - src/hooks/stand-down.ts
       - src/installer.binary.test.ts
       - src/installer.ts

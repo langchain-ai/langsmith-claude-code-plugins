@@ -34,17 +34,19 @@ function hookBundles(pluginRoot: string): string[] {
     groups.flatMap((group) =>
       group.hooks.map((hook) => {
         expect(hook.type).toBe("command");
-        const match = /^node "\$\{CLAUDE_PLUGIN_ROOT\}\/(bundle\/[^" ]+\.js)"( \S+)?$/.exec(
-          hook.command,
-        );
+        const match =
+          /^(?:node "\$\{CLAUDE_PLUGIN_ROOT\}\/(bundle\/[^" ]+\.js)"|"\$\{CLAUDE_PLUGIN_ROOT\}\/(hooks\/[^" ]+)")( \S+)?$/.exec(
+            hook.command,
+          );
         expect(match, hook.command).not.toBeNull();
+        const entry = match![1] ?? match![2];
         // The dispatcher runs whichever event it is given, so a mislabelled
         // argument would quietly run the wrong hook.
-        if (match![1] === "bundle/dispatch.js") expect(match![2], hook.command).toBe(` ${event}`);
-        const path = resolve(pluginRoot, match![1]);
+        if (entry !== "bundle/gateway.js") expect(match![3], hook.command).toBe(` ${event}`);
+        const path = resolve(pluginRoot, entry);
         expect(path.startsWith(resolve(pluginRoot) + sep)).toBe(true);
         expect(existsSync(path), path).toBe(true);
-        return match![1];
+        return entry;
       }),
     ),
   );
@@ -86,7 +88,7 @@ describe("separate marketplace packages", () => {
       if (entry.name === "langsmith-tracing") {
         expect(manifest.version).toBe(json(join(root, "package.json")).version);
         expect(hookBundles(pluginRoot)).toEqual(
-          Array(HOOK_EVENT_NAMES.length).fill("bundle/dispatch.js"),
+          Array(HOOK_EVENT_NAMES.length).fill("hooks/langsmith-tracing"),
         );
         expect(existsSync(join(pluginRoot, "bundle/gateway.js"))).toBe(false);
       } else {

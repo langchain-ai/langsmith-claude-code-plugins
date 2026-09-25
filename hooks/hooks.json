@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" UserPromptSubmit",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" UserPromptSubmit",
             "timeout": 30
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PreToolUse",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" PreToolUse",
             "timeout": 10
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PostToolUse",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" PostToolUse",
             "timeout": 30,
             "async": true
           }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" Stop",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" Stop",
             "timeout": 120
           }
         ]
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" StopFailure",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" StopFailure",
             "timeout": 30
           }
         ]
@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" SubagentStop",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" SubagentStop",
             "timeout": 60,
             "async": true
           }
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PreCompact",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" PreCompact",
             "timeout": 10
           }
         ]
@@ -85,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PostCompact",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" PostCompact",
             "timeout": 30,
             "async": true
           }
@@ -97,7 +97,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" SessionEnd",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" SessionEnd",
             "timeout": 10
           }
         ]
