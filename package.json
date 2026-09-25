@@ -14,6 +14,7 @@
     "format": "oxfmt --write",
     "test": "vitest run",
     "test:binary": "vitest run src/hooks/dispatch.binary.test.ts src/installer.binary.test.ts",
+    "test:hooks": "vitest run src/hook-command.test.ts",
     "test:install": "bash node_modules/@langchain/langsmith-plugin-binary/test/install/cases.sh",
     "test:install:mutations": "bash node_modules/@langchain/langsmith-plugin-binary/test/install/variants.sh",
     "test:watch": "vitest",
@@ -28,7 +29,7 @@
     "langsmith": "^0.10.4"
   },
   "devDependencies": {
-    "@langchain/langsmith-plugin-binary": "github:langchain-ai/langsmith-plugin-binary#v0.1.0",
+    "@langchain/langsmith-plugin-binary": "github:langchain-ai/langsmith-plugin-binary#v0.2.1",
     "@types/node": "^26.6.2",
     "esbuild": "^0.28.1",
     "oxfmt": "^0.68.0",

@@ -24,6 +24,7 @@
     "entryPoint": "src/hooks/dispatch.ts",
     "outputDirectory": "bin",
     "versionFile": "package.json",
+    "matchingVersionFiles": [".claude-plugin/plugin.json"],
     "minify": false,
     "defines": {
       "__LS_BINARY_HOOKS__": "hooks/hooks.binary.json"

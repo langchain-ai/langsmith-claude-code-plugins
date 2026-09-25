@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+
+root="${CLAUDE_PLUGIN_ROOT:-}"
+if [ -z "$root" ]; then
+  root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
+fi
+
+executable="langsmith-claude-code-tracing"
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64)
+    preferred="$root/binary/$executable-darwin-arm64"
+    alternate="$root/binary/$executable-darwin-x64"
+    ;;
+  Darwin-x86_64)
+    preferred="$root/binary/$executable-darwin-x64"
+    alternate=""
+    ;;
+  *)
+    preferred=""
+    alternate=""
+    ;;
+esac
+
+for candidate in "$preferred" "$alternate"; do
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+    exec "$candidate" "$@"
+  fi
+done
+
+exec node "$root/bundle/dispatch.js" "$@"
