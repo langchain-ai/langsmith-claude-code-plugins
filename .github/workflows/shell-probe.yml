@@ -33,6 +33,17 @@ jobs:
         shell: cmd
         run: node .github/shell-probe/probe2.mjs
 
+      - name: Round three, backslash paths
+        shell: cmd
+        run: node .github/shell-probe/probe3.mjs
+
+      - name: Round three with Git stripped from PATH
+        shell: pwsh
+        run: |
+          $clean = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'Git' }) -join ';'
+          $env:PATH = $clean
+          node .github/shell-probe/probe3.mjs
+
       - name: Round two with Git stripped from PATH
         shell: pwsh
         run: |
@@ -60,6 +71,8 @@ jobs:
         run: node .github/shell-probe/probe.mjs
       - name: Round two
         run: node .github/shell-probe/probe2.mjs
+      - name: Round three
+        run: node .github/shell-probe/probe3.mjs
       - name: Probe with node removed from PATH
         run: |
           export PATH="$(echo "$PATH" | tr ':' '\n' | grep -v -i node | tr '\n' ':')"
