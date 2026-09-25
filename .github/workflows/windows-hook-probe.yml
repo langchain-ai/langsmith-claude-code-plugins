@@ -1,0 +1,45 @@
+name: Windows Hook Probe
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Windows Hook Probe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Git line ending settings on this runner
+        shell: cmd
+        run: |
+          git config --show-origin --get core.autocrlf || echo core.autocrlf UNSET
+          git config --show-origin --get core.eol || echo core.eol UNSET
+          git ls-files --eol hooks/langsmith-tracing || echo ls-files FAILED
+
+      - name: Is a POSIX shell present
+        shell: cmd
+        run: |
+          where sh || echo sh NOT ON PATH
+          where bash || echo bash NOT ON PATH
+          where node || echo node NOT ON PATH
+          if exist "C:\Program Files\Git\bin\bash.exe" (echo GIT BASH PRESENT) else (echo GIT BASH ABSENT)
+
+      - name: Run every plausible invocation
+        shell: cmd
+        run: node .github/windows-probe/probe.mjs
+
+      - name: Git Bash, does the fallthrough find node
+        shell: bash
+        run: |
+          uname -s
+          uname -m
+          command -v node || echo "node NOT on PATH inside Git Bash"
