@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+FAILED_TO_START_CODES="126 127 137"
+
 root="${CLAUDE_PLUGIN_ROOT:-}"
 if [ -z "$root" ]; then
   root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
@@ -22,10 +24,60 @@ case "$(uname -s)-$(uname -m)" in
     ;;
 esac
 
+started() {
+  case " $FAILED_TO_START_CODES " in
+    *" $1 "*) return 1 ;;
+  esac
+  return 0
+}
+
+first=""
 for candidate in "$preferred" "$alternate"; do
   if [ -n "$candidate" ] && [ -x "$candidate" ]; then
-    exec "$candidate" "$@"
+    first="$candidate"
+    break
   fi
 done
 
-exec node "$root/bundle/dispatch.js" "$@"
+if [ -z "$first" ]; then
+  exec node "$root/bundle/dispatch.js" "$@"
+fi
+
+child=""
+clean() {
+  if [ -n "$child" ]; then kill "$child" 2>/dev/null || :; fi
+  rm -f "$event" || :
+}
+
+if event="$(mktemp "${TMPDIR:-/tmp}/langsmith-event.XXXXXX" 2>/dev/null)"; then
+  trap clean EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 131' QUIT
+  trap 'exit 143' TERM
+  exec 4<&0
+  cat <&4 > "$event" &
+  child=$!
+  wait "$child"
+  child=""
+  exec 4<&-
+else
+  exec "$first" "$@"
+fi
+
+for candidate in "$preferred" "$alternate"; do
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+    "$candidate" "$@" < "$event" &
+    child=$!
+    code=0
+    wait "$child" || code=$?
+    child=""
+    if started "$code"; then
+      exit "$code"
+    fi
+  fi
+done
+
+exec 3< "$event"
+rm -f "$event" || :
+exec node "$root/bundle/dispatch.js" "$@" <&3
