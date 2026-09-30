@@ -11,7 +11,7 @@
     {
       "name": "langsmith-tracing",
       "description": "Traces Claude Code sessions to LangSmith with full observability: LLM calls, tool executions, subagent runs, and context compaction events",
-      "source": "./",
+      "source": ".",
       "homepage": "https://github.com/langchain-ai/langsmith-claude-code-plugins"
     },
     {
