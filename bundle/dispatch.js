@@ -198,11 +198,11 @@ var require_p_finally = __commonJS({
       onFinally = onFinally || (() => {
       });
       return promise.then(
-        (val) => new Promise((resolve2) => {
-          resolve2(onFinally());
+        (val) => new Promise((resolve) => {
+          resolve(onFinally());
         }).then(() => val),
-        (err) => new Promise((resolve2) => {
-          resolve2(onFinally());
+        (err) => new Promise((resolve) => {
+          resolve(onFinally());
         }).then(() => {
           throw err;
         })
@@ -222,18 +222,18 @@ var require_p_timeout = __commonJS({
         this.name = "TimeoutError";
       }
     };
-    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve2, reject) => {
+    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve, reject) => {
       if (typeof milliseconds !== "number" || milliseconds < 0) {
         throw new TypeError("Expected `milliseconds` to be a positive number");
       }
       if (milliseconds === Infinity) {
-        resolve2(promise);
+        resolve(promise);
         return;
       }
       const timer = setTimeout(() => {
         if (typeof fallback === "function") {
           try {
-            resolve2(fallback());
+            resolve(fallback());
           } catch (error2) {
             reject(error2);
           }
@@ -248,7 +248,7 @@ var require_p_timeout = __commonJS({
       }, milliseconds);
       pFinally(
         // eslint-disable-next-line promise/prefer-await-to-then
-        promise.then(resolve2, reject),
+        promise.then(resolve, reject),
         () => {
           clearTimeout(timer);
         }
@@ -466,7 +466,7 @@ var require_dist = __commonJS({
       Adds a sync or async task to the queue. Always returns a promise.
       */
       async add(fn, options = {}) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve, reject) => {
           const run = async () => {
             this._pendingCount++;
             this._intervalCount++;
@@ -477,7 +477,7 @@ var require_dist = __commonJS({
                 }
                 return void 0;
               });
-              resolve2(await operation);
+              resolve(await operation);
             } catch (error2) {
               reject(error2);
             }
@@ -528,11 +528,11 @@ var require_dist = __commonJS({
         if (this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve2) => {
+        return new Promise((resolve) => {
           const existingResolve = this._resolveEmpty;
           this._resolveEmpty = () => {
             existingResolve();
-            resolve2();
+            resolve();
           };
         });
       }
@@ -545,11 +545,11 @@ var require_dist = __commonJS({
         if (this._pendingCount === 0 && this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve2) => {
+        return new Promise((resolve) => {
           const existingResolve = this._resolveIdle;
           this._resolveIdle = () => {
             existingResolve();
-            resolve2();
+            resolve();
           };
         });
       }
@@ -593,75 +593,15 @@ var require_dist = __commonJS({
   }
 });
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/binary.js
-import { arch as osArch2, platform as osPlatform2 } from "node:os";
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_cf00253ffd542eaf34e58b247587e1b8/node_modules/@langchain/langsmith-plugin-binary/dist/binary.js
+import { arch as osArch, platform as osPlatform } from "node:os";
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/install-binary.js
-import * as fs2 from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/constants.js
-var TEMPLATE_URL = new URL("../installer/install.sh.template", import.meta.url);
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_cf00253ffd542eaf34e58b247587e1b8/node_modules/@langchain/langsmith-plugin-binary/dist/constants.js
 var DEFAULT_PUBLISHED_TARGETS = {
   darwin: ["arm64", "x64"]
 };
-var RELEASES_PER_PAGE = 100;
-var LIST_TIMEOUT_MS = 15e3;
-var DOWNLOAD_TIMEOUT_MS = 5 * 6e4;
-var CODESIGN_TIMEOUT_MS = 12e4;
-var VERSION_CHECK_BUDGET_MS = 1e4;
-var VERSION_CHECK_MINIMUM_ATTEMPT_MS = 2e3;
-var VERSION_CHECK_RETRY_PAUSES_MS = [300, 900];
-var CRASH_SIGNALS = /* @__PURE__ */ new Set([
-  "SIGABRT",
-  "SIGBUS",
-  "SIGEMT",
-  "SIGFPE",
-  "SIGILL",
-  "SIGSEGV",
-  "SIGSYS",
-  "SIGTRAP"
-]);
-var NODE_ERROR_PREFIX = "ERR_";
-var KERNEL_LOG_COMMAND = `log show --last 5m --predicate 'sender == "AppleMobileFileIntegrity" or sender == "AppleSystemPolicy"'`;
-var MAX_BINARY_BYTES = 250 * 1024 * 1024;
-var MAX_CHECKSUM_BYTES = 1024;
-var ABANDONED_LOCK_MS = 10 * 60 * 1e3;
-var LOCK_FILE_NAME = ".update.lock";
-var REJECTED_FILE_SUFFIX = ".rejected";
-var DEFAULT_INSTALL_DIRECTORY_NAME = ".langsmith";
-var LOOPBACK_HOSTS = /* @__PURE__ */ new Set(["127.0.0.1", "[::1]", "localhost"]);
-var VERSION = /^(\d+)\.(\d+)\.(\d+)(?:-([a-z]+)(?:\.(\d+))?)?$/;
-var OLDER_THAN_ANY_RELEASE = "0.0.0";
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/download.js
-import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import * as fs from "node:fs/promises";
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/http.js
-function pointsAtThisMachine(override) {
-  try {
-    return LOOPBACK_HOSTS.has(new URL(override).hostname);
-  } catch {
-    return false;
-  }
-}
-function taggedReleaseUrl(releasesApi, tag) {
-  const url = new URL(releasesApi);
-  url.search = "";
-  url.pathname = `${url.pathname.replace(/\/+$/, "")}/tags/${encodeURIComponent(tag)}`;
-  return url.href;
-}
-function listedReleasesUrl(releasesApi) {
-  const url = new URL(releasesApi);
-  url.searchParams.set("per_page", String(RELEASES_PER_PAGE));
-  return url.href;
-}
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/target.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_cf00253ffd542eaf34e58b247587e1b8/node_modules/@langchain/langsmith-plugin-binary/dist/target.js
 function resolveTarget(options) {
   for (const field of ["executableName", "repository", "userAgent"]) {
     if (typeof options[field] !== "string" || options[field].trim() === "") {
@@ -673,7 +613,6 @@ function resolveTarget(options) {
     repository: options.repository,
     userAgent: options.userAgent,
     releasesApiOverrideEnvVar: options.releasesApiOverrideEnvVar,
-    installDirectoryName: options.installDirectoryName ?? DEFAULT_INSTALL_DIRECTORY_NAME,
     publishedTargets: options.publishedTargets ?? DEFAULT_PUBLISHED_TARGETS
   };
 }
@@ -683,499 +622,14 @@ function isPublishedTarget(target, platform, arch) {
 function releaseAssetName(target, platform, arch, version) {
   return `${target.executableName}-${platform}-${arch}-${version}`;
 }
-function defaultReleasesApi(target) {
-  return `https://api.github.com/repos/${target.repository}/releases`;
-}
-function releaseDownloadPrefix(target) {
-  return `https://github.com/${target.repository}/releases/download/`;
-}
-function githubRequestHeaders(target, currentVersion) {
-  return {
-    Accept: "application/vnd.github+json",
-    "User-Agent": `${target.userAgent}/${currentVersion}`,
-    "X-GitHub-Api-Version": "2022-11-28"
-  };
-}
-function configuredReleasesApi(target, environment = process.env) {
-  const override = environment[target.releasesApiOverrideEnvVar];
-  if (override && pointsAtThisMachine(override))
-    return override;
-  return defaultReleasesApi(target);
-}
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/checksum.js
-import { basename } from "node:path";
-function sha256FromDigestField(digest) {
-  const match = /^sha256:([a-f0-9]{64})$/i.exec(digest ?? "");
-  return match?.[1].toLowerCase();
-}
-function sha256FromChecksumFile(text, assetName) {
-  const match = /^([a-f0-9]{64})\s+[* ]?(\S+)\s*$/im.exec(text);
-  if (!match || basename(match[2]) !== assetName) {
-    throw new Error(`release asset ${assetName} has an invalid SHA-256 checksum file`);
-  }
-  return match[1].toLowerCase();
-}
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/fs.js
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-async function writeFully(handle, chunk) {
-  let offset = 0;
-  while (offset < chunk.byteLength) {
-    const { bytesWritten } = await handle.write(chunk, offset);
-    if (bytesWritten === 0)
-      throw new Error("could not write the release asset");
-    offset += bytesWritten;
-  }
-}
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/download.js
-function trustedDownloadUrl(asset, target, releasesApi) {
-  const url = new URL(asset.browser_download_url);
-  const trusted = releasesApi === defaultReleasesApi(target) ? url.href.startsWith(releaseDownloadPrefix(target)) : url.origin === new URL(releasesApi).origin;
-  if (!trusted)
-    throw new Error(`release asset ${asset.name} has an unexpected download URL`);
-  return url;
-}
-async function expectedSha256(release, query) {
-  const fromField = sha256FromDigestField(release.asset.digest);
-  if (fromField)
-    return fromField;
-  const checksum = release.checksum;
-  if (!checksum) {
-    throw new Error(`release asset ${release.asset.name} has no SHA-256 digest or checksum file`);
-  }
-  if (checksum.size <= 0 || checksum.size > MAX_CHECKSUM_BYTES) {
-    throw new Error(`release checksum size ${checksum.size} is outside the allowed range`);
-  }
-  const response = await query.fetchImpl(trustedDownloadUrl(checksum, query.target, query.releasesApi), {
-    headers: githubRequestHeaders(query.target, query.currentVersion),
-    signal: AbortSignal.timeout(LIST_TIMEOUT_MS)
-  });
-  if (!response.ok) {
-    throw new Error(`failed to download the release checksum: HTTP ${response.status}`);
-  }
-  return sha256FromChecksumFile(await response.text(), release.asset.name);
-}
-async function downloadAsset(release, destination, query) {
-  const { asset } = release;
-  if (asset.size <= 0 || asset.size > MAX_BINARY_BYTES) {
-    throw new Error(`release asset size ${asset.size} is outside the allowed range`);
-  }
-  const url = trustedDownloadUrl(asset, query.target, query.releasesApi);
-  const expected = await expectedSha256(release, query);
-  const response = await query.fetchImpl(url, {
-    headers: githubRequestHeaders(query.target, query.currentVersion),
-    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
-  });
-  if (!response.ok || !response.body) {
-    throw new Error(`failed to download the release asset: HTTP ${response.status}`);
-  }
-  const handle = await fs.open(destination, "wx", 448);
-  const hash = createHash("sha256");
-  let written = 0;
-  try {
-    for await (const rawChunk of response.body) {
-      const chunk = Buffer.from(rawChunk);
-      written += chunk.byteLength;
-      if (written > asset.size)
-        throw new Error("the release asset exceeds its declared size");
-      hash.update(chunk);
-      await writeFully(handle, chunk);
-    }
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  if (written !== asset.size) {
-    throw new Error(`release asset size mismatch: expected ${asset.size}, got ${written}`);
-  }
-  if (hash.digest("hex") !== expected)
-    throw new Error("release asset SHA-256 mismatch");
-}
-var verifyAdHocSignature = (binary2) => new Promise((resolve2, reject) => {
-  execFile("/usr/bin/codesign", ["--verify", "--strict", binary2], { timeout: CODESIGN_TIMEOUT_MS }, (error2) => error2 ? reject(error2) : resolve2());
-});
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/process.js
-import { execFile as execFile2, execFileSync } from "node:child_process";
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/errors.js
-function describe(error2) {
-  return error2 instanceof Error ? error2.message : String(error2);
-}
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/process.js
-function failureKind(error2, elapsed) {
-  const { killed, signal, code } = error2 ?? {};
-  if (killed)
-    return { kind: "timeout", seconds: Math.round(elapsed / 100) / 10 };
-  if (signal)
-    return { kind: CRASH_SIGNALS.has(signal) ? "crashed" : "stopped", signal };
-  if (typeof code === "number")
-    return { kind: "exit", status: code };
-  const refused = typeof code === "string" && !code.startsWith(NODE_ERROR_PREFIX);
-  const detail = typeof code === "string" ? code : describe(error2);
-  return { kind: refused ? "start" : "unclear", detail };
-}
-function reportedVersion(executable, timeout) {
-  const startedAt = Date.now();
-  return new Promise((resolve2) => {
-    execFile2(executable, ["--version"], { encoding: "utf-8", timeout, killSignal: "SIGKILL" }, (error2, stdout) => resolve2(error2 ? { ok: false, failure: failureKind(error2, Date.now() - startedAt) } : { ok: true, reported: stdout.trim() }));
-  });
-}
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/staging.js
-function keptLine(staged) {
-  return staged ? `
-The copy it tried to run is kept at ${staged} so you can run it yourself.` : "";
-}
-function worthRetrying(failure) {
-  return failure.kind === "stopped";
-}
-function worthKeeping(failure) {
-  return failure.kind !== "exit";
-}
-function whyTheVersionIsWrong(reported, expected) {
-  return `The downloaded binary reports version ${reported}, expected ${expected}.`;
-}
-function whyTheSignatureStoppedMatching(error2, staged) {
-  return `The downloaded binary no longer matches the signature we published (${describe(error2)}), so something altered the file after it landed here.${keptLine(staged)}`;
-}
-function whyTheVersionCheckFailed(failure, staged) {
-  switch (failure.kind) {
-    case "stopped":
-      return [
-        `The system killed the downloaded binary with ${failure.signal} before it could report its version, so something stopped the program rather than the program going wrong.`,
-        `Run ${KERNEL_LOG_COMMAND} to see what the system says about it, and nothing there means the kill came from somewhere else.${keptLine(staged)}`
-      ].join("\n");
-    case "crashed":
-      return `The downloaded binary crashed with ${failure.signal} before it could report its version, so the program itself failed rather than anything stopping it.${keptLine(staged)}`;
-    case "timeout":
-      return `The downloaded binary did not report its version, and gave up waiting after ${failure.seconds} seconds.${keptLine(staged)}`;
-    case "exit":
-      return `The downloaded binary exited with code ${failure.status} instead of reporting its version.`;
-    case "start":
-      return `The downloaded binary could not be started (${failure.detail}).${keptLine(staged)}`;
-    default:
-      return `The downloaded binary did not report its version (${failure.detail}).${keptLine(staged)}`;
-  }
-}
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/install-binary.js
-function installDirectory(target, home = homedir()) {
-  return join(home, target.installDirectoryName);
-}
-function installedBinaryPath(target, installDir) {
-  return join(installDir, target.executableName);
-}
-async function runningAsInstalledBinary(executablePath, installedPath) {
-  const [running, installed] = await Promise.all([
-    fs2.realpath(executablePath).catch(() => void 0),
-    fs2.realpath(installedPath).catch(() => void 0)
-  ]);
-  return running !== void 0 && running === installed;
-}
-async function stage({ target, installDir, version, options, fill, confirmVersion }) {
-  const now = (options.now ?? Date.now)();
-  const verifySignature = options.verifySignature ?? verifyAdHocSignature;
-  const pause = options.pause ?? ((milliseconds) => sleep(milliseconds));
-  await fs2.mkdir(installDir, { recursive: true, mode: 448 });
-  const temporary = join(installDir, `.${target.executableName}.${process.pid}.${now}.tmp`);
-  const rejected = join(installDir, `.${target.executableName}${REJECTED_FILE_SUFFIX}`);
-  const installed = installedBinaryPath(target, installDir);
-  const moveAsideForInspection = () => fs2.rename(temporary, rejected).then(() => rejected, () => void 0);
-  try {
-    await fill(temporary);
-    await fs2.chmod(temporary, 493);
-    await verifySignature(temporary);
-    if (confirmVersion) {
-      const spendBy = Date.now() + (options.versionCheckBudget ?? VERSION_CHECK_BUDGET_MS);
-      const left = () => spendBy - Date.now();
-      let check = await reportedVersion(temporary, left());
-      for (const wait of VERSION_CHECK_RETRY_PAUSES_MS) {
-        if (check.ok || !worthRetrying(check.failure))
-          break;
-        if (left() - wait < VERSION_CHECK_MINIMUM_ATTEMPT_MS)
-          break;
-        await pause(wait);
-        try {
-          await verifySignature(temporary);
-        } catch (error2) {
-          throw new Error(whyTheSignatureStoppedMatching(error2, await moveAsideForInspection()), {
-            cause: error2
-          });
-        }
-        check = await reportedVersion(temporary, left());
-      }
-      if (!check.ok) {
-        const staged = worthKeeping(check.failure) ? await moveAsideForInspection() : void 0;
-        throw new Error(whyTheVersionCheckFailed(check.failure, staged));
-      }
-      if (check.reported !== version) {
-        throw new Error(whyTheVersionIsWrong(check.reported, version));
-      }
-    }
-    await fs2.rename(temporary, installed);
-    await fs2.unlink(rejected).catch(() => void 0);
-    return installed;
-  } catch (error2) {
-    await fs2.unlink(temporary).catch(() => void 0);
-    throw error2;
-  }
-}
-function installRelease(release, installDir, query, options = {}) {
-  return stage({
-    target: query.target,
-    installDir,
-    version: release.version,
-    options,
-    fill: (temporary) => downloadAsset(release, temporary, query),
-    confirmVersion: true
-  });
-}
-function installRunningBinary(target, executablePath, installDir, version, options = {}) {
-  return stage({
-    target,
-    installDir,
-    version,
-    options,
-    fill: (temporary) => fs2.copyFile(executablePath, temporary),
-    confirmVersion: false
-  });
-}
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/update.js
-import { mkdir as mkdir2 } from "node:fs/promises";
-import { join as join2 } from "node:path";
-import { arch as osArch, platform as osPlatform } from "node:os";
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/version.js
-function parseVersion(version) {
-  const match = VERSION.exec(version.trim());
-  if (!match)
-    return void 0;
-  return {
-    numbers: [Number(match[1]), Number(match[2]), Number(match[3])],
-    final: match[4] === void 0 ? 1 : 0,
-    label: match[4] ?? "",
-    iteration: match[5] === void 0 ? 0 : Number(match[5])
-  };
-}
-function isVersion(version) {
-  return parseVersion(version) !== void 0;
-}
-function compare(next, installed) {
-  for (let index = 0; index < next.numbers.length; index += 1) {
-    const difference = next.numbers[index] - installed.numbers[index];
-    if (difference !== 0)
-      return difference;
-  }
-  if (next.final !== installed.final)
-    return next.final - installed.final;
-  if (next.label !== installed.label)
-    return next.label < installed.label ? -1 : 1;
-  return next.iteration - installed.iteration;
-}
-function isVersionNewer(candidate, current) {
-  const next = parseVersion(candidate);
-  const installed = parseVersion(current);
-  if (!next || !installed)
-    return false;
-  return compare(next, installed) > 0;
-}
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/releases.js
-function asAsset(value) {
-  if (!value || typeof value !== "object")
-    return void 0;
-  const asset = value;
-  if (typeof asset.name !== "string")
-    return void 0;
-  if (typeof asset.browser_download_url !== "string")
-    return void 0;
-  if (typeof asset.size !== "number")
-    return void 0;
-  if (asset.digest != null && typeof asset.digest !== "string")
-    return void 0;
-  return {
-    name: asset.name,
-    browser_download_url: asset.browser_download_url,
-    size: asset.size,
-    digest: typeof asset.digest === "string" ? asset.digest : null
-  };
-}
-function asInstallableRelease(value, target, platform, arch, allowPrerelease) {
-  if (!value || typeof value !== "object")
-    return void 0;
-  const release = value;
-  if (release.draft === true)
-    return void 0;
-  if (release.prerelease === true && !allowPrerelease)
-    return void 0;
-  if (typeof release.tag_name !== "string" || !Array.isArray(release.assets))
-    return void 0;
-  const version = release.tag_name.trim();
-  if (!isVersion(version))
-    return void 0;
-  const wanted = releaseAssetName(target, platform, arch, version);
-  const assets = release.assets.map(asAsset).filter((asset2) => asset2 !== void 0);
-  const asset = assets.find((candidate) => candidate.name === wanted);
-  if (!asset)
-    return void 0;
-  return {
-    version,
-    asset,
-    checksum: assets.find((candidate) => candidate.name === `${wanted}.sha256`)
-  };
-}
-function parseReleases(value, target, platform, arch, allowPrerelease = false) {
-  if (!Array.isArray(value))
-    throw new Error("GitHub returned no list of releases");
-  return value.map((entry) => asInstallableRelease(entry, target, platform, arch, allowPrerelease)).filter((release) => release !== void 0);
-}
-function newestRelease(releases, currentVersion) {
-  let newest;
-  for (const release of releases) {
-    if (!isVersionNewer(release.version, currentVersion))
-      continue;
-    if (!newest || isVersionNewer(release.version, newest.version))
-      newest = release;
-  }
-  return newest;
-}
-async function readJson(query, url, wanted) {
-  const response = await query.fetchImpl(url, {
-    headers: githubRequestHeaders(query.target, query.currentVersion),
-    signal: AbortSignal.timeout(LIST_TIMEOUT_MS)
-  });
-  if (!response.ok)
-    throw new Error(`failed to read ${wanted}: HTTP ${response.status}`);
-  return response.json();
-}
-async function fetchReleases(query) {
-  const url = listedReleasesUrl(query.releasesApi);
-  const listed = await readJson(query, url, "the GitHub releases");
-  return parseReleases(listed, query.target, query.platform, query.arch);
-}
-async function fetchTaggedRelease(query, tag) {
-  const url = taggedReleaseUrl(query.releasesApi, tag);
-  const tagged = await readJson(query, url, `the GitHub release tagged ${tag}`);
-  return parseReleases([tagged], query.target, query.platform, query.arch, true)[0];
-}
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/utils/lock.js
-import * as fs3 from "node:fs/promises";
-async function acquireLock(lockFile, now) {
-  try {
-    return await fs3.open(lockFile, "wx", 384);
-  } catch (error2) {
-    if (error2.code !== "EEXIST")
-      throw error2;
-  }
-  const abandoned = await fs3.stat(lockFile).then((stats) => now - stats.mtimeMs > ABANDONED_LOCK_MS, () => false);
-  if (!abandoned)
-    return void 0;
-  try {
-    await fs3.unlink(lockFile);
-    return await fs3.open(lockFile, "wx", 384);
-  } catch {
-    return void 0;
-  }
-}
-async function releaseLock(lockFile, lock) {
-  await lock.close().catch(() => void 0);
-  await fs3.unlink(lockFile).catch(() => void 0);
-}
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/update.js
-function releaseQuery(target, currentVersion, options) {
-  return {
-    target,
-    platform: options.runtimePlatform ?? osPlatform(),
-    arch: options.runtimeArch ?? osArch(),
-    currentVersion,
-    releasesApi: options.releasesApi ?? configuredReleasesApi(target, options.environment),
-    fetchImpl: options.fetchImpl ?? fetch
-  };
-}
-function stagingOptions(options) {
-  return {
-    verifySignature: options.verifySignature,
-    now: options.now,
-    pause: options.pause,
-    versionCheckBudget: options.versionCheckBudget
-  };
-}
-function resolveInstallDir(target, options) {
-  return options.installDir ?? installDirectory(target, options.home);
-}
-function requirePublishedTarget(target, platform, arch) {
-  if (!isPublishedTarget(target, platform, arch)) {
-    throw new Error(`the binary does not run on ${platform}-${arch}`);
-  }
-}
-async function updateFromGitHub(target, options) {
-  const query = releaseQuery(target, options.currentVersion, options);
-  if (!isPublishedTarget(target, query.platform, query.arch))
-    return { status: "unsupported" };
-  if (!isVersion(options.currentVersion))
-    return { status: "unsupported" };
-  const installDir = resolveInstallDir(target, options);
-  const lockFile = join2(installDir, LOCK_FILE_NAME);
-  const now = (options.now ?? Date.now)();
-  await mkdir2(installDir, { recursive: true, mode: 448 });
-  const lock = await acquireLock(lockFile, now);
-  if (!lock)
-    return { status: "busy" };
-  try {
-    const release = newestRelease(await fetchReleases(query), options.currentVersion);
-    if (!release)
-      return { status: "current" };
-    await installRelease(release, installDir, query, stagingOptions(options));
-    return { status: "updated", version: release.version };
-  } finally {
-    await releaseLock(lockFile, lock);
-  }
-}
-async function chooseRelease(query, tag) {
-  const release = tag ? await fetchTaggedRelease(query, tag) : newestRelease(await fetchReleases(query), OLDER_THAN_ANY_RELEASE);
-  if (!release) {
-    throw new Error(tag ? `no published release tagged ${tag} carries a ${query.platform}-${query.arch} binary` : `no published release carries a ${query.platform}-${query.arch} binary`);
-  }
-  return release;
-}
-async function installFromReleases(target, options = {}) {
-  const query = releaseQuery(target, options.currentVersion ?? OLDER_THAN_ANY_RELEASE, options);
-  requirePublishedTarget(target, query.platform, query.arch);
-  const release = await chooseRelease(query, options.tag);
-  const installDir = resolveInstallDir(target, options);
-  const path3 = await installRelease(release, installDir, query, stagingOptions(options));
-  return { path: path3, version: release.version };
-}
-async function installLocalCopy(target, executablePath, version, options = {}) {
-  const platform = options.runtimePlatform ?? osPlatform();
-  const arch = options.runtimeArch ?? osArch();
-  requirePublishedTarget(target, platform, arch);
-  const installDir = resolveInstallDir(target, options);
-  const path3 = await installRunningBinary(target, executablePath, installDir, version, stagingOptions(options));
-  return { path: path3, version };
-}
-
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_300ea6673d60d8e4915dd96c1ad16481/node_modules/@langchain/langsmith-plugin-binary/dist/binary.js
+// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_cf00253ffd542eaf34e58b247587e1b8/node_modules/@langchain/langsmith-plugin-binary/dist/binary.js
 function defineBinaryTarget(options) {
   const target = resolveTarget(options);
   return {
     target,
-    supportsHost: (platform = osPlatform2(), arch = osArch2()) => isPublishedTarget(target, platform, arch),
-    assetName: (platform, arch, version) => releaseAssetName(target, platform, arch, version),
-    installDirectory: (home) => installDirectory(target, home),
-    installedBinaryPath: (home) => installedBinaryPath(target, installDirectory(target, home)),
-    isInstalledBinary: (executablePath, home) => runningAsInstalledBinary(executablePath, installedBinaryPath(target, installDirectory(target, home))),
-    install: (installOptions = {}) => installFromReleases(target, installOptions),
-    installLocalCopy: (executablePath, version, hostOptions = {}) => installLocalCopy(target, executablePath, version, hostOptions),
-    update: (updateOptions) => updateFromGitHub(target, updateOptions)
+    supportsHost: (platform = osPlatform(), arch = osArch()) => isPublishedTarget(target, platform, arch),
+    assetName: (platform, arch, version) => releaseAssetName(target, platform, arch, version)
   };
 }
 
@@ -1191,10 +645,10 @@ var binary = defineBinaryTarget({
 });
 
 // dist/src/config.js
-import { readFileSync as readFileSync3 } from "node:fs";
+import { readFileSync as readFileSync2 } from "node:fs";
 
 // dist/src/shared-config.js
-import { lstatSync, readFileSync as readFileSync2, statSync } from "node:fs";
+import { lstatSync, readFileSync, statSync } from "node:fs";
 var COMMON_BOOLEAN_SETTINGS = {
   enabled: { default: false, restrictive: false },
   defaultMuted: { default: false, restrictive: true }
@@ -1320,7 +774,7 @@ function readCommonConfigFile(path3) {
     return invalid();
   }
   try {
-    return parseCommonConfig(JSON.parse(readFileSync2(path3, "utf8")));
+    return parseCommonConfig(JSON.parse(readFileSync(path3, "utf8")));
   } catch {
     return invalid();
   }
@@ -1358,8 +812,8 @@ function toSdkReplicas(replicas2) {
 }
 
 // dist/src/config.js
-import { homedir as homedir2, userInfo } from "node:os";
-import { join as join3 } from "node:path";
+import { homedir, userInfo } from "node:os";
+import { join } from "node:path";
 
 // dist/src/logger.js
 import { appendFileSync, mkdirSync, statSync as statSync2, renameSync } from "node:fs";
@@ -1417,9 +871,9 @@ function readAnthropicUserId() {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE;
   if (!homeDir)
     return void 0;
-  const configPath = join3(homeDir, ".claude.json");
+  const configPath = join(homeDir, ".claude.json");
   try {
-    const raw = readFileSync3(configPath, "utf-8");
+    const raw = readFileSync2(configPath, "utf-8");
     const parsed = JSON.parse(raw);
     const userId = parsed?.userID;
     if (typeof userId === "string" && userId.length > 0) {
@@ -1525,7 +979,7 @@ function envBoolean(field) {
 }
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
-  const homeDir = homedir2();
+  const homeDir = homedir();
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
   let replicas2;
@@ -1584,10 +1038,10 @@ function loadConfig(options) {
     }
   }
   const common = mergeCommonConfig({
-    harness: readCommonConfigFile(join3(cwd, ".claude", "langsmith.json")).common,
-    root: readCommonConfigFile(join3(cwd, "langsmith-plugins.json")).common,
-    user: homeDir ? readCommonConfigFile(join3(homeDir, ".claude", "langsmith.json")).common : void 0,
-    userRoot: homeDir ? readCommonConfigFile(join3(homeDir, ".langsmith-plugins.json")).common : void 0,
+    harness: readCommonConfigFile(join(cwd, ".claude", "langsmith.json")).common,
+    root: readCommonConfigFile(join(cwd, "langsmith-plugins.json")).common,
+    user: homeDir ? readCommonConfigFile(join(homeDir, ".claude", "langsmith.json")).common : void 0,
+    userRoot: homeDir ? readCommonConfigFile(join(homeDir, ".langsmith-plugins.json")).common : void 0,
     env: {
       enabled: envBoolean("enabled"),
       defaultMuted: envBoolean("defaultMuted"),
@@ -1666,208 +1120,6 @@ var HOOK_EVENT_NAMES = [
   "PostCompact",
   "SessionEnd"
 ];
-var OLDER_THAN_ANY_RELEASE2 = "0.0.0";
-var TRACING_PLUGIN_ID = "langsmith-tracing@langsmith-claude-code-plugins";
-var HAND_INSTALLED_BINARY_WARNING_EVENT = "Stop";
-var HAND_INSTALLED_BINARY_WARNING_MARKER_SUFFIX = ".warned";
-var HAND_INSTALLED_BINARY_WARNING = "LangSmith tracing: the hand-installed binary at %s is still registered in settings.json, so it is doing the tracing and the plugin is standing aside. Delete that file and drop its hooks to let the plugin take over. You only see this once.";
-
-// dist/src/installer.js
-import { arch as osArch3, homedir as homedir3, platform as osPlatform3 } from "node:os";
-import { dirname as dirname3, join as join5 } from "node:path";
-
-// dist/src/utils/binary-runtime.js
-var COMPILED_ROOT = "/$bunfs/";
-function runningCompiledBinary() {
-  const main10 = globalThis.Bun?.main;
-  return typeof main10 === "string" && main10.startsWith(COMPILED_ROOT);
-}
-
-// dist/src/utils/paths.js
-import { realpathSync } from "node:fs";
-function isTheSameFile(one, other) {
-  try {
-    return realpathSync(one) === realpathSync(other);
-  } catch {
-    return one === other;
-  }
-}
-function underHome(path3, home) {
-  if (path3 === home)
-    return "~";
-  return path3.startsWith(`${home}/`) ? `~/${path3.slice(home.length + 1)}` : path3;
-}
-
-// dist/src/utils/settings.js
-import { existsSync, readFileSync as readFileSync4 } from "node:fs";
-import * as fs4 from "node:fs/promises";
-import { basename as basename2, dirname as dirname2, join as join4 } from "node:path";
-function userSettingsPath(home) {
-  return join4(home, ".claude", "settings.json");
-}
-function projectSettingsPath(cwd) {
-  return join4(cwd, ".claude", "settings.json");
-}
-async function readSettings(path3) {
-  return fs4.readFile(path3, "utf-8").then((text) => JSON.parse(text), () => ({}));
-}
-function readSettingsSync(path3) {
-  if (!existsSync(path3))
-    return {};
-  return JSON.parse(readFileSync4(path3, "utf-8"));
-}
-async function writeSettings(path3, contents) {
-  await fs4.mkdir(dirname2(path3), { recursive: true });
-  const mode = await fs4.stat(path3).then((stats) => stats.mode & 511, () => 384);
-  const temporary = join4(dirname2(path3), `.${basename2(path3)}.${process.pid}.${Date.now()}.tmp`);
-  try {
-    await fs4.writeFile(temporary, contents, { mode: 384 });
-    await fs4.chmod(temporary, mode);
-    await fs4.rename(temporary, path3);
-  } catch (err) {
-    await fs4.unlink(temporary).catch(() => void 0);
-    throw err;
-  }
-}
-
-// dist/src/installer.js
-function mergeHooks(existing, manifest) {
-  const merged = { ...existing.hooks };
-  for (const [event2, groups] of Object.entries(manifest)) {
-    const current = Array.isArray(merged[event2]) ? merged[event2] : [];
-    const present = new Set(current.flatMap((group) => (group?.hooks ?? []).map((hook) => hook?.command)));
-    merged[event2] = [
-      ...current,
-      ...groups.filter((group) => (group.hooks ?? []).every((hook) => !present.has(hook.command)))
-    ];
-  }
-  return { ...existing, hooks: merged };
-}
-function compiledHooksManifest() {
-  const compiled = false ? void 0 : '{\n  "description": "LangSmith tracing hooks, run by the standalone binary instead of Node. Traces Claude Code sessions, tool calls, and subagents to LangSmith",\n  "hooks": {\n    "UserPromptSubmit": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" UserPromptSubmit",\n            "timeout": 30\n          }\n        ]\n      }\n    ],\n    "PreToolUse": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" PreToolUse",\n            "timeout": 10\n          }\n        ]\n      }\n    ],\n    "PostToolUse": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" PostToolUse",\n            "timeout": 30,\n            "async": true\n          }\n        ]\n      }\n    ],\n    "Stop": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" Stop",\n            "timeout": 120\n          }\n        ]\n      }\n    ],\n    "StopFailure": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" StopFailure",\n            "timeout": 30\n          }\n        ]\n      }\n    ],\n    "SubagentStop": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" SubagentStop",\n            "timeout": 60,\n            "async": true\n          }\n        ]\n      }\n    ],\n    "PreCompact": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" PreCompact",\n            "timeout": 10\n          }\n        ]\n      }\n    ],\n    "PostCompact": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" PostCompact",\n            "timeout": 30,\n            "async": true\n          }\n        ]\n      }\n    ],\n    "SessionEnd": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "\\"${HOME}/.langsmith/langsmith-claude-code-tracing\\" SessionEnd",\n            "timeout": 10\n          }\n        ]\n      }\n    ]\n  }\n}\n';
-  const hooks = compiled ? JSON.parse(compiled).hooks : void 0;
-  if (!hooks || typeof hooks !== "object" || Array.isArray(hooks)) {
-    throw new Error("this build carries no hooks manifest");
-  }
-  return hooks;
-}
-function hookCount(manifest) {
-  return Object.values(manifest).reduce((total, groups) => total + groups.reduce((inGroups, group) => inGroups + (group.hooks ?? []).length, 0), 0);
-}
-function requestedTag(args) {
-  const index = args.indexOf("--tag");
-  if (index === -1)
-    return void 0;
-  const tag = args[index + 1];
-  if (!tag || tag.startsWith("-")) {
-    throw new Error("--tag needs a release tag, for example --tag 0.4.0");
-  }
-  return tag;
-}
-async function tracingPluginIsEnabled(home) {
-  try {
-    const { enabledPlugins } = await readSettings(userSettingsPath(home));
-    return enabledPlugins?.[TRACING_PLUGIN_ID] === true;
-  } catch {
-    return false;
-  }
-}
-async function install(options = {}) {
-  const args = options.args ?? [];
-  const tag = requestedTag(args);
-  const platform = options.runtimePlatform ?? osPlatform3();
-  const arch = options.runtimeArch ?? osArch3();
-  if (!binary.supportsHost(platform, arch)) {
-    throw new Error(`no binary is published for ${platform}-${arch}. Install the Node plugin with '/plugin install ${TRACING_PLUGIN_ID}' instead`);
-  }
-  const home = options.home ?? homedir3();
-  const settingsPath = args.includes("--project") ? projectSettingsPath(options.cwd ?? process.cwd()) : userSettingsPath(home);
-  const manifest = options.hooksManifest ?? compiledHooksManifest();
-  const merged = mergeHooks(await readSettings(settingsPath), manifest);
-  const settings = `${JSON.stringify(merged, null, 2)}
-`;
-  const out = options.out ?? console.log;
-  if (args.includes("--print")) {
-    out(settings.trimEnd());
-    return settingsPath;
-  }
-  const currentVersion = options.currentVersion ?? LS_INTEGRATION_VERSION ?? OLDER_THAN_ANY_RELEASE2;
-  const executablePath = options.executablePath ?? process.execPath;
-  const copyable = !tag && (options.compiledBinary ?? runningCompiledBinary());
-  const host = {
-    fetchImpl: options.fetchImpl,
-    home,
-    releasesApi: options.releasesApi,
-    runtimeArch: arch,
-    runtimePlatform: platform,
-    verifySignature: options.verifySignature
-  };
-  const installed = copyable ? await binary.installLocalCopy(executablePath, currentVersion, host) : await binary.install({ ...host, currentVersion, tag });
-  await writeSettings(settingsPath, settings);
-  const configPath = join5(dirname3(settingsPath), "langsmith.json");
-  for (const line of [
-    `Installed ${binary.target.executableName} ${installed.version} to ${underHome(dirname3(installed.path), home)}`,
-    `Registered ${hookCount(manifest)} hooks in ${underHome(settingsPath, home)}`,
-    "",
-    "Next:",
-    `  1. Create ${underHome(configPath, home)} (if it doesn't exist already):`,
-    `       {"enabled": true, "api_key": "<your-api-key>", "project": "my-project"}`,
-    "  2. Restart Claude Code"
-  ]) {
-    out(line);
-  }
-  if (await tracingPluginIsEnabled(home)) {
-    for (const line of [
-      "",
-      "You have LangSmith tracing installed two ways: through the Claude Code",
-      "marketplace and as this standalone binary. The binary handles tracing",
-      "from now on and the marketplace copy goes quiet by itself. Removing it",
-      "saves a process on each hook and will not affect the binary:",
-      "",
-      `  claude plugin uninstall ${TRACING_PLUGIN_ID}`
-    ]) {
-      out(line);
-    }
-  }
-  return settingsPath;
-}
-async function runInstall(args) {
-  try {
-    await install({ args });
-  } catch (err) {
-    console.error(`Install failed: ${err instanceof Error ? err.message : err}`);
-    process.exitCode = 1;
-  }
-}
-
-// dist/src/updater.js
-async function updateFromGitHub2(options = {}) {
-  const currentVersion = options.currentVersion ?? LS_INTEGRATION_VERSION ?? "";
-  const executablePath = options.executablePath ?? process.execPath;
-  if (!await binary.isInstalledBinary(executablePath, options.home)) {
-    debug(`Skipping the update check outside the install path: ${executablePath}`);
-    return { status: "not-installed" };
-  }
-  return binary.update({
-    currentVersion,
-    fetchImpl: options.fetchImpl,
-    home: options.home,
-    releasesApi: options.releasesApi,
-    runtimeArch: options.runtimeArch,
-    runtimePlatform: options.runtimePlatform,
-    verifySignature: options.verifySignature
-  });
-}
-async function runUpdateCheck() {
-  try {
-    const result = await updateFromGitHub2();
-    log(`Update check: ${result.status}${result.status === "updated" ? ` (${result.version})` : ""}`);
-    return result;
-  } catch (err) {
-    warn(`Update check failed: ${err}`);
-    return void 0;
-  }
-}
 
 // dist/src/utils/hook-entry.js
 function runHookEntry(event2, main10) {
@@ -1880,99 +1132,11 @@ function runHookEntry(event2, main10) {
   });
 }
 
-// dist/src/utils/stdin.js
-var DRAIN_TIMEOUT_MS = 2e3;
-function drainStdinToAvoidEpipe(timeoutMs = DRAIN_TIMEOUT_MS) {
-  return new Promise((resolve2) => {
-    if (process.stdin.isTTY)
-      return resolve2();
-    let timer;
-    const finish = () => {
-      clearTimeout(timer);
-      process.stdin.pause();
-      resolve2();
-    };
-    timer = setTimeout(finish, timeoutMs);
-    process.stdin.once("end", finish);
-    process.stdin.once("error", finish);
-    process.stdin.resume();
-  });
-}
-function readStdin() {
-  return new Promise((resolve2, reject) => {
-    let data = "";
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => data += chunk);
-    process.stdin.on("end", () => {
-      try {
-        resolve2(JSON.parse(data));
-      } catch (err) {
-        reject(new Error(`Failed to parse hook input: ${err}`));
-      }
-    });
-    process.stdin.on("error", reject);
-  });
-}
-
-// dist/src/hooks/hand-installed-binary.js
-import { rmSync, writeFileSync } from "node:fs";
-import { homedir as homedir5 } from "node:os";
-
-// dist/src/hooks/stand-down.js
-import { existsSync as existsSync2 } from "node:fs";
-import { homedir as homedir4 } from "node:os";
-var REGISTERED_COMMAND = `/${binary.target.installDirectoryName}/${binary.target.executableName}`;
-function runningTheInstalledBinary(home = homedir4()) {
-  return isTheSameFile(process.execPath, binary.installedBinaryPath(home));
-}
-function binaryOwnsAnyHook(home = homedir4(), cwd = process.cwd()) {
-  try {
-    if (!existsSync2(binary.installedBinaryPath(home)))
-      return false;
-    return [userSettingsPath(home), projectSettingsPath(cwd)].some(registersTheBinary);
-  } catch {
-    return false;
-  }
-}
-function pluginShouldStandDown(home = homedir4(), cwd = process.cwd()) {
-  if (runningTheInstalledBinary(home))
-    return false;
-  return binaryOwnsAnyHook(home, cwd);
-}
-function registersTheBinary(settingsPath) {
-  try {
-    const settings = readSettingsSync(settingsPath);
-    return Object.values(settings.hooks ?? {}).some((groups) => groups.some((group) => group?.hooks?.some((hook) => hook?.command?.includes(REGISTERED_COMMAND))));
-  } catch {
-    return false;
-  }
-}
-
-// dist/src/hooks/hand-installed-binary.js
-function warnAboutHandInstalledBinary(event2, out = console.log, home = homedir5()) {
-  try {
-    if (event2 !== HAND_INSTALLED_BINARY_WARNING_EVENT)
-      return;
-    if (runningTheInstalledBinary(home))
-      return;
-    const path3 = binary.installedBinaryPath(home);
-    const marker = `${path3}${HAND_INSTALLED_BINARY_WARNING_MARKER_SUFFIX}`;
-    if (!binaryOwnsAnyHook(home)) {
-      rmSync(marker, { force: true });
-      return;
-    }
-    writeFileSync(marker, "", { flag: "wx" });
-    out(JSON.stringify({ systemMessage: HAND_INSTALLED_BINARY_WARNING.replace("%s", path3) }));
-  } catch {
-    return;
-  }
-}
-
 // dist/src/tracing-policy.js
 import { randomUUID } from "node:crypto";
-import { lstatSync as lstatSync2, readFileSync as readFileSync5 } from "node:fs";
-import { mkdir as mkdir4, open as open3, rename as rename3, rmdir, unlink as unlink4 } from "node:fs/promises";
-import { dirname as dirname4 } from "node:path";
+import { lstatSync as lstatSync2, readFileSync as readFileSync3 } from "node:fs";
+import { mkdir, open, rename, rmdir, unlink } from "node:fs/promises";
+import { dirname as dirname2 } from "node:path";
 import { performance as performance2 } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 function isMode(value) {
@@ -1987,7 +1151,7 @@ function hasCode(error2, code) {
 function readPolicy(path3) {
   let raw;
   try {
-    raw = readFileSync5(path3, "utf8");
+    raw = readFileSync3(path3, "utf8");
   } catch (error2) {
     if (hasCode(error2, "ENOENT")) {
       try {
@@ -2034,12 +1198,12 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
   }
   const path3 = tracingPolicyPath(stateFilePath);
   const lockPath2 = `${path3}.lock`;
-  await mkdir4(dirname4(path3), { recursive: true });
+  await mkdir(dirname2(path3), { recursive: true });
   const deadline = performance2.now() + 2e3;
   let locked = false;
   while (!locked) {
     try {
-      await mkdir4(lockPath2, { mode: 448 });
+      await mkdir(lockPath2, { mode: 448 });
       locked = true;
     } catch (error2) {
       if (!hasCode(error2, "EEXIST"))
@@ -2068,7 +1232,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     }
     policy.threads = { ...policy.threads, [sessionId]: mode };
     tempPath = `${path3}.${process.pid}.${randomUUID()}.tmp`;
-    const temp = await open3(tempPath, "wx", 384);
+    const temp = await open(tempPath, "wx", 384);
     try {
       await temp.writeFile(`${JSON.stringify(policy)}
 `, "utf8");
@@ -2078,10 +1242,10 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
       throw error2;
     }
     await temp.close();
-    await rename3(tempPath, path3);
+    await rename(tempPath, path3);
     tempPath = void 0;
     await bestEffort(async () => {
-      const directory = await open3(dirname4(path3), "r");
+      const directory = await open(dirname2(path3), "r");
       try {
         await directory.sync();
       } finally {
@@ -2090,7 +1254,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     }, "Preference is effective, but crash durability could not be confirmed; retry saving");
   } finally {
     if (tempPath) {
-      await bestEffort(() => unlink4(tempPath), "Temporary file cleanup failed");
+      await bestEffort(() => unlink(tempPath), "Temporary file cleanup failed");
     }
     await bestEffort(() => rmdir(lockPath2), `Preference lock cleanup failed at ${lockPath2}. Before retrying, remove the lock only after confirming no preference writer is running`);
   }
@@ -3163,7 +2327,7 @@ async function onAttemptFailure({ error: error2, attemptNumber, retriesConsumed,
   const delayTime = calculateDelay(retriesConsumed, options);
   const finalDelay = Math.min(delayTime, remainingTime);
   if (finalDelay > 0) {
-    await new Promise((resolve2, reject) => {
+    await new Promise((resolve, reject) => {
       const onAbort = () => {
         clearTimeout(timeoutToken);
         options.signal?.removeEventListener("abort", onAbort);
@@ -3171,7 +2335,7 @@ async function onAttemptFailure({ error: error2, attemptNumber, retriesConsumed,
       };
       const timeoutToken = setTimeout(() => {
         options.signal?.removeEventListener("abort", onAbort);
-        resolve2();
+        resolve();
       }, finalDelay);
       if (options.unref) {
         timeoutToken.unref?.();
@@ -3581,10 +2745,10 @@ var safeJSON = (text) => {
 };
 
 // node_modules/.pnpm/langsmith@0.10.5/node_modules/langsmith/dist/_openapi_client/internal/utils/sleep.js
-var sleep2 = (ms) => new Promise((resolve2) => setTimeout(resolve2, ms));
+var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // node_modules/.pnpm/langsmith@0.10.5/node_modules/langsmith/dist/_openapi_client/version.js
-var VERSION2 = "0.0.1";
+var VERSION = "0.0.1";
 
 // node_modules/.pnpm/langsmith@0.10.5/node_modules/langsmith/dist/_openapi_client/internal/detect-platform.js
 function getDetectedPlatform() {
@@ -3604,7 +2768,7 @@ var getPlatformProperties = () => {
   if (detectedPlatform === "deno") {
     return {
       "X-Stainless-Lang": "js",
-      "X-Stainless-Package-Version": VERSION2,
+      "X-Stainless-Package-Version": VERSION,
       "X-Stainless-OS": normalizePlatform(Deno.build.os),
       "X-Stainless-Arch": normalizeArch(Deno.build.arch),
       "X-Stainless-Runtime": "deno",
@@ -3614,7 +2778,7 @@ var getPlatformProperties = () => {
   if (typeof EdgeRuntime !== "undefined") {
     return {
       "X-Stainless-Lang": "js",
-      "X-Stainless-Package-Version": VERSION2,
+      "X-Stainless-Package-Version": VERSION,
       "X-Stainless-OS": "Unknown",
       "X-Stainless-Arch": `other:${EdgeRuntime}`,
       "X-Stainless-Runtime": "edge",
@@ -3624,7 +2788,7 @@ var getPlatformProperties = () => {
   if (detectedPlatform === "node") {
     return {
       "X-Stainless-Lang": "js",
-      "X-Stainless-Package-Version": VERSION2,
+      "X-Stainless-Package-Version": VERSION,
       "X-Stainless-OS": normalizePlatform(globalThis.process.platform ?? "unknown"),
       "X-Stainless-Arch": normalizeArch(globalThis.process.arch ?? "unknown"),
       "X-Stainless-Runtime": "node",
@@ -3635,7 +2799,7 @@ var getPlatformProperties = () => {
   if (browserInfo) {
     return {
       "X-Stainless-Lang": "js",
-      "X-Stainless-Package-Version": VERSION2,
+      "X-Stainless-Package-Version": VERSION,
       "X-Stainless-OS": "Unknown",
       "X-Stainless-Arch": "unknown",
       "X-Stainless-Runtime": `browser:${browserInfo.browser}`,
@@ -3644,7 +2808,7 @@ var getPlatformProperties = () => {
   }
   return {
     "X-Stainless-Lang": "js",
-    "X-Stainless-Package-Version": VERSION2,
+    "X-Stainless-Package-Version": VERSION,
     "X-Stainless-OS": "Unknown",
     "X-Stainless-Arch": "unknown",
     "X-Stainless-Runtime": "unknown",
@@ -4260,8 +3424,8 @@ var __classPrivateFieldGet = function(receiver, state, kind, f2) {
 var _APIPromise_client;
 var APIPromise = class _APIPromise extends Promise {
   constructor(client2, responsePromise, parseResponse = defaultParseResponse) {
-    super((resolve2) => {
-      resolve2(null);
+    super((resolve) => {
+      resolve(null);
     });
     Object.defineProperty(this, "responsePromise", {
       enumerable: true,
@@ -5937,7 +5101,7 @@ var Langsmith = class {
     return stringifyQuery(query);
   }
   getUserAgent() {
-    return `${this.constructor.name}/JS ${VERSION2}`;
+    return `${this.constructor.name}/JS ${VERSION}`;
   }
   defaultIdempotencyKey() {
     return `stainless-node-retry-${uuid4()}`;
@@ -6158,7 +5322,7 @@ var Langsmith = class {
       const maxRetries = options.maxRetries ?? this.maxRetries;
       timeoutMillis = this.calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries);
     }
-    await sleep2(timeoutMillis);
+    await sleep(timeoutMillis);
     return this.makeRequest(options, retriesRemaining - 1, requestLogID);
   }
   calculateDefaultRetryTimeoutMillis(retriesRemaining, maxRetries) {
@@ -6856,7 +6020,7 @@ import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 var path2 = nodePath;
-async function mkdir6(dir) {
+async function mkdir3(dir) {
   await nodeFsPromises.mkdir(dir, { recursive: true });
 }
 async function writeFileAtomic(filePath, content) {
@@ -6870,16 +6034,16 @@ async function writeFileAtomic(filePath, content) {
 async function readdir2(dir) {
   return nodeFsPromises.readdir(dir);
 }
-async function stat4(filePath) {
+async function stat2(filePath) {
   return nodeFsPromises.stat(filePath);
 }
-function existsSync4(p) {
+function existsSync2(p) {
   return nodeFs.existsSync(p);
 }
 function mkdirSync3(dir) {
   nodeFs.mkdirSync(dir, { recursive: true });
 }
-function writeFileSync3(filePath, content) {
+function writeFileSync2(filePath, content) {
   nodeFs.writeFileSync(filePath, content);
 }
 function renameSync3(oldPath, newPath) {
@@ -6888,7 +6052,7 @@ function renameSync3(oldPath, newPath) {
 function unlinkSync2(filePath) {
   nodeFs.unlinkSync(filePath);
 }
-function readFileSync7(filePath) {
+function readFileSync5(filePath) {
   return nodeFs.readFileSync(filePath, "utf-8");
 }
 async function mkdirExclusive(dir) {
@@ -7069,15 +6233,15 @@ var PromptCache = class {
       entries[key] = entry.value;
     }
     const dir = path2.dirname(filePath);
-    if (!existsSync4(dir)) {
+    if (!existsSync2(dir)) {
       mkdirSync3(dir);
     }
     const tempPath = `${filePath}.tmp`;
     try {
-      writeFileSync3(tempPath, JSON.stringify({ entries }, null, 2));
+      writeFileSync2(tempPath, JSON.stringify({ entries }, null, 2));
       renameSync3(tempPath, filePath);
     } catch (e) {
-      if (existsSync4(tempPath)) {
+      if (existsSync2(tempPath)) {
         unlinkSync2(tempPath);
       }
       throw e;
@@ -7091,12 +6255,12 @@ var PromptCache = class {
    * @returns Number of entries loaded.
    */
   load(filePath) {
-    if (!existsSync4(filePath)) {
+    if (!existsSync2(filePath)) {
       return 0;
     }
     let entries;
     try {
-      const content = readFileSync7(filePath);
+      const content = readFileSync5(filePath);
       const data = JSON.parse(content);
       entries = data.entries ?? null;
     } catch {
@@ -7208,15 +6372,15 @@ var _getFetchImplementation = (debug2) => {
 var LOCK_POLL_INTERVAL_MS = 10;
 var LOCK_STALE_AFTER_MS = 1e4;
 var LOCK_METADATA_FILE = "created_at";
-function sleep3(ms) {
-  return new Promise((resolve2) => setTimeout(resolve2, ms));
+function sleep2(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 function isEEXIST(err) {
   return typeof err === "object" && err !== null && err.code === "EEXIST";
 }
 function lockMetadataLines(lockDir) {
   try {
-    return readFileSync7(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
+    return readFileSync5(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
   } catch {
     return void 0;
   }
@@ -7250,7 +6414,7 @@ async function acquireOAuthRefreshLock(configPath, deadline) {
   const lockDir = `${configPath}.oauth.lock.lock`;
   const parent = path2.dirname(lockDir);
   if (parent) {
-    await mkdir6(parent);
+    await mkdir3(parent);
   }
   const owner = globalThis.crypto.randomUUID();
   for (; ; ) {
@@ -7264,7 +6428,7 @@ async function acquireOAuthRefreshLock(configPath, deadline) {
         if (Date.now() >= deadline) {
           throw new Error("timed out acquiring OAuth refresh lock");
         }
-        await sleep3(Math.min(LOCK_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())));
+        await sleep2(Math.min(LOCK_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())));
       }
       continue;
     }
@@ -7327,11 +6491,11 @@ function loadProfileState() {
     return void 0;
   }
   const configPath = getProfileConfigPath();
-  if (!configPath || !existsSync4(configPath)) {
+  if (!configPath || !existsSync2(configPath)) {
     return void 0;
   }
   try {
-    const config = JSON.parse(readFileSync7(configPath));
+    const config = JSON.parse(readFileSync5(configPath));
     const profileName = resolveProfileName(config);
     const profile = profileName ? config.profiles?.[profileName] : void 0;
     if (!profileName || !profile) {
@@ -7561,7 +6725,7 @@ var ProfileAuth = class {
   }
   reloadProfile() {
     try {
-      const config = JSON.parse(readFileSync7(this.state.configPath));
+      const config = JSON.parse(readFileSync5(this.state.configPath));
       const profile = config.profiles?.[this.state.profileName];
       if (!profile) {
         return void 0;
@@ -8145,8 +7309,8 @@ var SerializeWorker = class {
     if (!ok)
       return null;
     const id = this.nextId++;
-    return new Promise((resolve2, reject) => {
-      this.pending.set(id, { resolve: resolve2, reject });
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
       try {
         this.worker.postMessage({ id, op: "serialize", payload });
       } catch (e) {
@@ -8303,7 +7467,7 @@ var handle429 = async (response) => {
   if (response?.status === 429) {
     const retryAfter = parseInt(response.headers.get("retry-after") ?? "10", 10) * 1e3;
     if (retryAfter > 0) {
-      await new Promise((resolve2) => setTimeout(resolve2, retryAfter));
+      await new Promise((resolve) => setTimeout(resolve, retryAfter));
       return true;
     }
   }
@@ -8402,8 +7566,8 @@ var AutoBatchQueue = class {
   }
   push(item) {
     let itemPromiseResolve;
-    const itemPromise = new Promise((resolve2) => {
-      itemPromiseResolve = resolve2;
+    const itemPromise = new Promise((resolve) => {
+      itemPromiseResolve = resolve;
     });
     const size = estimateSerializedSize(item.item).size;
     if (this.sizeBytes + size > this.maxSizeBytes && this.items.length > 0) {
@@ -9488,7 +8652,7 @@ var Client = class _Client {
       const filename = `trace_${Date.now()}_${v4_default().slice(0, 8)}.json`;
       const filepath = path2.join(directory, filename);
       if (!_Client._fallbackDirsCreated.has(directory)) {
-        await mkdir6(directory);
+        await mkdir3(directory);
         _Client._fallbackDirsCreated.add(directory);
       }
       if (maxBytes !== void 0 && maxBytes > 0) {
@@ -9497,7 +8661,7 @@ var Client = class _Client {
           const traceFiles = entries.filter((f2) => f2.startsWith("trace_") && f2.endsWith(".json"));
           let total = 0;
           for (const name of traceFiles) {
-            const { size } = await stat4(path2.join(directory, name));
+            const { size } = await stat2(path2.join(directory, name));
             total += size;
           }
           if (total >= maxBytes) {
@@ -13407,7 +12571,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       console.warn("[WARNING]: When tracing in manual flush mode, you must call `await client.flush()` manually to submit trace batches.");
       return Promise.resolve();
     }
-    await new Promise((resolve2) => setTimeout(resolve2, 1));
+    await new Promise((resolve) => setTimeout(resolve, 1));
     while (this._pendingDrains.size > 0) {
       await Promise.all([...this._pendingDrains]);
     }
@@ -14673,7 +13837,7 @@ function createSecretAnonymizer(options) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync8, statSync as statSync4, fstatSync, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync as readFileSync6, statSync as statSync4, fstatSync, openSync, readSync, closeSync } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
   let size;
@@ -14683,7 +13847,7 @@ function readTranscript(filePath, afterLine = -1) {
     return { messages: [], lastLine: afterLine };
   }
   if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync8(filePath, "utf-8");
+    const raw = readFileSync6(filePath, "utf-8");
     const lines = raw.split("\n").filter((l) => l.trim() !== "");
     const messages = [];
     let lastLine = afterLine;
@@ -14749,7 +13913,7 @@ function getTranscriptEndLine(filePath) {
     if (size === 0)
       return -1;
     if (size <= MAX_FULL_READ_BYTES) {
-      const raw = readFileSync8(filePath, "utf-8");
+      const raw = readFileSync6(filePath, "utf-8");
       const lines = raw.split("\n").filter((l) => l.trim() !== "");
       return lines.length > 0 ? lines.length - 1 : -1;
     }
@@ -14977,27 +14141,27 @@ function groupIntoTurns(messages) {
 }
 
 // dist/src/state.js
-import { readFileSync as readFileSync9, writeFileSync as writeFileSync4, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
-import { dirname as dirname5 } from "node:path";
+import { readFileSync as readFileSync7, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
+import { dirname as dirname3 } from "node:path";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
 function lockPath(stateFilePath) {
   return `${stateFilePath}.lock`;
 }
-function sleep4(ms) {
-  return new Promise((resolve2) => setTimeout(resolve2, ms));
+function sleep3(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
-async function acquireLock2(stateFilePath) {
+async function acquireLock(stateFilePath) {
   const lock = lockPath(stateFilePath);
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync4(dirname5(stateFilePath), { recursive: true });
+  mkdirSync4(dirname3(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
       const fd = openSync2(lock, "wx");
       closeSync2(fd);
       return;
     } catch {
-      await sleep4(LOCK_RETRY_MS);
+      await sleep3(LOCK_RETRY_MS);
     }
   }
   try {
@@ -15005,24 +14169,24 @@ async function acquireLock2(stateFilePath) {
   } catch {
   }
 }
-function releaseLock2(stateFilePath) {
+function releaseLock(stateFilePath) {
   try {
     unlinkSync3(lockPath(stateFilePath));
   } catch {
   }
 }
 async function atomicUpdateState(stateFilePath, fn) {
-  await acquireLock2(stateFilePath);
+  await acquireLock(stateFilePath);
   try {
     const state = loadState(stateFilePath);
-    writeFileSync4(stateFilePath, JSON.stringify(fn(state), null, 2));
+    writeFileSync3(stateFilePath, JSON.stringify(fn(state), null, 2));
   } finally {
-    releaseLock2(stateFilePath);
+    releaseLock(stateFilePath);
   }
 }
 function loadState(stateFilePath) {
   try {
-    const raw = readFileSync9(stateFilePath, "utf-8");
+    const raw = readFileSync7(stateFilePath, "utf-8");
     return JSON.parse(raw);
   } catch {
     return {};
@@ -15949,6 +15113,23 @@ function initHook(cwd) {
 }
 function expandHome(path3) {
   return path3?.replace(/^~/, process.env.HOME ?? "");
+}
+
+// dist/src/utils/stdin.js
+function readStdin() {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    process.stdin.setEncoding("utf-8");
+    process.stdin.on("data", (chunk) => data += chunk);
+    process.stdin.on("end", () => {
+      try {
+        resolve(JSON.parse(data));
+      } catch (err) {
+        reject(new Error(`Failed to parse hook input: ${err}`));
+      }
+    });
+    process.stdin.on("error", reject);
+  });
 }
 
 // dist/src/hooks/post-compact.js
@@ -17263,35 +16444,19 @@ var HOOK_HANDLERS = {
 var EXECUTABLE_NAME = binary.target.executableName;
 var USAGE = `Usage:
   ${EXECUTABLE_NAME} <HookEventName>
-  ${EXECUTABLE_NAME} --install [--print] [--project] [--tag VERSION]
-  ${EXECUTABLE_NAME} --update
   ${EXECUTABLE_NAME} --version
 
 Options:
   --help, -h     Show this help and exit
-  --version, -v  Print the installed version and exit
-  --install      Install this binary and add the hooks to settings.json
-  --print        With --install, print the merged settings and change nothing
-  --project      Use .claude/settings.json in the current directory
-  --tag VERSION  Install a published release instead of this binary
-  --update       Replace the installed binary with the newest release`;
+  --version, -v  Print the installed version and exit`;
 var argument = process.argv[2];
 var event = HOOK_EVENT_NAMES.find((name) => name === argument);
 if (argument === "--help" || argument === "-h") {
   console.log(USAGE);
 } else if (argument === "--version" || argument === "-v") {
   console.log(LS_INTEGRATION_VERSION ?? "development");
-} else if (argument === "--install") {
-  void runInstall(process.argv.slice(3));
-} else if (argument === "--update") {
-  initLogger(false);
-  void runUpdateCheck();
 } else if (event) {
-  warnAboutHandInstalledBinary(event);
-  if (pluginShouldStandDown())
-    void drainStdinToAvoidEpipe();
-  else
-    void runHookEntry(event, HOOK_HANDLERS[event]);
+  void runHookEntry(event, HOOK_HANDLERS[event]);
 } else if (argument?.startsWith("-")) {
   console.error(`unknown option: ${argument}`);
   console.error(USAGE);

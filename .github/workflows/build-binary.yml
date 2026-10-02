@@ -10,7 +10,6 @@ on:
       - .github/workflows/build-binary.yml
       - binary.config.json
       - hooks/hooks.binary.json
-      - install.sh
       - macos-entitlements.plist
       - package.json
       - pnpm-lock.yaml
@@ -18,11 +17,6 @@ on:
       - src/constants.ts
       - src/hooks/dispatch.binary.test.ts
       - src/hooks/dispatch.ts
-      - src/hooks/hand-installed-binary.ts
-      - src/hooks/stand-down.ts
-      - src/installer.binary.test.ts
-      - src/installer.ts
-      - src/updater.ts
       - src/utils/binary-runtime.test.ts
       - src/utils/binary-runtime.ts
       - src/utils/paths.ts
@@ -33,12 +27,10 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: langchain-ai/langsmith-plugin-binary/.github/workflows/build-binary.yml@10d9b1acab7cd4fbbca96475e8374192b9a93323 # v0.2.1
+    uses: langchain-ai/langsmith-plugin-binary/.github/workflows/build-binary.yml@0f168bab262fc1609d1cee1ed252732c529d876d # main
     secrets:
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
       APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
       CSC_LINK: ${{ secrets.CSC_LINK }}
-    with:
-      beta-branch: ejaimez/beta-0.4.0
