@@ -62,7 +62,7 @@ if event="$(mktemp "${TMPDIR:-/tmp}/langsmith-event.XXXXXX" 2>/dev/null)"; then
   child=""
   exec 4<&-
 else
-  exec "$first" "$@"
+  exec node "$root/bundle/dispatch.js" "$@"
 fi
 
 for candidate in "$preferred" "$alternate"; do

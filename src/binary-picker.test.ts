@@ -295,6 +295,14 @@ describe("the build picker", () => {
     );
   });
 
+  it("hands the turn to node when the event cannot be spooled at all", () => {
+    inSandbox(["darwin-arm64"], (dir) => {
+      const spool = join(dir, "spool");
+      mkdirSync(spool, { mode: 0o500 });
+      expect(pick(dir, { TMPDIR: spool, input: "hello" })).toBe("node Stop");
+    });
+  });
+
   it("leaves no half-written copy behind when the event cannot be spooled", () => {
     inSandbox(["darwin-arm64"], (dir) => {
       const spool = join(dir, "spool");
