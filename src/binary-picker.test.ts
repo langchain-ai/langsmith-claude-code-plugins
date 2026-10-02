@@ -193,33 +193,17 @@ describe("the build picker", () => {
     });
   });
 
-  it("falls back to Node when every carried build is too broken to start", () => {
+  it.each([
+    ["is too broken to start", "unreadableToTheKernel"],
+    ["is killed the moment it starts", "killedOnTheSpot"],
+    ["reports it could not be started", "reportsItCouldNotStart"],
+  ] as const)("falls back to Node when a build %s", (_, shaped) => {
     inSandbox(
       ["darwin-arm64", "darwin-x64"],
       (dir) => {
         expect(pick(dir)).toBe("node Stop");
       },
-      { shaped: "unreadableToTheKernel" },
-    );
-  });
-
-  it("falls back to Node when a build is killed the moment it starts", () => {
-    inSandbox(
-      ["darwin-arm64", "darwin-x64"],
-      (dir) => {
-        expect(pick(dir)).toBe("node Stop");
-      },
-      { shaped: "killedOnTheSpot" },
-    );
-  });
-
-  it("falls back to Node when a build reports it could not be started", () => {
-    inSandbox(
-      ["darwin-arm64", "darwin-x64"],
-      (dir) => {
-        expect(pick(dir)).toBe("node Stop");
-      },
-      { shaped: "reportsItCouldNotStart" },
+      { shaped },
     );
   });
 
