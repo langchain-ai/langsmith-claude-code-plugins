@@ -1,13 +1,5 @@
 import { spawnSync } from "node:child_process";
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,26 +45,6 @@ function dispatch(args: string[], prompt = "ordinary prompt") {
 
 // A handler's initHook creates this directory, so it is proof the handler ran.
 const logDir = () => join(home, ".claude", "state");
-
-function registerInstalledBinary(event: string, installed = binary) {
-  mkdirSync(join(home, ".langsmith"), { recursive: true });
-  copyFileSync(installed, join(home, ".langsmith", EXECUTABLE_NAME));
-  mkdirSync(join(home, ".claude"), { recursive: true });
-  writeFileSync(
-    join(home, ".claude", "settings.json"),
-    JSON.stringify({
-      hooks: {
-        [event]: [
-          {
-            hooks: [
-              { type: "command", command: `"\${HOME}/.langsmith/${EXECUTABLE_NAME}" ${event}` },
-            ],
-          },
-        ],
-      },
-    }),
-  );
-}
 
 describe.skipIf(!built)("the standalone binary, bin/langsmith-claude-code-tracing", () => {
   it("prints the package version for --version", () => {
@@ -133,34 +105,4 @@ describe.skipIf(!built)("the standalone binary, bin/langsmith-claude-code-tracin
       expect(existsSync(join(home, "state.json"))).toBe(false);
     },
   );
-
-  it.each(HOOK_EVENT_NAMES)(
-    "runs the %s handler even though it is the registered binary",
-    (event) => {
-      registerInstalledBinary(event);
-      const result = spawnSync(join(home, ".langsmith", EXECUTABLE_NAME), [event], {
-        cwd: home,
-        env: {
-          HOME: home,
-          PATH: "",
-          TRACE_TO_LANGSMITH: "false",
-          STATE_FILE: join(home, "s.json"),
-        },
-        input: JSON.stringify({ session_id: "installed", cwd: home, prompt: "ordinary prompt" }),
-        encoding: "utf8",
-        timeout: 10000,
-      });
-      expect(result.error).toBeUndefined();
-      expect(result.status, result.stderr).toBe(0);
-      expect(existsSync(logDir()), result.stderr).toBe(true);
-    },
-  );
-
-  it("stands down when the registered binary is a different file", () => {
-    registerInstalledBinary("UserPromptSubmit");
-    const result = dispatch(["UserPromptSubmit"]);
-    expect(result.error).toBeUndefined();
-    expect(result.status, result.stderr).toBe(0);
-    expect(existsSync(logDir()), result.stderr).toBe(false);
-  });
 });

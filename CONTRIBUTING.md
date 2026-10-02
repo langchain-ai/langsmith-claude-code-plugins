@@ -51,11 +51,11 @@ invocation so a rebuild reaches your next hook without restarting the session.
 pnpm dev     # tsc --watch
 pnpm build   # compile and regenerate both bundles
 pnpm test    # vitest
-pnpm lint    # oxlint, and install.sh checked against its generator
+pnpm lint    # oxlint
 pnpm format  # oxfmt --write
 ```
 
-The binary and installer scripts are in `package.json` alongside these.
+The binary build and signing scripts are in `package.json` alongside these.
 
 To try the plugin against a real session, build it and point Claude Code at your clone:
 

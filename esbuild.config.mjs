@@ -13,7 +13,7 @@ const runtimeBinaryConfig = {
   setup(bundler) {
     bundler.onLoad({ filter: /binary\.config\.json$/ }, ({ path }) => {
       const runtime = JSON.parse(readFileSync(path, "utf-8"));
-      for (const section of ["installer", "build", "sign"]) delete runtime[section];
+      for (const section of ["build", "sign"]) delete runtime[section];
       return { loader: "json", contents: JSON.stringify(runtime) };
     });
   },

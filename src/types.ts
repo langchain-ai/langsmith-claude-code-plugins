@@ -1,8 +1,7 @@
 /**
- * Types for Claude Code hook inputs, JSONL transcript messages and the standalone binary.
+ * Types for Claude Code hook inputs and JSONL transcript messages.
  */
 
-import type { HostOptions, UpdateResult } from "@langchain/langsmith-plugin-binary";
 import type { RunTree } from "langsmith";
 
 export type TracingMode = "full" | "metadata";
@@ -324,28 +323,3 @@ export interface SettingsFile {
   hooks?: HooksManifest;
   [key: string]: unknown;
 }
-
-type BinaryHostFields =
-  | "fetchImpl"
-  | "home"
-  | "releasesApi"
-  | "runtimeArch"
-  | "runtimePlatform"
-  | "verifySignature";
-
-export interface BinaryInstallOptions extends Pick<HostOptions, BinaryHostFields> {
-  args?: string[];
-  compiledBinary?: boolean;
-  currentVersion?: string;
-  cwd?: string;
-  executablePath?: string;
-  hooksManifest?: HooksManifest;
-  out?: (line: string) => void;
-}
-
-export interface BinaryUpdateOptions extends Pick<HostOptions, BinaryHostFields> {
-  currentVersion?: string;
-  executablePath?: string;
-}
-
-export type BinaryUpdateResult = UpdateResult | { status: "not-installed" };

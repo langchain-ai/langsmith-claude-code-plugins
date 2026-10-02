@@ -10,7 +10,6 @@ on:
       - .github/workflows/build-binary.yml
       - binary.config.json
       - hooks/hooks.binary.json
-      - install.sh
       - macos-entitlements.plist
       - package.json
       - pnpm-lock.yaml
@@ -18,11 +17,6 @@ on:
       - src/constants.ts
       - src/hooks/dispatch.binary.test.ts
       - src/hooks/dispatch.ts
-      - src/hooks/hand-installed-binary.ts
-      - src/hooks/stand-down.ts
-      - src/installer.binary.test.ts
-      - src/installer.ts
-      - src/updater.ts
       - src/utils/binary-runtime.test.ts
       - src/utils/binary-runtime.ts
       - src/utils/paths.ts
