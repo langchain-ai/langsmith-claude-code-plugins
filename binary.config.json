@@ -9,7 +9,8 @@
     "minify": false,
     "defines": {
       "__LS_BINARY_HOOKS__": "hooks/hooks.binary.json"
-    }
+    },
+    "stampedVersionFiles": ["bundle/dispatch.js"]
   },
   "sign": {
     "entitlements": "macos-entitlements.plist"
