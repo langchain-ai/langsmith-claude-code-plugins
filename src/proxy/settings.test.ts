@@ -1586,3 +1586,29 @@ describe("saved routing diagnostics", () => {
     );
   });
 });
+
+describe("a gateway command that cannot answer", () => {
+  it("leaves the hook's exit code clear and says so on stderr", async () => {
+    const before = process.exitCode;
+    const said = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const output = vi.fn(() => {
+      throw new Error("stdout closed");
+    });
+    await expect(
+      handleGatewayInput(
+        {
+          hook_event_name: "UserPromptSubmit",
+          prompt: "/langsmith-gateway:status --scope nowhere",
+          cwd: "/repo",
+        },
+        "/fake",
+        {},
+        "/repo",
+        output,
+      ),
+    ).resolves.toBeUndefined();
+    expect(process.exitCode).toBe(before);
+    expect(said).toHaveBeenCalledWith(expect.stringContaining("could not be written"));
+    said.mockRestore();
+  });
+});

@@ -4,6 +4,7 @@ import { once } from "node:events";
 import {
   chmodSync,
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -28,6 +29,10 @@ const body = {
   killedOnTheSpot: () => "#!/bin/sh\nkill -9 $$\n",
   reportsItCouldNotStart: () => "#!/bin/sh\nexit 127\n",
   failsForItsOwnReason: (build: string) => `#!/bin/sh\necho "${build} refused"\nexit 3\n`,
+  stopsWithOne: () => "#!/bin/sh\nexit 1\n",
+  stopsWithTwo: () => "#!/bin/sh\nexit 2\n",
+  stopsWithThree: () => "#!/bin/sh\nexit 3\n",
+  stopsWithTheHighestCode: () => "#!/bin/sh\nexit 255\n",
   countsItsInput: (build: string) => `#!/bin/sh\necho "${build} $(wc -c | tr -d ' ') bytes"\n`,
   diesPartWayThroughTheEvent: () => "#!/bin/sh\nhead -c 10 >/dev/null\nkill -9 $$\n",
   outlastsTheTimeout: () => "#!/bin/sh\nhead -c 10 >/dev/null\nsleep 30\nexit 127\n",
@@ -84,6 +89,26 @@ function run(
       ...env,
     },
   });
+}
+
+const interpreters = ["/bin/sh", "/bin/bash", "/bin/zsh", "/bin/dash"].filter((path) =>
+  existsSync(path),
+);
+
+function under(interpreter: string, dir: string, redirect = "") {
+  const argv = ["-c", `exec "$0" "$1" Stop ${redirect}`, interpreter, launcher(dir)];
+  return spawnSync(interpreter, argv, {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      CLAUDE_PLUGIN_ROOT: dir,
+      PATH: machine(dir, "Darwin", "arm64"),
+    },
+  });
+}
+
+function launcher(dir: string): string {
+  return join(dir, "hooks/langsmith-tracing");
 }
 
 function pick(dir: string, options = {}): string {
@@ -197,6 +222,10 @@ describe("the build picker", () => {
     ["is too broken to start", "unreadableToTheKernel"],
     ["is killed the moment it starts", "killedOnTheSpot"],
     ["reports it could not be started", "reportsItCouldNotStart"],
+    ["stops with 1, as a failed start does under /bin/sh", "stopsWithOne"],
+    ["stops with 2, as unreadable bytes read as a script do", "stopsWithTwo"],
+    ["stops with 3, as a build that crashed after starting does", "stopsWithThree"],
+    ["stops with the highest code a shell can report", "stopsWithTheHighestCode"],
   ] as const)("falls back to Node when a build %s", (_, shaped) => {
     inSandbox(
       ["darwin-arm64", "darwin-x64"],
@@ -216,16 +245,104 @@ describe("the build picker", () => {
     });
   });
 
-  it("keeps a build's own failure instead of running the session twice", () => {
+  it("lets a build that already answered answer twice when it then fails", () => {
     inSandbox(
       ["darwin-arm64"],
       (dir) => {
         const result = run(dir);
-        expect(result.stdout.trim()).toBe("darwin-arm64 refused");
-        expect(result.stdout).not.toContain("node");
-        expect(result.status).toBe(3);
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout.trim().split("\n")).toEqual(["darwin-arm64 refused", "node Stop"]);
       },
       { shaped: "failsForItsOwnReason" },
+    );
+  });
+
+  it("says once that a carried build could not run, so the turn is not lost in silence", () => {
+    inSandbox(
+      ["darwin-arm64", "darwin-x64"],
+      (dir) => {
+        const result = run(dir);
+        const said = result.stderr
+          .trim()
+          .split("\n")
+          .filter((line) => line.includes("carried build did not run"));
+        expect(said).toHaveLength(1);
+        expect(said[0]).toContain("exited 3");
+      },
+      { shaped: "stopsWithThree" },
+    );
+  });
+
+  it("says nothing at all when the carried build runs the turn", () => {
+    inSandbox(["darwin-arm64"], (dir) => {
+      const result = run(dir);
+      expect(result.stdout.trim()).toBe("darwin-arm64 Stop");
+      expect(result.stderr).toBe("");
+    });
+  });
+
+  it("says nothing when there is no carried build to try", () => {
+    inSandbox([], (dir) => {
+      const result = run(dir);
+      expect(result.stdout.trim()).toBe("node Stop");
+      expect(result.stderr).toBe("");
+    });
+  });
+
+  it("has at least two of the four interpreters to run the launcher under", () => {
+    expect(interpreters.length, `only found ${interpreters.join(", ")}`).toBeGreaterThanOrEqual(2);
+  });
+
+  it.each(interpreters)(
+    "keeps the turn and exits 0 under %s when a build stops with its own code",
+    (interpreter) => {
+      inSandbox(
+        ["darwin-arm64"],
+        (dir) => {
+          const result = under(interpreter, dir);
+          expect(result.status, result.stderr).toBe(0);
+          expect(result.stdout.trim()).toBe("node Stop");
+        },
+        { shaped: "stopsWithThree" },
+      );
+    },
+  );
+
+  it.each(interpreters)(
+    "still reaches Node under %s when the warning has nowhere to go",
+    (interpreter) => {
+      inSandbox(
+        ["darwin-arm64"],
+        (dir) => {
+          const result = under(interpreter, dir, "2>&-");
+          expect(result.status, result.stdout).toBe(0);
+          expect(result.stdout.trim()).toBe("node Stop");
+        },
+        { shaped: "stopsWithThree" },
+      );
+    },
+  );
+
+  it.each(interpreters)(
+    "still reaches Node under %s when the event cannot be read at all",
+    (interpreter) => {
+      inSandbox(["darwin-arm64"], (dir) => {
+        const result = under(interpreter, dir, "0<&-");
+        expect(result.status, result.stdout).toBe(0);
+        expect(result.stdout.trim()).toBe("node Stop");
+      });
+    },
+  );
+
+  it("still reaches Node when the warning is written into a dead pipe", () => {
+    inSandbox(
+      ["darwin-arm64"],
+      (dir) => {
+        const result = under("/bin/bash", dir, "2> >(exit 0)");
+        expect(result.status, result.stdout).toBe(0);
+        expect(result.stdout.trim()).toBe("node Stop");
+      },
+      { shaped: "stopsWithThree" },
     );
   });
 

@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:binary": "vitest run src/hooks/dispatch.binary.test.ts",
     "test:hooks": "vitest run src/hook-command.test.ts",
+    "test:picker": "vitest run src/binary-picker.test.ts",
     "test:watch": "vitest",
     "tsx": "tsx",
     "lint": "pnpm lint:code",

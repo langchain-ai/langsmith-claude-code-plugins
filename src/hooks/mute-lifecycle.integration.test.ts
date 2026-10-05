@@ -235,6 +235,22 @@ function legacyParent() {
   };
 }
 
+describe("a tracing command that cannot answer", () => {
+  it("logs and lets the turn through rather than stopping it", async () => {
+    reset("full");
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const output = vi.spyOn(console, "log").mockImplementation(() => {
+      throw new Error("stdout closed");
+    });
+    await expect(hook("prompt", { prompt: "/langsmith-tracing:mute" })).resolves.toBeUndefined();
+    expect(exit).not.toHaveBeenCalled();
+    expect(process.exitCode).toBeUndefined();
+    expect(JSON.stringify(h.errors)).toContain("stdout closed");
+    output.mockRestore();
+    exit.mockRestore();
+  });
+});
+
 describe("configured default lifecycle", () => {
   function configuredDefault() {
     reset("full");

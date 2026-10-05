@@ -100,9 +100,8 @@ export async function main(): Promise<void> {
     }
     try {
       console.log(JSON.stringify({ decision: "block", reason }));
-    } catch {
-      // Exit 2 also blocks UserPromptSubmit if writing its JSON response fails.
-      process.exit(2);
+    } catch (err) {
+      error(`Could not write the ${command} command response: ${err}`);
     }
     return;
   }
