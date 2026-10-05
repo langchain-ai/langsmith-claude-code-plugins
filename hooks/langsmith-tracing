@@ -39,7 +39,7 @@ for candidate in "$preferred" "$alternate"; do
   fi
 done
 
-if [ -z "$first" ]; then
+if [ -z "$first" ] || ! ( exec 4<&0 ) 2>/dev/null; then
   exec node "$root/bundle/dispatch.js" "$@"
 fi
 

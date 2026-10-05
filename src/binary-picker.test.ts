@@ -323,6 +323,17 @@ describe("the build picker", () => {
     },
   );
 
+  it.each(interpreters)(
+    "still reaches Node under %s when the event cannot be read at all",
+    (interpreter) => {
+      inSandbox(["darwin-arm64"], (dir) => {
+        const result = under(interpreter, dir, "0<&-");
+        expect(result.status, result.stdout).toBe(0);
+        expect(result.stdout.trim()).toBe("node Stop");
+      });
+    },
+  );
+
   it("still reaches Node when the warning is written into a dead pipe", () => {
     inSandbox(
       ["darwin-arm64"],
