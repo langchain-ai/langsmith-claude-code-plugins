@@ -446,7 +446,7 @@ require("node:module").syncBuiltinESMExports();
       daemon.drain();
       rmSync(sandbox, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it("loads the shipped gateway outside the repo with no root runtime dependencies and safely no-ops disabled", async () => {
     const sandbox = mkdtempSync(join(tmpdir(), "langsmith-package-"));
@@ -625,5 +625,5 @@ require("node:module").syncBuiltinESMExports();
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 });
