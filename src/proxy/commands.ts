@@ -53,7 +53,11 @@ export async function handleGatewayInput(
     try {
       output({ decision: "block", reason });
     } catch {
-      process.exitCode = 2;
+      try {
+        process.stderr.write("Gateway command response could not be written.\n");
+      } catch {
+        return;
+      }
     }
     return;
   }

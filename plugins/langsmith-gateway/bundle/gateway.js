@@ -1342,7 +1342,11 @@ async function handleGatewayInput(input, entry2, env = process.env, home = userH
     try {
       output({ decision: "block", reason });
     } catch {
-      process.exitCode = 2;
+      try {
+        process.stderr.write("Gateway command response could not be written.\n");
+      } catch {
+        return;
+      }
     }
     return;
   }

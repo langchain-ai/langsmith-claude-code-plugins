@@ -16260,8 +16260,8 @@ async function main9() {
     }
     try {
       console.log(JSON.stringify({ decision: "block", reason }));
-    } catch {
-      process.exit(2);
+    } catch (err) {
+      error(`Could not write the ${command} command response: ${err}`);
     }
     return;
   }
