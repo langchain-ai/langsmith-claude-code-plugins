@@ -91,6 +91,26 @@ function run(
   });
 }
 
+const interpreters = ["/bin/sh", "/bin/bash", "/bin/zsh", "/bin/dash"].filter((path) =>
+  existsSync(path),
+);
+
+function under(interpreter: string, dir: string, redirect = "") {
+  const argv = ["-c", `exec "$0" "$1" Stop ${redirect}`, interpreter, launcher(dir)];
+  return spawnSync(interpreter, argv, {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      CLAUDE_PLUGIN_ROOT: dir,
+      PATH: machine(dir, "Darwin", "arm64"),
+    },
+  });
+}
+
+function launcher(dir: string): string {
+  return join(dir, "hooks/langsmith-tracing");
+}
+
 function pick(dir: string, options = {}): string {
   const result = run(dir, options);
   expect(result.error, result.stderr).toBeUndefined();
@@ -225,13 +245,13 @@ describe("the build picker", () => {
     });
   });
 
-  it("hands the turn to Node when a build fails for its own reason", () => {
+  it("lets a build that already answered answer twice when it then fails", () => {
     inSandbox(
       ["darwin-arm64"],
       (dir) => {
         const result = run(dir);
         expect(result.status, result.stderr).toBe(0);
-        expect(result.stdout.trim().split("\n").at(-1)).toBe("node Stop");
+        expect(result.stdout.trim().split("\n")).toEqual(["darwin-arm64 refused", "node Stop"]);
       },
       { shaped: "failsForItsOwnReason" },
     );
@@ -269,32 +289,51 @@ describe("the build picker", () => {
     });
   });
 
-  it.each(["/bin/sh", "/bin/bash", "/bin/zsh", "/bin/dash"])(
+  it("has at least two of the four interpreters to run the launcher under", () => {
+    expect(interpreters.length, `only found ${interpreters.join(", ")}`).toBeGreaterThanOrEqual(2);
+  });
+
+  it.each(interpreters)(
     "keeps the turn and exits 0 under %s when a build stops with its own code",
     (interpreter) => {
-      if (!existsSync(interpreter)) return;
       inSandbox(
         ["darwin-arm64"],
         (dir) => {
-          const result = spawnSync(
-            interpreter,
-            [join(dir, "hooks/langsmith-tracing"), "Stop"],
-            {
-              encoding: "utf8",
-              env: {
-                ...process.env,
-                CLAUDE_PLUGIN_ROOT: dir,
-                PATH: machine(dir, "Darwin", "arm64"),
-              },
-            },
-          );
+          const result = under(interpreter, dir);
           expect(result.status, result.stderr).toBe(0);
-          expect(result.stdout.trim().split("\n").at(-1)).toBe("node Stop");
+          expect(result.stdout.trim()).toBe("node Stop");
         },
         { shaped: "stopsWithThree" },
       );
     },
   );
+
+  it.each(interpreters)(
+    "still reaches Node under %s when the warning has nowhere to go",
+    (interpreter) => {
+      inSandbox(
+        ["darwin-arm64"],
+        (dir) => {
+          const result = under(interpreter, dir, "2>&-");
+          expect(result.status, result.stdout).toBe(0);
+          expect(result.stdout.trim()).toBe("node Stop");
+        },
+        { shaped: "stopsWithThree" },
+      );
+    },
+  );
+
+  it("still reaches Node when the warning is written into a dead pipe", () => {
+    inSandbox(
+      ["darwin-arm64"],
+      (dir) => {
+        const result = under("/bin/bash", dir, "2> >(exit 0)");
+        expect(result.status, result.stdout).toBe(0);
+        expect(result.stdout.trim()).toBe("node Stop");
+      },
+      { shaped: "stopsWithThree" },
+    );
+  });
 
   it("hands Node an event far larger than a pipe buffer when no build starts", () => {
     inSandbox(
