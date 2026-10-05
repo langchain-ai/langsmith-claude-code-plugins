@@ -80,9 +80,7 @@ for candidate in "$preferred" "$alternate"; do
   fi
 done
 
-if [ -n "$unstarted" ]; then
-  printf '%s\n' "langsmith tracing: carried build did not run ($unstarted); handing the event to node" >&2
-fi
+printf '%s\n' "langsmith tracing: carried build did not run ($unstarted); handing the event to node" >&2
 
 exec 3< "$event"
 rm -f "$event" || :
