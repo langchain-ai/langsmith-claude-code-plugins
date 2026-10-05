@@ -32,6 +32,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:hooks
+      - if: runner.os == 'macOS'
+        run: pnpm test:picker
 
   test:
     runs-on: ubuntu-latest
