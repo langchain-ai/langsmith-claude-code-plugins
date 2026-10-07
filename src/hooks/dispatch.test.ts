@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { binary } from "../binary-target.js";
 import { HOOK_EVENT_NAMES } from "../constants.js";
+import cursorHooks from "../fixtures/cursor-hooks.json" with { type: "json" };
 
 const EXECUTABLE_NAME = binary.target.executableName;
 
@@ -63,6 +64,32 @@ describe("bundle/dispatch.js", () => {
       expect(existsSync(join(home, "state.json"))).toBe(false);
     },
   );
+
+  it.each(HOOK_EVENT_NAMES)("stands the %s handler down for a Cursor payload", (event) => {
+    const result = spawnSync(process.execPath, [bundle, event], {
+      cwd: home,
+      env: {
+        HOME: home,
+        PATH: "",
+        TRACE_TO_LANGSMITH: "true",
+        CC_LANGSMITH_API_KEY: "test-key",
+        LANGSMITH_ENDPOINT: "http://127.0.0.1:1",
+        STATE_FILE: join(home, "state.json"),
+        // Cursor sets both for compatibility, so neither can be the signal.
+        CLAUDE_PROJECT_DIR: home,
+        CLAUDE_PLUGIN_ROOT: home,
+      },
+      input: JSON.stringify(cursorHooks.beforeSubmitPrompt),
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+    expect(existsSync(logDir())).toBe(false);
+    expect(existsSync(join(home, "state.json"))).toBe(false);
+  });
 
   it("leaves stderr silent when git runs outside a repository", () => {
     const result = spawnSync(process.execPath, [bundle, "UserPromptSubmit"], {

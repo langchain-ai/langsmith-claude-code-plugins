@@ -16,5 +16,8 @@ const HOOK_EVENT_NAMES = [
 
 type HookEventName = (typeof HOOK_EVENT_NAMES)[number];
 
-export { USER_PROMPT_TURN_NAME, ASSISTANT_RUN_NAME, HOOK_EVENT_NAMES };
+/** Present on every Cursor hook payload and never sent by Claude Code. */
+const CURSOR_VERSION_FIELD = "cursor_version";
+
+export { USER_PROMPT_TURN_NAME, ASSISTANT_RUN_NAME, HOOK_EVENT_NAMES, CURSOR_VERSION_FIELD };
 export type { HookEventName };

@@ -17,6 +17,7 @@ import {
   advanceToolTracingProgress,
 } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
+import { isForeignHarnessPayload } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
 import { createRunTree, runConfigForMode } from "../privacy.js";
@@ -39,6 +40,7 @@ interface PostToolUseHookInput {
 
 export async function main(): Promise<void> {
   const input: PostToolUseHookInput = await readStdin();
+  if (isForeignHarnessPayload(input)) return;
 
   const config = initHook(input.cwd);
   if (!config) return;

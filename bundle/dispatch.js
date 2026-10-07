@@ -1120,6 +1120,7 @@ var HOOK_EVENT_NAMES = [
   "PostCompact",
   "SessionEnd"
 ];
+var CURSOR_VERSION_FIELD = "cursor_version";
 
 // dist/src/utils/hook-entry.js
 function runHookEntry(event2, main10) {
@@ -15115,6 +15116,11 @@ function expandHome(path3) {
   return path3?.replace(/^~/, process.env.HOME ?? "");
 }
 
+// dist/src/utils/harness.js
+function isForeignHarnessPayload(input) {
+  return typeof input === "object" && input !== null && Object.hasOwn(input, CURSOR_VERSION_FIELD);
+}
+
 // dist/src/utils/stdin.js
 function readStdin() {
   return new Promise((resolve, reject) => {
@@ -15135,6 +15141,8 @@ function readStdin() {
 // dist/src/hooks/post-compact.js
 async function main() {
   const input = await readStdin();
+  if (isForeignHarnessPayload(input))
+    return;
   const config = initHook(input.cwd);
   if (!config)
     return;
@@ -15288,6 +15296,8 @@ async function handleWorkflowSubagentStop(opts) {
 // dist/src/hooks/post-tool-use.js
 async function main2() {
   const input = await readStdin();
+  if (isForeignHarnessPayload(input))
+    return;
   const config = initHook(input.cwd);
   if (!config)
     return;
@@ -15443,6 +15453,8 @@ async function main2() {
 // dist/src/hooks/pre-compact.js
 async function main3() {
   const input = await readStdin();
+  if (isForeignHarnessPayload(input))
+    return;
   const config = initHook(input.cwd);
   if (!config)
     return;
@@ -15464,6 +15476,8 @@ async function main3() {
 // dist/src/hooks/pre-tool-use.js
 async function main4() {
   const input = await readStdin();
+  if (isForeignHarnessPayload(input))
+    return;
   const config = initHook(input.cwd);
   if (!config)
     return;
@@ -15491,6 +15505,8 @@ async function main4() {
 // dist/src/hooks/session-end.js
 async function main5() {
   const input = await readStdin();
+  if (isForeignHarnessPayload(input))
+    return;
   const config = initHook(input.cwd);
   if (!config)
     return;
@@ -15707,6 +15723,8 @@ async function finalizeNotificationChain(opts) {
 async function main6() {
   const startTime = Date.now();
   const input = await readStdin();
+  if (isForeignHarnessPayload(input))
+    return;
   const config = initHook(input.cwd);
   if (!config)
     return;
@@ -15994,6 +16012,8 @@ async function main6() {
 // dist/src/hooks/stop-failure.js
 async function main7() {
   const input = await readStdin();
+  if (isForeignHarnessPayload(input))
+    return;
   const config = initHook(input.cwd);
   if (!config)
     return;
@@ -16056,6 +16076,8 @@ async function main7() {
 // dist/src/hooks/subagent-stop.js
 async function main8() {
   const input = await readStdin();
+  if (isForeignHarnessPayload(input))
+    return;
   const config = initHook(input.cwd);
   if (!config)
     return;
@@ -16236,6 +16258,8 @@ var KILLED_NOTIFICATION_STATUS = "killed";
 async function main9() {
   const hookStartTime = Date.now();
   const input = await readStdin();
+  if (isForeignHarnessPayload(input))
+    return;
   const command = parseTracingCommand(input.prompt);
   if (command) {
     let reason;
