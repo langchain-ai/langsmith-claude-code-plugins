@@ -34,6 +34,7 @@ import {
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
+import { startQueueFlusher } from "../utils/detach.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { MUTED_TRACE_CONTENT } from "../privacy.js";
 import type { TaskRunEntry } from "../langsmith.js";
@@ -50,6 +51,9 @@ export async function main(): Promise<void> {
   if (!config) return;
 
   debug(`Stop hook started, session=${input.session_id}`);
+
+  // Hand the queued tool runs to a detached uploader, off this turn's response path.
+  startQueueFlusher(input.cwd);
 
   // Skip recursive hook calls.
   if (input.stop_hook_active) {

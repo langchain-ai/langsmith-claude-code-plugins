@@ -42,11 +42,32 @@ async function acquireLock(stateFilePath: string): Promise<void> {
   }
 }
 
-function releaseLock(stateFilePath: string): void {
+export function releaseLock(stateFilePath: string): void {
   try {
     unlinkSync(lockPath(stateFilePath));
   } catch {
     /* ignore */
+  }
+}
+
+/** Single attempt, for a worker that should stand aside rather than queue behind a peer. */
+export function tryAcquireLock(filePath: string): boolean {
+  try {
+    mkdirSync(dirname(filePath), { recursive: true });
+    closeSync(openSync(lockPath(filePath), "wx"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Run `fn` while holding the cross-process lock that guards `filePath`. */
+export async function withFileLock<T>(filePath: string, fn: () => T | Promise<T>): Promise<T> {
+  await acquireLock(filePath);
+  try {
+    return await fn();
+  } finally {
+    releaseLock(filePath);
   }
 }
 
@@ -58,13 +79,10 @@ export async function atomicUpdateState(
   stateFilePath: string,
   fn: (state: TracingState) => TracingState,
 ): Promise<void> {
-  await acquireLock(stateFilePath);
-  try {
+  await withFileLock(stateFilePath, () => {
     const state = loadState(stateFilePath);
     writeFileSync(stateFilePath, JSON.stringify(fn(state), null, 2));
-  } finally {
-    releaseLock(stateFilePath);
-  }
+  });
 }
 
 // ─── State helpers ──────────────────────────────────────────────────────────

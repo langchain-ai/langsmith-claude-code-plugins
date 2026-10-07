@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   ids: 0,
   beforePost: undefined as undefined | (() => void | Promise<void>),
   errors: [] as unknown[],
+  queueState: "",
 }));
 vi.mock("langsmith", () => ({
   Client: class {
@@ -45,7 +46,7 @@ vi.mock("../utils/hook-init.js", () => ({
   initHook: () => ({
     apiKey: "test",
     project: "test",
-    stateFilePath: "/unused",
+    stateFilePath: h.queueState,
     defaultMuted: h.defaultMuted,
     redact: false,
     customMetadata: { custom: "PRIVATE_MARKER", ls_model_name: "PRIVATE_MARKER" },
@@ -72,14 +73,22 @@ vi.mock("../logger.js", () => ({
   warn: () => {},
   error: (...args: unknown[]) => h.errors.push(args),
 }));
-vi.mock("../state.js", async (original) => ({
-  ...(await original<typeof import("../state.js")>()),
+vi.mock("../state.js", async (original) => {
+  const state = await original<typeof import("../state.js")>();
+  return {
+  ...state,
+  // The queue write is PostToolUse's new await boundary, where the network used to be.
+  withFileLock: async (path: string, fn: () => unknown) => {
+    if (path.includes("queue")) await h.beforePost?.();
+    return state.withFileLock(path, fn);
+  },
   loadState: () => structuredClone(h.state),
   atomicUpdateState: async (_: string, update: (state: TracingState) => TracingState) => {
     // Match persistence: no symbols/functions or shared references survive.
     h.state = JSON.parse(JSON.stringify(update(structuredClone(h.state))));
   },
-}));
+  };
+});
 vi.mock("../transcript.js", async (original) => ({
   ...(await original<typeof import("../transcript.js")>()),
   readTranscript: (path: string) => ({
@@ -181,6 +190,16 @@ async function hook(name: keyof typeof HOOK_EVENT_BY_NAME, extra: Record<string,
   // Awaiting the handler covers Stop's 200ms transcript flush, so this settle
   // only has to let the SDK's unawaited posts land.
   await new Promise((resolve) => setTimeout(resolve, 15));
+  // A tool run is queued rather than posted now, so read what the real queue wrote.
+  const { queueFilePath, readQueue } = await import("../queue.js");
+  const queued = queueFilePath(h.queueState, String(h.input.session_id));
+  for (const entry of readQueue(queued))
+    h.operations.push({ action: "post", config: entry.run as Record<string, any> });
+  try {
+    unlinkSync(queued);
+  } catch {
+    // Nothing was queued by this hook.
+  }
 }
 function topology() {
   return h.operations.map(({ action, config: c }) => ({
@@ -200,7 +219,15 @@ function expectPrivate(operations = h.operations) {
   for (const { config } of operations)
     expect(config.extra.metadata.ls_tracing_mode).toBe("metadata");
 }
-beforeEach(() => {
+const queueSandbox = join(mkdtempSync(join(tmpdir(), "queue-sandbox-")), "state.json");
+beforeEach(async () => {
+  h.queueState = queueSandbox;
+  const { queueFilePath } = await import("../queue.js");
+  try {
+    unlinkSync(queueFilePath(queueSandbox, "session"));
+  } catch {
+    // No queue from the previous test.
+  }
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(now));
 });

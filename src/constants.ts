@@ -55,6 +55,18 @@ const REPOSITORY_METADATA_KEYS = [...TURN_REPOSITORY_KEYS, "ls_attribution_ident
 const PINNED_REPOSITORY_KEYS = Symbol("pinned repository metadata keys");
 
 const NO_PINNED_KEYS: ReadonlySet<string> = new Set();
+/** Directory of per-session upload queues, kept beside the state file. */
+const QUEUE_DIR_NAME = "langsmith_queue";
+const QUEUE_FILE_SUFFIX = ".queue.json";
+
+/** Oldest entries are dropped past this, so a never-flushed queue cannot grow forever. */
+const QUEUE_MAX_ENTRIES = 500;
+
+/** An entry that fails this many uploads is dropped rather than retried forever. */
+const QUEUE_MAX_ATTEMPTS = 5;
+
+/** Argument that runs the detached queue flusher instead of a hook handler. */
+const FLUSH_QUEUE_ARG = "--flush-queue";
 
 const GH_LOGIN_COMMAND = "gh";
 
@@ -93,5 +105,10 @@ export {
   STATE_FILE_DEFAULT,
   GH_LOGIN_MARKER_FILE,
   GH_LOGIN_RETRY_AFTER_MS,
+  QUEUE_DIR_NAME,
+  QUEUE_FILE_SUFFIX,
+  QUEUE_MAX_ENTRIES,
+  QUEUE_MAX_ATTEMPTS,
+  FLUSH_QUEUE_ARG,
 };
 export type { HookEventName };

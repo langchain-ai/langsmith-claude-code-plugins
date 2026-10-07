@@ -334,6 +334,17 @@ export interface TracingState {
   [sessionId: string]: SessionState;
 }
 
+// ─── Upload queue ───────────────────────────────────────────────────────────
+
+/** One finished run waiting to be uploaded, written by a hook that did not wait. */
+export interface QueuedRun {
+  queue_id: string;
+  tracing: TracingMode;
+  attempts: number;
+  /** A RunTree config without `client` or `replicas`, which the flusher supplies. */
+  run: Record<string, unknown>;
+}
+
 // ─── Standalone Binary ──────────────────────────────────────────────────────
 
 export interface HookCommand {

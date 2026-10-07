@@ -24,6 +24,7 @@ import { repoScopedMetadata, sessionScopedMetadata } from "../repo-attribution.j
 import { createRunTree, runConfigForMode } from "../privacy.js";
 import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
+import { enqueueRun } from "../queue.js";
 
 interface PostToolUseHookInput {
   session_id: string;
@@ -52,14 +53,6 @@ export async function main(): Promise<void> {
     debug("Skipping PostToolUse for subagent tool — Stop hook handles tracing");
     return;
   }
-
-  const client = initTracing(
-    config.apiKey,
-    config.apiBaseUrl,
-    config.replicas,
-    config.redact,
-    config.redactExtraRules,
-  );
 
   // Load state to get current turn's run ID (created by UserPromptSubmit)
   const state = loadState(config.stateFilePath);
@@ -120,7 +113,13 @@ export async function main(): Promise<void> {
     );
     const runTree = createRunTree(
       {
-        client,
+        client: initTracing(
+          config.apiKey,
+          config.apiBaseUrl,
+          config.replicas,
+          config.redact,
+          config.redactExtraRules,
+        ),
         replicas: config.replicas,
         id: toolRunId,
         name: "Workflow",
@@ -148,11 +147,11 @@ export async function main(): Promise<void> {
     );
     await runTree.postRun();
   } else {
-    // Regular tool: create and complete the run immediately.
-    const runTree = createRunTree(
+    // Regular tool: queue the finished run and leave the upload to the flusher.
+    await enqueueRun(
+      config.stateFilePath,
+      input.session_id,
       {
-        client,
-        replicas: config.replicas,
         id: toolRunId,
         name: input.tool_name,
         run_type: "tool",
@@ -181,7 +180,6 @@ export async function main(): Promise<void> {
       },
       tracing,
     );
-    await runTree.postRun();
   }
 
   // Save state atomically so concurrent PostToolUse hooks don't clobber each other.
@@ -278,10 +276,9 @@ export async function main(): Promise<void> {
     };
   });
 
-  // Flush pending batches so traces are sent before this async hook exits. The
-  // deferred Agent tool run is the one case that posts nothing here (Stop creates
-  // it), so it has nothing to flush; regular tools and the open Workflow run do.
-  if (!agentId) {
+  // Only the open Workflow run posts here: a regular tool is queued for the detached
+  // flusher, and the deferred Agent tool run is created by Stop.
+  if (workflow) {
     await flushPendingTraces();
   }
 }
