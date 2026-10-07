@@ -7,6 +7,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -50,6 +51,13 @@ beforeEach(async () => {
         return;
       }
       const body = Buffer.concat(chunks).toString("utf8");
+      // LangSmith rejects a run that started over a day ago, and everything sent with it.
+      for (const match of body.matchAll(/"start_time":"([^"]+)"/g)) {
+        if (Date.now() - new Date(match[1]).getTime() < 24 * 60 * 60 * 1000) continue;
+        res.writeHead(400);
+        res.end("{}");
+        return;
+      }
       for (const match of body.matchAll(/"name":"(Tool\d+)"/g)) received.push(match[1]);
       res.writeHead(202, { "content-type": "application/json" });
       res.end("{}");
@@ -141,13 +149,17 @@ function toolCall(index: number, sessionId = "s1") {
 
 const queueDirFor = (sessionId = "s1") => join(home, QUEUE_DIR_NAME, sessionId);
 
-function queued(sessionId = "s1"): Array<{ attempts: number; run: { name: string } }> {
+function entryFiles(sessionId = "s1"): string[] {
   const dir = queueDirFor(sessionId);
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((name) => name.endsWith(QUEUE_FILE_SUFFIX))
     .sort()
-    .map((name) => JSON.parse(readFileSync(join(dir, name), "utf8")));
+    .map((name) => join(dir, name));
+}
+
+function queued(sessionId = "s1"): Array<{ attempts: number; run: { name: string } }> {
+  return entryFiles(sessionId).map((path) => JSON.parse(readFileSync(path, "utf8")));
 }
 
 async function waitFor(predicate: () => boolean, ms = 20_000) {
@@ -264,5 +276,43 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
 
     await hook("Stop", { hook_event_name: "Stop", stop_hook_active: false });
     expect(await waitFor(() => received.includes("Tool0"))).toBe(true);
+  });
+
+  // Catches a queue folder that outlives its session for good, which only the next
+  // session on that machine would ever clear, and never if the plugin is removed.
+  it("removes a session folder nothing has written to for a day", async () => {
+    writeTranscript();
+    await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
+    await toolCall(0);
+
+    failUploads = true;
+    const aged = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    utimesSync(queueDirFor(), aged, aged);
+
+    await hook("UserPromptSubmit", {
+      session_id: "s2",
+      hook_event_name: "UserPromptSubmit",
+      prompt: "a new session",
+    });
+
+    expect(await waitFor(() => !existsSync(queueDirFor()))).toBe(true);
+  });
+
+  // Catches a run LangSmith will reject for age being retried forever, and taking
+  // every run batched with it down too.
+  it("drops a run too old to accept and uploads the ones queued around it", async () => {
+    writeTranscript();
+    await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
+    for (let index = 0; index < 3; index++) await toolCall(index);
+
+    const middle = entryFiles()[1];
+    const entry = JSON.parse(readFileSync(middle, "utf8"));
+    entry.run.start_time = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    writeFileSync(middle, JSON.stringify(entry));
+
+    await hook("Stop", { hook_event_name: "Stop", stop_hook_active: false });
+    expect(await waitFor(() => received.length >= 2)).toBe(true);
+    expect(await waitFor(() => queued().length === 0)).toBe(true);
+    expect(received).toEqual(["Tool0", "Tool2"]);
   });
 });

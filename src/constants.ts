@@ -71,6 +71,12 @@ const QUEUE_MAX_ENTRIES = 500;
 /** An entry that fails this many uploads is dropped rather than retried forever. */
 const QUEUE_MAX_ATTEMPTS = 5;
 
+/** LangSmith rejects a run that started before this, and the whole batch with it. */
+const QUEUE_RUN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** A session nobody has written to for this long is gone for good. */
+const QUEUE_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 /** Argument that runs the detached queue flusher instead of a hook handler. */
 const FLUSH_QUEUE_ARG = "--flush-queue";
 
@@ -117,6 +123,8 @@ export {
   QUEUE_ID_TIME_WIDTH,
   QUEUE_MAX_ENTRIES,
   QUEUE_MAX_ATTEMPTS,
+  QUEUE_RUN_MAX_AGE_MS,
+  QUEUE_SESSION_MAX_AGE_MS,
   FLUSH_QUEUE_ARG,
 };
 export type { HookEventName };

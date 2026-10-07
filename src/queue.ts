@@ -15,6 +15,7 @@ import {
   readdirSync,
   renameSync,
   rmdirSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -26,6 +27,8 @@ import {
   QUEUE_ID_TIME_WIDTH,
   QUEUE_MAX_ATTEMPTS,
   QUEUE_MAX_ENTRIES,
+  QUEUE_RUN_MAX_AGE_MS,
+  QUEUE_SESSION_MAX_AGE_MS,
   QUEUE_TEMP_SUFFIX,
 } from "./constants.js";
 import { runConfigForMode } from "./privacy.js";
@@ -156,4 +159,26 @@ export function discardEmptyQueue(dir: string): void {
   } catch {
     /* ignore */
   }
+}
+
+export function discardQueue(dir: string): void {
+  for (const queueId of entryIds(dir)) removeQueued(dir, queueId);
+  discardEmptyQueue(dir);
+}
+
+export function queueIdleMs(dir: string, now: number = Date.now()): number {
+  try {
+    return now - statSync(dir).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+export function queueIsAbandoned(dir: string, now: number = Date.now()): boolean {
+  return queueIdleMs(dir, now) >= QUEUE_SESSION_MAX_AGE_MS;
+}
+
+export function runIsTooOldToUpload(entry: QueuedRun, now: number = Date.now()): boolean {
+  const started = new Date(entry.run.start_time as string | number).getTime();
+  return Number.isFinite(started) && now - started >= QUEUE_RUN_MAX_AGE_MS;
 }

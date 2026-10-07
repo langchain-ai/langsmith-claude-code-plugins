@@ -907,6 +907,8 @@ var QUEUE_TEMP_SUFFIX = ".queue.tmp";
 var QUEUE_ID_TIME_WIDTH = 16;
 var QUEUE_MAX_ENTRIES = 500;
 var QUEUE_MAX_ATTEMPTS = 5;
+var QUEUE_RUN_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
+var QUEUE_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 var FLUSH_QUEUE_ARG = "--flush-queue";
 var GH_LOGIN_COMMAND = "gh";
 var GH_LOGIN_ARGUMENTS = ["api", "user", "--jq", ".login"];
@@ -13849,7 +13851,7 @@ function expandHome(path3) {
 }
 
 // dist/src/queue.js
-import { mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync, renameSync as renameSync5, rmdirSync, unlinkSync as unlinkSync3, writeFileSync as writeFileSync4 } from "node:fs";
+import { mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync, renameSync as renameSync5, rmdirSync, statSync as statSync4, unlinkSync as unlinkSync3, writeFileSync as writeFileSync4 } from "node:fs";
 import { dirname as dirname3, join as join3 } from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -14133,6 +14135,25 @@ function discardEmptyQueue(dir) {
   } catch {
   }
 }
+function discardQueue(dir) {
+  for (const queueId of entryIds(dir))
+    removeQueued(dir, queueId);
+  discardEmptyQueue(dir);
+}
+function queueIdleMs(dir, now = Date.now()) {
+  try {
+    return now - statSync4(dir).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+function queueIsAbandoned(dir, now = Date.now()) {
+  return queueIdleMs(dir, now) >= QUEUE_SESSION_MAX_AGE_MS;
+}
+function runIsTooOldToUpload(entry, now = Date.now()) {
+  const started = new Date(entry.run.start_time).getTime();
+  return Number.isFinite(started) && now - started >= QUEUE_RUN_MAX_AGE_MS;
+}
 
 // dist/src/state.js
 import { readFileSync as readFileSync7, writeFileSync as writeFileSync5, writeSync, mkdirSync as mkdirSync6, openSync, closeSync, unlinkSync as unlinkSync4 } from "node:fs";
@@ -14327,12 +14348,18 @@ async function flushQueue(dir, config) {
     debug(`Another flusher already owns ${dir}`);
     return;
   }
+  const abandoned = queueIsAbandoned(dir);
   const { client: client2, lastError } = flusherClient(config);
   try {
     for (; ; ) {
       const entry = nextQueued(dir);
       if (!entry)
         break;
+      if (runIsTooOldToUpload(entry)) {
+        warn(`Dropping a queued run LangSmith will no longer accept: ${entry.queue_id}`);
+        removeQueued(dir, entry.queue_id);
+        continue;
+      }
       const runTree = createRunTree({ ...entry.run, client: client2, replicas: config.replicas }, entry.tracing);
       await runTree.postRun();
       const failure = lastError();
@@ -14345,6 +14372,8 @@ async function flushQueue(dir, config) {
     }
     discardEmptyQueue(dir);
   } finally {
+    if (abandoned)
+      discardQueue(dir);
     releaseLock(lock);
   }
 }
@@ -14497,12 +14526,12 @@ function resolveTurnTracingMode(config, sessionId, ...snapshots) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync9, statSync as statSync4, fstatSync, openSync as openSync2, readSync, closeSync as closeSync2 } from "node:fs";
+import { readFileSync as readFileSync9, statSync as statSync5, fstatSync, openSync as openSync2, readSync, closeSync as closeSync2 } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
   let size;
   try {
-    size = statSync4(filePath).size;
+    size = statSync5(filePath).size;
   } catch {
     return { messages: [], lastLine: afterLine };
   }
@@ -14569,7 +14598,7 @@ function readTranscript(filePath, afterLine = -1) {
 }
 function getTranscriptEndLine(filePath) {
   try {
-    const size = statSync4(filePath).size;
+    const size = statSync5(filePath).size;
     if (size === 0)
       return -1;
     if (size <= MAX_FULL_READ_BYTES) {
@@ -14808,7 +14837,7 @@ import { existsSync as existsSync3 } from "node:fs";
 import { isAbsolute, resolve as resolve3 } from "node:path";
 
 // dist/src/repo-attribution-paths.js
-import { statSync as statSync5 } from "node:fs";
+import { statSync as statSync6 } from "node:fs";
 import { dirname as dirname6, join as join4, resolve as resolve2 } from "node:path";
 function nearestExistingDirectory(path3) {
   let current = path3;
@@ -14818,7 +14847,7 @@ function nearestExistingDirectory(path3) {
     if (reachedFilesystemRoot)
       return void 0;
     try {
-      if (statSync5(current).isDirectory())
+      if (statSync6(current).isDirectory())
         return current;
     } catch {
     }
@@ -14827,7 +14856,7 @@ function nearestExistingDirectory(path3) {
 }
 function gitMarkerAt(directory) {
   try {
-    return statSync5(join4(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
+    return statSync6(join4(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
   } catch {
     return GIT_MARKERS.NOTHING_HERE;
   }

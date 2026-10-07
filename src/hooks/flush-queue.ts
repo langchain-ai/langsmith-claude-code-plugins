@@ -11,10 +11,13 @@ import { initHook } from "../utils/hook-init.js";
 import { debug, warn } from "../logger.js";
 import {
   discardEmptyQueue,
+  discardQueue,
   listQueues,
   nextQueued,
+  queueIsAbandoned,
   removeQueued,
   recordFailure,
+  runIsTooOldToUpload,
 } from "../queue.js";
 import { releaseLock, tryAcquireLock } from "../state.js";
 import { createRunTree } from "../privacy.js";
@@ -58,11 +61,17 @@ async function flushQueue(dir: string, config: Config): Promise<void> {
     debug(`Another flusher already owns ${dir}`);
     return;
   }
+  const abandoned = queueIsAbandoned(dir);
   const { client, lastError } = flusherClient(config);
   try {
     for (;;) {
       const entry = nextQueued(dir);
       if (!entry) break;
+      if (runIsTooOldToUpload(entry)) {
+        warn(`Dropping a queued run LangSmith will no longer accept: ${entry.queue_id}`);
+        removeQueued(dir, entry.queue_id);
+        continue;
+      }
       const runTree = createRunTree(
         { ...entry.run, client, replicas: config.replicas } as never,
         entry.tracing,
@@ -78,6 +87,7 @@ async function flushQueue(dir: string, config: Config): Promise<void> {
     }
     discardEmptyQueue(dir);
   } finally {
+    if (abandoned) discardQueue(dir);
     releaseLock(lock);
   }
 }
