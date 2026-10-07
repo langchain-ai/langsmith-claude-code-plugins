@@ -20,6 +20,7 @@ import { initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
+import { repoScopedMetadata } from "../repo-attribution.js";
 import { createRunTree, runConfigForMode } from "../privacy.js";
 import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
@@ -103,6 +104,8 @@ export async function main(): Promise<void> {
     ? detectWorkflowLaunch(input.tool_name, input.tool_response)
     : undefined;
 
+  const toolMetadataBase = repoScopedMetadata(config.customMetadata, input.tool_input, input.cwd);
+
   if (agentId) {
     // Agent tool: defer LangSmith run creation to the Stop hook, which will
     // have the actual subagent type from SubagentStop's pending_subagent_traces.
@@ -131,7 +134,7 @@ export async function main(): Promise<void> {
         extra: {
           metadata: codingAgentMetadata({
             sessionId: input.session_id,
-            base: config.customMetadata,
+            base: toolMetadataBase,
             turnNumber: sessionState.current_turn_number,
             runtimeVersion: sessionState.runtime_version,
             agentType: "root",
@@ -163,7 +166,7 @@ export async function main(): Promise<void> {
         extra: {
           metadata: codingAgentMetadata({
             sessionId: input.session_id,
-            base: config.customMetadata,
+            base: toolMetadataBase,
             // turn_id (promptId) isn't in the PostToolUse payload; turn_number is
             // sufficient (the contract needs at least one of the two).
             turnNumber: sessionState.current_turn_number,

@@ -42,6 +42,8 @@ A project can carry its own settings in `<project>/.claude/langsmith.json`, and 
 
 Each model call carries the conversation so far and the assistant's reply. You also get the model name, provider and token counts. Tool calls come with their inputs and outputs. Skill calls record which skill ran so you can count usage per skill. A subagent, meaning a helper Claude Code spawns to work on its own, appears nested under the turn that started it.
 
+A tool call that touches a path is labelled with the repository that path is in, rather than the one you started in, so a session spanning several repositories labels each call correctly. Those calls carry that repository's name, branch and commit, plus the name git would put on a commit there, which is usually your global git name, so treat it as personal data. A path in no repository carries none of them.
+
 Cancel a turn and it still uploads, marked interrupted. A subagent uploads only once it finishes, so cancelling one leaves its own steps out.
 
 Run `/langsmith-tracing:trace` to get a link to the current conversation's trace. It does not start a model turn or change anything.

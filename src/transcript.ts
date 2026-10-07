@@ -237,6 +237,10 @@ export function resolveProvider(model: string): string {
   return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
 }
 
+export function turnToolInputs(turn: Turn): unknown[] {
+  return turn.llmCalls.flatMap((call) => call.toolCalls.map((tool) => tool.tool_use.input));
+}
+
 /** Tool snapshots are no longer needed for replay once these turns' cursor is saved.
  *  A call without a result is still pending, even if the enclosing turn ended.
  */

@@ -12,7 +12,9 @@ import {
   groupIntoTurns,
   readRuntimeVersion,
   completedToolUseIds,
+  turnToolInputs,
 } from "../transcript.js";
+import { turnScopedMetadata } from "../repo-attribution.js";
 import { log, warn, debug, error } from "../logger.js";
 import {
   loadState,
@@ -212,6 +214,9 @@ export async function main(): Promise<void> {
   const mergedTaskRunMap = { ...freshSession.task_run_map, ...allTaskRunMaps };
 
   const lastTurnId = turns[turns.length - 1]?.promptId;
+  const closingTurn = turns[turns.length - 1];
+  const closingTurnTools = closingTurn ? turnToolInputs(closingTurn) : [];
+  const turnMetadata = turnScopedMetadata(config.customMetadata, closingTurnTools, input.cwd);
 
   // Process any pending subagent traces queued by SubagentStop. These are
   // synchronous subagents whose SubagentStop fired before PostToolUse recorded
@@ -388,7 +393,7 @@ export async function main(): Promise<void> {
         startTime: sessionState.current_turn_start,
         project: config.project,
         lastAssistantMessage: input.last_assistant_message,
-        customMetadata: config.customMetadata,
+        customMetadata: turnMetadata,
         turnId: lastTurnId,
         turnNumber: sessionState.current_turn_number,
         runtimeVersion,

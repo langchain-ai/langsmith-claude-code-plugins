@@ -6,11 +6,19 @@ import {
   toSdkReplicas,
 } from "./shared-config.js";
 import { homedir, userInfo } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { RunTreeConfig } from "langsmith";
 import type { StringNodeRule } from "langsmith/anonymizer";
 import { debug, error } from "./logger.js";
 import { execSync } from "node:child_process";
+import {
+  GIT_LOCATION_ENV_KEYS,
+  NO_PINNED_KEYS,
+  NOT_A_REPOSITORY,
+  PINNED_REPOSITORY_KEYS,
+  REPOSITORY_METADATA_KEYS,
+} from "./constants.js";
+import type { MetadataWithPins } from "./types.js";
 
 /**
  * Configuration — existing Claude environment discovery plus the shared langsmith-plugins.json contract.
@@ -122,8 +130,11 @@ export function parseRepoName(remoteUrl: string): { provider: string; name: stri
 }
 
 function gitOutput(command: string, cwd: string): string {
+  const env: NodeJS.ProcessEnv = { ...process.env, LC_ALL: "C", LANG: "C" };
+  for (const key of GIT_LOCATION_ENV_KEYS) delete env[key];
   return execSync(command, {
     cwd,
+    env,
     encoding: "utf-8",
     timeout: 5000,
     stdio: ["ignore", "pipe", "pipe"],
@@ -163,6 +174,37 @@ export function getRepoName(cwd: string): { provider: string; name: string } | u
   } catch {
     // Not a git repo or git not available — silently skip
   }
+  return undefined;
+}
+
+export function pinnedRepositoryKeys(
+  metadata: Record<string, unknown> | undefined,
+): ReadonlySet<string> {
+  return (metadata as MetadataWithPins | undefined)?.[PINNED_REPOSITORY_KEYS] ?? NO_PINNED_KEYS;
+}
+
+export function getRepoUrl(provider: string, name: string): string | undefined {
+  const host = PROVIDER_HOSTS[provider];
+  return host ? `https://${host}/${name}` : undefined;
+}
+
+/** `null` is git placing the directory in no repository, `undefined` is git not answering at all. */
+export function getRepoRoot(cwd: string): string | null | undefined {
+  try {
+    // Resolved, since git reports this with forward slashes on Windows.
+    const root = gitOutput("git rev-parse --show-toplevel", cwd).trim();
+    return root ? resolve(root) : undefined;
+  } catch (err) {
+    const stderr = String((err as { stderr?: unknown } | undefined)?.stderr ?? "");
+    return NOT_A_REPOSITORY.test(stderr) ? null : undefined;
+  }
+}
+
+export function getGitUserName(cwd: string): string | undefined {
+  try {
+    const name = gitOutput("git config user.name", cwd).trim();
+    if (name) return name;
+  } catch {}
   return undefined;
 }
 
@@ -346,14 +388,17 @@ export function loadConfig(options?: { cwd?: string }): Config {
   if (repoName != null) {
     repoMetadata.repository_name = repoName.name;
     repoMetadata.repository_provider = repoName.provider;
-    const host = PROVIDER_HOSTS[repoName.provider];
-    if (host) repoMetadata.repository_url = `https://${host}/${repoName.name}`;
+    const url = getRepoUrl(repoName.provider, repoName.name);
+    if (url) repoMetadata.repository_url = url;
   }
   const gitInfo = getGitInfo(cwd);
   if (gitInfo.branch) repoMetadata.git_branch = gitInfo.branch;
   if (gitInfo.commit) repoMetadata.git_commit_sha = gitInfo.commit;
 
+  const pinned = REPOSITORY_METADATA_KEYS.filter((key) => customMetadata?.[key] !== undefined);
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
+  // Carried privately so per-tool attribution can leave these alone; spreading drops it.
+  Object.defineProperty(customMetadata, PINNED_REPOSITORY_KEYS, { value: new Set<string>(pinned) });
 
   return {
     enabled: common.enabled,
