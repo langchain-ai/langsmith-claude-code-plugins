@@ -27,6 +27,7 @@ import {
 } from "../state.js";
 import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
+import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
 import { codingAgentMetadata } from "../metadata.js";
@@ -63,6 +64,7 @@ const KILLED_NOTIFICATION_STATUS = "killed";
 export async function main(): Promise<void> {
   const hookStartTime = Date.now();
   const input: UserPromptSubmitHookInput = await readStdin();
+  if (!isPayloadForHook(input, "UserPromptSubmit")) return;
 
   // Local commands must be handled before the master switch, credentials, or
   // any tracing/turn-state work. Even failures consume the prompt, not the model.

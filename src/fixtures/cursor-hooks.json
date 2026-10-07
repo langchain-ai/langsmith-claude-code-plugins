@@ -1,0 +1,33 @@
+{
+  "beforeSubmitPrompt": {
+    "conversation_id": "6bd3db3e-e838-485e-befc-b5f0d05b18cd",
+    "generation_id": "e5d2aef7-6689-4c40-b531-f6266b44e70d",
+    "model": "default",
+    "composer_mode": "agent",
+    "prompt": "hi",
+    "attachments": [],
+    "session_id": "6bd3db3e-e838-485e-befc-b5f0d05b18cd",
+    "hook_event_name": "beforeSubmitPrompt",
+    "cursor_version": "3.7.19",
+    "workspace_roots": ["/Users/user/Desktop/langsmith-cli"],
+    "user_email": "dev@example.com",
+    "transcript_path": null
+  },
+  "stop": {
+    "conversation_id": "6bd3db3e-e838-485e-befc-b5f0d05b18cd",
+    "generation_id": "e5d2aef7-6689-4c40-b531-f6266b44e70d",
+    "model": "default",
+    "status": "completed",
+    "loop_count": 0,
+    "input_tokens": 15850,
+    "output_tokens": 85,
+    "cache_read_tokens": 8377,
+    "cache_write_tokens": 0,
+    "session_id": "6bd3db3e-e838-485e-befc-b5f0d05b18cd",
+    "hook_event_name": "stop",
+    "cursor_version": "3.7.19",
+    "workspace_roots": ["/Users/user/Desktop/langsmith-cli"],
+    "user_email": "dev@example.com",
+    "transcript_path": "/Users/user/.cursor/projects/Users-user-Desktop-langsmith-cli/agent-transcripts/6bd3db3e-e838-485e-befc-b5f0d05b18cd/6bd3db3e-e838-485e-befc-b5f0d05b18cd.jsonl"
+  }
+}

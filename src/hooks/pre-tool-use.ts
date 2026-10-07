@@ -10,6 +10,7 @@ import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { debug } from "../logger.js";
 import { atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
+import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 
 interface PreToolUseHookInput {
@@ -22,6 +23,7 @@ interface PreToolUseHookInput {
 
 export async function main(): Promise<void> {
   const input: PreToolUseHookInput = await readStdin();
+  if (!isPayloadForHook(input, "PreToolUse")) return;
 
   const config = initHook(input.cwd);
   if (!config) return;

@@ -35,11 +35,13 @@ import { initTracing, tracePendingSubagents, flushPendingTraces } from "../langs
 import { finalizeNotificationChain } from "../finalize.js";
 import { WORKFLOW_SUBAGENT_TYPE, handleWorkflowSubagentStop } from "../workflows.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
+import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import type { SubagentStopHookInput, OpenTurn } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: SubagentStopHookInput = await readStdin();
+  if (!isPayloadForHook(input, "SubagentStop")) return;
 
   const config = initHook(input.cwd);
   if (!config) return;

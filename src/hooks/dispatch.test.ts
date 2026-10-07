@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { binary } from "../binary-target.js";
 import { HOOK_EVENT_NAMES } from "../constants.js";
+import cursorHooks from "../fixtures/cursor-hooks.json" with { type: "json" };
 
 const EXECUTABLE_NAME = binary.target.executableName;
 
@@ -63,6 +64,62 @@ describe("bundle/dispatch.js", () => {
       expect(existsSync(join(home, "state.json"))).toBe(false);
     },
   );
+
+  function dispatchPayload(event: string, payload: unknown, env: Record<string, string>) {
+    return spawnSync(process.execPath, [bundle, event], {
+      cwd: home,
+      env: { HOME: home, PATH: "", STATE_FILE: join(home, "state.json"), ...env },
+      input: JSON.stringify(payload),
+      encoding: "utf8",
+      timeout: 10000,
+    });
+  }
+
+  // Tracing on with an unreachable endpoint, so a handler that fails to stand down leaves a trail.
+  function dispatchTracing(event: string, payload: unknown) {
+    return dispatchPayload(event, payload, {
+      TRACE_TO_LANGSMITH: "true",
+      CC_LANGSMITH_API_KEY: "test-key",
+      LANGSMITH_ENDPOINT: "http://127.0.0.1:1",
+      // Cursor sets both of these too, so neither can be the signal.
+      CLAUDE_PROJECT_DIR: home,
+      CLAUDE_PLUGIN_ROOT: home,
+    });
+  }
+
+  function claudePayload(event: string) {
+    return {
+      session_id: "dispatch-test",
+      transcript_path: join(home, "missing.jsonl"),
+      cwd: home,
+      hook_event_name: event,
+      prompt: "ordinary prompt",
+    };
+  }
+
+  function expectStoodDown(result: ReturnType<typeof dispatchTracing>) {
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+    expect(existsSync(logDir())).toBe(false);
+    expect(existsSync(join(home, "state.json"))).toBe(false);
+  }
+
+  it.each(HOOK_EVENT_NAMES)("stands the %s handler down for a Cursor payload", (event) => {
+    expectStoodDown(dispatchTracing(event, cursorHooks.beforeSubmitPrompt));
+  });
+
+  it.each(HOOK_EVENT_NAMES)("runs the %s handler when the payload names that event", (event) => {
+    const result = dispatchPayload(event, claudePayload(event), { TRACE_TO_LANGSMITH: "false" });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(logDir()), result.stderr).toBe(true);
+  });
+
+  it("stands down when the payload names another Claude Code event", () => {
+    expectStoodDown(dispatchTracing("Stop", claudePayload("PreToolUse")));
+  });
 
   it("leaves stderr silent when git runs outside a repository", () => {
     const result = spawnSync(process.execPath, [bundle, "UserPromptSubmit"], {

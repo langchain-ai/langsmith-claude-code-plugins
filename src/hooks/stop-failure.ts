@@ -13,6 +13,7 @@ import { error, debug } from "../logger.js";
 import { initTracing, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
+import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
@@ -31,6 +32,7 @@ interface StopFailureHookInput {
 
 export async function main(): Promise<void> {
   const input: StopFailureHookInput = await readStdin();
+  if (!isPayloadForHook(input, "StopFailure")) return;
 
   const config = initHook(input.cwd);
   if (!config) return;
