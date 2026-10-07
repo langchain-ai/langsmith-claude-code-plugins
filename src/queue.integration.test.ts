@@ -1,6 +1,14 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -131,8 +139,16 @@ function toolCall(index: number, sessionId = "s1") {
   });
 }
 
-const queueFile = (sessionId = "s1") =>
-  join(home, QUEUE_DIR_NAME, `${sessionId}${QUEUE_FILE_SUFFIX}`);
+const queueDirFor = (sessionId = "s1") => join(home, QUEUE_DIR_NAME, sessionId);
+
+function queued(sessionId = "s1"): Array<{ attempts: number; run: { name: string } }> {
+  const dir = queueDirFor(sessionId);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(QUEUE_FILE_SUFFIX))
+    .sort()
+    .map((name) => JSON.parse(readFileSync(join(dir, name), "utf8")));
+}
 
 async function waitFor(predicate: () => boolean, ms = 20_000) {
   const deadline = Date.now() + ms;
@@ -152,11 +168,11 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     await toolCall(0);
 
     expect(received).toEqual([]);
-    expect(existsSync(queueFile())).toBe(true);
+    expect(queued()).toHaveLength(1);
 
     await hook("Stop", { hook_event_name: "Stop", stop_hook_active: false });
     expect(await waitFor(() => received.includes("Tool0"))).toBe(true);
-    expect(await waitFor(() => !existsSync(queueFile()))).toBe(true);
+    expect(await waitFor(() => queued().length === 0)).toBe(true);
   });
 
   // Catches a flusher that uploads newest-first or concurrently, which would break
@@ -166,10 +182,7 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
     for (let index = 0; index < 5; index++) await toolCall(index);
 
-    const queued = JSON.parse(readFileSync(queueFile(), "utf8")) as Array<{
-      run: { name: string };
-    }>;
-    expect(queued.map((entry) => entry.run.name)).toEqual([
+    expect(queued().map((entry) => entry.run.name)).toEqual([
       "Tool0",
       "Tool1",
       "Tool2",
@@ -193,9 +206,7 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     await hook("Stop", { hook_event_name: "Stop", stop_hook_active: false });
     expect(
       await waitFor(() => {
-        const entries = existsSync(queueFile())
-          ? (JSON.parse(readFileSync(queueFile(), "utf8")) as Array<{ attempts: number }>)
-          : [];
+        const entries = queued();
         return entries.length === 1 && entries[0].attempts === 1;
       }),
     ).toBe(true);
@@ -206,13 +217,30 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     expect(await waitFor(() => received.includes("Tool0"))).toBe(true);
   });
 
+  // Catches a queue that serialises appends behind a lock, where one hook giving up on
+  // a lock a dead hook left behind silently overwrites every run queued beside it.
+  it("uploads every parallel tool call when a dead hook left a lock behind", async () => {
+    writeTranscript();
+    await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
+
+    mkdirSync(join(home, QUEUE_DIR_NAME), { recursive: true });
+    writeFileSync(join(home, QUEUE_DIR_NAME, `s1${QUEUE_FILE_SUFFIX}.lock`), "");
+
+    const names = Array.from({ length: 12 }, (_, index) => `Tool${index}`);
+    await Promise.all(names.map((_, index) => toolCall(index)));
+
+    await hook("Stop", { hook_event_name: "Stop", stop_hook_active: false });
+    expect(await waitFor(() => received.length >= names.length)).toBe(true);
+    expect([...received].sort()).toEqual([...names].sort());
+  });
+
   // Catches a sweep that never runs, or one that throws leftovers away the way
   // pruneOldSessions throws away stale state.
   it("flushes a queue left behind by a session that died before its Stop", async () => {
     writeTranscript();
     await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
     await toolCall(0);
-    expect(existsSync(queueFile())).toBe(true);
+    expect(queued()).toHaveLength(1);
 
     await hook("UserPromptSubmit", {
       session_id: "s2",
@@ -221,6 +249,20 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     });
 
     expect(await waitFor(() => received.includes("Tool0"))).toBe(true);
-    expect(await waitFor(() => !existsSync(queueFile()))).toBe(true);
+    expect(await waitFor(() => queued().length === 0)).toBe(true);
+  });
+
+  // Catches a flusher lock that outlives the flusher, which stops that session
+  // uploading for good. No other test leaves a flusher lock behind.
+  it("flushes a queue whose previous flusher died still holding the lock", async () => {
+    writeTranscript();
+    await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
+    await toolCall(0);
+
+    const dead = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
+    writeFileSync(`${queueDirFor()}.flush.lock`, String(dead.pid));
+
+    await hook("Stop", { hook_event_name: "Stop", stop_hook_active: false });
+    expect(await waitFor(() => received.includes("Tool0"))).toBe(true);
   });
 });

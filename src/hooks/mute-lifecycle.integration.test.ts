@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   operations: [] as Array<{ action: string; config: Record<string, any> }>,
   ids: 0,
   beforePost: undefined as undefined | (() => void | Promise<void>),
+  event: "" as string,
   errors: [] as unknown[],
   queueState: "",
 }));
@@ -76,17 +77,14 @@ vi.mock("../logger.js", () => ({
 vi.mock("../state.js", async (original) => {
   const state = await original<typeof import("../state.js")>();
   return {
-  ...state,
-  // The queue write is PostToolUse's new await boundary, where the network used to be.
-  withFileLock: async (path: string, fn: () => unknown) => {
-    if (path.includes("queue")) await h.beforePost?.();
-    return state.withFileLock(path, fn);
-  },
-  loadState: () => structuredClone(h.state),
-  atomicUpdateState: async (_: string, update: (state: TracingState) => TracingState) => {
-    // Match persistence: no symbols/functions or shared references survive.
-    h.state = JSON.parse(JSON.stringify(update(structuredClone(h.state))));
-  },
+    ...state,
+    loadState: () => structuredClone(h.state),
+    atomicUpdateState: async (_: string, update: (state: TracingState) => TracingState) => {
+      // PostToolUse commits here, the await boundary where the network used to be.
+      if (h.event === "PostToolUse") await h.beforePost?.();
+      // Match persistence: no symbols/functions or shared references survive.
+      h.state = JSON.parse(JSON.stringify(update(structuredClone(h.state))));
+    },
   };
 });
 vi.mock("../transcript.js", async (original) => ({
@@ -184,21 +182,22 @@ async function hook(name: keyof typeof HOOK_EVENT_BY_NAME, extra: Record<string,
     tool_response: { content: privateText },
     ...extra,
   };
+  h.event = HOOK_EVENT_BY_NAME[name];
   vi.resetModules();
   const { HOOK_HANDLERS } = await import("./registry.js");
+  const { queueSessionDir, readQueue, removeQueued } = await import("../queue.js");
+  const queued = queueSessionDir(h.queueState, String(h.input.session_id));
+  // A nested hook must leave its caller's entry for the caller to drain in order.
+  const inherited = new Set(readQueue(queued).map((entry) => entry.queue_id));
   await HOOK_HANDLERS[HOOK_EVENT_BY_NAME[name]]();
   // Awaiting the handler covers Stop's 200ms transcript flush, so this settle
   // only has to let the SDK's unawaited posts land.
   await new Promise((resolve) => setTimeout(resolve, 15));
   // A tool run is queued rather than posted now, so read what the real queue wrote.
-  const { queueFilePath, readQueue } = await import("../queue.js");
-  const queued = queueFilePath(h.queueState, String(h.input.session_id));
-  for (const entry of readQueue(queued))
+  for (const entry of readQueue(queued)) {
+    if (inherited.has(entry.queue_id)) continue;
     h.operations.push({ action: "post", config: entry.run as Record<string, any> });
-  try {
-    unlinkSync(queued);
-  } catch {
-    // Nothing was queued by this hook.
+    removeQueued(queued, entry.queue_id);
   }
 }
 function topology() {
@@ -222,12 +221,9 @@ function expectPrivate(operations = h.operations) {
 const queueSandbox = join(mkdtempSync(join(tmpdir(), "queue-sandbox-")), "state.json");
 beforeEach(async () => {
   h.queueState = queueSandbox;
-  const { queueFilePath } = await import("../queue.js");
-  try {
-    unlinkSync(queueFilePath(queueSandbox, "session"));
-  } catch {
-    // No queue from the previous test.
-  }
+  const { queueSessionDir, readQueue, removeQueued } = await import("../queue.js");
+  const previous = queueSessionDir(queueSandbox, "session");
+  for (const entry of readQueue(previous)) removeQueued(previous, entry.queue_id);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(now));
 });

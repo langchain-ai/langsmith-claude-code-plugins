@@ -9,7 +9,13 @@ import { Client } from "langsmith";
 import { createSecretAnonymizer } from "langsmith/anonymizer";
 import { initHook } from "../utils/hook-init.js";
 import { debug, warn } from "../logger.js";
-import { listQueueFiles, readQueue, removeQueued, recordFailure } from "../queue.js";
+import {
+  discardEmptyQueue,
+  listQueues,
+  nextQueued,
+  removeQueued,
+  recordFailure,
+} from "../queue.js";
 import { releaseLock, tryAcquireLock } from "../state.js";
 import { createRunTree } from "../privacy.js";
 import type { Config } from "../config.js";
@@ -46,16 +52,16 @@ function flusherClient(config: Config): { client: Client; lastError: () => unkno
   };
 }
 
-async function flushFile(path: string, config: Config): Promise<void> {
-  const lock = `${path}.flush`;
+async function flushQueue(dir: string, config: Config): Promise<void> {
+  const lock = `${dir}.flush`;
   if (!tryAcquireLock(lock)) {
-    debug(`Another flusher already owns ${path}`);
+    debug(`Another flusher already owns ${dir}`);
     return;
   }
   const { client, lastError } = flusherClient(config);
   try {
     for (;;) {
-      const entry = readQueue(path)[0];
+      const entry = nextQueued(dir);
       if (!entry) break;
       const runTree = createRunTree(
         { ...entry.run, client, replicas: config.replicas } as never,
@@ -65,11 +71,12 @@ async function flushFile(path: string, config: Config): Promise<void> {
       const failure = lastError();
       if (failure) {
         warn(`Queued run upload failed, leaving it for a later retry: ${failure}`);
-        await recordFailure(path, entry.queue_id);
+        recordFailure(dir, entry.queue_id);
         return;
       }
-      await removeQueued(path, entry.queue_id);
+      removeQueued(dir, entry.queue_id);
     }
+    discardEmptyQueue(dir);
   } finally {
     releaseLock(lock);
   }
@@ -78,11 +85,11 @@ async function flushFile(path: string, config: Config): Promise<void> {
 export async function main(cwd: string): Promise<void> {
   const config = initHook(cwd);
   if (!config) return;
-  for (const path of listQueueFiles(config.stateFilePath)) {
+  for (const dir of listQueues(config.stateFilePath)) {
     try {
-      await flushFile(path, config);
+      await flushQueue(dir, config);
     } catch (err) {
-      warn(`Could not flush ${path}: ${err}`);
+      warn(`Could not flush ${dir}: ${err}`);
     }
   }
 }

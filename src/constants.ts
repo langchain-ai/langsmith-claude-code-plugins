@@ -59,6 +59,12 @@ const NO_PINNED_KEYS: ReadonlySet<string> = new Set();
 const QUEUE_DIR_NAME = "langsmith_queue";
 const QUEUE_FILE_SUFFIX = ".queue.json";
 
+/** A half-written entry carries this instead, so a reader never sees it. */
+const QUEUE_TEMP_SUFFIX = ".queue.tmp";
+
+/** Zero-padding that keeps entry names sorting by time well past the year 9999. */
+const QUEUE_ID_TIME_WIDTH = 16;
+
 /** Oldest entries are dropped past this, so a never-flushed queue cannot grow forever. */
 const QUEUE_MAX_ENTRIES = 500;
 
@@ -107,6 +113,8 @@ export {
   GH_LOGIN_RETRY_AFTER_MS,
   QUEUE_DIR_NAME,
   QUEUE_FILE_SUFFIX,
+  QUEUE_TEMP_SUFFIX,
+  QUEUE_ID_TIME_WIDTH,
   QUEUE_MAX_ENTRIES,
   QUEUE_MAX_ATTEMPTS,
   FLUSH_QUEUE_ARG,

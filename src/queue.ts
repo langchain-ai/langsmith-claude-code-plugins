@@ -4,18 +4,30 @@
  * A hook appends to it and exits without touching the network; a detached
  * flusher uploads the entries in order and removes each one only once its
  * upload has been confirmed.
+ *
+ * Each run is its own file, published by rename, so parallel hooks never
+ * read-modify-write the same file and no lock guards the append.
  */
 
-import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmdirSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   QUEUE_DIR_NAME,
   QUEUE_FILE_SUFFIX,
+  QUEUE_ID_TIME_WIDTH,
   QUEUE_MAX_ATTEMPTS,
   QUEUE_MAX_ENTRIES,
+  QUEUE_TEMP_SUFFIX,
 } from "./constants.js";
-import { withFileLock } from "./state.js";
 import { runConfigForMode } from "./privacy.js";
 import { debug, warn } from "./logger.js";
 import type { QueuedRun, TracingMode } from "./types.js";
@@ -24,44 +36,71 @@ export function queueDir(stateFilePath: string): string {
   return join(dirname(stateFilePath), QUEUE_DIR_NAME);
 }
 
-export function queueFilePath(stateFilePath: string, sessionId: string): string {
-  return join(queueDir(stateFilePath), `${sessionId.replace(/[^\w.-]/g, "_")}${QUEUE_FILE_SUFFIX}`);
+export function queueSessionDir(stateFilePath: string, sessionId: string): string {
+  return join(queueDir(stateFilePath), sessionId.replace(/[^\w.-]/g, "_"));
 }
 
-export function listQueueFiles(stateFilePath: string): string[] {
+export function listQueues(stateFilePath: string): string[] {
   try {
-    return readdirSync(queueDir(stateFilePath))
+    return readdirSync(queueDir(stateFilePath), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(queueDir(stateFilePath), entry.name))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+function entryIds(dir: string): string[] {
+  try {
+    return readdirSync(dir)
       .filter((name) => name.endsWith(QUEUE_FILE_SUFFIX))
       .sort()
-      .map((name) => join(queueDir(stateFilePath), name));
+      .map((name) => name.slice(0, -QUEUE_FILE_SUFFIX.length));
   } catch {
     return [];
   }
 }
 
-export function readQueue(path: string): QueuedRun[] {
+function entryPath(dir: string, queueId: string): string {
+  return join(dir, `${queueId}${QUEUE_FILE_SUFFIX}`);
+}
+
+function readEntry(dir: string, queueId: string): QueuedRun | undefined {
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8"));
-    return Array.isArray(parsed) ? (parsed.filter(isQueuedRun) as QueuedRun[]) : [];
+    const parsed = JSON.parse(readFileSync(entryPath(dir, queueId), "utf-8")) as QueuedRun;
+    return parsed && parsed.run ? { ...parsed, queue_id: queueId } : undefined;
   } catch {
-    return [];
+    return undefined;
   }
 }
 
-function isQueuedRun(value: unknown): boolean {
-  const entry = value as QueuedRun | null;
-  return Boolean(entry && typeof entry.queue_id === "string" && entry.run);
+export function readQueue(dir: string): QueuedRun[] {
+  return entryIds(dir)
+    .map((queueId) => readEntry(dir, queueId))
+    .filter((entry): entry is QueuedRun => entry !== undefined);
 }
 
-function writeQueue(path: string, entries: QueuedRun[]): void {
-  if (entries.length === 0) {
-    try {
-      unlinkSync(path);
-    } catch {
-    }
-    return;
+export function nextQueued(dir: string): QueuedRun | undefined {
+  for (const queueId of entryIds(dir)) {
+    const entry = readEntry(dir, queueId);
+    if (entry) return entry;
+    removeQueued(dir, queueId);
   }
-  writeFileSync(path, JSON.stringify(entries));
+  return undefined;
+}
+
+function publish(dir: string, queueId: string, entry: Omit<QueuedRun, "queue_id">): void {
+  const temp = join(dir, `${queueId}${QUEUE_TEMP_SUFFIX}`);
+  writeFileSync(temp, JSON.stringify(entry));
+  renameSync(temp, entryPath(dir, queueId));
+}
+
+function trim(dir: string): void {
+  const ids = entryIds(dir);
+  for (const queueId of ids.slice(0, Math.max(0, ids.length - QUEUE_MAX_ENTRIES))) {
+    removeQueued(dir, queueId);
+  }
 }
 
 export async function enqueueRun(
@@ -70,42 +109,51 @@ export async function enqueueRun(
   run: Record<string, unknown>,
   tracing: TracingMode,
 ): Promise<void> {
-  const path = queueFilePath(stateFilePath, sessionId);
+  const dir = queueSessionDir(stateFilePath, sessionId);
+  const queueId = `${String(Date.now()).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID()}`;
   try {
-    mkdirSync(queueDir(stateFilePath), { recursive: true });
-    await withFileLock(path, () => {
-      const entries = readQueue(path);
-      // Filter before the write, so a muted thread's content never lands on disk.
-      entries.push({
-        queue_id: randomUUID(),
-        tracing,
-        attempts: 0,
-        run: runConfigForMode(run, tracing),
-      });
-      writeQueue(path, entries.slice(-QUEUE_MAX_ENTRIES));
+    mkdirSync(dir, { recursive: true });
+    // Filter before the write, so a muted thread's content never lands on disk.
+    publish(dir, queueId, {
+      tracing,
+      attempts: 0,
+      run: runConfigForMode(run, tracing),
     });
-    debug(`Queued run for upload in ${path}`);
+    trim(dir);
+    debug(`Queued run for upload in ${entryPath(dir, queueId)}`);
   } catch (err) {
     warn(`Could not queue run for upload: ${err}`);
   }
 }
 
-export async function removeQueued(path: string, queueId: string): Promise<void> {
-  await withFileLock(path, () => {
-    writeQueue(
-      path,
-      readQueue(path).filter((entry) => entry.queue_id !== queueId),
-    );
-  });
+export function removeQueued(dir: string, queueId: string): void {
+  try {
+    unlinkSync(entryPath(dir, queueId));
+  } catch {
+    /* ignore */
+  }
 }
 
-export async function recordFailure(path: string, queueId: string): Promise<void> {
-  await withFileLock(path, () => {
-    const entries = readQueue(path)
-      .map((entry) =>
-        entry.queue_id === queueId ? { ...entry, attempts: (entry.attempts ?? 0) + 1 } : entry,
-      )
-      .filter((entry) => entry.attempts < QUEUE_MAX_ATTEMPTS);
-    writeQueue(path, entries);
-  });
+export function recordFailure(dir: string, queueId: string): void {
+  const entry = readEntry(dir, queueId);
+  if (!entry) return;
+  const attempts = (entry.attempts ?? 0) + 1;
+  if (attempts >= QUEUE_MAX_ATTEMPTS) {
+    removeQueued(dir, queueId);
+    return;
+  }
+  try {
+    publish(dir, queueId, { tracing: entry.tracing, attempts, run: entry.run });
+  } catch (err) {
+    warn(`Could not record a failed upload: ${err}`);
+  }
+}
+
+export function discardEmptyQueue(dir: string): void {
+  if (entryIds(dir).length > 0) return;
+  try {
+    rmdirSync(dir);
+  } catch {
+    /* ignore */
+  }
 }

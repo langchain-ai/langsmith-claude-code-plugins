@@ -3,7 +3,15 @@
  * transcript so the Stop hook only processes new messages.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, openSync, closeSync, unlinkSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  writeSync,
+  mkdirSync,
+  openSync,
+  closeSync,
+  unlinkSync,
+} from "node:fs";
 import { dirname } from "node:path";
 import type { TracingState, SessionState } from "./types.js";
 
@@ -50,15 +58,53 @@ export function releaseLock(stateFilePath: string): void {
   }
 }
 
-/** Single attempt, for a worker that should stand aside rather than queue behind a peer. */
-export function tryAcquireLock(filePath: string): boolean {
+function claimLock(lock: string): boolean {
   try {
-    mkdirSync(dirname(filePath), { recursive: true });
-    closeSync(openSync(lockPath(filePath), "wx"));
+    const fd = openSync(lock, "wx");
+    try {
+      writeSync(fd, String(process.pid));
+    } finally {
+      closeSync(fd);
+    }
     return true;
   } catch {
     return false;
   }
+}
+
+function holderIsGone(lock: string): boolean {
+  let pid: number;
+  try {
+    pid = Number(readFileSync(lock, "utf-8"));
+  } catch {
+    return false;
+  }
+  if (!Number.isInteger(pid) || pid <= 0) return true;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code !== "EPERM";
+  }
+}
+
+/** Single attempt, for a worker that should stand aside rather than queue behind a peer. */
+export function tryAcquireLock(filePath: string): boolean {
+  const lock = lockPath(filePath);
+  try {
+    mkdirSync(dirname(filePath), { recursive: true });
+  } catch {
+    return false;
+  }
+  if (claimLock(lock)) return true;
+  // A worker that died holding this would otherwise own it forever.
+  if (!holderIsGone(lock)) return false;
+  try {
+    unlinkSync(lock);
+  } catch {
+    return false;
+  }
+  return claimLock(lock);
 }
 
 /** Run `fn` while holding the cross-process lock that guards `filePath`. */

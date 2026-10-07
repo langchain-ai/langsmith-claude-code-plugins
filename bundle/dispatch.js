@@ -903,6 +903,8 @@ var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata 
 var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
 var QUEUE_DIR_NAME = "langsmith_queue";
 var QUEUE_FILE_SUFFIX = ".queue.json";
+var QUEUE_TEMP_SUFFIX = ".queue.tmp";
+var QUEUE_ID_TIME_WIDTH = 16;
 var QUEUE_MAX_ENTRIES = 500;
 var QUEUE_MAX_ATTEMPTS = 5;
 var FLUSH_QUEUE_ARG = "--flush-queue";
@@ -13847,130 +13849,9 @@ function expandHome(path3) {
 }
 
 // dist/src/queue.js
-import { mkdirSync as mkdirSync6, readFileSync as readFileSync7, readdirSync, unlinkSync as unlinkSync4, writeFileSync as writeFileSync5 } from "node:fs";
-import { dirname as dirname4, join as join3 } from "node:path";
+import { mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync, renameSync as renameSync5, rmdirSync, unlinkSync as unlinkSync3, writeFileSync as writeFileSync4 } from "node:fs";
+import { dirname as dirname3, join as join3 } from "node:path";
 import { randomUUID } from "node:crypto";
-
-// dist/src/state.js
-import { readFileSync as readFileSync6, writeFileSync as writeFileSync4, mkdirSync as mkdirSync5, openSync, closeSync, unlinkSync as unlinkSync3 } from "node:fs";
-import { dirname as dirname3 } from "node:path";
-var LOCK_TIMEOUT_MS = 5e3;
-var LOCK_RETRY_MS = 20;
-function lockPath(stateFilePath) {
-  return `${stateFilePath}.lock`;
-}
-function sleep3(ms) {
-  return new Promise((resolve4) => setTimeout(resolve4, ms));
-}
-async function acquireLock(stateFilePath) {
-  const lock = lockPath(stateFilePath);
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync5(dirname3(stateFilePath), { recursive: true });
-  while (Date.now() < deadline) {
-    try {
-      const fd = openSync(lock, "wx");
-      closeSync(fd);
-      return;
-    } catch {
-      await sleep3(LOCK_RETRY_MS);
-    }
-  }
-  try {
-    unlinkSync3(lock);
-  } catch {
-  }
-}
-function releaseLock(stateFilePath) {
-  try {
-    unlinkSync3(lockPath(stateFilePath));
-  } catch {
-  }
-}
-function tryAcquireLock(filePath) {
-  try {
-    mkdirSync5(dirname3(filePath), { recursive: true });
-    closeSync(openSync(lockPath(filePath), "wx"));
-    return true;
-  } catch {
-    return false;
-  }
-}
-async function withFileLock(filePath, fn) {
-  await acquireLock(filePath);
-  try {
-    return await fn();
-  } finally {
-    releaseLock(filePath);
-  }
-}
-async function atomicUpdateState(stateFilePath, fn) {
-  await withFileLock(stateFilePath, () => {
-    const state = loadState(stateFilePath);
-    writeFileSync4(stateFilePath, JSON.stringify(fn(state), null, 2));
-  });
-}
-function loadState(stateFilePath) {
-  try {
-    const raw = readFileSync6(stateFilePath, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-function getSessionState(state, sessionId) {
-  return state[sessionId] ?? {
-    last_line: -1,
-    turn_count: 0,
-    updated: "",
-    task_run_map: {}
-  };
-}
-function advanceToolTracingProgress(session, ids, phase) {
-  const modes = { ...session.tool_tracing_modes };
-  const progress = { ...session.tool_tracing_progress };
-  for (const id of ids) {
-    if (!Object.hasOwn(modes, id))
-      continue;
-    if (progress[id] && progress[id] !== phase) {
-      delete modes[id];
-      delete progress[id];
-    } else {
-      progress[id] = phase;
-    }
-  }
-  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
-}
-var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
-function pruneOldSessions(state, now = Date.now()) {
-  const cutoff = now - SESSION_MAX_AGE_MS;
-  const pruned = {};
-  for (const [sessionId, session] of Object.entries(state)) {
-    const updatedMs = session.updated ? new Date(session.updated).getTime() : 0;
-    if (updatedMs >= cutoff) {
-      pruned[sessionId] = session;
-    }
-  }
-  return pruned;
-}
-function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, currentTurnRunId) {
-  const existingSession = state[sessionId] ?? {
-    last_line: -1,
-    turn_count: 0,
-    updated: "",
-    task_run_map: {}
-  };
-  return {
-    ...state,
-    [sessionId]: {
-      ...existingSession,
-      last_line: lastLine,
-      turn_count: turnCount,
-      updated: (/* @__PURE__ */ new Date()).toISOString(),
-      task_run_map: taskRunMap ?? existingSession.task_run_map,
-      current_turn_run_id: currentTurnRunId !== void 0 ? currentTurnRunId : existingSession.current_turn_run_id
-    }
-  };
-}
 
 // dist/src/metadata.js
 var TRUSTED_INTEGRATION_VERSION = true ? "0.4.1" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
@@ -14157,69 +14038,259 @@ function createRunTree(config, mode = "full") {
 
 // dist/src/queue.js
 function queueDir(stateFilePath) {
-  return join3(dirname4(stateFilePath), QUEUE_DIR_NAME);
+  return join3(dirname3(stateFilePath), QUEUE_DIR_NAME);
 }
-function queueFilePath(stateFilePath, sessionId) {
-  return join3(queueDir(stateFilePath), `${sessionId.replace(/[^\w.-]/g, "_")}${QUEUE_FILE_SUFFIX}`);
+function queueSessionDir(stateFilePath, sessionId) {
+  return join3(queueDir(stateFilePath), sessionId.replace(/[^\w.-]/g, "_"));
 }
-function listQueueFiles(stateFilePath) {
+function listQueues(stateFilePath) {
   try {
-    return readdirSync(queueDir(stateFilePath)).filter((name) => name.endsWith(QUEUE_FILE_SUFFIX)).sort().map((name) => join3(queueDir(stateFilePath), name));
+    return readdirSync(queueDir(stateFilePath), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => join3(queueDir(stateFilePath), entry.name)).sort();
   } catch {
     return [];
   }
 }
-function readQueue(path3) {
+function entryIds(dir) {
   try {
-    const parsed = JSON.parse(readFileSync7(path3, "utf-8"));
-    return Array.isArray(parsed) ? parsed.filter(isQueuedRun) : [];
+    return readdirSync(dir).filter((name) => name.endsWith(QUEUE_FILE_SUFFIX)).sort().map((name) => name.slice(0, -QUEUE_FILE_SUFFIX.length));
   } catch {
     return [];
   }
 }
-function isQueuedRun(value) {
-  const entry = value;
-  return Boolean(entry && typeof entry.queue_id === "string" && entry.run);
+function entryPath(dir, queueId) {
+  return join3(dir, `${queueId}${QUEUE_FILE_SUFFIX}`);
 }
-function writeQueue(path3, entries) {
-  if (entries.length === 0) {
-    try {
-      unlinkSync4(path3);
-    } catch {
-    }
-    return;
+function readEntry(dir, queueId) {
+  try {
+    const parsed = JSON.parse(readFileSync6(entryPath(dir, queueId), "utf-8"));
+    return parsed && parsed.run ? { ...parsed, queue_id: queueId } : void 0;
+  } catch {
+    return void 0;
   }
-  writeFileSync5(path3, JSON.stringify(entries));
+}
+function nextQueued(dir) {
+  for (const queueId of entryIds(dir)) {
+    const entry = readEntry(dir, queueId);
+    if (entry)
+      return entry;
+    removeQueued(dir, queueId);
+  }
+  return void 0;
+}
+function publish(dir, queueId, entry) {
+  const temp = join3(dir, `${queueId}${QUEUE_TEMP_SUFFIX}`);
+  writeFileSync4(temp, JSON.stringify(entry));
+  renameSync5(temp, entryPath(dir, queueId));
+}
+function trim(dir) {
+  const ids = entryIds(dir);
+  for (const queueId of ids.slice(0, Math.max(0, ids.length - QUEUE_MAX_ENTRIES))) {
+    removeQueued(dir, queueId);
+  }
 }
 async function enqueueRun(stateFilePath, sessionId, run, tracing) {
-  const path3 = queueFilePath(stateFilePath, sessionId);
+  const dir = queueSessionDir(stateFilePath, sessionId);
+  const queueId = `${String(Date.now()).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID()}`;
   try {
-    mkdirSync6(queueDir(stateFilePath), { recursive: true });
-    await withFileLock(path3, () => {
-      const entries = readQueue(path3);
-      entries.push({
-        queue_id: randomUUID(),
-        tracing,
-        attempts: 0,
-        run: runConfigForMode(run, tracing)
-      });
-      writeQueue(path3, entries.slice(-QUEUE_MAX_ENTRIES));
+    mkdirSync5(dir, { recursive: true });
+    publish(dir, queueId, {
+      tracing,
+      attempts: 0,
+      run: runConfigForMode(run, tracing)
     });
-    debug(`Queued run for upload in ${path3}`);
+    trim(dir);
+    debug(`Queued run for upload in ${entryPath(dir, queueId)}`);
   } catch (err) {
     warn(`Could not queue run for upload: ${err}`);
   }
 }
-async function removeQueued(path3, queueId) {
-  await withFileLock(path3, () => {
-    writeQueue(path3, readQueue(path3).filter((entry) => entry.queue_id !== queueId));
+function removeQueued(dir, queueId) {
+  try {
+    unlinkSync3(entryPath(dir, queueId));
+  } catch {
+  }
+}
+function recordFailure2(dir, queueId) {
+  const entry = readEntry(dir, queueId);
+  if (!entry)
+    return;
+  const attempts = (entry.attempts ?? 0) + 1;
+  if (attempts >= QUEUE_MAX_ATTEMPTS) {
+    removeQueued(dir, queueId);
+    return;
+  }
+  try {
+    publish(dir, queueId, { tracing: entry.tracing, attempts, run: entry.run });
+  } catch (err) {
+    warn(`Could not record a failed upload: ${err}`);
+  }
+}
+function discardEmptyQueue(dir) {
+  if (entryIds(dir).length > 0)
+    return;
+  try {
+    rmdirSync(dir);
+  } catch {
+  }
+}
+
+// dist/src/state.js
+import { readFileSync as readFileSync7, writeFileSync as writeFileSync5, writeSync, mkdirSync as mkdirSync6, openSync, closeSync, unlinkSync as unlinkSync4 } from "node:fs";
+import { dirname as dirname4 } from "node:path";
+var LOCK_TIMEOUT_MS = 5e3;
+var LOCK_RETRY_MS = 20;
+function lockPath(stateFilePath) {
+  return `${stateFilePath}.lock`;
+}
+function sleep3(ms) {
+  return new Promise((resolve4) => setTimeout(resolve4, ms));
+}
+async function acquireLock(stateFilePath) {
+  const lock = lockPath(stateFilePath);
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  mkdirSync6(dirname4(stateFilePath), { recursive: true });
+  while (Date.now() < deadline) {
+    try {
+      const fd = openSync(lock, "wx");
+      closeSync(fd);
+      return;
+    } catch {
+      await sleep3(LOCK_RETRY_MS);
+    }
+  }
+  try {
+    unlinkSync4(lock);
+  } catch {
+  }
+}
+function releaseLock(stateFilePath) {
+  try {
+    unlinkSync4(lockPath(stateFilePath));
+  } catch {
+  }
+}
+function claimLock(lock) {
+  try {
+    const fd = openSync(lock, "wx");
+    try {
+      writeSync(fd, String(process.pid));
+    } finally {
+      closeSync(fd);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+function holderIsGone(lock) {
+  let pid;
+  try {
+    pid = Number(readFileSync7(lock, "utf-8"));
+  } catch {
+    return false;
+  }
+  if (!Number.isInteger(pid) || pid <= 0)
+    return true;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (err) {
+    return err.code !== "EPERM";
+  }
+}
+function tryAcquireLock(filePath) {
+  const lock = lockPath(filePath);
+  try {
+    mkdirSync6(dirname4(filePath), { recursive: true });
+  } catch {
+    return false;
+  }
+  if (claimLock(lock))
+    return true;
+  if (!holderIsGone(lock))
+    return false;
+  try {
+    unlinkSync4(lock);
+  } catch {
+    return false;
+  }
+  return claimLock(lock);
+}
+async function withFileLock(filePath, fn) {
+  await acquireLock(filePath);
+  try {
+    return await fn();
+  } finally {
+    releaseLock(filePath);
+  }
+}
+async function atomicUpdateState(stateFilePath, fn) {
+  await withFileLock(stateFilePath, () => {
+    const state = loadState(stateFilePath);
+    writeFileSync5(stateFilePath, JSON.stringify(fn(state), null, 2));
   });
 }
-async function recordFailure2(path3, queueId) {
-  await withFileLock(path3, () => {
-    const entries = readQueue(path3).map((entry) => entry.queue_id === queueId ? { ...entry, attempts: (entry.attempts ?? 0) + 1 } : entry).filter((entry) => entry.attempts < QUEUE_MAX_ATTEMPTS);
-    writeQueue(path3, entries);
-  });
+function loadState(stateFilePath) {
+  try {
+    const raw = readFileSync7(stateFilePath, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+function getSessionState(state, sessionId) {
+  return state[sessionId] ?? {
+    last_line: -1,
+    turn_count: 0,
+    updated: "",
+    task_run_map: {}
+  };
+}
+function advanceToolTracingProgress(session, ids, phase) {
+  const modes = { ...session.tool_tracing_modes };
+  const progress = { ...session.tool_tracing_progress };
+  for (const id of ids) {
+    if (!Object.hasOwn(modes, id))
+      continue;
+    if (progress[id] && progress[id] !== phase) {
+      delete modes[id];
+      delete progress[id];
+    } else {
+      progress[id] = phase;
+    }
+  }
+  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
+}
+var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
+function pruneOldSessions(state, now = Date.now()) {
+  const cutoff = now - SESSION_MAX_AGE_MS;
+  const pruned = {};
+  for (const [sessionId, session] of Object.entries(state)) {
+    const updatedMs = session.updated ? new Date(session.updated).getTime() : 0;
+    if (updatedMs >= cutoff) {
+      pruned[sessionId] = session;
+    }
+  }
+  return pruned;
+}
+function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, currentTurnRunId) {
+  const existingSession = state[sessionId] ?? {
+    last_line: -1,
+    turn_count: 0,
+    updated: "",
+    task_run_map: {}
+  };
+  return {
+    ...state,
+    [sessionId]: {
+      ...existingSession,
+      last_line: lastLine,
+      turn_count: turnCount,
+      updated: (/* @__PURE__ */ new Date()).toISOString(),
+      task_run_map: taskRunMap ?? existingSession.task_run_map,
+      current_turn_run_id: currentTurnRunId !== void 0 ? currentTurnRunId : existingSession.current_turn_run_id
+    }
+  };
 }
 
 // dist/src/hooks/flush-queue.js
@@ -14250,16 +14321,16 @@ function flusherClient(config) {
     }
   };
 }
-async function flushFile(path3, config) {
-  const lock = `${path3}.flush`;
+async function flushQueue(dir, config) {
+  const lock = `${dir}.flush`;
   if (!tryAcquireLock(lock)) {
-    debug(`Another flusher already owns ${path3}`);
+    debug(`Another flusher already owns ${dir}`);
     return;
   }
   const { client: client2, lastError } = flusherClient(config);
   try {
     for (; ; ) {
-      const entry = readQueue(path3)[0];
+      const entry = nextQueued(dir);
       if (!entry)
         break;
       const runTree = createRunTree({ ...entry.run, client: client2, replicas: config.replicas }, entry.tracing);
@@ -14267,11 +14338,12 @@ async function flushFile(path3, config) {
       const failure = lastError();
       if (failure) {
         warn(`Queued run upload failed, leaving it for a later retry: ${failure}`);
-        await recordFailure2(path3, entry.queue_id);
+        recordFailure2(dir, entry.queue_id);
         return;
       }
-      await removeQueued(path3, entry.queue_id);
+      removeQueued(dir, entry.queue_id);
     }
+    discardEmptyQueue(dir);
   } finally {
     releaseLock(lock);
   }
@@ -14280,11 +14352,11 @@ async function main(cwd) {
   const config = initHook(cwd);
   if (!config)
     return;
-  for (const path3 of listQueueFiles(config.stateFilePath)) {
+  for (const dir of listQueues(config.stateFilePath)) {
     try {
-      await flushFile(path3, config);
+      await flushQueue(dir, config);
     } catch (err) {
-      warn(`Could not flush ${path3}: ${err}`);
+      warn(`Could not flush ${dir}: ${err}`);
     }
   }
 }
