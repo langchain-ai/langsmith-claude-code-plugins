@@ -1,13 +1,38 @@
 # Experimental langsmith-gateway plugin
 
 Operational reference for the opt-in local proxy, installed separately from
-`langsmith-tracing` and disabled by default. Start with the [README quick start](./README.md#langsmith-cli-prerequisite)
-for CLI installation and browser login.
+`langsmith-tracing` and disabled by default. Start with the [LangSmith CLI prerequisite](#langsmith-cli-prerequisite)
+below for CLI installation and browser login.
 
 Requires macOS/Linux, Node.js 20+, Claude Code and `langsmith` on PATH. The selected
 gateway must support LangSmith OAuth and, for subscription forwarding,
 `X-LangSmith-Anthropic-Passthrough`; local readiness does not verify this.
 Signed-out Claude Code compatibility is not established.
+
+## LangSmith CLI prerequisite
+
+**Install and authenticate the LangSmith CLI before installing or enabling the gateway plugin.**
+These requirements are for the gateway. Tracing on its own needs none of them.
+
+In your terminal, install the [LangSmith CLI](https://docs.langchain.com/langsmith/langsmith-cli)
+if needed:
+
+```sh
+curl -fsSL https://cli.langsmith.com/install.sh | sh
+```
+
+Follow the installer's PATH instructions, then open a new terminal if needed so
+`langsmith` is available to both your shell and Claude Code. For a new production
+configuration, log in using the CLI's normal selected/default profile:
+
+```sh
+langsmith auth login
+```
+
+Complete the browser login using ordinary short-lived OAuth credentials, not the
+CLI's static-token gateway setup flow. Setup does not check login; authentication
+is checked on first model use. For an existing or alternate profile, follow the
+[profile and issuer guidance](#alternate-api-and-gateway-hosts).
 
 ## Install and enable in Claude Code
 
