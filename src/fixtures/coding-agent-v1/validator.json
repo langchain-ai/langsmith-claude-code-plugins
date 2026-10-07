@@ -153,6 +153,15 @@
       "note": "Name of the invoked skill. Source depends on the harness: a skill tool's argument, or the SKILL.md path."
     },
     {
+      "key": "ls_attribution_identifier",
+      "appliesTo": ["tool"],
+      "type": "string",
+      "allowedValues": null,
+      "requirement": "contextual",
+      "requiredWhereKnown": false,
+      "note": "The name git would author a commit with in the repository the tool's path is in, which falls back to the person's global setting. PII-sensitive."
+    },
+    {
       "key": "user_id",
       "appliesTo": ["root", "llm", "tool", "subagent", "interrupted"],
       "type": "string",

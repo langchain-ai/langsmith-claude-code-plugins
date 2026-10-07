@@ -198,11 +198,11 @@ var require_p_finally = __commonJS({
       onFinally = onFinally || (() => {
       });
       return promise.then(
-        (val) => new Promise((resolve) => {
-          resolve(onFinally());
+        (val) => new Promise((resolve3) => {
+          resolve3(onFinally());
         }).then(() => val),
-        (err) => new Promise((resolve) => {
-          resolve(onFinally());
+        (err) => new Promise((resolve3) => {
+          resolve3(onFinally());
         }).then(() => {
           throw err;
         })
@@ -222,18 +222,18 @@ var require_p_timeout = __commonJS({
         this.name = "TimeoutError";
       }
     };
-    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve, reject) => {
+    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve3, reject) => {
       if (typeof milliseconds !== "number" || milliseconds < 0) {
         throw new TypeError("Expected `milliseconds` to be a positive number");
       }
       if (milliseconds === Infinity) {
-        resolve(promise);
+        resolve3(promise);
         return;
       }
       const timer = setTimeout(() => {
         if (typeof fallback === "function") {
           try {
-            resolve(fallback());
+            resolve3(fallback());
           } catch (error2) {
             reject(error2);
           }
@@ -248,7 +248,7 @@ var require_p_timeout = __commonJS({
       }, milliseconds);
       pFinally(
         // eslint-disable-next-line promise/prefer-await-to-then
-        promise.then(resolve, reject),
+        promise.then(resolve3, reject),
         () => {
           clearTimeout(timer);
         }
@@ -466,7 +466,7 @@ var require_dist = __commonJS({
       Adds a sync or async task to the queue. Always returns a promise.
       */
       async add(fn, options = {}) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve3, reject) => {
           const run = async () => {
             this._pendingCount++;
             this._intervalCount++;
@@ -477,7 +477,7 @@ var require_dist = __commonJS({
                 }
                 return void 0;
               });
-              resolve(await operation);
+              resolve3(await operation);
             } catch (error2) {
               reject(error2);
             }
@@ -528,11 +528,11 @@ var require_dist = __commonJS({
         if (this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve) => {
+        return new Promise((resolve3) => {
           const existingResolve = this._resolveEmpty;
           this._resolveEmpty = () => {
             existingResolve();
-            resolve();
+            resolve3();
           };
         });
       }
@@ -545,11 +545,11 @@ var require_dist = __commonJS({
         if (this._pendingCount === 0 && this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve) => {
+        return new Promise((resolve3) => {
           const existingResolve = this._resolveIdle;
           this._resolveIdle = () => {
             existingResolve();
-            resolve();
+            resolve3();
           };
         });
       }
@@ -813,7 +813,7 @@ function toSdkReplicas(replicas2) {
 
 // dist/src/config.js
 import { homedir, userInfo } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 // dist/src/logger.js
 import { appendFileSync, mkdirSync, statSync as statSync2, renameSync } from "node:fs";
@@ -860,6 +860,43 @@ function debug(message) {
 
 // dist/src/config.js
 import { execSync } from "node:child_process";
+
+// dist/src/constants.js
+var USER_PROMPT_TURN_NAME = "Claude Code Turn";
+var ASSISTANT_RUN_NAME = "Claude";
+var HOOK_EVENT_NAMES = [
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUse",
+  "Stop",
+  "StopFailure",
+  "SubagentStop",
+  "PreCompact",
+  "PostCompact",
+  "SessionEnd"
+];
+var CURSOR_VERSION_FIELD = "cursor_version";
+var GIT_LOCATION_ENV_KEYS = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_COMMON_DIR",
+  "GIT_INDEX_FILE",
+  "GIT_CEILING_DIRECTORIES"
+];
+var NOT_A_REPOSITORY = /not a git repository \(or any of the parent directories\)/i;
+var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
+var TURN_REPOSITORY_KEYS = [
+  "repository_name",
+  "repository_provider",
+  "repository_url",
+  "git_branch",
+  "git_commit_sha"
+];
+var REPOSITORY_METADATA_KEYS = [...TURN_REPOSITORY_KEYS, "ls_attribution_identifier"];
+var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
+var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
+
+// dist/src/config.js
 var LS_INTEGRATION_VERSION = true ? "0.4.0" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var PROVIDER_HOSTS = {
   github: "github.com",
@@ -913,8 +950,12 @@ function parseRepoName(remoteUrl) {
   return void 0;
 }
 function gitOutput(command, cwd) {
+  const env = { ...process.env, LC_ALL: "C", LANG: "C" };
+  for (const key of GIT_LOCATION_ENV_KEYS)
+    delete env[key];
   return execSync(command, {
     cwd,
+    env,
     encoding: "utf-8",
     timeout: 5e3,
     stdio: ["ignore", "pipe", "pipe"]
@@ -942,6 +983,31 @@ function getRepoName(cwd) {
       if (name)
         return name;
     }
+  } catch {
+  }
+  return void 0;
+}
+function pinnedRepositoryKeys(metadata) {
+  return metadata?.[PINNED_REPOSITORY_KEYS] ?? NO_PINNED_KEYS;
+}
+function getRepoUrl(provider, name) {
+  const host = PROVIDER_HOSTS[provider];
+  return host ? `https://${host}/${name}` : void 0;
+}
+function getRepoRoot(cwd) {
+  try {
+    const root = gitOutput("git rev-parse --show-toplevel", cwd).trim();
+    return root ? resolve(root) : void 0;
+  } catch (err) {
+    const stderr = String(err?.stderr ?? "");
+    return NOT_A_REPOSITORY.test(stderr) ? null : void 0;
+  }
+}
+function getGitUserName(cwd) {
+  try {
+    const name = gitOutput("git config user.name", cwd).trim();
+    if (name)
+      return name;
   } catch {
   }
   return void 0;
@@ -1080,16 +1146,18 @@ function loadConfig(options) {
   if (repoName != null) {
     repoMetadata.repository_name = repoName.name;
     repoMetadata.repository_provider = repoName.provider;
-    const host = PROVIDER_HOSTS[repoName.provider];
-    if (host)
-      repoMetadata.repository_url = `https://${host}/${repoName.name}`;
+    const url = getRepoUrl(repoName.provider, repoName.name);
+    if (url)
+      repoMetadata.repository_url = url;
   }
   const gitInfo = getGitInfo(cwd);
   if (gitInfo.branch)
     repoMetadata.git_branch = gitInfo.branch;
   if (gitInfo.commit)
     repoMetadata.git_commit_sha = gitInfo.commit;
+  const pinned = REPOSITORY_METADATA_KEYS.filter((key) => customMetadata?.[key] !== void 0);
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
+  Object.defineProperty(customMetadata, PINNED_REPOSITORY_KEYS, { value: new Set(pinned) });
   return {
     enabled: common.enabled,
     defaultMuted: common.defaultMuted,
@@ -1105,22 +1173,6 @@ function loadConfig(options) {
     redactExtraRules
   };
 }
-
-// dist/src/constants.js
-var USER_PROMPT_TURN_NAME = "Claude Code Turn";
-var ASSISTANT_RUN_NAME = "Claude";
-var HOOK_EVENT_NAMES = [
-  "UserPromptSubmit",
-  "PreToolUse",
-  "PostToolUse",
-  "Stop",
-  "StopFailure",
-  "SubagentStop",
-  "PreCompact",
-  "PostCompact",
-  "SessionEnd"
-];
-var CURSOR_VERSION_FIELD = "cursor_version";
 
 // dist/src/utils/hook-entry.js
 function runHookEntry(event2, main10) {
@@ -2328,7 +2380,7 @@ async function onAttemptFailure({ error: error2, attemptNumber, retriesConsumed,
   const delayTime = calculateDelay(retriesConsumed, options);
   const finalDelay = Math.min(delayTime, remainingTime);
   if (finalDelay > 0) {
-    await new Promise((resolve, reject) => {
+    await new Promise((resolve3, reject) => {
       const onAbort = () => {
         clearTimeout(timeoutToken);
         options.signal?.removeEventListener("abort", onAbort);
@@ -2336,7 +2388,7 @@ async function onAttemptFailure({ error: error2, attemptNumber, retriesConsumed,
       };
       const timeoutToken = setTimeout(() => {
         options.signal?.removeEventListener("abort", onAbort);
-        resolve();
+        resolve3();
       }, finalDelay);
       if (options.unref) {
         timeoutToken.unref?.();
@@ -2746,7 +2798,7 @@ var safeJSON = (text) => {
 };
 
 // node_modules/.pnpm/langsmith@0.10.5/node_modules/langsmith/dist/_openapi_client/internal/utils/sleep.js
-var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+var sleep = (ms) => new Promise((resolve3) => setTimeout(resolve3, ms));
 
 // node_modules/.pnpm/langsmith@0.10.5/node_modules/langsmith/dist/_openapi_client/version.js
 var VERSION = "0.0.1";
@@ -3425,8 +3477,8 @@ var __classPrivateFieldGet = function(receiver, state, kind, f2) {
 var _APIPromise_client;
 var APIPromise = class _APIPromise extends Promise {
   constructor(client2, responsePromise, parseResponse = defaultParseResponse) {
-    super((resolve) => {
-      resolve(null);
+    super((resolve3) => {
+      resolve3(null);
     });
     Object.defineProperty(this, "responsePromise", {
       enumerable: true,
@@ -6374,7 +6426,7 @@ var LOCK_POLL_INTERVAL_MS = 10;
 var LOCK_STALE_AFTER_MS = 1e4;
 var LOCK_METADATA_FILE = "created_at";
 function sleep2(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve3) => setTimeout(resolve3, ms));
 }
 function isEEXIST(err) {
   return typeof err === "object" && err !== null && err.code === "EEXIST";
@@ -7310,8 +7362,8 @@ var SerializeWorker = class {
     if (!ok)
       return null;
     const id = this.nextId++;
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+    return new Promise((resolve3, reject) => {
+      this.pending.set(id, { resolve: resolve3, reject });
       try {
         this.worker.postMessage({ id, op: "serialize", payload });
       } catch (e) {
@@ -7468,7 +7520,7 @@ var handle429 = async (response) => {
   if (response?.status === 429) {
     const retryAfter = parseInt(response.headers.get("retry-after") ?? "10", 10) * 1e3;
     if (retryAfter > 0) {
-      await new Promise((resolve) => setTimeout(resolve, retryAfter));
+      await new Promise((resolve3) => setTimeout(resolve3, retryAfter));
       return true;
     }
   }
@@ -7567,8 +7619,8 @@ var AutoBatchQueue = class {
   }
   push(item) {
     let itemPromiseResolve;
-    const itemPromise = new Promise((resolve) => {
-      itemPromiseResolve = resolve;
+    const itemPromise = new Promise((resolve3) => {
+      itemPromiseResolve = resolve3;
     });
     const size = estimateSerializedSize(item.item).size;
     if (this.sizeBytes + size > this.maxSizeBytes && this.items.length > 0) {
@@ -12572,7 +12624,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       console.warn("[WARNING]: When tracing in manual flush mode, you must call `await client.flush()` manually to submit trace batches.");
       return Promise.resolve();
     }
-    await new Promise((resolve) => setTimeout(resolve, 1));
+    await new Promise((resolve3) => setTimeout(resolve3, 1));
     while (this._pendingDrains.size > 0) {
       await Promise.all([...this._pendingDrains]);
     }
@@ -14006,6 +14058,9 @@ function resolveProvider(model) {
     return "google_vertex_ai";
   return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
 }
+function turnToolInputs(turn) {
+  return turn.llmCalls.flatMap((call) => call.toolCalls.map((tool) => tool.tool_use.input));
+}
 function completedToolUseIds(turns) {
   return turns.flatMap((turn) => turn.llmCalls.flatMap((call) => call.toolCalls.filter((tool) => tool.result !== void 0).map((tool) => tool.tool_use.id)));
 }
@@ -14150,7 +14205,7 @@ function lockPath(stateFilePath) {
   return `${stateFilePath}.lock`;
 }
 function sleep3(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve3) => setTimeout(resolve3, ms));
 }
 async function acquireLock(stateFilePath) {
   const lock = lockPath(stateFilePath);
@@ -14431,6 +14486,159 @@ function createRunTree(config, mode = "full") {
   return run;
 }
 
+// dist/src/repo-attribution.js
+import { existsSync as existsSync3, statSync as statSync5 } from "node:fs";
+import { dirname as dirname4, isAbsolute, resolve as resolve2, sep } from "node:path";
+var rootByDirectory = /* @__PURE__ */ new Map();
+var attributionByRoot = /* @__PURE__ */ new Map();
+var identifierByRoot = /* @__PURE__ */ new Map();
+function toolPathFromInput(toolInput, sessionCwd) {
+  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput))
+    return void 0;
+  const input = toolInput;
+  for (const key of TOOL_PATH_INPUT_KEYS) {
+    const value = input[key];
+    if (typeof value !== "string" || value.length === 0)
+      continue;
+    if (isAbsolute(value))
+      return value;
+    if (!sessionCwd || !isAbsolute(sessionCwd))
+      continue;
+    const resolved = resolve2(sessionCwd, value);
+    if (existsSync3(resolved))
+      return resolved;
+  }
+  return void 0;
+}
+function outsideGitDirectory(path3) {
+  const nestedAt = path3.indexOf(`${sep}.git${sep}`);
+  if (nestedAt > 0)
+    return path3.slice(0, nestedAt);
+  const trailing = `${sep}.git`;
+  return path3.endsWith(trailing) && path3.length > trailing.length ? path3.slice(0, -trailing.length) : path3;
+}
+function nearestExistingDirectory(path3) {
+  let current = outsideGitDirectory(path3);
+  for (; ; ) {
+    const parent = dirname4(current);
+    const reachedFilesystemRoot = parent === current;
+    if (reachedFilesystemRoot)
+      return void 0;
+    try {
+      if (statSync5(current).isDirectory())
+        return current;
+    } catch {
+    }
+    current = parent;
+  }
+}
+function rootForPath(path3) {
+  const directory = nearestExistingDirectory(path3);
+  if (!directory)
+    return void 0;
+  if (rootByDirectory.has(directory))
+    return rootByDirectory.get(directory);
+  const root = getRepoRoot(directory);
+  rootByDirectory.set(directory, root);
+  return root;
+}
+function isSessionsOwnRepository(sessionCwd, root) {
+  return sessionCwd ? rootForPath(sessionCwd) === root : false;
+}
+function withoutPinnedKeys(attribution, pinned) {
+  if (pinned.size === 0)
+    return { ...attribution };
+  return Object.fromEntries(Object.entries(attribution).filter(([key]) => !pinned.has(key)));
+}
+function withoutRepositoryKeys(base, pinned) {
+  const stripped = { ...base };
+  for (const key of REPOSITORY_METADATA_KEYS) {
+    if (!pinned.has(key))
+      delete stripped[key];
+  }
+  return stripped;
+}
+function identifierForRoot(root) {
+  const cached = identifierByRoot.get(root);
+  if (cached)
+    return cached;
+  const userName = getGitUserName(root);
+  const identifier = userName ? { ls_attribution_identifier: userName } : {};
+  identifierByRoot.set(root, identifier);
+  return identifier;
+}
+function attributionForRoot(root) {
+  const cached = attributionByRoot.get(root);
+  if (cached)
+    return cached;
+  const attribution = { ...identifierForRoot(root) };
+  const repoName = getRepoName(root);
+  if (repoName) {
+    attribution.repository_name = repoName.name;
+    attribution.repository_provider = repoName.provider;
+    const url = getRepoUrl(repoName.provider, repoName.name);
+    if (url)
+      attribution.repository_url = url;
+  }
+  const gitInfo = getGitInfo(root);
+  if (gitInfo.branch)
+    attribution.git_branch = gitInfo.branch;
+  if (gitInfo.commit)
+    attribution.git_commit_sha = gitInfo.commit;
+  attributionByRoot.set(root, attribution);
+  return attribution;
+}
+function alreadyAttributed(base) {
+  if (!base || base.ls_attribution_identifier === void 0)
+    return false;
+  return TURN_REPOSITORY_KEYS.some((key) => base[key] !== void 0);
+}
+function withSessionAuthor(base, sessionRoot) {
+  if (base?.ls_attribution_identifier !== void 0)
+    return base;
+  return { ...base, ...identifierForRoot(sessionRoot) };
+}
+function sessionScopedMetadata(base, sessionCwd) {
+  const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : void 0;
+  return typeof sessionRoot === "string" ? withSessionAuthor(base, sessionRoot) : base;
+}
+function repoScopedMetadata(base, toolInput, sessionCwd) {
+  if (alreadyAttributed(base))
+    return base;
+  const path3 = toolPathFromInput(toolInput, sessionCwd);
+  if (!path3)
+    return base;
+  const root = rootForPath(path3);
+  const gitCouldNotAnswer = root === void 0;
+  if (gitCouldNotAnswer)
+    return base;
+  const pinned = pinnedRepositoryKeys(base);
+  const pathIsInNoRepository = root === null;
+  if (pathIsInNoRepository)
+    return withoutRepositoryKeys(base, pinned);
+  if (isSessionsOwnRepository(sessionCwd, root)) {
+    return { ...base, ...withoutPinnedKeys(identifierForRoot(root), pinned) };
+  }
+  return {
+    ...withoutRepositoryKeys(base, pinned),
+    ...withoutPinnedKeys(attributionForRoot(root), pinned)
+  };
+}
+function turnScopedMetadata(base, toolInputs, sessionCwd) {
+  const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : void 0;
+  if (typeof sessionRoot === "string")
+    return withSessionAuthor(base, sessionRoot);
+  for (const toolInput of toolInputs) {
+    const path3 = toolPathFromInput(toolInput, sessionCwd);
+    if (!path3)
+      continue;
+    const landedInRepository = typeof rootForPath(path3) === "string";
+    if (landedInRepository)
+      return repoScopedMetadata(base, toolInput, sessionCwd);
+  }
+  return base;
+}
+
 // dist/src/langsmith.js
 var client = void 0;
 var replicas = void 0;
@@ -14497,6 +14705,7 @@ function buildUsageMetadata(usage) {
 }
 async function traceTurn(options) {
   const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, agentType = "root", tracing = "full", toolTracingModes } = options;
+  const sessionCwd = typeof customMetadata?.cwd === "string" ? customMetadata.cwd : void 0;
   const turnId = turn.promptId;
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
@@ -14506,6 +14715,7 @@ async function traceTurn(options) {
   const userContent = typeof turn.userContent === "string" ? [{ type: "text", text: turn.userContent }] : turn.userContent;
   let turnRunId;
   let shouldCreateTurn = false;
+  const turnMetadataBase = turnScopedMetadata(customMetadata, turnToolInputs(turn), sessionCwd);
   if (parentRunId) {
     debug(`Using existing run ${parentRunId} as parent for LLM/tool runs`);
     turnRunId = parentRunId;
@@ -14532,7 +14742,7 @@ async function traceTurn(options) {
       extra: {
         metadata: codingAgentMetadata({
           sessionId,
-          base: customMetadata,
+          base: turnMetadataBase,
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
@@ -14612,7 +14822,7 @@ async function traceTurn(options) {
         extra: {
           metadata: codingAgentMetadata({
             sessionId,
-            base: customMetadata,
+            base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, sessionCwd),
             turnId,
             turnNumber: turnNum,
             runtimeVersion,
@@ -14704,7 +14914,7 @@ async function traceTurn(options) {
       extra: {
         metadata: codingAgentMetadata({
           sessionId,
-          base: customMetadata,
+          base: turnMetadataBase,
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
@@ -15129,13 +15339,13 @@ function isPayloadForHook(input, event2) {
 
 // dist/src/utils/stdin.js
 function readStdin() {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve3, reject) => {
     let data = "";
     process.stdin.setEncoding("utf-8");
     process.stdin.on("data", (chunk) => data += chunk);
     process.stdin.on("end", () => {
       try {
-        resolve(JSON.parse(data));
+        resolve3(JSON.parse(data));
       } catch (err) {
         reject(new Error(`Failed to parse hook input: ${err}`));
       }
@@ -15331,6 +15541,8 @@ async function main2() {
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
   const agentId = input.tool_response.agentId;
   const workflow = !agentId ? detectWorkflowLaunch(input.tool_name, input.tool_response) : void 0;
+  const sessionMetadataBase = sessionScopedMetadata(config.customMetadata, input.cwd);
+  const toolMetadataBase = repoScopedMetadata(sessionMetadataBase, input.tool_input, input.cwd);
   if (agentId) {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
   } else if (workflow) {
@@ -15351,7 +15563,7 @@ async function main2() {
       extra: {
         metadata: codingAgentMetadata({
           sessionId: input.session_id,
-          base: config.customMetadata,
+          base: toolMetadataBase,
           turnNumber: sessionState.current_turn_number,
           runtimeVersion: sessionState.runtime_version,
           agentType: "root",
@@ -15379,7 +15591,7 @@ async function main2() {
       extra: {
         metadata: codingAgentMetadata({
           sessionId: input.session_id,
-          base: config.customMetadata,
+          base: toolMetadataBase,
           // turn_id (promptId) isn't in the PostToolUse payload; turn_number is
           // sufficient (the contract needs at least one of the two).
           turnNumber: sessionState.current_turn_number,
@@ -15836,6 +16048,9 @@ async function main6() {
   const freshSession = getSessionState(freshState, input.session_id);
   const mergedTaskRunMap = { ...freshSession.task_run_map, ...allTaskRunMaps };
   const lastTurnId = turns[turns.length - 1]?.promptId;
+  const closingTurn = turns[turns.length - 1];
+  const closingTurnTools = closingTurn ? turnToolInputs(closingTurn) : [];
+  const turnMetadata = turnScopedMetadata(config.customMetadata, closingTurnTools, input.cwd);
   const pendingSubagents = freshSession.pending_subagent_traces || [];
   const processedAgentIds = /* @__PURE__ */ new Set();
   if (pendingSubagents.length > 0) {
@@ -15942,7 +16157,7 @@ async function main6() {
         startTime: sessionState.current_turn_start,
         project: config.project,
         lastAssistantMessage: input.last_assistant_message,
-        customMetadata: config.customMetadata,
+        customMetadata: turnMetadata,
         turnId: lastTurnId,
         turnNumber: sessionState.current_turn_number,
         runtimeVersion,

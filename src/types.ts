@@ -3,6 +3,7 @@
  */
 
 import type { RunTree } from "langsmith";
+import type { PINNED_REPOSITORY_KEYS } from "./constants.js";
 
 export type TracingMode = "full" | "metadata";
 
@@ -167,6 +168,21 @@ export interface Turn {
   isComplete: boolean;
   /** Claude Code prompt id for this turn → coding-agent-v1 `turn_id`. */
   promptId?: string;
+}
+
+// ─── Repository Attribution ────────────────────────────────────────────────
+
+export interface RepositoryAttribution {
+  repository_name?: string;
+  repository_provider?: string;
+  repository_url?: string;
+  git_branch?: string;
+  git_commit_sha?: string;
+  ls_attribution_identifier?: string;
+}
+
+export interface MetadataWithPins {
+  [PINNED_REPOSITORY_KEYS]?: ReadonlySet<string>;
 }
 
 // ─── Tracing State ─────────────────────────────────────────────────────────
