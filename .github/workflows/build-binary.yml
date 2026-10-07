@@ -13,14 +13,7 @@ on:
       - macos-entitlements.plist
       - package.json
       - pnpm-lock.yaml
-      - src/binary-target.ts
-      - src/constants.ts
-      - src/hooks/dispatch.binary.test.ts
-      - src/hooks/dispatch.ts
-      - src/utils/binary-runtime.test.ts
-      - src/utils/binary-runtime.ts
-      - src/utils/paths.ts
-      - src/utils/settings.ts
+      - src/**
 
 jobs:
   binary:
