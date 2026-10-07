@@ -8,6 +8,11 @@ export type TracingMode = "full" | "metadata";
 
 // ─── Hook Input Types ───────────────────────────────────────────────────────
 
+/** The one field the harness check reads, since every other field varies by event and by harness. */
+export interface HookEventPayload {
+  hook_event_name?: string;
+}
+
 /** Common fields present in all hook inputs (delivered via stdin JSON). */
 export interface HookInputBase {
   session_id: string;

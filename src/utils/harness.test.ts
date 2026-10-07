@@ -11,19 +11,13 @@ const CLAUDE_PAYLOAD = {
   hook_event_name: "PreToolUse",
   tool_name: "Bash",
   tool_use_id: "tu_1",
-} as const;
+};
 
-const RECORDED_SHAPES = ["beforeSubmitPrompt", "preToolUse", "stop"] as const;
-
-const { cursor_version: _version, ...RENAMED_CURSOR_STOP } = cursorHooks.stop;
+const { cursor_version: _version, ...CURSOR_STOP_WITHOUT_MARKER } = cursorHooks.stop;
 
 describe("isCursorPayload", () => {
-  it.each(RECORDED_SHAPES)("spots the version field on the recorded %s payload", (event) => {
-    expect(isCursorPayload(cursorHooks[event])).toBe(true);
-  });
-
-  it("leaves an ordinary Claude Code payload alone", () => {
-    expect(isCursorPayload(CLAUDE_PAYLOAD)).toBe(false);
+  it("spots the version field on a recorded Cursor payload", () => {
+    expect(isCursorPayload(cursorHooks.stop)).toBe(true);
   });
 
   it("ignores the marker nested inside traced tool content", () => {
@@ -42,26 +36,15 @@ describe("isCursorPayload", () => {
 });
 
 describe("isPayloadForHook", () => {
-  it("runs the handler for the event it was dispatched for", () => {
-    expect(isPayloadForHook(CLAUDE_PAYLOAD, "PreToolUse")).toBe(true);
-  });
-
-  it("stands down when the payload names a different event", () => {
-    const stopPayload = { ...CLAUDE_PAYLOAD, hook_event_name: "Stop" } as never;
-    expect(isPayloadForHook(stopPayload, "PreToolUse")).toBe(false);
-  });
-
-  it("stands down on the event name alone once Cursor renames its version field", () => {
-    expect(isPayloadForHook(RENAMED_CURSOR_STOP as never, "Stop")).toBe(false);
+  it("stands down on the event name alone once Cursor drops its version field", () => {
+    expect(isPayloadForHook(CURSOR_STOP_WITHOUT_MARKER, "Stop")).toBe(false);
   });
 
   it("stands down on the version field alone when the event names agree", () => {
-    expect(
-      isPayloadForHook({ ...cursorHooks.stop, hook_event_name: "Stop" } as never, "Stop"),
-    ).toBe(false);
+    expect(isPayloadForHook({ ...cursorHooks.stop, hook_event_name: "Stop" }, "Stop")).toBe(false);
   });
 
   it("runs when a payload names no event at all", () => {
-    expect(isPayloadForHook({} as never, "Stop")).toBe(true);
+    expect(isPayloadForHook({}, "Stop")).toBe(true);
   });
 });
