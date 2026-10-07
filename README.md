@@ -22,7 +22,9 @@ Run these inside Claude Code:
 /reload-plugins
 ```
 
-Your install stays pinned to the version you got, so a newer release needs two steps: run `/plugin marketplace update langsmith-claude-code-plugins` in Claude Code, then `claude plugin update langsmith-tracing@langsmith-claude-code-plugins` in your shell, and restart. To skip that next time, open `/plugin`, go to **Marketplaces**, and turn on **Enable auto-update**.
+To stay current without thinking about it, open `/plugin`, go to **Marketplaces**, select this marketplace and choose **Enable auto-update**, which is off by default for marketplaces like ours. To update once instead, select it on that same tab and choose **Update marketplace**, which refreshes the listing and the plugins you installed from it together. From a shell, `claude plugin update langsmith-tracing@langsmith-claude-code-plugins` updates this plugin on its own.
+
+The session you are in keeps the version it already loaded, so an update applies to your next session unless you run `/reload-plugins`.
 
 ## Turn on tracing
 
