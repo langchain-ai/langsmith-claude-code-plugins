@@ -2,7 +2,7 @@
 // directory says nothing about the repository a given tool call touched.
 
 import { existsSync, statSync } from "node:fs";
-import { dirname, isAbsolute, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import {
   getGitUserName,
   getGitInfo,
@@ -11,29 +11,29 @@ import {
   getRepoUrl,
   pinnedRepositoryKeys,
 } from "./config.js";
-import {
-  REPOSITORY_METADATA_KEYS,
-  TOOL_PATH_INPUT_KEYS,
-  TURN_REPOSITORY_KEYS,
-} from "./constants.js";
-import type { RepositoryAttribution } from "./types.js";
+import { GIT_DIRECTORY_NAME, REPOSITORY_METADATA_KEYS, TOOL_PATH_INPUT_KEYS } from "./constants.js";
+import type { RepositoryAttribution, ToolPathLookup } from "./types.js";
 
 const rootByDirectory = new Map<string, string | null | undefined>();
 const attributionByRoot = new Map<string, RepositoryAttribution>();
 const identifierByRoot = new Map<string, RepositoryAttribution>();
 
-export function toolPathFromInput(toolInput: unknown, sessionCwd?: string): string | undefined {
-  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) return undefined;
+export function toolPathFromInput(toolInput: unknown, sessionCwd?: string): ToolPathLookup {
+  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
+    return { namedAPath: false };
+  }
   const input = toolInput as Record<string, unknown>;
+  let namedAPath = false;
   for (const key of TOOL_PATH_INPUT_KEYS) {
     const value = input[key];
     if (typeof value !== "string" || value.length === 0) continue;
-    if (isAbsolute(value)) return value;
+    namedAPath = true;
+    if (isAbsolute(value)) return { path: value, namedAPath };
     if (!sessionCwd || !isAbsolute(sessionCwd)) continue;
     const resolved = resolve(sessionCwd, value);
-    if (existsSync(resolved)) return resolved;
+    if (existsSync(resolved)) return { path: resolved, namedAPath };
   }
-  return undefined;
+  return { namedAPath };
 }
 
 function outsideGitDirectory(path: string): string {
@@ -58,11 +58,25 @@ function nearestExistingDirectory(path: string): string | undefined {
   }
 }
 
+function rootFromGitMarker(directory: string): string | null | undefined {
+  let current = resolve(directory);
+  for (;;) {
+    try {
+      if (statSync(join(current, GIT_DIRECTORY_NAME)).isDirectory()) return current;
+      return undefined;
+    } catch {}
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
 function rootForPath(path: string): string | null | undefined {
   const directory = nearestExistingDirectory(path);
   if (!directory) return undefined;
   if (rootByDirectory.has(directory)) return rootByDirectory.get(directory);
-  const root = getRepoRoot(directory);
+  const marked = rootFromGitMarker(directory);
+  const root = marked === undefined ? getRepoRoot(directory) : marked;
   rootByDirectory.set(directory, root);
   return root;
 }
@@ -117,11 +131,6 @@ function attributionForRoot(root: string): RepositoryAttribution {
   return attribution;
 }
 
-function alreadyAttributed(base: Record<string, unknown> | undefined): boolean {
-  if (!base || base.ls_attribution_identifier === undefined) return false;
-  return TURN_REPOSITORY_KEYS.some((key) => base[key] !== undefined);
-}
-
 function withSessionAuthor(
   base: Record<string, unknown> | undefined,
   sessionRoot: string,
@@ -143,10 +152,9 @@ export function repoScopedMetadata(
   toolInput: unknown,
   sessionCwd?: string,
 ): Record<string, unknown> | undefined {
-  if (alreadyAttributed(base)) return base;
-
-  const path = toolPathFromInput(toolInput, sessionCwd);
-  if (!path) return base;
+  const lookup = toolPathFromInput(toolInput, sessionCwd);
+  const path = lookup.path ?? (lookup.namedAPath ? undefined : sessionCwd);
+  if (!path || !isAbsolute(path)) return base;
 
   const root = rootForPath(path);
   const gitCouldNotAnswer = root === undefined;
@@ -173,7 +181,7 @@ export function turnScopedMetadata(
   const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : undefined;
   if (typeof sessionRoot === "string") return withSessionAuthor(base, sessionRoot);
   for (const toolInput of toolInputs) {
-    const path = toolPathFromInput(toolInput, sessionCwd);
+    const { path } = toolPathFromInput(toolInput, sessionCwd);
     if (!path) continue;
     const landedInRepository = typeof rootForPath(path) === "string";
     if (landedInRepository) return repoScopedMetadata(base, toolInput, sessionCwd);

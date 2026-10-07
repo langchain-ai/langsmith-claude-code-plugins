@@ -99,24 +99,31 @@ describe("repoScopedMetadata", () => {
       },
     ],
     ["a path git places in no repository", { file_path: join(plain, "x.txt") }, noRepository],
-    ["a tool that carries no path", { command: "ls -la" }, session, beta],
     ["an opaque identifier no file sits at", { path: "notion/page/abc123" }, session, beta],
     ["a broken submodule git cannot answer for", { file_path: join(submodule, "x.txt") }, session],
+    ["a shell command run outside every repository", { command: "ls -la" }, noRepository, plain],
   ])("stamps exactly what %s accounts for", (_name, input, want, cwd) => {
     expect(repoScopedMetadata(session, input, cwd)).toEqual(want);
   });
 
-  it("drops a repository the session carried once a path lands in no repository", () => {
-    expect(repoScopedMetadata(session, { file_path: join(plain, "x.txt") })).toEqual(noRepository);
+  it("attributes a shell command to the repository it ran in", () => {
+    expect(repoScopedMetadata(noRepository, { command: "ls -la" }, beta)).toMatchObject({
+      ls_attribution_identifier: "Beta Owner",
+    });
   });
 
-  it("asks git nothing at all once a turn carries both a repository and an author", () => {
+  it("gives each tool its own repository rather than reusing the first one answered", () => {
     const attributed = { ...session, ls_attribution_identifier: "Alpha Owner" };
 
-    for (const path of [alphaSeed, betaSeed, join(plain, "x.txt")]) {
-      expect(repoScopedMetadata(attributed, { file_path: path }, alpha)).toEqual(attributed);
-    }
-    expect(gitCommands()).toEqual([]);
+    expect(repoScopedMetadata(attributed, { file_path: betaSeed }, alpha)).toMatchObject(inBeta);
+    expect(repoScopedMetadata(attributed, { file_path: join(plain, "x.txt") }, alpha)).toEqual({
+      cwd: session.cwd,
+      ls_integration: session.ls_integration,
+    });
+  });
+
+  it("drops a repository the session carried once a path lands in no repository", () => {
+    expect(repoScopedMetadata(session, { file_path: join(plain, "x.txt") })).toEqual(noRepository);
   });
 
   it("keeps looking while a turn has a repository but still no author", () => {
@@ -170,11 +177,18 @@ describe("repoScopedMetadata", () => {
     const afterFirstPath = gitCommands().length;
     expect(afterFirstPath).toBeGreaterThan(0);
 
-    // An unseen directory costs one lookup; the repository behind it is already known.
-    expect(repoScopedMetadata(session, { file_path: nested })).toEqual(first);
-    expect(gitCommands()).toHaveLength(afterFirstPath + 1);
-    expect(repoScopedMetadata(session, { file_path: alphaSeed })).toEqual(first);
-    expect(gitCommands()).toHaveLength(afterFirstPath + 1);
+    for (const path of [nested, alphaSeed]) {
+      expect(repoScopedMetadata(session, { file_path: path })).toEqual(first);
+      expect(gitCommands()).toHaveLength(afterFirstPath);
+    }
+  });
+
+  it("asks git nothing to place a path, so only naming a repository costs a process", () => {
+    expect(repoScopedMetadata(session, { file_path: join(plain, "x.txt") })).toEqual(noRepository);
+    expect(gitCommands()).toEqual([]);
+
+    repoScopedMetadata(session, { file_path: alphaSeed }, alpha);
+    expect(gitCommands()).toEqual(["git config user.name"]);
   });
 });
 

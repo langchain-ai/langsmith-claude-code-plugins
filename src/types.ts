@@ -181,6 +181,11 @@ export interface RepositoryAttribution {
   ls_attribution_identifier?: string;
 }
 
+export interface ToolPathLookup {
+  path?: string;
+  namedAPath: boolean;
+}
+
 export interface MetadataWithPins {
   [PINNED_REPOSITORY_KEYS]?: ReadonlySet<string>;
 }

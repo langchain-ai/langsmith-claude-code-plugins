@@ -885,6 +885,7 @@ var GIT_LOCATION_ENV_KEYS = [
 ];
 var NOT_A_REPOSITORY = /not a git repository \(or any of the parent directories\)/i;
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
+var GIT_DIRECTORY_NAME = ".git";
 var TURN_REPOSITORY_KEYS = [
   "repository_name",
   "repository_provider",
@@ -14552,27 +14553,30 @@ function createRunTree(config, mode = "full") {
 
 // dist/src/repo-attribution.js
 import { existsSync as existsSync3, statSync as statSync5 } from "node:fs";
-import { dirname as dirname5, isAbsolute, resolve as resolve2, sep } from "node:path";
+import { dirname as dirname5, isAbsolute, join as join3, resolve as resolve2, sep } from "node:path";
 var rootByDirectory = /* @__PURE__ */ new Map();
 var attributionByRoot = /* @__PURE__ */ new Map();
 var identifierByRoot = /* @__PURE__ */ new Map();
 function toolPathFromInput(toolInput, sessionCwd) {
-  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput))
-    return void 0;
+  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
+    return { namedAPath: false };
+  }
   const input = toolInput;
+  let namedAPath = false;
   for (const key of TOOL_PATH_INPUT_KEYS) {
     const value = input[key];
     if (typeof value !== "string" || value.length === 0)
       continue;
+    namedAPath = true;
     if (isAbsolute(value))
-      return value;
+      return { path: value, namedAPath };
     if (!sessionCwd || !isAbsolute(sessionCwd))
       continue;
     const resolved = resolve2(sessionCwd, value);
     if (existsSync3(resolved))
-      return resolved;
+      return { path: resolved, namedAPath };
   }
-  return void 0;
+  return { namedAPath };
 }
 function outsideGitDirectory(path3) {
   const nestedAt = path3.indexOf(`${sep}.git${sep}`);
@@ -14596,13 +14600,29 @@ function nearestExistingDirectory(path3) {
     current = parent;
   }
 }
+function rootFromGitMarker(directory) {
+  let current = resolve2(directory);
+  for (; ; ) {
+    try {
+      if (statSync5(join3(current, GIT_DIRECTORY_NAME)).isDirectory())
+        return current;
+      return void 0;
+    } catch {
+    }
+    const parent = dirname5(current);
+    if (parent === current)
+      return null;
+    current = parent;
+  }
+}
 function rootForPath(path3) {
   const directory = nearestExistingDirectory(path3);
   if (!directory)
     return void 0;
   if (rootByDirectory.has(directory))
     return rootByDirectory.get(directory);
-  const root = getRepoRoot(directory);
+  const marked = rootFromGitMarker(directory);
+  const root = marked === void 0 ? getRepoRoot(directory) : marked;
   rootByDirectory.set(directory, root);
   return root;
 }
@@ -14652,11 +14672,6 @@ function attributionForRoot(root) {
   attributionByRoot.set(root, attribution);
   return attribution;
 }
-function alreadyAttributed(base) {
-  if (!base || base.ls_attribution_identifier === void 0)
-    return false;
-  return TURN_REPOSITORY_KEYS.some((key) => base[key] !== void 0);
-}
 function withSessionAuthor(base, sessionRoot) {
   if (base?.ls_attribution_identifier !== void 0)
     return base;
@@ -14667,10 +14682,9 @@ function sessionScopedMetadata(base, sessionCwd) {
   return typeof sessionRoot === "string" ? withSessionAuthor(base, sessionRoot) : base;
 }
 function repoScopedMetadata(base, toolInput, sessionCwd) {
-  if (alreadyAttributed(base))
-    return base;
-  const path3 = toolPathFromInput(toolInput, sessionCwd);
-  if (!path3)
+  const lookup = toolPathFromInput(toolInput, sessionCwd);
+  const path3 = lookup.path ?? (lookup.namedAPath ? void 0 : sessionCwd);
+  if (!path3 || !isAbsolute(path3))
     return base;
   const root = rootForPath(path3);
   const gitCouldNotAnswer = root === void 0;
@@ -14693,7 +14707,7 @@ function turnScopedMetadata(base, toolInputs, sessionCwd) {
   if (typeof sessionRoot === "string")
     return withSessionAuthor(base, sessionRoot);
   for (const toolInput of toolInputs) {
-    const path3 = toolPathFromInput(toolInput, sessionCwd);
+    const { path: path3 } = toolPathFromInput(toolInput, sessionCwd);
     if (!path3)
       continue;
     const landedInRepository = typeof rootForPath(path3) === "string";
