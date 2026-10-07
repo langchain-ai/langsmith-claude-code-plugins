@@ -645,7 +645,7 @@ var binary = defineBinaryTarget({
 });
 
 // dist/src/config.js
-import { readFileSync as readFileSync2 } from "node:fs";
+import { readFileSync as readFileSync3 } from "node:fs";
 
 // dist/src/shared-config.js
 import { lstatSync, readFileSync, statSync } from "node:fs";
@@ -812,8 +812,8 @@ function toSdkReplicas(replicas2) {
 }
 
 // dist/src/config.js
-import { homedir, userInfo } from "node:os";
-import { join, resolve } from "node:path";
+import { homedir as homedir2, userInfo } from "node:os";
+import { join as join2, resolve } from "node:path";
 
 // dist/src/logger.js
 import { appendFileSync, mkdirSync, statSync as statSync2, renameSync } from "node:fs";
@@ -895,6 +895,40 @@ var TURN_REPOSITORY_KEYS = [
 var REPOSITORY_METADATA_KEYS = [...TURN_REPOSITORY_KEYS, "ls_attribution_identifier"];
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
 var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
+var GH_CONFIG_DIR_ENV = "GH_CONFIG_DIR";
+var GH_DEFAULT_CONFIG_DIR = [".config", "gh"];
+var GH_HOSTS_FILE = "hosts.yml";
+var GITHUB_DOT_COM = "github.com";
+var GH_HOSTS_HOST_LINE = /^([A-Za-z0-9][^\s:]*):\s*$/;
+var GH_HOSTS_USER_LINE = /^\s+user:\s+["']?([^"'\s#]+)["']?\s*$/;
+
+// dist/src/utils/gh-config.js
+import { readFileSync as readFileSync2 } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+function githubLoginFromHostsFile() {
+  try {
+    const configured = process.env[GH_CONFIG_DIR_ENV]?.trim();
+    const dir = configured || join(homedir(), ...GH_DEFAULT_CONFIG_DIR);
+    const logins = /* @__PURE__ */ new Map();
+    let host;
+    for (const line of readFileSync2(join(dir, GH_HOSTS_FILE), "utf-8").split(/\r?\n/)) {
+      const hostLine = GH_HOSTS_HOST_LINE.exec(line);
+      if (hostLine) {
+        host = hostLine[1];
+        continue;
+      }
+      if (!host)
+        continue;
+      const userLine = GH_HOSTS_USER_LINE.exec(line);
+      if (userLine && !logins.has(host))
+        logins.set(host, userLine[1]);
+    }
+    return logins.get(GITHUB_DOT_COM) ?? logins.values().next().value;
+  } catch {
+    return void 0;
+  }
+}
 
 // dist/src/config.js
 var LS_INTEGRATION_VERSION = true ? "0.4.1" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
@@ -908,9 +942,9 @@ function readAnthropicUserId() {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE;
   if (!homeDir)
     return void 0;
-  const configPath = join(homeDir, ".claude.json");
+  const configPath = join2(homeDir, ".claude.json");
   try {
-    const raw = readFileSync2(configPath, "utf-8");
+    const raw = readFileSync3(configPath, "utf-8");
     const parsed = JSON.parse(raw);
     const userId = parsed?.userID;
     if (typeof userId === "string" && userId.length > 0) {
@@ -1010,7 +1044,7 @@ function getGitUserName(cwd) {
       return name;
   } catch {
   }
-  return void 0;
+  return githubLoginFromHostsFile();
 }
 function getGitInfo(cwd) {
   const result = {};
@@ -1045,7 +1079,7 @@ function envBoolean(field) {
 }
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
-  const homeDir = homedir();
+  const homeDir = homedir2();
   const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
   let replicas2;
@@ -1104,10 +1138,10 @@ function loadConfig(options) {
     }
   }
   const common = mergeCommonConfig({
-    harness: readCommonConfigFile(join(cwd, ".claude", "langsmith.json")).common,
-    root: readCommonConfigFile(join(cwd, "langsmith-plugins.json")).common,
-    user: homeDir ? readCommonConfigFile(join(homeDir, ".claude", "langsmith.json")).common : void 0,
-    userRoot: homeDir ? readCommonConfigFile(join(homeDir, ".langsmith-plugins.json")).common : void 0,
+    harness: readCommonConfigFile(join2(cwd, ".claude", "langsmith.json")).common,
+    root: readCommonConfigFile(join2(cwd, "langsmith-plugins.json")).common,
+    user: homeDir ? readCommonConfigFile(join2(homeDir, ".claude", "langsmith.json")).common : void 0,
+    userRoot: homeDir ? readCommonConfigFile(join2(homeDir, ".langsmith-plugins.json")).common : void 0,
     env: {
       enabled: envBoolean("enabled"),
       defaultMuted: envBoolean("defaultMuted"),
@@ -1187,7 +1221,7 @@ function runHookEntry(event2, main10) {
 
 // dist/src/tracing-policy.js
 import { randomUUID } from "node:crypto";
-import { lstatSync as lstatSync2, readFileSync as readFileSync3 } from "node:fs";
+import { lstatSync as lstatSync2, readFileSync as readFileSync4 } from "node:fs";
 import { mkdir, open, rename, rmdir, unlink } from "node:fs/promises";
 import { dirname as dirname2 } from "node:path";
 import { performance as performance2 } from "node:perf_hooks";
@@ -1204,7 +1238,7 @@ function hasCode(error2, code) {
 function readPolicy(path3) {
   let raw;
   try {
-    raw = readFileSync3(path3, "utf8");
+    raw = readFileSync4(path3, "utf8");
   } catch (error2) {
     if (hasCode(error2, "ENOENT")) {
       try {
@@ -6105,7 +6139,7 @@ function renameSync3(oldPath, newPath) {
 function unlinkSync2(filePath) {
   nodeFs.unlinkSync(filePath);
 }
-function readFileSync5(filePath) {
+function readFileSync6(filePath) {
   return nodeFs.readFileSync(filePath, "utf-8");
 }
 async function mkdirExclusive(dir) {
@@ -6313,7 +6347,7 @@ var PromptCache = class {
     }
     let entries;
     try {
-      const content = readFileSync5(filePath);
+      const content = readFileSync6(filePath);
       const data = JSON.parse(content);
       entries = data.entries ?? null;
     } catch {
@@ -6433,7 +6467,7 @@ function isEEXIST(err) {
 }
 function lockMetadataLines(lockDir) {
   try {
-    return readFileSync5(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
+    return readFileSync6(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
   } catch {
     return void 0;
   }
@@ -6548,7 +6582,7 @@ function loadProfileState() {
     return void 0;
   }
   try {
-    const config = JSON.parse(readFileSync5(configPath));
+    const config = JSON.parse(readFileSync6(configPath));
     const profileName = resolveProfileName(config);
     const profile = profileName ? config.profiles?.[profileName] : void 0;
     if (!profileName || !profile) {
@@ -6778,7 +6812,7 @@ var ProfileAuth = class {
   }
   reloadProfile() {
     try {
-      const config = JSON.parse(readFileSync5(this.state.configPath));
+      const config = JSON.parse(readFileSync6(this.state.configPath));
       const profile = config.profiles?.[this.state.profileName];
       if (!profile) {
         return void 0;
@@ -13890,7 +13924,7 @@ function createSecretAnonymizer(options) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync6, statSync as statSync4, fstatSync, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync as readFileSync7, statSync as statSync4, fstatSync, openSync, readSync, closeSync } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
   let size;
@@ -13900,7 +13934,7 @@ function readTranscript(filePath, afterLine = -1) {
     return { messages: [], lastLine: afterLine };
   }
   if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync6(filePath, "utf-8");
+    const raw = readFileSync7(filePath, "utf-8");
     const lines = raw.split("\n").filter((l) => l.trim() !== "");
     const messages = [];
     let lastLine = afterLine;
@@ -13966,7 +14000,7 @@ function getTranscriptEndLine(filePath) {
     if (size === 0)
       return -1;
     if (size <= MAX_FULL_READ_BYTES) {
-      const raw = readFileSync6(filePath, "utf-8");
+      const raw = readFileSync7(filePath, "utf-8");
       const lines = raw.split("\n").filter((l) => l.trim() !== "");
       return lines.length > 0 ? lines.length - 1 : -1;
     }
@@ -14197,7 +14231,7 @@ function groupIntoTurns(messages) {
 }
 
 // dist/src/state.js
-import { readFileSync as readFileSync7, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
+import { readFileSync as readFileSync8, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
 import { dirname as dirname3 } from "node:path";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
@@ -14242,7 +14276,7 @@ async function atomicUpdateState(stateFilePath, fn) {
 }
 function loadState(stateFilePath) {
   try {
-    const raw = readFileSync7(stateFilePath, "utf-8");
+    const raw = readFileSync8(stateFilePath, "utf-8");
     return JSON.parse(raw);
   } catch {
     return {};

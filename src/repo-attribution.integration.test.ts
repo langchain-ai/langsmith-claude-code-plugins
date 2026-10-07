@@ -22,16 +22,41 @@ const home = sandbox.makeRepo(
   "git@github.com:private/dotfiles.git",
 );
 
+const nameless = sandbox.makeRepo(
+  "nameless repo",
+  "trunk-nameless",
+  "Temporary",
+  "git@github.com:acme/c.git",
+);
+sandbox.git(nameless, "config", "--unset", "user.name");
+const ghHome = join(sandbox.root, "gh home");
+writeFileSync(
+  join(sandbox.makeDir(ghHome, ".config", "gh"), "hosts.yml"),
+  "github.com:\n    git_protocol: https\n    user: ejaimez14\n",
+);
+const emptyGlobalConfig = join(sandbox.root, "empty global config");
+writeFileSync(emptyGlobalConfig, "");
+const withoutAGitName = {
+  GIT_CONFIG_GLOBAL: emptyGlobalConfig,
+  GIT_CONFIG_SYSTEM: emptyGlobalConfig,
+};
+
 let server: Server;
 let endpoint: string;
 const posted: Run[] = [];
 
-async function hook(event: string, payload: Record<string, unknown>, home?: string): Promise<void> {
+async function hook(
+  event: string,
+  payload: Record<string, unknown>,
+  home?: string,
+  extraEnv?: Record<string, string>,
+): Promise<void> {
   const child = spawn(process.execPath, [bundle, event], {
     cwd: String(payload.cwd ?? alpha),
     env: {
       ...sandbox.env,
       ...(home ? { HOME: home, USERPROFILE: home } : {}),
+      ...extraEnv,
       PATH: process.env.PATH ?? "",
       TRACE_TO_LANGSMITH: "true",
       LANGSMITH_API_KEY: "lsv2_pt_fake_key_for_tests",
@@ -84,10 +109,15 @@ function toolRun(name: string): Record<string, unknown> {
   return runs[0].extra?.metadata ?? {};
 }
 
-const prompt = (base: Record<string, unknown>, home?: string) =>
-  hook("UserPromptSubmit", { ...base, hook_event_name: "UserPromptSubmit", prompt: "go" }, home);
-const stop = (base: Record<string, unknown>, home?: string) =>
-  hook("Stop", { ...base, hook_event_name: "Stop", last_assistant_message: "done" }, home);
+const prompt = (base: Record<string, unknown>, home?: string, env?: Record<string, string>) =>
+  hook(
+    "UserPromptSubmit",
+    { ...base, hook_event_name: "UserPromptSubmit", prompt: "go" },
+    home,
+    env,
+  );
+const stop = (base: Record<string, unknown>, home?: string, env?: Record<string, string>) =>
+  hook("Stop", { ...base, hook_event_name: "Stop", last_assistant_message: "done" }, home, env);
 
 beforeEach(() => (posted.length = 0));
 
@@ -197,5 +227,21 @@ describe("a turn working across repositories", () => {
     for (const name of ["Read", "Glob", "Edit"]) {
       expect(toolRun(name)).toMatchObject({ repository_name: "acme/a", git_branch: "trunk-a" });
     }
+  }, 120_000);
+
+  it("labels a turn with the GitHub login when no git name is set", async () => {
+    const session = "gh-login-fallback";
+    const path = join(sandbox.root, `${session}.jsonl`);
+    const base = { session_id: session, transcript_path: path, cwd: nameless };
+
+    await prompt(base, ghHome, withoutAGitName);
+    writeFileSync(path, transcript(join(nameless, "seed.txt")));
+    await stop(base, ghHome, withoutAGitName);
+
+    const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
+    expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject({
+      repository_name: "acme/c",
+      ls_attribution_identifier: "ejaimez14",
+    });
   }, 120_000);
 });

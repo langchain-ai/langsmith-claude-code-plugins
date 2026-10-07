@@ -19,6 +19,7 @@ import {
   REPOSITORY_METADATA_KEYS,
 } from "./constants.js";
 import type { MetadataWithPins } from "./types.js";
+import { githubLoginFromHostsFile } from "./utils/gh-config.js";
 
 /**
  * Configuration — existing Claude environment discovery plus the shared langsmith-plugins.json contract.
@@ -205,7 +206,7 @@ export function getGitUserName(cwd: string): string | undefined {
     const name = gitOutput("git config user.name", cwd).trim();
     if (name) return name;
   } catch {}
-  return undefined;
+  return githubLoginFromHostsFile();
 }
 
 /** Read the current git branch and commit SHA via the git CLI (omitted if absent). */

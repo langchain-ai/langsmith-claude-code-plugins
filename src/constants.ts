@@ -48,6 +48,18 @@ const PINNED_REPOSITORY_KEYS = Symbol("pinned repository metadata keys");
 
 const NO_PINNED_KEYS: ReadonlySet<string> = new Set();
 
+const GH_CONFIG_DIR_ENV = "GH_CONFIG_DIR";
+
+const GH_DEFAULT_CONFIG_DIR = [".config", "gh"] as const;
+
+const GH_HOSTS_FILE = "hosts.yml";
+
+const GITHUB_DOT_COM = "github.com";
+
+const GH_HOSTS_HOST_LINE = /^([A-Za-z0-9][^\s:]*):\s*$/;
+
+const GH_HOSTS_USER_LINE = /^\s+user:\s+["']?([^"'\s#]+)["']?\s*$/;
+
 export {
   USER_PROMPT_TURN_NAME,
   ASSISTANT_RUN_NAME,
@@ -60,5 +72,11 @@ export {
   REPOSITORY_METADATA_KEYS,
   PINNED_REPOSITORY_KEYS,
   NO_PINNED_KEYS,
+  GH_CONFIG_DIR_ENV,
+  GH_DEFAULT_CONFIG_DIR,
+  GH_HOSTS_FILE,
+  GITHUB_DOT_COM,
+  GH_HOSTS_HOST_LINE,
+  GH_HOSTS_USER_LINE,
 };
 export type { HookEventName };
