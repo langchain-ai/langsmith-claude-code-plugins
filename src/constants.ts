@@ -33,14 +33,15 @@ const NOT_A_REPOSITORY = /not a git repository \(or any of the parent directorie
 
 const TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"] as const;
 
-const REPOSITORY_METADATA_KEYS = [
+const TURN_REPOSITORY_KEYS = [
   "repository_name",
   "repository_provider",
   "repository_url",
   "git_branch",
   "git_commit_sha",
-  "ls_attribution_identifier",
 ] as const;
+
+const REPOSITORY_METADATA_KEYS = [...TURN_REPOSITORY_KEYS, "ls_attribution_identifier"] as const;
 
 /** A symbol, since metadata travels as plain JSON and this must never reach LangSmith. */
 const PINNED_REPOSITORY_KEYS = Symbol("pinned repository metadata keys");
@@ -55,6 +56,7 @@ export {
   GIT_LOCATION_ENV_KEYS,
   NOT_A_REPOSITORY,
   TOOL_PATH_INPUT_KEYS,
+  TURN_REPOSITORY_KEYS,
   REPOSITORY_METADATA_KEYS,
   PINNED_REPOSITORY_KEYS,
   NO_PINNED_KEYS,

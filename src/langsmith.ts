@@ -225,7 +225,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
   // Determine the turn run ID and whether we need to create it
   let turnRunId: string;
   let shouldCreateTurn = false;
-  let turnMetadataBase = customMetadata;
+  const turnMetadataBase = turnScopedMetadata(customMetadata, turnToolInputs(turn), sessionCwd);
 
   if (parentRunId) {
     // UserPromptSubmit already created the Turn run (or this is a subagent under a tool run)
@@ -243,7 +243,6 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
   } else {
     // Create a new turn run for interrupted/standalone turns
     shouldCreateTurn = true;
-    turnMetadataBase = turnScopedMetadata(customMetadata, turnToolInputs(turn), sessionCwd);
     turnRunId = uuid7FromTime(turn.userTimestamp);
     traceId = turnRunId; // This turn is its own trace root
 
@@ -380,7 +379,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
           extra: {
             metadata: codingAgentMetadata({
               sessionId,
-              base: repoScopedMetadata(customMetadata, toolCall.tool_use.input, sessionCwd),
+              base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, sessionCwd),
               turnId,
               turnNumber: turnNum,
               runtimeVersion,

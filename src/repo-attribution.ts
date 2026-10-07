@@ -1,7 +1,7 @@
 // A session started in a central folder works across several repositories, so its working
 // directory says nothing about the repository a given tool call touched.
 
-import { statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 import {
   getGitUserName,
@@ -11,7 +11,11 @@ import {
   getRepoUrl,
   pinnedRepositoryKeys,
 } from "./config.js";
-import { REPOSITORY_METADATA_KEYS, TOOL_PATH_INPUT_KEYS } from "./constants.js";
+import {
+  REPOSITORY_METADATA_KEYS,
+  TOOL_PATH_INPUT_KEYS,
+  TURN_REPOSITORY_KEYS,
+} from "./constants.js";
 import type { RepositoryAttribution } from "./types.js";
 
 const rootByDirectory = new Map<string, string | null | undefined>();
@@ -25,7 +29,9 @@ export function toolPathFromInput(toolInput: unknown, sessionCwd?: string): stri
     const value = input[key];
     if (typeof value !== "string" || value.length === 0) continue;
     if (isAbsolute(value)) return value;
-    if (sessionCwd && isAbsolute(sessionCwd)) return resolve(sessionCwd, value);
+    if (!sessionCwd || !isAbsolute(sessionCwd)) continue;
+    const resolved = resolve(sessionCwd, value);
+    if (existsSync(resolved)) return resolved;
   }
   return undefined;
 }
@@ -111,11 +117,34 @@ function attributionForRoot(root: string): RepositoryAttribution {
   return attribution;
 }
 
+function alreadyAttributed(base: Record<string, unknown> | undefined): boolean {
+  if (!base || base.ls_attribution_identifier === undefined) return false;
+  return TURN_REPOSITORY_KEYS.some((key) => base[key] !== undefined);
+}
+
+function withSessionAuthor(
+  base: Record<string, unknown> | undefined,
+  sessionRoot: string,
+): Record<string, unknown> | undefined {
+  if (base?.ls_attribution_identifier !== undefined) return base;
+  return { ...base, ...identifierForRoot(sessionRoot) };
+}
+
+export function sessionScopedMetadata(
+  base: Record<string, unknown> | undefined,
+  sessionCwd?: string,
+): Record<string, unknown> | undefined {
+  const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : undefined;
+  return typeof sessionRoot === "string" ? withSessionAuthor(base, sessionRoot) : base;
+}
+
 export function repoScopedMetadata(
   base: Record<string, unknown> | undefined,
   toolInput: unknown,
   sessionCwd?: string,
 ): Record<string, unknown> | undefined {
+  if (alreadyAttributed(base)) return base;
+
   const path = toolPathFromInput(toolInput, sessionCwd);
   if (!path) return base;
 
@@ -141,10 +170,8 @@ export function turnScopedMetadata(
   toolInputs: Iterable<unknown>,
   sessionCwd?: string,
 ): Record<string, unknown> | undefined {
-  const sessionResolvedRepository = sessionCwd
-    ? typeof rootForPath(sessionCwd) === "string"
-    : false;
-  if (sessionResolvedRepository) return base;
+  const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : undefined;
+  if (typeof sessionRoot === "string") return withSessionAuthor(base, sessionRoot);
   for (const toolInput of toolInputs) {
     const path = toolPathFromInput(toolInput, sessionCwd);
     if (!path) continue;

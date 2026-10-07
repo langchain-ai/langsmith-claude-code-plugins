@@ -885,14 +885,14 @@ var GIT_LOCATION_ENV_KEYS = [
 ];
 var NOT_A_REPOSITORY = /not a git repository \(or any of the parent directories\)/i;
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
-var REPOSITORY_METADATA_KEYS = [
+var TURN_REPOSITORY_KEYS = [
   "repository_name",
   "repository_provider",
   "repository_url",
   "git_branch",
-  "git_commit_sha",
-  "ls_attribution_identifier"
+  "git_commit_sha"
 ];
+var REPOSITORY_METADATA_KEYS = [...TURN_REPOSITORY_KEYS, "ls_attribution_identifier"];
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
 var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
 
@@ -14487,7 +14487,7 @@ function createRunTree(config, mode = "full") {
 }
 
 // dist/src/repo-attribution.js
-import { statSync as statSync5 } from "node:fs";
+import { existsSync as existsSync3, statSync as statSync5 } from "node:fs";
 import { dirname as dirname4, isAbsolute, resolve as resolve2, sep } from "node:path";
 var rootByDirectory = /* @__PURE__ */ new Map();
 var attributionByRoot = /* @__PURE__ */ new Map();
@@ -14502,8 +14502,11 @@ function toolPathFromInput(toolInput, sessionCwd) {
       continue;
     if (isAbsolute(value))
       return value;
-    if (sessionCwd && isAbsolute(sessionCwd))
-      return resolve2(sessionCwd, value);
+    if (!sessionCwd || !isAbsolute(sessionCwd))
+      continue;
+    const resolved = resolve2(sessionCwd, value);
+    if (existsSync3(resolved))
+      return resolved;
   }
   return void 0;
 }
@@ -14585,7 +14588,23 @@ function attributionForRoot(root) {
   attributionByRoot.set(root, attribution);
   return attribution;
 }
+function alreadyAttributed(base) {
+  if (!base || base.ls_attribution_identifier === void 0)
+    return false;
+  return TURN_REPOSITORY_KEYS.some((key) => base[key] !== void 0);
+}
+function withSessionAuthor(base, sessionRoot) {
+  if (base?.ls_attribution_identifier !== void 0)
+    return base;
+  return { ...base, ...identifierForRoot(sessionRoot) };
+}
+function sessionScopedMetadata(base, sessionCwd) {
+  const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : void 0;
+  return typeof sessionRoot === "string" ? withSessionAuthor(base, sessionRoot) : base;
+}
 function repoScopedMetadata(base, toolInput, sessionCwd) {
+  if (alreadyAttributed(base))
+    return base;
   const path3 = toolPathFromInput(toolInput, sessionCwd);
   if (!path3)
     return base;
@@ -14606,9 +14625,9 @@ function repoScopedMetadata(base, toolInput, sessionCwd) {
   };
 }
 function turnScopedMetadata(base, toolInputs, sessionCwd) {
-  const sessionResolvedRepository = sessionCwd ? typeof rootForPath(sessionCwd) === "string" : false;
-  if (sessionResolvedRepository)
-    return base;
+  const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : void 0;
+  if (typeof sessionRoot === "string")
+    return withSessionAuthor(base, sessionRoot);
   for (const toolInput of toolInputs) {
     const path3 = toolPathFromInput(toolInput, sessionCwd);
     if (!path3)
@@ -14696,7 +14715,7 @@ async function traceTurn(options) {
   const userContent = typeof turn.userContent === "string" ? [{ type: "text", text: turn.userContent }] : turn.userContent;
   let turnRunId;
   let shouldCreateTurn = false;
-  let turnMetadataBase = customMetadata;
+  const turnMetadataBase = turnScopedMetadata(customMetadata, turnToolInputs(turn), sessionCwd);
   if (parentRunId) {
     debug(`Using existing run ${parentRunId} as parent for LLM/tool runs`);
     turnRunId = parentRunId;
@@ -14705,7 +14724,6 @@ async function traceTurn(options) {
     }
   } else {
     shouldCreateTurn = true;
-    turnMetadataBase = turnScopedMetadata(customMetadata, turnToolInputs(turn), sessionCwd);
     turnRunId = uuid7FromTime(turn.userTimestamp);
     traceId = turnRunId;
     parentDottedOrder = generateDottedOrderSegment(turn.userTimestamp, turnRunId);
@@ -14804,7 +14822,7 @@ async function traceTurn(options) {
         extra: {
           metadata: codingAgentMetadata({
             sessionId,
-            base: repoScopedMetadata(customMetadata, toolCall.tool_use.input, sessionCwd),
+            base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, sessionCwd),
             turnId,
             turnNumber: turnNum,
             runtimeVersion,
@@ -15523,7 +15541,8 @@ async function main2() {
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
   const agentId = input.tool_response.agentId;
   const workflow = !agentId ? detectWorkflowLaunch(input.tool_name, input.tool_response) : void 0;
-  const toolMetadataBase = repoScopedMetadata(config.customMetadata, input.tool_input, input.cwd);
+  const sessionMetadataBase = sessionScopedMetadata(config.customMetadata, input.cwd);
+  const toolMetadataBase = repoScopedMetadata(sessionMetadataBase, input.tool_input, input.cwd);
   if (agentId) {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
   } else if (workflow) {

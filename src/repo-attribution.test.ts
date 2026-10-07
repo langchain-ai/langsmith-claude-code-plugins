@@ -100,15 +100,29 @@ describe("repoScopedMetadata", () => {
     ],
     ["a path git places in no repository", { file_path: join(plain, "x.txt") }, noRepository],
     ["a tool that carries no path", { command: "ls -la" }, session, beta],
+    ["an opaque identifier no file sits at", { path: "notion/page/abc123" }, session, beta],
     ["a broken submodule git cannot answer for", { file_path: join(submodule, "x.txt") }, session],
   ])("stamps exactly what %s accounts for", (_name, input, want, cwd) => {
     expect(repoScopedMetadata(session, input, cwd)).toEqual(want);
   });
 
-  it("drops an author name the session carried once a path lands in no repository", () => {
-    const stale = { ...session, ls_attribution_identifier: "Stale Owner" };
+  it("drops a repository the session carried once a path lands in no repository", () => {
+    expect(repoScopedMetadata(session, { file_path: join(plain, "x.txt") })).toEqual(noRepository);
+  });
 
-    expect(repoScopedMetadata(stale, { file_path: join(plain, "x.txt") })).toEqual(noRepository);
+  it("asks git nothing at all once a turn carries both a repository and an author", () => {
+    const attributed = { ...session, ls_attribution_identifier: "Alpha Owner" };
+
+    for (const path of [alphaSeed, betaSeed, join(plain, "x.txt")]) {
+      expect(repoScopedMetadata(attributed, { file_path: path }, alpha)).toEqual(attributed);
+    }
+    expect(gitCommands()).toEqual([]);
+  });
+
+  it("keeps looking while a turn has a repository but still no author", () => {
+    const halfway = { ...session, ls_attribution_identifier: undefined };
+
+    expect(repoScopedMetadata(halfway, { file_path: betaSeed })).toMatchObject(inBeta);
   });
 
   it("ignores git settings the session exported, which answer for the wrong directory", () => {
@@ -180,10 +194,10 @@ describe("turnScopedMetadata", () => {
 
   it.each<TurnCase>([
     [
-      "the repository it already resolved, which has no remote to name it",
+      "the repository it already resolved, which has no remote to name it, and its author",
       inRemoteless,
       [{ file_path: betaSeed }],
-      inRemoteless,
+      { ...inRemoteless, ls_attribution_identifier: "Local Owner" },
     ],
     [
       "the repository its first tool lands in",
@@ -205,5 +219,22 @@ describe("turnScopedMetadata", () => {
     ],
   ])("gives the turn %s", (_name, base, inputs, want) => {
     expect(turnScopedMetadata(base, inputs, base.cwd as string)).toEqual(want);
+  });
+
+  it("gives the turn the same author its tools get, inside the session's own repository", () => {
+    const base = { cwd: alpha, repository_name: "acme/alpha", git_branch: "trunk-alpha" };
+    const author = { ls_attribution_identifier: "Alpha Owner" };
+
+    expect(turnScopedMetadata(base, [{ file_path: alphaSeed }], alpha)).toEqual({
+      ...base,
+      ...author,
+    });
+    expect(repoScopedMetadata(base, { file_path: alphaSeed }, alpha)).toMatchObject(author);
+  });
+
+  it("keeps an author the person configured rather than the one git reports", () => {
+    const base = { cwd: alpha, repository_name: "acme/alpha", ls_attribution_identifier: "Chosen" };
+
+    expect(turnScopedMetadata(base, [{ file_path: alphaSeed }], alpha)).toEqual(base);
   });
 });

@@ -15,16 +15,23 @@ type Run = { name?: string; extra?: { metadata?: Record<string, unknown> } };
 const sandbox = createGitSandbox("ls repo e2e ");
 const alpha = sandbox.makeRepo("alpha repo", "trunk-a", "Alpha Owner", "git@github.com:acme/a.git");
 const beta = sandbox.makeRepo("beta repo", "trunk-b", "Beta Owner", "https://gitlab.com/acme/b");
+const home = sandbox.makeRepo(
+  "home folder",
+  "trunk-home",
+  "Private Person",
+  "git@github.com:private/dotfiles.git",
+);
 
 let server: Server;
 let endpoint: string;
 const posted: Run[] = [];
 
-async function hook(event: string, payload: Record<string, unknown>): Promise<void> {
+async function hook(event: string, payload: Record<string, unknown>, home?: string): Promise<void> {
   const child = spawn(process.execPath, [bundle, event], {
     cwd: String(payload.cwd ?? alpha),
     env: {
       ...sandbox.env,
+      ...(home ? { HOME: home, USERPROFILE: home } : {}),
       PATH: process.env.PATH ?? "",
       TRACE_TO_LANGSMITH: "true",
       LANGSMITH_API_KEY: "lsv2_pt_fake_key_for_tests",
@@ -77,10 +84,10 @@ function toolRun(name: string): Record<string, unknown> {
   return runs[0].extra?.metadata ?? {};
 }
 
-const prompt = (base: Record<string, unknown>) =>
-  hook("UserPromptSubmit", { ...base, hook_event_name: "UserPromptSubmit", prompt: "go" });
-const stop = (base: Record<string, unknown>) =>
-  hook("Stop", { ...base, hook_event_name: "Stop", last_assistant_message: "done" });
+const prompt = (base: Record<string, unknown>, home?: string) =>
+  hook("UserPromptSubmit", { ...base, hook_event_name: "UserPromptSubmit", prompt: "go" }, home);
+const stop = (base: Record<string, unknown>, home?: string) =>
+  hook("Stop", { ...base, hook_event_name: "Stop", last_assistant_message: "done" }, home);
 
 beforeEach(() => (posted.length = 0));
 
@@ -115,7 +122,7 @@ afterAll(async () => {
 });
 
 describe("a turn working across repositories", () => {
-  it("attributes every tool call to its own repository", async () => {
+  it("keeps every tool call on the repository the session itself resolved", async () => {
     const session = "repo-attribution";
     const path = join(sandbox.root, `${session}.jsonl`);
     // The session starts inside the first repository and reaches into the second.
@@ -133,16 +140,14 @@ describe("a turn working across repositories", () => {
     writeFileSync(path, transcript(join(beta, "seed.txt")));
     await stop(base);
 
-    const inBeta = { repository_name: "acme/b", ls_attribution_identifier: "Beta Owner" };
-    expect(toolRun("Read")).toMatchObject({ ...inBeta, git_branch: "trunk-b" });
-    expect(toolRun("Glob")).toMatchObject(inBeta);
-    // Relative, and traced in the same process as the Glob, so a cache that is right
-    // once and wrong afterwards shows up here.
-    expect(toolRun("Edit")).toMatchObject({
+    const inAlpha = {
       repository_name: "acme/a",
       git_branch: "trunk-a",
       ls_attribution_identifier: "Alpha Owner",
-    });
+    };
+    for (const name of ["Read", "Glob", "Edit"]) expect(toolRun(name)).toMatchObject(inAlpha);
+    expect(JSON.stringify(posted)).not.toContain("acme/b");
+    expect(JSON.stringify(posted)).not.toContain("Beta Owner");
   }, 120_000);
 
   it("fills a turn that resolved no repository from its first tool", async () => {
@@ -159,6 +164,38 @@ describe("a turn working across repositories", () => {
     const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
     expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject(inBeta);
     expect(toolRun("Glob")).toMatchObject(inBeta);
-    expect(toolRun("Edit")).toMatchObject({ repository_name: "acme/a" });
+    expect(toolRun("Edit")).toMatchObject(inBeta);
+    expect(JSON.stringify(posted)).not.toContain("acme/a");
+  }, 120_000);
+
+  it("sends nothing from a home folder that is a repository of its own", async () => {
+    const session = "private-home";
+    const path = join(sandbox.root, `${session}.jsonl`);
+    const base = { session_id: session, transcript_path: path, cwd: alpha };
+
+    await prompt(base, home);
+    await hook(
+      "PostToolUse",
+      {
+        ...base,
+        hook_event_name: "PostToolUse",
+        tool_name: "Read",
+        tool_input: { file_path: join(home, "seed.txt") },
+        tool_response: { ok: true },
+        tool_use_id: `${session}-tool-0`,
+      },
+      home,
+    );
+    writeFileSync(path, transcript(join(home, "seed.txt")));
+    await stop(base, home);
+
+    const wire = JSON.stringify(posted);
+    expect(posted.length).toBeGreaterThan(0);
+    for (const secret of ["private/dotfiles", "trunk-home", "Private Person"]) {
+      expect(wire).not.toContain(secret);
+    }
+    for (const name of ["Read", "Glob", "Edit"]) {
+      expect(toolRun(name)).toMatchObject({ repository_name: "acme/a", git_branch: "trunk-a" });
+    }
   }, 120_000);
 });
