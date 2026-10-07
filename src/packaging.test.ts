@@ -14,8 +14,10 @@ import {
 } from "node:fs";
 import { once } from "node:events";
 import { createProxy } from "./proxy/server.js";
-import { COMMAND_GUIDANCE, parseGatewayCommand } from "./proxy/options.js";
-import { endpoints, type ProxyConfig } from "./proxy/config.js";
+import { parseGatewayCommand } from "./proxy/options.js";
+import { COMMAND_GUIDANCE } from "./proxy/proxy-constants.js";
+import { endpoints } from "./proxy/config.js";
+import type { ProxyConfig } from "./proxy/proxy-models.js";
 import { isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
@@ -125,7 +127,7 @@ describe("separate marketplace packages", () => {
           ? "description: Show read-only gateway routing and shared proxy status"
           : `description: ${name === "setup" ? "Enable" : "Disable"} gateway settings deterministically for an explicit scope`,
         name === "setup"
-          ? `argument-hint: "--scope global|project [--use-claude-subscription] [--profile name] [--api-url HTTPS_ORIGIN --gateway-url HTTPS_ORIGIN] [--cli /absolute/path --port 52507]"`
+          ? `argument-hint: "--scope global|project [--use-claude-subscription] [--profile name] [--api-url HTTPS_ORIGIN --gateway-url HTTPS_ORIGIN] [--cli /absolute/path --port 52507] [--workspace-id UUID --credential-ttl 300 --credential-command cmd args (last)]"`
           : name === "status"
             ? `argument-hint: "[--scope global|project]"`
             : `argument-hint: "--scope global|project"`,

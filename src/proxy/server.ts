@@ -5,8 +5,20 @@ import http, {
 } from "node:http";
 import https from "node:https";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { KEY_HEADER, endpoints, type ProxyConfig } from "./config.js";
-import { TokenCache, cliToken, loginGuidance } from "./token.js";
+import { endpoints } from "./config.js";
+import {
+  CLI_TOKEN_TTL_MS,
+  CREDENTIAL_TIMEOUT_MS,
+  DEFAULT_CREDENTIAL_TTL_MS,
+  KEY_HEADER,
+  MAX_REQUEST_BYTES,
+  PROTOCOL_VERSION,
+  TENANT_HEADER,
+  hop,
+  routing,
+} from "./proxy-constants.js";
+import type { ProxyConfig } from "./proxy-models.js";
+import { TokenCache, cliToken, commandToken, commandGuidance, loginGuidance } from "./token.js";
 
 // Bump the protocol identity when forwarding or validation changes so an older
 // daemon cannot silently retain the previous contract. Conflicts fail closed.
@@ -14,7 +26,7 @@ export const identity = (c: ProxyConfig) =>
   createHash("sha256")
     .update(
       JSON.stringify([
-        8,
+        PROTOCOL_VERSION,
         c.useClaudeSubscription,
         c.cli,
         c.profile,
@@ -22,6 +34,9 @@ export const identity = (c: ProxyConfig) =>
         c.secret,
         endpoints(c).apiUrl,
         endpoints(c).gatewayUrl,
+        c.credentialCommand,
+        c.credentialTtlMs,
+        c.workspaceId,
       ]),
     )
     .digest("hex");
@@ -61,32 +76,6 @@ export function nativeToken(req: IncomingMessage): string | undefined {
   return token;
 }
 
-const hop = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-  "proxy-connection",
-]);
-const routing = new Set([
-  "authorization",
-  "x-auth-source",
-  "x-gateway-key",
-  "gateway-key",
-  "x-api-key",
-  "x-tenant-id",
-  "x-workspace-id",
-  "x-project-id",
-  "x-auth-mode",
-  "x-gateway-auth-mode",
-  "x-service-key",
-  "x-auth-token",
-  "x-secret-token",
-]);
 export function cleanHeaders(headers: IncomingHttpHeaders, request = true): IncomingHttpHeaders {
   const blocked = new Set([
     ...hop,
@@ -138,7 +127,6 @@ export function upstreamPath(method: string, raw: string): string | undefined {
 
 // Match smith-go/gateway's buffered request limit, including large image/context
 // payloads. Enforce it on both the uploaded and rewritten UTF-8 bytes.
-export const MAX_REQUEST_BYTES = 60 * 1024 * 1024;
 
 class RequestError extends Error {
   constructor(
@@ -295,9 +283,18 @@ export function createProxy(
 ) {
   const upstreamOrigin = new URL(endpoints(config).gatewayUrl);
   const credentialAbort = new AbortController();
-  const tokens = new TokenCache(
-    options.token ?? (() => cliToken(config, 10_000, credentialAbort.signal)),
-  );
+  const command = config.credentialCommand;
+  const fetchToken =
+    command === undefined
+      ? (options.token ?? (() => cliToken(config, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal)))
+      : () => commandToken(command, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal);
+  const ttlMs =
+    command === undefined
+      ? CLI_TOKEN_TTL_MS
+      : (config.credentialTtlMs ?? DEFAULT_CREDENTIAL_TTL_MS);
+  const tokens = new TokenCache(fetchToken, Date.now, ttlMs);
+  const unavailable = () =>
+    command === undefined ? loginGuidance(config) : commandGuidance(config);
   const sessions = options.sessions ?? new Sessions();
   const transport = options.transport ?? https.request;
   let draining = false;
@@ -391,7 +388,7 @@ export function createProxy(
       }
       if (draining) throw new RequestError(503, "Local proxy draining");
       const token = await tokens.get().catch(() => {
-        throw new RequestError(503, loginGuidance(config));
+        throw new RequestError(503, unavailable());
       });
       if (ended || res.destroyed) return;
       if (draining) throw new RequestError(503, "Local proxy draining");
@@ -399,6 +396,7 @@ export function createProxy(
       // overridden provider. Gateway selection activates it only for built-in
       // Anthropic (including fallback legs); other destinations ignore it.
       headers.authorization = `Bearer ${token}`;
+      if (config.workspaceId) headers[TENANT_HEADER] = config.workspaceId;
       if (native) headers["x-langsmith-anthropic-passthrough"] = native;
       outgoing = transport(
         {

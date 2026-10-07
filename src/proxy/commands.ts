@@ -1,4 +1,5 @@
-import { parseGatewayCommand, SetupError, COMMAND_GUIDANCE } from "./options.js";
+import { parseGatewayCommand, SetupError } from "./options.js";
+import { COMMAND_GUIDANCE } from "./proxy-constants.js";
 import { enable, disable, modeSummary } from "./settings.js";
 import { gatewayHook } from "./lifecycle.js";
 import { gatewayStatus } from "./status.js";

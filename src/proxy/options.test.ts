@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { httpsOrigin, endpoints, API_URL, UPSTREAM } from "./config.js";
+import { httpsOrigin, endpoints } from "./config.js";
+import { API_URL, UPSTREAM } from "./proxy-constants.js";
 import { parseSetupArgs } from "./options.js";
 
 describe("strict endpoint origins and paired explicit setup arguments", () => {

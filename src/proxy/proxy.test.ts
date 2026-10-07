@@ -25,17 +25,10 @@ import {
   Sessions,
   identity,
   nativeToken,
-  MAX_REQUEST_BYTES,
 } from "./server.js";
-import {
-  API_URL,
-  endpoints,
-  KEY_HEADER,
-  UPSTREAM,
-  configDir,
-  loadConfig,
-  type ProxyConfig,
-} from "./config.js";
+import { endpoints, configDir, loadConfig } from "./config.js";
+import { API_URL, KEY_HEADER, MAX_REQUEST_BYTES, UPSTREAM } from "./proxy-constants.js";
+import type { ProxyConfig } from "./proxy-models.js";
 import { cliToken, loginGuidance, TokenCache } from "./token.js";
 import { control, ensure, gatewayHook, waitForStopped } from "./lifecycle.js";
 import { createConfig } from "./setup.js";

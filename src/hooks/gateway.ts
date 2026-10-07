@@ -2,7 +2,7 @@
 import { fileURLToPath } from "node:url";
 import { ConfigError, loadConfig } from "../proxy/config.js";
 import { createProxy, identity } from "../proxy/server.js";
-import { COMMAND_GUIDANCE } from "../proxy/options.js";
+import { COMMAND_GUIDANCE } from "../proxy/proxy-constants.js";
 import { SetupError } from "../proxy/options.js";
 import { handleGatewayInput } from "../proxy/commands.js";
 import { readStdin } from "../utils/stdin.js";

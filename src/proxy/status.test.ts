@@ -18,19 +18,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  CONFIG_UPDATE_GUIDANCE,
-  API_URL,
-  UPSTREAM,
-  configDir,
-  configStatus,
-  loadConfig,
-  type ProxyConfig,
-} from "./config.js";
+import { configDir, configStatus, loadConfig } from "./config.js";
+import { API_URL, CONFIG_UPDATE_GUIDANCE, STATUS_GUIDANCE, UPSTREAM } from "./proxy-constants.js";
+import type { ProxyConfig } from "./proxy-models.js";
 import { identity } from "./server.js";
 import { targetPaths } from "./scopes.js";
 import { STATUS_ERROR } from "./status.js";
-import { parseGatewayCommand, STATUS_GUIDANCE } from "./options.js";
+import { parseGatewayCommand } from "./options.js";
 
 let root: string, home: string, project: string, config: ProxyConfig;
 let listener: http.Server | undefined;

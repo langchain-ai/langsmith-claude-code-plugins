@@ -1,8 +1,9 @@
 import { realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { configDir, type ProxyConfig } from "./config.js";
+import { configDir } from "./config.js";
 import { directory, snapshot } from "./files.js";
-import { SetupError, type SetupOptions } from "./options.js";
+import { SetupError } from "./options.js";
+import type { ProxyConfig, SetupOptions } from "./proxy-models.js";
 
 export function targetPaths(home: string, scope: SetupOptions["scope"], cwd: string) {
   if (scope === "global")

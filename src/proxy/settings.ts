@@ -1,13 +1,8 @@
 import { accessSync, constants, mkdirSync, rmdirSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
-import {
-  configDir,
-  endpoints,
-  loadConfig,
-  privatePath,
-  userHome,
-  type ProxyConfig,
-} from "./config.js";
+import { configDir, endpoints, loadConfig, privatePath, userHome } from "./config.js";
+import { AUTH } from "./proxy-constants.js";
+import type { ObjectValue, ProxyConfig } from "./proxy-models.js";
 import {
   atomic,
   transaction,
@@ -38,17 +33,6 @@ export { SetupError } from "./options.js";
 const fail = (message: string): never => {
   throw new SetupError(message);
 };
-const AUTH = [
-  "ANTHROPIC_AUTH_TOKEN",
-  "ANTHROPIC_API_KEY",
-  "CLAUDE_CODE_USE_BEDROCK",
-  "CLAUDE_CODE_USE_VERTEX",
-  "CLAUDE_CODE_USE_FOUNDRY",
-  "ANTHROPIC_FOUNDRY_API_KEY",
-  "ANTHROPIC_FOUNDRY_BASE_URL",
-  "CLAUDE_CODE_API_KEY_HELPER",
-];
-type ObjectValue = Record<string, unknown>;
 function object(value: unknown): ObjectValue {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return fail("Expected a JSON object; settings were not replaced.");
@@ -193,6 +177,9 @@ export async function enable(
           cli: requested.cli === undefined ? config.cli : validateCLI(requested.cli),
           profile: requested.profile ?? config.profile,
           port,
+          credentialCommand: requested.credentialCommand ?? config.credentialCommand,
+          credentialTtlMs: requested.credentialTtlMs ?? config.credentialTtlMs,
+          workspaceId: requested.workspaceId ?? config.workspaceId,
         }
       : undefined;
     const changing =
@@ -201,6 +188,9 @@ export async function enable(
       (config.cli !== next.cli ||
         config.profile !== next.profile ||
         config.port !== next.port ||
+        config.credentialCommand !== next.credentialCommand ||
+        config.credentialTtlMs !== next.credentialTtlMs ||
+        config.workspaceId !== next.workspaceId ||
         endpoints(config).apiUrl !== next.apiUrl ||
         endpoints(config).gatewayUrl !== next.gatewayUrl);
     if (changing && (initiallyEnabled || active.length))
@@ -254,6 +244,11 @@ export async function enable(
         home,
         selected,
         useClaudeSubscription,
+        {
+          credentialCommand: requested.credentialCommand,
+          credentialTtlMs: requested.credentialTtlMs,
+          workspaceId: requested.workspaceId,
+        },
       );
       config = loadConfig(home)!;
     }
