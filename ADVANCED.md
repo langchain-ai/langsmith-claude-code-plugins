@@ -2,9 +2,9 @@
 
 Everything here is optional. The [README](./README.md) covers what most people need.
 
-## Usage with GitHub Actions
+## Trace a Claude Code run in CI
 
-You can use this plugin with [`anthropics/claude-code-action`](https://github.com/anthropics/claude-code-action) to trace Claude Code runs in CI. Add the following to your workflow:
+Add the plugin to [`anthropics/claude-code-action`](https://github.com/anthropics/claude-code-action) and your CI runs show up in LangSmith.
 
 ```yaml
 - uses: anthropics/claude-code-action@v1
@@ -14,12 +14,9 @@ You can use this plugin with [`anthropics/claude-code-action`](https://github.co
     CC_LANGSMITH_PROJECT: "my-project"
     CC_LANGSMITH_METADATA: |
       {
-        "pr_url": "${{ github.event.pull_request.html_url || '' }}",
         "pr_number": "${{ github.event.pull_request.number || '' }}",
-        "pr_author": "${{ github.event.pull_request.user.login || '' }}",
         "repository": "${{ github.repository }}",
-        "commit_sha": "${{ github.sha }}",
-        "trigger": "${{ github.event_name }}"
+        "commit_sha": "${{ github.sha }}"
       }
   with:
     anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -32,24 +29,20 @@ You can use this plugin with [`anthropics/claude-code-action`](https://github.co
       Your prompt here
 ```
 
-Make sure to add `LANGSMITH_API_KEY` and `ANTHROPIC_API_KEY` as [repository secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions).
+Store your keys as [repository secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) first. This repository runs [the same setup](.github/workflows/claude-code-review.yml) if you want a complete file.
 
-See [`.github/workflows/claude-code-review.yml`](.github/workflows/claude-code-review.yml) for a full working example.
+## Nest traces under a run you already trace
 
-## Nesting traces under an existing run
-
-Set `CC_LANGSMITH_PARENT_DOTTED_ORDER` to nest all Claude Code traces as children of an existing LangSmith run. This is useful when Claude Code is invoked programmatically as part of a larger traced workflow.
-
-**Python**
+When your own code calls Claude Code, you can hang its trace under the run that started it. Pass the parent's dotted order through `CC_LANGSMITH_PARENT_DOTTED_ORDER`.
 
 ```python
+import os
 import subprocess
 from langsmith import traceable, get_current_run_tree
 
-
 os.environ["LANGSMITH_TRACING"] = "true"
-os.environ["LANGSMITH_API_KEY"] = "..."
-os.environ["LANGSMITH_PROJECT"] = "claude-code"
+os.environ["LANGSMITH_API_KEY"] = "lsv2_pt_example_not_a_real_key"
+
 
 @traceable
 def run_claude(prompt: str):
@@ -59,138 +52,45 @@ def run_claude(prompt: str):
         env={
             **os.environ,
             "TRACE_TO_LANGSMITH": "true",
-            "CC_LANGSMITH_API_KEY": "...",
-            "CC_LANGSMITH_PROJECT": "claude-code",
+            "CC_LANGSMITH_API_KEY": "lsv2_pt_example_not_a_real_key",
             "CC_LANGSMITH_PARENT_DOTTED_ORDER": run_tree.dotted_order,
         },
     )
 ```
 
-**TypeScript**
+Each Claude Code turn then appears as a child of your run, with its model calls and tool calls underneath.
 
-```ts
-import { traceable, getCurrentRunTree } from "langsmith/traceable";
-import { execSync } from "node:child_process";
+## Send the same trace to two places
 
-process.env.LANGSMITH_TRACING = "true";
-process.env.LANGSMITH_API_KEY = "...";
-process.env.LANGSMITH_PROJECT = "claude-code";
-
-const runClaude = traceable(
-  async (prompt: string) => {
-    const runTree = getCurrentRunTree();
-    const pluginDir = new URL(".", import.meta.url).pathname;
-    const res = execSync(`claude -p "${prompt}" --plugin-dir '${pluginDir}'`, {
-      env: {
-        ...process.env,
-        TRACE_TO_LANGSMITH: "true",
-        CC_LANGSMITH_API_KEY: "...",
-        CC_LANGSMITH_PROJECT: "claude-code",
-        CC_LANGSMITH_PARENT_DOTTED_ORDER: runTree.dotted_order,
-      },
-    });
-    return res.toString();
-  },
-  { name: "run_claude" },
-);
-```
-
-The resulting trace hierarchy looks like:
-
-```
-Your outer run (chain)
-└── Claude Code Turn (chain)
-    ├── Claude (llm)
-    ├── Read (tool)
-    └── Claude (llm)
-```
-
-## Tracing to multiple destinations (Replicas)
-
-You can trace to multiple LangSmith projects or workspaces simultaneously using the `CC_LANGSMITH_RUNS_ENDPOINTS` environment variable. This is useful for:
-
-- Sending traces to both a production and staging project
-- Tracing to multiple workspaces with different API keys
-- Adding extra metadata to specific replica destinations
-
-For more information on replicas, see the [LangSmith documentation](https://docs.langchain.com/langsmith/log-traces-to-project).
-
-### Configuration
-
-Set `CC_LANGSMITH_RUNS_ENDPOINTS` to a JSON array of replica configurations. This will override other client settings.
-
-**Option 1: Claude Code settings file (recommended)**
-
-In your local `.claude/settings.local.json` or global `~/.claude/settings.json`:
-
-```json
-{
-  "env": {
-    "TRACE_TO_LANGSMITH": "true",
-    "CC_LANGSMITH_RUNS_ENDPOINTS": "[{\"apiUrl\":\"https://api.smith.langchain.com\",\"apiKey\":\"ls__key_workspace_a\",\"projectName\":\"project-prod\"},{\"apiUrl\":\"https://api.smith.langchain.com\",\"apiKey\":\"ls__key_workspace_b\",\"projectName\":\"project-staging\",\"updates\":{\"metadata\":{\"environment\":\"staging\"}}}]"
-  }
-}
-```
-
-> **Tip:** To generate the escaped JSON string, use: `echo '[{"apiUrl":"...","apiKey":"...","projectName":"..."}]' | jq -cR .`
-
-**Option 2: Shell environment variable**
-
-Add to your `~/.zshrc`, `~/.bashrc`, or `~/.bash_profile`:
-
-```bash
-export CC_LANGSMITH_RUNS_ENDPOINTS='[{"apiUrl":"https://api.smith.langchain.com","apiKey":"ls__key_workspace_a","projectName":"project-prod"},{"apiUrl":"https://api.smith.langchain.com","apiKey":"ls__key_workspace_b","projectName":"project-staging","updates":{"metadata":{"environment":"staging"}}}]'
-```
-
-### Replica format
-
-Each replica object supports the following fields:
-
-| Field         | Required | Description                                                     |
-| ------------- | -------- | --------------------------------------------------------------- |
-| `apiUrl`      | Yes      | LangSmith API URL (typically `https://api.smith.langchain.com`) |
-| `apiKey`      | Yes      | API key for the destination workspace                           |
-| `projectName` | Yes      | Project name in the destination workspace                       |
-| `updates`     | No       | Optional metadata/fields to override on the replicated runs     |
-
-## Shared `langsmith-plugins.json` contract
-
-> **Security: trust repository tracing configuration before using this plugin.** Project `langsmith-plugins.json` and `.claude/langsmith.json` can enable tracing, choose upload endpoints and replicas, supply credentials, and disable secret redaction. A malicious configuration can send conversation messages, file contents, and tool inputs/outputs to a third party. Review these files before using the plugin in an unfamiliar repository. Also review `.claude/settings.json` and `.claude/settings.local.json`: their `env` settings can change the plugin's behavior too. Secret redaction is not a guarantee that uploaded content is safe to share. To prevent this plugin from uploading, disable it or ensure its effective `TRACE_TO_LANGSMITH` is `false`; a file-level `enabled:false` does not override an environment setting of `true`.
-
-Use `langsmith-plugins.json` in the project root and `~/.langsmith-plugins.json` for user defaults shared across coding-tool plugins. Claude-specific overrides live in project `.claude/langsmith.json` and user `~/.claude/langsmith.json`. These files configure the plugins, not your application's LangSmith tracing.
-
-All four paths use the same dependency-free parser (`src/shared-config.ts`). Files are read only at `cwd/.claude/langsmith.json`, `cwd/langsmith-plugins.json`, `~/.claude/langsmith.json`, and `~/.langsmith-plugins.json`; there is no ancestor search. Readable symlinks to regular files are supported. Directories, devices, FIFOs, dangling symlinks, unreadable files, malformed JSON, and non-object JSON restrict that source to `enabled:false, defaultMuted:true`. Only a truly absent entry is ignored.
-
-| Exact JSON field     | Type / default                                        | Environment source                               |
-| -------------------- | ----------------------------------------------------- | ------------------------------------------------ |
-| `enabled`            | boolean / `false`                                     | `TRACE_TO_LANGSMITH`                             |
-| `defaultMuted`       | boolean / `false`                                     | `CC_LANGSMITH_DEFAULT_MUTED`                     |
-| `api_key`            | string / `""`                                         | `CC_LANGSMITH_API_KEY`, then `LANGSMITH_API_KEY` |
-| `api_url`            | string / `https://api.smith.langchain.com`            | `LANGSMITH_ENDPOINT`                             |
-| `project`            | string / `claude-code`                                | `CC_LANGSMITH_PROJECT`                           |
-| `replicas`           | array of objects / absent                             | `CC_LANGSMITH_RUNS_ENDPOINTS`                    |
-| `metadata`           | JSON object / absent                                  | `CC_LANGSMITH_METADATA`                          |
-| `redact`             | boolean / `true`                                      | `CC_LANGSMITH_REDACT`                            |
-| `redact_extra_rules` | array of `{pattern:string, replace?:string}` / absent | `CC_LANGSMITH_REDACT_EXTRA`                      |
-
-**All shared fields use environment > `cwd/.claude/langsmith.json` > `cwd/langsmith-plugins.json` > `~/.claude/langsmith.json` > `~/.langsmith-plugins.json` > defaults**, independently for each field. Strings, including empty strings and whitespace, are accepted unchanged. Arrays replace rather than concatenate; `[]` explicitly selects no replicas/rules. Metadata shallow-merges per key from defaults → home root → user `.claude` → cwd root → project `.claude` → env: nested values replace, and `{}` does not clear inherited keys. `__proto__` is treated as own data, not a prototype mutation. File metadata is treated as untrusted user metadata by privacy filtering.
-
-An invalid present `enabled` restricts only that field to `false`; an invalid present `defaultMuted` restricts only that field to `true`. **Any other recognized field with an invalid value invalidates the entire common file:** discard all its ordinary fields and restrict both switches. Ordinary values can still fall back to lower sources; higher-priority switch fields still override the restrictions (e.g. environment can override either switch from any invalid file without overriding the other switch). Unknown keys are ignored, including malformed harness extensions; adapters can access the decoded raw object separately. Diagnostics never include file contents.
-
-Replica file entries use `api_url`, `api_key`, `project` (optional strings) and `updates` (optional JSON object, preserved). SDK aliases `apiUrl`, `apiKey`, `projectName` are accepted **only inside replica objects**. An own canonical key always wins, even if empty or invalid: `api_key:null` invalidates the common file even alongside a valid `apiKey`. Unknown replica/rule keys are stripped; `{}` is a valid replica. File tuple entries are invalid. `CC_LANGSMITH_RUNS_ENDPOINTS` supports SDK replica objects and the supported SDK tuple format. Rule patterns must compile as global regular expressions; any invalid file rule invalidates the common file. Malformed environment rules are skipped; an explicit environment `[]` overrides file rules.
+Replicas copy every run to a second project or workspace. Use one to feed a staging project or an audit workspace alongside your normal one. Add them to `~/.claude/langsmith.json`.
 
 ```json
 {
   "enabled": true,
-  "defaultMuted": true,
-  "project": "my-project",
-  "metadata": { "team": "platform" },
-  "redact": true,
-  "redact_extra_rules": [{ "pattern": "ACME-[A-Z0-9]+", "replace": "[REDACTED]" }],
+  "api_key": "lsv2_pt_example_not_a_real_key",
   "replicas": [
-    { "api_url": "https://api.smith.langchain.com", "api_key": "your-key", "project": "audit" }
+    {
+      "api_url": "https://api.smith.langchain.com",
+      "api_key": "lsv2_pt_example_audit_key",
+      "project": "audit"
+    }
   ]
 }
 ```
 
-Credentials may come from files, including replica-only credentials, but never enable tracing by themselves: all uploads require the master switch to be enabled. `redact:false` never bypasses muted content/provenance filtering. Keep credential-bearing files out of version control.
+Give each replica a server, a key and a project name. Add an optional `updates` object to attach extra metadata to that copy only. See the [LangSmith replica docs](https://docs.langchain.com/langsmith/log-traces-to-project) for the wider feature.
+
+## Where settings can live
+
+Settings load from four files, and the first one that sets a field wins:
+
+1. `<project>/.claude/langsmith.json`
+2. `<project>/langsmith-plugins.json`
+3. `~/.claude/langsmith.json`
+4. `~/.langsmith-plugins.json`
+
+A value set in your shell beats all four. The two files named `langsmith-plugins.json` are shared with LangSmith's plugins for other coding tools.
+
+> **Any of these files can switch tracing on in a repository you cloned.** Read them before you trust an unfamiliar project.
+
+A key in a file never switches tracing on by itself, so `enabled` must also be true. Keep any file holding a key out of version control.

@@ -34,17 +34,17 @@ Tracing is off until you give it a key and switch it on. Write both to `~/.claud
 
 Get a key from [smith.langchain.com](https://smith.langchain.com) under **Settings** then **API Keys**. Send a message, then look for it in the `claude-code` project.
 
-Settings can also live in a single project, at `<project>/.claude/langsmith.json` or `<project>/langsmith-plugins.json`, or be shared with LangSmith's other coding-tool plugins at `~/.langsmith-plugins.json`. A setting from your shell beats a project file, which beats `~/.claude/langsmith.json`, which beats the shared one.
+A project can carry its own settings in `<project>/.claude/langsmith.json`, and a setting in your shell beats any file. [Advanced configuration](./ADVANCED.md) lists the other locations.
 
-> **Check a repository's tracing settings before you trust it.** A project file can switch tracing on, point uploads at someone else's server, supply its own credentials and turn secret redaction off, and a full trace can carry your conversation, file contents and tool results. Review these files in an unfamiliar repository, along with `.claude/settings.json` and `.claude/settings.local.json`.
+> **Check a repository's tracing settings before you trust it.** A repository you clone can switch tracing on and send your conversation to someone else's server. Review these files in an unfamiliar repository. Check `.claude/settings.json` and `.claude/settings.local.json` too.
 
 ## What gets traced
 
-Each model call carries the conversation so far, the assistant's reply, and the model name, provider and token counts. Tool calls come with their inputs and outputs, and skill calls record which skill ran so you can count usage per skill. A subagent, meaning a helper Claude Code spawns to work on its own, appears nested under the turn that started it, and a turn you cancel is marked interrupted rather than dropped.
+Each model call carries the conversation so far and the assistant's reply. You also get the model name, provider and token counts. Tool calls come with their inputs and outputs. Skill calls record which skill ran so you can count usage per skill. A subagent, meaning a helper Claude Code spawns to work on its own, appears nested under the turn that started it.
+
+Cancel a turn and it still uploads, marked interrupted. A subagent uploads only once it finishes, so cancelling one leaves its own steps out.
 
 Run `/langsmith-tracing:trace` to get a link to the current conversation's trace. It does not start a model turn or change anything.
-
-A subagent only uploads once it finishes, so cancelling one leaves its own steps out and marks the call that started it interrupted.
 
 ## Hide one conversation
 
@@ -55,11 +55,11 @@ To keep one conversation's content out of LangSmith, run these inside Claude Cod
 /langsmith-tracing:unmute
 ```
 
-Muting still records which steps ran, how long they took and how many tokens they used, but leaves out what was said. It applies from the next turn rather than the one in flight. The turn in progress keeps the setting it started with, and so does any subagent it launched, so wait for the confirmation before sending anything sensitive.
+Muting keeps the shape of the conversation and leaves out what was said. It starts from your next turn, so wait for the confirmation before sending anything sensitive.
 
-Muting changes only what reaches LangSmith. Claude Code still reads and remembers everything locally, and earlier uploads are not deleted.
+Muting changes only what reaches LangSmith. Claude Code still reads and remembers everything locally. Earlier uploads are not deleted.
 
-To mute every conversation by default instead of one at a time, set `defaultMuted` to `true`. A conversation you muted or unmuted by hand keeps that choice regardless.
+To mute every conversation, set `defaultMuted` to `true`. A conversation you muted or unmuted by hand keeps that choice.
 
 ## Change a setting
 
@@ -91,7 +91,7 @@ With tracing on, a full turn uploads your messages, tool inputs and outputs, met
 
 ## More
 
-- [Running in CI, nesting under another run, and sending to several destinations](./ADVANCED.md)
+- [Running in CI, nesting under another run, sending to a second project, and where settings can live](./ADVANCED.md)
 - [The separate `langsmith-gateway` plugin](./LOCAL_PROXY.md), which routes model requests through LangSmith and is unrelated to tracing
 
 ## Development
