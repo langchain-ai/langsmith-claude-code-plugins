@@ -30,7 +30,7 @@ import {
   flushPendingTraces,
 } from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
-import { isForeignHarnessPayload } from "../utils/harness.js";
+import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { MUTED_TRACE_CONTENT } from "../privacy.js";
@@ -42,7 +42,7 @@ export async function main(): Promise<void> {
 
   // Read hook input from stdin.
   const input: StopHookInput = await readStdin();
-  if (isForeignHarnessPayload(input)) return;
+  if (!isPayloadForHook(input, "Stop")) return;
 
   const config = initHook(input.cwd);
   if (!config) return;

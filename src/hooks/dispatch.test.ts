@@ -65,8 +65,8 @@ describe("bundle/dispatch.js", () => {
     },
   );
 
-  it.each(HOOK_EVENT_NAMES)("stands the %s handler down for a Cursor payload", (event) => {
-    const result = spawnSync(process.execPath, [bundle, event], {
+  function dispatchTracing(event: string, payload: unknown) {
+    return spawnSync(process.execPath, [bundle, event], {
       cwd: home,
       env: {
         HOME: home,
@@ -75,20 +75,71 @@ describe("bundle/dispatch.js", () => {
         CC_LANGSMITH_API_KEY: "test-key",
         LANGSMITH_ENDPOINT: "http://127.0.0.1:1",
         STATE_FILE: join(home, "state.json"),
-        // Cursor sets both for compatibility, so neither can be the signal.
+        // Cursor sets both of these too, so neither can be the signal.
         CLAUDE_PROJECT_DIR: home,
         CLAUDE_PLUGIN_ROOT: home,
       },
-      input: JSON.stringify(cursorHooks.beforeSubmitPrompt),
+      input: JSON.stringify(payload),
       encoding: "utf8",
       timeout: 10000,
     });
+  }
+
+  function expectStoodDown(result: ReturnType<typeof dispatchTracing>) {
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toBe("");
     expect(result.stderr).toBe("");
     expect(existsSync(logDir())).toBe(false);
     expect(existsSync(join(home, "state.json"))).toBe(false);
+  }
+
+  const { cursor_version: _version, ...renamedCursorStop } = cursorHooks.stop;
+
+  it.each(HOOK_EVENT_NAMES)("stands the %s handler down for a Cursor payload", (event) => {
+    expectStoodDown(dispatchTracing(event, cursorHooks.beforeSubmitPrompt));
+  });
+
+  it.each(HOOK_EVENT_NAMES)(
+    "stands the %s handler down for a Cursor payload with no version field",
+    (event) => {
+      expectStoodDown(dispatchTracing(event, renamedCursorStop));
+    },
+  );
+
+  it.each(HOOK_EVENT_NAMES)("runs the %s handler when the payload names that event", (event) => {
+    const result = spawnSync(process.execPath, [bundle, event], {
+      cwd: home,
+      env: {
+        HOME: home,
+        PATH: "",
+        TRACE_TO_LANGSMITH: "false",
+        STATE_FILE: join(home, "state.json"),
+      },
+      input: JSON.stringify({
+        session_id: "dispatch-test",
+        transcript_path: join(home, "missing.jsonl"),
+        cwd: home,
+        hook_event_name: event,
+        prompt: "ordinary prompt",
+      }),
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(logDir()), result.stderr).toBe(true);
+  });
+
+  it("stands down when the payload names another Claude Code event", () => {
+    expectStoodDown(
+      dispatchTracing("Stop", {
+        session_id: "dispatch-test",
+        transcript_path: join(home, "missing.jsonl"),
+        cwd: home,
+        hook_event_name: "PreToolUse",
+      }),
+    );
   });
 
   it("leaves stderr silent when git runs outside a repository", () => {

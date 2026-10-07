@@ -11,7 +11,7 @@ import { debug, error } from "../logger.js";
 import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
-import { isForeignHarnessPayload } from "../utils/harness.js";
+import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { createRunTree } from "../privacy.js";
 import { codingAgentMetadata } from "../metadata.js";
@@ -27,7 +27,7 @@ interface PostCompactHookInput {
 
 export async function main(): Promise<void> {
   const input: PostCompactHookInput = await readStdin();
-  if (isForeignHarnessPayload(input)) return;
+  if (!isPayloadForHook(input, "PostCompact")) return;
 
   const config = initHook(input.cwd);
   if (!config) return;

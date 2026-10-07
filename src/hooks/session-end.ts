@@ -21,7 +21,7 @@ import {
 } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
-import { isForeignHarnessPayload } from "../utils/harness.js";
+import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { readRuntimeVersion } from "../transcript.js";
 
@@ -35,7 +35,7 @@ interface SessionEndHookInput {
 
 export async function main(): Promise<void> {
   const input: SessionEndHookInput = await readStdin();
-  if (isForeignHarnessPayload(input)) return;
+  if (!isPayloadForHook(input, "SessionEnd")) return;
 
   const config = initHook(input.cwd);
   if (!config) return;
