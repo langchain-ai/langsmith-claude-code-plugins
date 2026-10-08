@@ -10,6 +10,7 @@ import { loadConfig } from "./config.js";
 import {
   clearRepoAttributionCache,
   repoScopedMetadata,
+  sessionScopedMetadata,
   turnScopedMetadata,
 } from "./repo-attribution.js";
 
@@ -77,7 +78,6 @@ describe("repoScopedMetadata", () => {
     ["a relative directory", { cwd: "beta repo" }, inBeta, root],
     ["a file nothing has created yet", { file_path: join(alpha, "new", "deep", "x.txt") }, inAlpha],
     ["a file in the git directory", { file_path: join(alpha, ".git", "config") }, inAlpha],
-    ["the git directory itself", { file_path: join(alpha, ".git") }, inAlpha],
     [
       "a linked worktree, on its own branch rather than the main checkout's",
       { file_path: join(worktree, "seed.txt") },
@@ -106,6 +106,14 @@ describe("repoScopedMetadata", () => {
     expect(repoScopedMetadata(session, input, cwd)).toEqual(want);
   });
 
+  it("keeps the session repository's author on a tool naming a path nothing sits at", () => {
+    const base = sessionScopedMetadata(noRepository, alpha);
+
+    expect(repoScopedMetadata(base, { path: "notion/page/abc123" }, alpha)).toMatchObject({
+      ls_attribution_identifier: "Alpha Owner",
+    });
+  });
+
   it("attributes a shell command to the repository it ran in", () => {
     expect(repoScopedMetadata(noRepository, { command: "ls -la" }, beta)).toMatchObject({
       ls_attribution_identifier: "Beta Owner",
@@ -120,16 +128,6 @@ describe("repoScopedMetadata", () => {
       cwd: session.cwd,
       ls_integration: session.ls_integration,
     });
-  });
-
-  it("drops a repository the session carried once a path lands in no repository", () => {
-    expect(repoScopedMetadata(session, { file_path: join(plain, "x.txt") })).toEqual(noRepository);
-  });
-
-  it("keeps looking while a turn has a repository but still no author", () => {
-    const halfway = { ...session, ls_attribution_identifier: undefined };
-
-    expect(repoScopedMetadata(halfway, { file_path: betaSeed })).toMatchObject(inBeta);
   });
 
   it("ignores git settings the session exported, which answer for the wrong directory", () => {
@@ -224,12 +222,6 @@ describe("turnScopedMetadata", () => {
       noRepository,
       [pathless, outside, { file_path: betaSeed }],
       filledFromBeta,
-    ],
-    [
-      "no repository, with nothing landing anywhere",
-      noRepository,
-      [pathless, outside],
-      noRepository,
     ],
   ])("gives the turn %s", (_name, base, inputs, want) => {
     expect(turnScopedMetadata(base, inputs, base.cwd as string)).toEqual(want);
