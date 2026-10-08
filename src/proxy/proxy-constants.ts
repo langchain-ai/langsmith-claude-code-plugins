@@ -2,7 +2,7 @@ export const CONFIG_UPDATE_GUIDANCE =
   "Invalid proxy configuration. A one-time private config update is required, so keep your existing key, CLI, profile, port and addresses, and set enabled and useClaudeSubscription explicitly even when disabled. Do not paste secrets.";
 
 export const COMMAND_GUIDANCE =
-  "Run /langsmith-gateway:setup --scope global|project within Claude Code, or /langsmith-gateway:disable to turn it off. To sign in with your own identity token, add --workspace-id UUID and --identity-token-command \"your command\", where the command prints one token. See GATEWAY.md for the other flags.";
+  'Run /langsmith-gateway:setup --scope global|project within Claude Code, or /langsmith-gateway:disable to turn it off. To sign in with your own identity token, add --workspace-id UUID and --identity-token-command "your command", where the command prints one token. See GATEWAY.md for the other flags.';
 
 export const CREDENTIAL_SOURCE_GUIDANCE =
   "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI and sign in, or add --workspace-id UUID and --identity-token-command. Then retry setup.";
