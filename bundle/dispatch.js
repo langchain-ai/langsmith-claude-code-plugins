@@ -895,39 +895,69 @@ var TURN_REPOSITORY_KEYS = [
 var REPOSITORY_METADATA_KEYS = [...TURN_REPOSITORY_KEYS, "ls_attribution_identifier"];
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
 var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
-var GH_CONFIG_DIR_ENV = "GH_CONFIG_DIR";
-var GH_DEFAULT_CONFIG_DIR = [".config", "gh"];
-var GH_HOSTS_FILE = "hosts.yml";
-var GITHUB_DOT_COM = "github.com";
-var GH_HOSTS_HOST_LINE = /^([A-Za-z0-9][^\s:]*):\s*$/;
-var GH_HOSTS_USER_LINE = /^\s+user:\s+["']?([^"'\s#]+)["']?\s*$/;
+var GH_LOGIN_COMMAND = "gh";
+var GH_LOGIN_ARGUMENTS = ["api", "user", "--jq", ".login"];
+var GH_LOGIN_TIMEOUT_MS = 5e3;
+var GH_LOGIN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
+var JQ_NULL_OUTPUT = "null";
+var STATE_FILE_DEFAULT = [".claude", "state", "langsmith_state.json"];
+var GH_LOGIN_MARKER_FILE = "langsmith_gh_login.json";
+var GH_LOGIN_RETRY_AFTER_MS = 24 * 60 * 60 * 1e3;
 
-// dist/src/utils/gh-config.js
-import { readFileSync as readFileSync2 } from "node:fs";
+// dist/src/utils/gh-login.js
+import { execFileSync } from "node:child_process";
+import { mkdirSync as mkdirSync2, readFileSync as readFileSync2, renameSync as renameSync2, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
-function githubLoginFromHostsFile() {
+import { dirname as dirname2, join } from "node:path";
+function isLogin(printed) {
+  return printed !== JQ_NULL_OUTPUT && GH_LOGIN_PATTERN.test(printed);
+}
+function markerPath() {
+  const stateFile = process.env.STATE_FILE ?? join(homedir(), ...STATE_FILE_DEFAULT);
+  return join(dirname2(stateFile), GH_LOGIN_MARKER_FILE);
+}
+function failedRecently() {
   try {
-    const configured = process.env[GH_CONFIG_DIR_ENV]?.trim();
-    const dir = configured || join(homedir(), ...GH_DEFAULT_CONFIG_DIR);
-    const logins = /* @__PURE__ */ new Map();
-    let host;
-    for (const line of readFileSync2(join(dir, GH_HOSTS_FILE), "utf-8").split(/\r?\n/)) {
-      const hostLine = GH_HOSTS_HOST_LINE.exec(line);
-      if (hostLine) {
-        host = hostLine[1];
-        continue;
-      }
-      if (!host)
-        continue;
-      const userLine = GH_HOSTS_USER_LINE.exec(line);
-      if (userLine && !logins.has(host))
-        logins.set(host, userLine[1]);
-    }
-    return logins.get(GITHUB_DOT_COM) ?? logins.values().next().value;
+    const marker = JSON.parse(readFileSync2(markerPath(), "utf-8"));
+    const failed = new Date(marker.failed).getTime();
+    const since = Date.now() - failed;
+    return since >= 0 && since < GH_LOGIN_RETRY_AFTER_MS;
   } catch {
-    return void 0;
+    return false;
   }
+}
+function recordFailure() {
+  try {
+    const path3 = markerPath();
+    mkdirSync2(dirname2(path3), { recursive: true });
+    const partial = `${path3}.${process.pid}`;
+    const marker = { failed: (/* @__PURE__ */ new Date()).toISOString() };
+    writeFileSync(partial, JSON.stringify(marker));
+    renameSync2(partial, path3);
+  } catch {
+  }
+}
+var alreadyTried = false;
+var login;
+function githubLogin() {
+  if (alreadyTried)
+    return login;
+  alreadyTried = true;
+  if (failedRecently())
+    return void 0;
+  try {
+    const printed = execFileSync(GH_LOGIN_COMMAND, GH_LOGIN_ARGUMENTS, {
+      encoding: "utf-8",
+      timeout: GH_LOGIN_TIMEOUT_MS,
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    if (isLogin(printed))
+      login = printed;
+  } catch {
+  }
+  if (login === void 0)
+    recordFailure();
+  return login;
 }
 
 // dist/src/config.js
@@ -1044,7 +1074,7 @@ function getGitUserName(cwd) {
       return name;
   } catch {
   }
-  return githubLoginFromHostsFile();
+  return githubLogin();
 }
 function getGitInfo(cwd) {
   const result = {};
@@ -1080,7 +1110,7 @@ function envBoolean(field) {
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
   const homeDir = homedir2();
-  const stateFilePath = process.env.STATE_FILE ?? `${homeDir}/.claude/state/langsmith_state.json`;
+  const stateFilePath = process.env.STATE_FILE ?? join2(homeDir, ...STATE_FILE_DEFAULT);
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
   let replicas2;
   const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
@@ -1223,7 +1253,7 @@ function runHookEntry(event2, main10) {
 import { randomUUID } from "node:crypto";
 import { lstatSync as lstatSync2, readFileSync as readFileSync4 } from "node:fs";
 import { mkdir, open, rename, rmdir, unlink } from "node:fs/promises";
-import { dirname as dirname2 } from "node:path";
+import { dirname as dirname3 } from "node:path";
 import { performance as performance2 } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 function isMode(value) {
@@ -1285,7 +1315,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
   }
   const path3 = tracingPolicyPath(stateFilePath);
   const lockPath2 = `${path3}.lock`;
-  await mkdir(dirname2(path3), { recursive: true });
+  await mkdir(dirname3(path3), { recursive: true });
   const deadline = performance2.now() + 2e3;
   let locked = false;
   while (!locked) {
@@ -1332,7 +1362,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     await rename(tempPath, path3);
     tempPath = void 0;
     await bestEffort(async () => {
-      const directory = await open(dirname2(path3), "r");
+      const directory = await open(dirname3(path3), "r");
       try {
         await directory.sync();
       } finally {
@@ -6127,13 +6157,13 @@ async function stat2(filePath) {
 function existsSync2(p) {
   return nodeFs.existsSync(p);
 }
-function mkdirSync3(dir) {
+function mkdirSync4(dir) {
   nodeFs.mkdirSync(dir, { recursive: true });
 }
-function writeFileSync2(filePath, content) {
+function writeFileSync3(filePath, content) {
   nodeFs.writeFileSync(filePath, content);
 }
-function renameSync3(oldPath, newPath) {
+function renameSync4(oldPath, newPath) {
   nodeFs.renameSync(oldPath, newPath);
 }
 function unlinkSync2(filePath) {
@@ -6321,12 +6351,12 @@ var PromptCache = class {
     }
     const dir = path2.dirname(filePath);
     if (!existsSync2(dir)) {
-      mkdirSync3(dir);
+      mkdirSync4(dir);
     }
     const tempPath = `${filePath}.tmp`;
     try {
-      writeFileSync2(tempPath, JSON.stringify({ entries }, null, 2));
-      renameSync3(tempPath, filePath);
+      writeFileSync3(tempPath, JSON.stringify({ entries }, null, 2));
+      renameSync4(tempPath, filePath);
     } catch (e) {
       if (existsSync2(tempPath)) {
         unlinkSync2(tempPath);
@@ -14231,8 +14261,8 @@ function groupIntoTurns(messages) {
 }
 
 // dist/src/state.js
-import { readFileSync as readFileSync8, writeFileSync as writeFileSync3, mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
-import { dirname as dirname3 } from "node:path";
+import { readFileSync as readFileSync8, writeFileSync as writeFileSync4, mkdirSync as mkdirSync5, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
+import { dirname as dirname4 } from "node:path";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
 function lockPath(stateFilePath) {
@@ -14244,7 +14274,7 @@ function sleep3(ms) {
 async function acquireLock(stateFilePath) {
   const lock = lockPath(stateFilePath);
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync4(dirname3(stateFilePath), { recursive: true });
+  mkdirSync5(dirname4(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
       const fd = openSync2(lock, "wx");
@@ -14269,7 +14299,7 @@ async function atomicUpdateState(stateFilePath, fn) {
   await acquireLock(stateFilePath);
   try {
     const state = loadState(stateFilePath);
-    writeFileSync3(stateFilePath, JSON.stringify(fn(state), null, 2));
+    writeFileSync4(stateFilePath, JSON.stringify(fn(state), null, 2));
   } finally {
     releaseLock(stateFilePath);
   }
@@ -14522,7 +14552,7 @@ function createRunTree(config, mode = "full") {
 
 // dist/src/repo-attribution.js
 import { existsSync as existsSync3, statSync as statSync5 } from "node:fs";
-import { dirname as dirname4, isAbsolute, resolve as resolve2, sep } from "node:path";
+import { dirname as dirname5, isAbsolute, resolve as resolve2, sep } from "node:path";
 var rootByDirectory = /* @__PURE__ */ new Map();
 var attributionByRoot = /* @__PURE__ */ new Map();
 var identifierByRoot = /* @__PURE__ */ new Map();
@@ -14554,7 +14584,7 @@ function outsideGitDirectory(path3) {
 function nearestExistingDirectory(path3) {
   let current = outsideGitDirectory(path3);
   for (; ; ) {
-    const parent = dirname4(current);
+    const parent = dirname5(current);
     const reachedFilesystemRoot = parent === current;
     if (reachedFilesystemRoot)
       return void 0;

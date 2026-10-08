@@ -48,17 +48,21 @@ const PINNED_REPOSITORY_KEYS = Symbol("pinned repository metadata keys");
 
 const NO_PINNED_KEYS: ReadonlySet<string> = new Set();
 
-const GH_CONFIG_DIR_ENV = "GH_CONFIG_DIR";
+const GH_LOGIN_COMMAND = "gh";
 
-const GH_DEFAULT_CONFIG_DIR = [".config", "gh"] as const;
+const GH_LOGIN_ARGUMENTS = ["api", "user", "--jq", ".login"];
 
-const GH_HOSTS_FILE = "hosts.yml";
+const GH_LOGIN_TIMEOUT_MS = 5000;
 
-const GITHUB_DOT_COM = "github.com";
+const GH_LOGIN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
 
-const GH_HOSTS_HOST_LINE = /^([A-Za-z0-9][^\s:]*):\s*$/;
+const JQ_NULL_OUTPUT = "null";
 
-const GH_HOSTS_USER_LINE = /^\s+user:\s+["']?([^"'\s#]+)["']?\s*$/;
+const STATE_FILE_DEFAULT = [".claude", "state", "langsmith_state.json"];
+
+const GH_LOGIN_MARKER_FILE = "langsmith_gh_login.json";
+
+const GH_LOGIN_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
 
 export {
   USER_PROMPT_TURN_NAME,
@@ -72,11 +76,13 @@ export {
   REPOSITORY_METADATA_KEYS,
   PINNED_REPOSITORY_KEYS,
   NO_PINNED_KEYS,
-  GH_CONFIG_DIR_ENV,
-  GH_DEFAULT_CONFIG_DIR,
-  GH_HOSTS_FILE,
-  GITHUB_DOT_COM,
-  GH_HOSTS_HOST_LINE,
-  GH_HOSTS_USER_LINE,
+  GH_LOGIN_COMMAND,
+  GH_LOGIN_ARGUMENTS,
+  GH_LOGIN_TIMEOUT_MS,
+  GH_LOGIN_PATTERN,
+  JQ_NULL_OUTPUT,
+  STATE_FILE_DEFAULT,
+  GH_LOGIN_MARKER_FILE,
+  GH_LOGIN_RETRY_AFTER_MS,
 };
 export type { HookEventName };

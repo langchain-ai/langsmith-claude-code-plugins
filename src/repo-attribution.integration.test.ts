@@ -29,16 +29,20 @@ const nameless = sandbox.makeRepo(
   "git@github.com:acme/c.git",
 );
 sandbox.git(nameless, "config", "--unset", "user.name");
-const ghHome = join(sandbox.root, "gh home");
+const fakeGh = join(sandbox.makeDir(sandbox.root, "gh bin"), "gh");
 writeFileSync(
-  join(sandbox.makeDir(ghHome, ".config", "gh"), "hosts.yml"),
-  "github.com:\n    git_protocol: https\n    user: ejaimez14\n",
+  fakeGh,
+  '#!/bin/sh\necho "a new release of gh is available" >&2\necho "ejaimez14"\n',
+  {
+    mode: 0o755,
+  },
 );
-const emptyGlobalConfig = join(sandbox.root, "empty global config");
-writeFileSync(emptyGlobalConfig, "");
-const withoutAGitName = {
-  GIT_CONFIG_GLOBAL: emptyGlobalConfig,
-  GIT_CONFIG_SYSTEM: emptyGlobalConfig,
+const emptyGitConfig = join(sandbox.root, "empty git config");
+writeFileSync(emptyGitConfig, "");
+const signedInWithoutAGitName = {
+  GIT_CONFIG_GLOBAL: emptyGitConfig,
+  GIT_CONFIG_SYSTEM: emptyGitConfig,
+  PATH: `${join(sandbox.root, "gh bin")}:${process.env.PATH ?? ""}`,
 };
 
 let server: Server;
@@ -50,14 +54,14 @@ async function hook(
   payload: Record<string, unknown>,
   home?: string,
   extraEnv?: Record<string, string>,
-): Promise<void> {
+): Promise<string> {
   const child = spawn(process.execPath, [bundle, event], {
     cwd: String(payload.cwd ?? alpha),
     env: {
       ...sandbox.env,
       ...(home ? { HOME: home, USERPROFILE: home } : {}),
-      ...extraEnv,
       PATH: process.env.PATH ?? "",
+      ...extraEnv,
       TRACE_TO_LANGSMITH: "true",
       LANGSMITH_API_KEY: "lsv2_pt_fake_key_for_tests",
       LANGSMITH_ENDPOINT: endpoint,
@@ -74,6 +78,7 @@ async function hook(
     child.on("close", resolve);
   });
   expect(status, stderr).toBe(0);
+  return stderr;
 }
 
 /** Two calls only the Stop hook traces: one reaching into the other repository, one relative to the session's own. */
@@ -234,14 +239,15 @@ describe("a turn working across repositories", () => {
     const path = join(sandbox.root, `${session}.jsonl`);
     const base = { session_id: session, transcript_path: path, cwd: nameless };
 
-    await prompt(base, ghHome, withoutAGitName);
+    const opening = await prompt(base, undefined, signedInWithoutAGitName);
     writeFileSync(path, transcript(join(nameless, "seed.txt")));
-    await stop(base, ghHome, withoutAGitName);
+    const closing = await stop(base, undefined, signedInWithoutAGitName);
 
     const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
     expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject({
       repository_name: "acme/c",
       ls_attribution_identifier: "ejaimez14",
     });
+    expect(opening + closing).not.toContain("a new release of gh");
   }, 120_000);
 });
