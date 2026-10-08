@@ -1,139 +1,24 @@
-import { afterEach, describe, expect, it } from "vitest";
-import http from "node:http";
-import type https from "node:https";
-import { once } from "node:events";
-import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, it } from "vitest";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createProxy, identity } from "./server.js";
+import { identity } from "./server.js";
 import { configDir, loadConfig } from "./config.js";
-import { KEY_HEADER } from "./proxy-constants.js";
-import type { ProxyConfig } from "./proxy-models.js";
-import { parseSetupArgs } from "./options.js";
 import { enable } from "./settings.js";
 import { createConfig } from "./setup.js";
-
-const WORKSPACE = "f4c7e130-165b-471d-bdd3-5f0fc7a6a012";
-const EXPIRY = Math.floor(Date.now() / 1000) + 3600;
-const unexpiredToken = (suffix: string) =>
-  `e30.${Buffer.from(JSON.stringify({ exp: EXPIRY, suffix })).toString("base64url")}.sig`;
-const base: ProxyConfig = {
-  enabled: true,
-  useClaudeSubscription: false,
-  cli: "/unused/langsmith",
-  port: 19991,
-  secret: "a".repeat(64),
-};
-const cleanup: (() => void)[] = [];
-afterEach(() => {
-  for (const f of cleanup.splice(0).reverse()) f();
-});
-function temporary() {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ls-credential-test-")));
-  cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
-  return dir;
-}
-function tokenFile(contents: string) {
-  const path = join(temporary(), "identity.jwt");
-  writeFileSync(path, contents, { mode: 0o600 });
-  return path;
-}
-async function listen(server: http.Server) {
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  cleanup.push(() => {
-    server.closeAllConnections();
-    server.close();
-  });
-  return (server.address() as { port: number }).port;
-}
-async function fixture(extra: Partial<ProxyConfig> = {}) {
-  const seen: http.IncomingHttpHeaders[] = [];
-  const upstream = http.createServer((req, res) => {
-    seen.push(req.headers);
-    res.end("ok");
-  });
-  const upstreamPort = await listen(upstream);
-  const transport = ((options: https.RequestOptions, cb: (r: http.IncomingMessage) => void) =>
-    http.request(
-      { ...options, protocol: "http:", hostname: "127.0.0.1", port: upstreamPort },
-      cb,
-    )) as typeof https.request;
-  const config = { ...base, ...extra };
-  const neverTheCli = async () => unexpiredToken("from-cli");
-  const proxy = createProxy(config, { transport, token: neverTheCli });
-  config.port = await listen(proxy.server);
-  return { config, seen };
-}
-function send(c: ProxyConfig, headers: http.OutgoingHttpHeaders = {}) {
-  return new Promise<{ status: number; body: string }>((resolve, reject) => {
-    const req = http.request(
-      {
-        hostname: "127.0.0.1",
-        port: c.port,
-        path: "/v1/models",
-        method: "GET",
-        headers: { [KEY_HEADER]: c.secret, host: `127.0.0.1:${c.port}`, ...headers },
-      },
-      (res) => {
-        let body = "";
-        res.setEncoding("utf8");
-        res.on("data", (chunk) => (body += chunk));
-        res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
-      },
-    );
-    req.on("error", reject);
-    req.end();
-  });
-}
-function savedConfig(extra: Record<string, unknown>) {
-  const dir = temporary();
-  const directory = join(dir, ".claude", "langsmith-proxy");
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  chmodSync(join(dir, ".claude"), 0o700);
-  chmodSync(directory, 0o700);
-  const path = join(directory, "config.json");
-  writeFileSync(path, JSON.stringify({ ...base, cli: "/bin/sh", ...extra }), { mode: 0o600 });
-  chmodSync(path, 0o600);
-  return dir;
-}
-const setup = (args: string) => parseSetupArgs(["--scope", "global", ...args.split(" ")]);
-const SAVED_COMMAND = "cat /tmp/t.jwt";
-// A listener answering health lets enable() finish without waiting on a real daemon.
-async function existingInstall(extra: Record<string, unknown> = {}) {
-  let config = base;
-  const health = http.createServer((_req, res) => res.end(identity(config)));
-  const port = await listen(health);
-  config = {
-    ...base,
-    cli: "/bin/sh",
-    port,
-    credentialCommand: SAVED_COMMAND,
-    workspaceId: WORKSPACE,
-    ...extra,
-  } as ProxyConfig;
-  const home = temporary();
-  const directory = join(home, ".claude", "langsmith-proxy");
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  chmodSync(join(home, ".claude"), 0o700);
-  chmodSync(directory, 0o700);
-  const path = join(directory, "config.json");
-  writeFileSync(path, JSON.stringify(config), { mode: 0o600 });
-  chmodSync(path, 0o600);
-  const entry = join(home, "entry.mjs");
-  writeFileSync(entry, "", { mode: 0o600 });
-  const run = (args: string) =>
-    enable(entry, `--scope global --port ${port} ${args}`.trim().split(/ +/), {}, home, home);
-  return { home, path, run };
-}
+import { cleanup } from "./fixtures/server-sandbox.js";
+import {
+  base,
+  existingInstall,
+  fixture,
+  savedConfig,
+  SAVED_COMMAND,
+  send,
+  setup,
+  temporary,
+  tokenFile,
+  unexpiredToken,
+  WORKSPACE,
+} from "./fixtures/credential-sandbox.js";
 
 describe("credential command", () => {
   it("sends the configured workspace id", async () => {

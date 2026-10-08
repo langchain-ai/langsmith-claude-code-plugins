@@ -1,10 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   chmodSync,
   existsSync,
   linkSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -12,9 +11,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as os from "node:os";
 import { enable, disable, routingStatus, SetupError } from "./settings.js";
 import { configDir, loadConfig } from "./config.js";
 import { API_URL, UPSTREAM } from "./proxy-constants.js";
@@ -25,6 +22,7 @@ import { handleGatewayInput } from "./commands.js";
 import { identity } from "./server.js";
 import * as setupModule from "./setup.js";
 import { cliToken } from "./token.js";
+import { args, home, json, run, save, settings, transport } from "./fixtures/settings-sandbox.js";
 
 vi.mock("node:os", async (original) => ({
   ...(await original<typeof import("node:os")>()),
@@ -36,39 +34,6 @@ vi.mock("./lifecycle.js", async (original) => ({
   control: vi.fn(),
   waitForStopped: vi.fn(),
 }));
-let home: string, settings: string;
-const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
-function save(value: unknown) {
-  writeFileSync(settings, JSON.stringify(value), { mode: 0o600 });
-}
-const transport = ({
-  settingsTargets: _targets,
-  ...config
-}: NonNullable<ReturnType<typeof loadConfig>>) => config;
-const args = () => [
-  "--scope",
-  "global",
-  "--cli",
-  process.execPath,
-  "--profile",
-  "fake-profile",
-  "--port",
-  "52507",
-];
-const run = () => enable("/fake/gateway.js", args(), {});
-beforeEach(() => {
-  home = realpathSync(mkdtempSync(join(tmpdir(), "gateway-settings-")));
-  vi.mocked(os.userInfo).mockReturnValue({ homedir: home } as ReturnType<typeof os.userInfo>);
-  mkdirSync(join(home, ".claude"), { mode: 0o700 });
-  settings = join(home, ".claude/settings.json");
-  vi.mocked(ensure).mockResolvedValue(undefined);
-  vi.mocked(waitForStopped).mockResolvedValue(undefined);
-  vi.mocked(control).mockResolvedValue("");
-});
-afterEach(() => {
-  vi.clearAllMocks();
-  rmSync(home, { recursive: true, force: true });
-});
 
 describe("consented user transport setup (OS-home isolated, no real CLI/network)", () => {
   it.each([undefined, "claude-gateway"])(
