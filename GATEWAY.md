@@ -1,4 +1,4 @@
-# LangSmith Gateway for Claude Code
+# LangSmith Gateway Plugin for Claude Code
 
 The [LangSmith](https://smith.langchain.com) gateway routes model requests for many providers, holding the keys and paying for the calls. This plugin points Claude Code at it, so a small helper runs on your machine and passes each request on. You keep using Claude Code exactly as before.
 
