@@ -1,16 +1,15 @@
-# LangSmith Gateway Plugin for Claude Code
+# LangSmith Gateway Plugin
 
-The [LangSmith](https://smith.langchain.com) gateway routes model requests for many providers, holding the keys and paying for the calls. This plugin points Claude Code at it, so a small helper runs on your machine and passes each request on. You keep using Claude Code exactly as before.
+The [LangSmith](https://smith.langchain.com) gateway routes model requests for many providers while holding the keys and paying for the calls. This plugin points Claude Code at it so a small helper on your machine passes each request on and you keep using Claude Code exactly as before.
 
-This is a different plugin from LangSmith tracing. Neither needs the other, and turning this on does not start tracing your conversations.
+This is a different plugin from LangSmith tracing since neither needs the other and turning this on does not start tracing your conversations.
 
 ## What you need
 
-- A Mac or a Linux machine. Windows does not work.
 - Node.js 20 or newer.
 - One way to prove who you are, either the LangSmith command line tool or your own single sign-on.
 
-Install the command line tool, then finish the sign-in in the browser that opens. Skip this if your employer's single sign-on issues your token instead.
+Install the command line tool and finish the sign-in in the browser that opens, or skip this if your employer's single sign-on issues your token instead.
 
 ```sh
 curl -fsSL https://cli.langsmith.com/install.sh | sh
@@ -19,7 +18,7 @@ langsmith auth login
 
 ## Install
 
-Run these inside Claude Code. Installing changes nothing on its own, since routing stays off until you turn it on.
+Run these inside Claude Code, where installing changes nothing on its own since routing stays off until you turn it on.
 
 ```text
 /plugin marketplace add langchain-ai/langsmith-claude-code-plugins
@@ -35,11 +34,11 @@ Run these inside Claude Code. Installing changes nothing on its own, since routi
 
 If you pay Anthropic through a Claude subscription rather than an API key, add `--use-claude-subscription` so your own Claude login is passed through.
 
-Everything in the conversation reaches the gateway, meaning your prompts, your tool inputs and outputs and the replies, with nothing removed. Only turn this on for a gateway you trust with that content.
+Everything in the conversation reaches the gateway with nothing removed, which means your prompts, your tool inputs and outputs and the replies, so only turn this on for a gateway you trust with that content.
 
 Claude Code's own model selection still decides which provider you reach, so `/model openai/gpt-4.1` works and the gateway supplies that key.
 
-To stop, run `/langsmith-gateway:disable --scope global`, then restart your sessions. Your earlier settings are not put back.
+To stop, run `/langsmith-gateway:disable --scope global` and restart your sessions, though that does not put your earlier settings back.
 
 ## Check it is working
 
@@ -47,11 +46,11 @@ To stop, run `/langsmith-gateway:disable --scope global`, then restart your sess
 /langsmith-gateway:status
 ```
 
-It says whether your settings point at the helper and whether the helper answers. It does not check your sign-in, so send a message to prove the whole path works.
+It says whether your settings point at the helper and whether the helper answers, and since it does not check your sign-in you should send a message to prove the whole path works.
 
 ## Configure custom OIDC authentication
 
-This is for people whose LangSmith organization has a custom OIDC provider configured, meaning their employer's own single sign-on. You hand over a token that provider already issues you, by giving the plugin a command to run, and whatever that command prints becomes your token:
+This is for people whose LangSmith organization has a custom OIDC provider configured, meaning their employer's own single sign-on. You hand over a token that provider already issues you by giving the plugin a command to run, and whatever that command prints becomes your token:
 
 ```text
 /langsmith-gateway:setup --scope global --identity-token-command "cat ~/.oidc/profile.jwt" --workspace-id 11111111-2222-3333-4444-555555555555
@@ -60,6 +59,7 @@ This is for people whose LangSmith organization has a custom OIDC provider confi
 - Quote the command, as above, so you can keep writing flags after it.
 - Name your LangSmith workspace too, as the long dashed id in your workspace settings.
 - The command runs without the setup your terminal gives you, so write out full paths and print nothing but the token.
+- It runs through `/bin/sh`, so this part needs a Unix-like shell.
 
 ## When it does not work
 
