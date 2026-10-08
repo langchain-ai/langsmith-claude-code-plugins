@@ -2,7 +2,16 @@ import { constants, accessSync, mkdirSync, realpathSync, statSync } from "node:f
 import { isAbsolute, join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { atomic, directories, jsonText, snapshot } from "./files.js";
-import { configDir, endpoints, privatePath, userHome, type ProxyConfig } from "./config.js";
+import { configDir, endpoints, privatePath, userHome } from "./config.js";
+import {
+  absent,
+  isIdentityTokenCommand,
+  isIdentityTokenTtlMs,
+  isPort,
+  isProfile,
+  isWorkspaceId,
+} from "./config-validation.js";
+import type { CredentialIdentity, ProxyConfig } from "./proxy-models.js";
 
 export function validateCLI(cli: string): string {
   if (!isAbsolute(cli)) throw new Error("CLI path must be absolute");
@@ -14,7 +23,6 @@ export function validateCLI(cli: string): string {
   return cli;
 }
 
-// Internal config creation for consented enable; not a runtime subcommand.
 export function createConfig(
   cli: string,
   profile: string | undefined,
@@ -22,17 +30,17 @@ export function createConfig(
   home = userHome(),
   urls: { apiUrl?: string; gatewayUrl?: string } = {},
   useClaudeSubscription = false,
+  credentials: CredentialIdentity = {},
 ): void {
-  if (
-    typeof useClaudeSubscription !== "boolean" ||
-    !isAbsolute(cli) ||
-    (profile !== undefined &&
-      (typeof profile !== "string" || !/^[a-zA-Z0-9_.-]{1,128}$/.test(profile))) ||
-    !Number.isInteger(port) ||
-    port < 1024 ||
-    port > 65535
-  )
-    throw new Error("Invalid setup arguments");
+  const valid =
+    typeof useClaudeSubscription === "boolean" &&
+    isAbsolute(cli) &&
+    absent(profile, isProfile) &&
+    isPort(port) &&
+    absent(credentials.identityTokenCommand, isIdentityTokenCommand) &&
+    absent(credentials.identityTokenTtlMs, isIdentityTokenTtlMs) &&
+    absent(credentials.workspaceId, isWorkspaceId);
+  if (!valid) throw new Error("Invalid setup arguments");
   const selected = endpoints(urls);
   cli = validateCLI(cli);
   directories(home, true);
@@ -47,6 +55,7 @@ export function createConfig(
     enabled: true,
     useClaudeSubscription,
     ...selected,
+    ...credentials,
     cli,
     profile,
     port,

@@ -1,8 +1,9 @@
 import { realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { configDir, type ProxyConfig } from "./config.js";
+import { configDir } from "./config.js";
 import { directory, snapshot } from "./files.js";
-import { SetupError, type SetupOptions } from "./options.js";
+import { SetupError } from "./options.js";
+import type { ProxyConfig, SetupOptions } from "./proxy-models.js";
 
 export function targetPaths(home: string, scope: SetupOptions["scope"], cwd: string) {
   if (scope === "global")
@@ -28,8 +29,6 @@ export const BASE = "ANTHROPIC_BASE_URL";
 export const HEADERS = "ANTHROPIC_CUSTOM_HEADERS";
 export const proxyKeyLine = (config: ProxyConfig) => `X-LangSmith-Proxy-Key: ${config.secret}`;
 
-// These snapshots are routing observations, not authorization or restoration records.
-// Never follow linked parent directories, including optional registered project paths.
 export function routingSnapshot(path: string) {
   try {
     const root = dirname(dirname(path));

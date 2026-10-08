@@ -1,19 +1,29 @@
 import { endpoints } from "./config.js";
+import {
+  isIdentityTokenCommand,
+  isIdentityTokenTtlMs,
+  isWorkspaceId,
+} from "./config-validation.js";
+import {
+  COMMAND_GUIDANCE,
+  PROFILE_NAME,
+  SETUP_FLAGS,
+  STATUS_GUIDANCE,
+  TTL_RANGE_GUIDANCE,
+  TTL_SECONDS,
+} from "./proxy-constants.js";
+import type { SetupOptions } from "./proxy-models.js";
 
 // Diagnostics contain no supplied values (arguments may contain accidental secrets).
 export class SetupError extends Error {}
-export interface SetupOptions {
-  scope: "global" | "project";
-  // Explicit setup only: omission selects OAuth-only, never the saved mode.
-  useClaudeSubscription: boolean;
-  cli?: string;
-  profile?: string;
-  port?: number;
-  apiUrl?: string;
-  gatewayUrl?: string;
+
+function identityTokenTtl(seconds: string | undefined): number | undefined {
+  if (seconds === undefined) return undefined;
+  const ms = Number(seconds) * 1000;
+  if (!TTL_SECONDS.test(seconds) || !isIdentityTokenTtlMs(ms))
+    throw new SetupError(TTL_RANGE_GUIDANCE);
+  return ms;
 }
-export const COMMAND_GUIDANCE =
-  "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic.";
 
 export function parseSetupArgs(rest: string[]): SetupOptions {
   const usage = COMMAND_GUIDANCE;
@@ -28,6 +38,7 @@ export function parseSetupArgs(rest: string[]): SetupOptions {
     throw new SetupError(usage);
   const flags = new Map<string, string>();
   let useClaudeSubscription = false;
+  let command: string | undefined;
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
     if (arg === "--use-claude-subscription") {
@@ -35,8 +46,14 @@ export function parseSetupArgs(rest: string[]): SetupOptions {
       useClaudeSubscription = true;
       continue;
     }
+    if (arg === "--identity-token-command") {
+      const tail = rest.slice(i + 1).join(" ");
+      if (!isIdentityTokenCommand(tail)) throw new SetupError(usage);
+      command = tail;
+      break;
+    }
     if (
-      !["--scope", "--cli", "--port", "--profile", "--api-url", "--gateway-url"].includes(arg) ||
+      !SETUP_FLAGS.includes(arg) ||
       flags.has(arg) ||
       !rest[i + 1] ||
       rest[i + 1].startsWith("--")
@@ -56,8 +73,17 @@ export function parseSetupArgs(rest: string[]): SetupOptions {
     result.port = Number(port);
   }
   result.profile = flags.get("--profile");
-  if (result.profile !== undefined && !/^[a-zA-Z0-9_.-]{1,128}$/.test(result.profile))
+  if (result.profile !== undefined && !PROFILE_NAME.test(result.profile))
     throw new SetupError("Invalid CLI profile name");
+  result.identityTokenCommand = command;
+  result.identityTokenTtlMs = identityTokenTtl(flags.get("--identity-token-ttl"));
+  result.workspaceId = flags.get("--workspace-id");
+  if (result.workspaceId !== undefined && !isWorkspaceId(result.workspaceId))
+    throw new SetupError("Workspace id must be a UUID");
+  if (command !== undefined && result.workspaceId === undefined)
+    throw new SetupError("An identity token command also requires --workspace-id");
+  if (command === undefined && result.identityTokenTtlMs !== undefined)
+    throw new SetupError("Identity token cache seconds apply only with an identity token command");
   if (flags.has("--api-url") || flags.has("--gateway-url")) {
     try {
       Object.assign(
@@ -78,8 +104,6 @@ export function parseDisableArgs(args: string[]): SetupOptions {
   return parseSetupArgs(args);
 }
 
-export const STATUS_GUIDANCE =
-  "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
 export function parseStatusArgs(args: string[]): { scope?: SetupOptions["scope"] } {
   if (args.length === 0) return {};
   if (args.length === 2 && args[0] === "--scope" && (args[1] === "global" || args[1] === "project"))
@@ -87,8 +111,6 @@ export function parseStatusArgs(args: string[]): { scope?: SetupOptions["scope"]
   throw new SetupError(STATUS_GUIDANCE);
 }
 
-// No shell, expansion, quoting interpretation or command-markup parsing. Only
-// exact standalone slash commands are authorized; malformed arguments still block.
 export function parseGatewayCommand(
   prompt: unknown,
 ): { command: "setup" | "disable" | "status"; args: string[] } | undefined {
@@ -96,7 +118,6 @@ export function parseGatewayCommand(
   const match = /^\/langsmith-gateway:(setup|disable|status)(?=\s|$)/.exec(prompt);
   if (!match) return;
   const rest = prompt.slice(match[0].length);
-  // Control bytes must never be normalized into an authorized invocation.
   // eslint-disable-next-line no-control-regex
   if (/[\r\n\x00-\x1f'"`$;&|<>\\]/.test(rest))
     throw new SetupError(match[1] === "status" ? STATUS_GUIDANCE : COMMAND_GUIDANCE);

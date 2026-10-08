@@ -5,8 +5,22 @@ import http, {
 } from "node:http";
 import https from "node:https";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { KEY_HEADER, endpoints, type ProxyConfig } from "./config.js";
-import { TokenCache, cliToken, loginGuidance } from "./token.js";
+import { endpoints } from "./config.js";
+import {
+  CLI_TOKEN_TTL_MS,
+  CREDENTIAL_TIMEOUT_MS,
+  DEFAULT_IDENTITY_TOKEN_TTL_MS,
+  KEY_HEADER,
+  MAX_REQUEST_BYTES,
+  PROTOCOL_VERSION,
+  TENANT_HEADER,
+  TENANT_HEADER_GUIDANCE,
+  hop,
+  routing,
+} from "./proxy-constants.js";
+import { isWorkspaceId } from "./config-validation.js";
+import type { ProxyConfig } from "./proxy-models.js";
+import { TokenCache, cliToken, commandToken, commandGuidance, loginGuidance } from "./token.js";
 
 // Bump the protocol identity when forwarding or validation changes so an older
 // daemon cannot silently retain the previous contract. Conflicts fail closed.
@@ -14,7 +28,7 @@ export const identity = (c: ProxyConfig) =>
   createHash("sha256")
     .update(
       JSON.stringify([
-        8,
+        PROTOCOL_VERSION,
         c.useClaudeSubscription,
         c.cli,
         c.profile,
@@ -22,6 +36,9 @@ export const identity = (c: ProxyConfig) =>
         c.secret,
         endpoints(c).apiUrl,
         endpoints(c).gatewayUrl,
+        c.identityTokenCommand,
+        c.identityTokenTtlMs,
+        c.workspaceId,
       ]),
     )
     .digest("hex");
@@ -48,8 +65,6 @@ export function nativeToken(req: IncomingMessage): string | undefined {
   if (count !== 1 || typeof value !== "string") return;
   if (!/^Bearer /i.test(value)) return;
   const token = value.slice(7);
-  // No subtype/suffix grammar. Reject whitespace, controls and comma ambiguity
-  // without trimming or changing the raw credential, and ensure Node can send it.
   // eslint-disable-next-line no-control-regex
   if (!token.startsWith("sk-ant-") || token.length <= 7 || /[\s\x00-\x1f\x7f-\x9f,]/.test(token))
     return;
@@ -61,32 +76,6 @@ export function nativeToken(req: IncomingMessage): string | undefined {
   return token;
 }
 
-const hop = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-  "proxy-connection",
-]);
-const routing = new Set([
-  "authorization",
-  "x-auth-source",
-  "x-gateway-key",
-  "gateway-key",
-  "x-api-key",
-  "x-tenant-id",
-  "x-workspace-id",
-  "x-project-id",
-  "x-auth-mode",
-  "x-gateway-auth-mode",
-  "x-service-key",
-  "x-auth-token",
-  "x-secret-token",
-]);
 export function cleanHeaders(headers: IncomingHttpHeaders, request = true): IncomingHttpHeaders {
   const blocked = new Set([
     ...hop,
@@ -113,7 +102,6 @@ export function cleanHeaders(headers: IncomingHttpHeaders, request = true): Inco
 // Never resolve an untrusted URL against the upstream. Restrict the raw origin-form
 // path first, then append it to the fixed prefix. No escapes, traversal, or authority.
 export function upstreamPath(method: string, raw: string): string | undefined {
-  // Reject control bytes deliberately at the raw request-target boundary.
   // eslint-disable-next-line no-control-regex
   if (raw.length > 4096 || /[\\#\x00-\x20\x7f]/.test(raw)) return;
   const [path, query] = raw.split("?", 2);
@@ -124,7 +112,6 @@ export function upstreamPath(method: string, raw: string): string | undefined {
     )
   )
     return;
-  // Query values are data, never used to select an upstream. Limit SDK query keys.
   if (query !== undefined) {
     if (raw.indexOf("?", raw.indexOf("?") + 1) !== -1) return;
     const allowed = method === "POST" ? ["beta"] : ["beta", "limit", "before_id", "after_id"];
@@ -136,10 +123,6 @@ export function upstreamPath(method: string, raw: string): string | undefined {
   return method === "GET" && path.startsWith("/v1/models/") ? "/anthropic" + raw : raw;
 }
 
-// Match smith-go/gateway's buffered request limit, including large image/context
-// payloads. Enforce it on both the uploaded and rewritten UTF-8 bytes.
-export const MAX_REQUEST_BYTES = 60 * 1024 * 1024;
-
 class RequestError extends Error {
   constructor(
     readonly status: number,
@@ -147,6 +130,16 @@ class RequestError extends Error {
   ) {
     super(message);
   }
+}
+
+export function callerWorkspace(req: IncomingMessage): string | undefined {
+  const values = req.rawHeaders.filter(
+    (_, i) => i % 2 === 1 && req.rawHeaders[i - 1].toLowerCase() === TENANT_HEADER,
+  );
+  if (values.length === 0) return undefined;
+  if (values.length !== 1 || !isWorkspaceId(values[0]))
+    throw new RequestError(400, TENANT_HEADER_GUIDANCE);
+  return values[0];
 }
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -203,7 +196,6 @@ async function prepareBody(req: IncomingMessage, path: string) {
   const model = body.model;
   if (typeof model !== "string" || !model.trim())
     throw new RequestError(400, "model must be a non-empty string");
-  // Only the first slash separates provider and model; no provider-name inference.
   const slash = model.indexOf("/");
   if (slash === 0 || slash === model.length - 1)
     throw new RequestError(400, "model must be a bare ID or provider/model");
@@ -283,8 +275,6 @@ function reply(res: ServerResponse, status: number, message: string): void {
   res.end(message);
 }
 
-// Inject only the transport/token source in tests; production always uses HTTPS,
-// the configured origin/allowlisted paths, system TLS validation, and never follows redirects.
 export function createProxy(
   config: ProxyConfig,
   options: {
@@ -295,9 +285,18 @@ export function createProxy(
 ) {
   const upstreamOrigin = new URL(endpoints(config).gatewayUrl);
   const credentialAbort = new AbortController();
-  const tokens = new TokenCache(
-    options.token ?? (() => cliToken(config, 10_000, credentialAbort.signal)),
-  );
+  const command = config.identityTokenCommand;
+  const fetchToken =
+    command === undefined
+      ? (options.token ?? (() => cliToken(config, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal)))
+      : () => commandToken(command, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal);
+  const ttlMs =
+    command === undefined
+      ? CLI_TOKEN_TTL_MS
+      : (config.identityTokenTtlMs ?? DEFAULT_IDENTITY_TOKEN_TTL_MS);
+  const tokens = new TokenCache(fetchToken, Date.now, ttlMs);
+  const unavailable = () =>
+    command === undefined ? loginGuidance(config) : commandGuidance(config);
   const sessions = options.sessions ?? new Sessions();
   const transport = options.transport ?? https.request;
   let draining = false;
@@ -350,7 +349,6 @@ export function createProxy(
       );
       return;
     }
-    // Strip client credentials/routing before adding trusted gateway credentials.
     const headers = cleanHeaders(req.headers);
     if (sessions.active >= 64) {
       reply(res, 503, "Local proxy busy");
@@ -381,6 +379,7 @@ export function createProxy(
     // Validate/transform before CLI acquisition: rejected JSON must not refresh
     // credentials. GET bodies retain their existing streaming behavior.
     void (async () => {
+      const workspace = callerWorkspace(req) ?? config.workspaceId;
       const prepared = req.method === "POST" ? await prepareBody(req, path) : undefined;
       if (ended || res.destroyed) return;
       if (prepared) {
@@ -391,7 +390,7 @@ export function createProxy(
       }
       if (draining) throw new RequestError(503, "Local proxy draining");
       const token = await tokens.get().catch(() => {
-        throw new RequestError(503, loginGuidance(config));
+        throw new RequestError(503, unavailable());
       });
       if (ended || res.destroyed) return;
       if (draining) throw new RequestError(503, "Local proxy draining");
@@ -399,6 +398,7 @@ export function createProxy(
       // overridden provider. Gateway selection activates it only for built-in
       // Anthropic (including fallback legs); other destinations ignore it.
       headers.authorization = `Bearer ${token}`;
+      if (workspace) headers[TENANT_HEADER] = workspace;
       if (native) headers["x-langsmith-anthropic-passthrough"] = native;
       outgoing = transport(
         {

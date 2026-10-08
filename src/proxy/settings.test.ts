@@ -1,10 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   chmodSync,
   existsSync,
   linkSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -12,11 +11,10 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as os from "node:os";
 import { enable, disable, routingStatus, SetupError } from "./settings.js";
-import { API_URL, UPSTREAM, configDir, loadConfig } from "./config.js";
+import { configDir, loadConfig } from "./config.js";
+import { API_URL, UPSTREAM } from "./proxy-constants.js";
 import { atomic, snapshot, transaction } from "./files.js";
 import { control, ensure, waitForStopped } from "./lifecycle.js";
 import { targetPaths, routingEnv, matchesRouting, BASE, HEADERS } from "./scopes.js";
@@ -24,6 +22,7 @@ import { handleGatewayInput } from "./commands.js";
 import { identity } from "./server.js";
 import * as setupModule from "./setup.js";
 import { cliToken } from "./token.js";
+import { args, home, json, run, save, settings, transport } from "./fixtures/settings-sandbox.js";
 
 vi.mock("node:os", async (original) => ({
   ...(await original<typeof import("node:os")>()),
@@ -35,39 +34,6 @@ vi.mock("./lifecycle.js", async (original) => ({
   control: vi.fn(),
   waitForStopped: vi.fn(),
 }));
-let home: string, settings: string;
-const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
-function save(value: unknown) {
-  writeFileSync(settings, JSON.stringify(value), { mode: 0o600 });
-}
-const transport = ({
-  settingsTargets: _targets,
-  ...config
-}: NonNullable<ReturnType<typeof loadConfig>>) => config;
-const args = () => [
-  "--scope",
-  "global",
-  "--cli",
-  process.execPath,
-  "--profile",
-  "fake-profile",
-  "--port",
-  "52507",
-];
-const run = () => enable("/fake/gateway.js", args(), {});
-beforeEach(() => {
-  home = realpathSync(mkdtempSync(join(tmpdir(), "gateway-settings-")));
-  vi.mocked(os.userInfo).mockReturnValue({ homedir: home } as ReturnType<typeof os.userInfo>);
-  mkdirSync(join(home, ".claude"), { mode: 0o700 });
-  settings = join(home, ".claude/settings.json");
-  vi.mocked(ensure).mockResolvedValue(undefined);
-  vi.mocked(waitForStopped).mockResolvedValue(undefined);
-  vi.mocked(control).mockResolvedValue("");
-});
-afterEach(() => {
-  vi.clearAllMocks();
-  rmSync(home, { recursive: true, force: true });
-});
 
 describe("consented user transport setup (OS-home isolated, no real CLI/network)", () => {
   it.each([undefined, "claude-gateway"])(
@@ -116,8 +82,6 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
         JSON.stringify({ current_profile: current, profiles }),
         { mode: 0o600 },
       );
-      // Fake CLI mirrors the sibling CLI's flag/env/current_profile/default resolution.
-      // Only this scratch config is read; no credentials, refresh or network access.
       writeFileSync(
         cli,
         `#!${process.execPath}
@@ -134,7 +98,6 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
       const options = ["--scope", "global", "--cli", cli];
       if (profile !== undefined) options.push("--profile", profile);
       await enable("/fake", options, {});
-      // Load saved config, rather than passing the setup arguments to token lookup.
       const config = loadConfig()!;
       for (const key of [
         "LANGSMITH_PROFILE",
@@ -300,7 +263,6 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
     disable(["--scope", "global"], {});
     rmSync(oldCLI);
     expect(existsSync(original.cli)).toBe(false);
-    // Retaining the deleted executable must still fail validation.
     await expect(enable("/fake", ["--scope", "global"], {})).rejects.toThrow();
     vi.clearAllMocks();
     const validate = vi.spyOn(setupModule, "validateCLI");
@@ -445,7 +407,6 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
       const paths = [settings, join(configDir(home), "config.json")];
       const before = paths.map((path) => snapshot(path));
       vi.clearAllMocks();
-      // Check both user-only headers and the same headers inherited by Claude.
       for (const env of [
         {},
         { ANTHROPIC_CUSTOM_HEADERS: json(settings).env.ANTHROPIC_CUSTOM_HEADERS },
@@ -721,7 +682,6 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
     const before = { model: "keep", env: { OTHER: "keep" } };
     save(before);
     await run();
-    // Simulate routing absent after a partial setup.
     save({ ...before, model: "later" });
     disable(["--scope", "global"], {});
     expect(json(settings)).toEqual({ ...before, model: "later" });
@@ -1198,7 +1158,6 @@ describe.each(["global", "project"] as const)("same-session %s re-enable", (scop
       expect(loadConfig()).toBeUndefined();
       vi.clearAllMocks();
       const output = vi.fn();
-      // Neither ordinary prompts nor lifecycle recovery can implicitly re-enable.
       for (const event of ["SessionStart", "UserPromptSubmit", "SessionEnd"]) {
         await handleGatewayInput(
           { hook_event_name: event, prompt: "hello", cwd, session_id: "same-session" },
@@ -1217,7 +1176,6 @@ describe.each(["global", "project"] as const)("same-session %s re-enable", (scop
         expect(loadConfig()).toBeUndefined();
         expect(json(p.settings)).toEqual(disabled);
       });
-      // Omission is still explicit opt-out, even with a retained true config.
       await handleGatewayInput(
         {
           hook_event_name: "UserPromptSubmit",
@@ -1248,7 +1206,6 @@ describe.each(["global", "project"] as const)("same-session %s re-enable", (scop
       expect(control).not.toHaveBeenCalled();
       disable(args, inherited, home, cwd);
       expect(json(p.settings)).toEqual(disabled);
-      // Report disk changes without inferring the parent session's live transport.
       await expect(enable("/fake", args, inherited, home, cwd)).resolves.toMatchObject({
         settingsChanged: true,
       });
@@ -1439,8 +1396,6 @@ describe("externally provisioned receipt-free routing", () => {
     expect(json(local)).toEqual({ env: { ANTHROPIC_BASE_URL: "https://later.test" } });
   });
   it("preserves later settings on partial transaction failure and disables new config", async () => {
-    // A concurrent creator blocks the settings write after readiness, without
-    // requiring a persistent write-ahead record to clean up matching routing.
     vi.mocked(ensure).mockImplementationOnce(async () => save({ model: "later" }));
     await expect(run()).rejects.toThrow("Settings changed concurrently");
     expect(json(settings)).toEqual({ model: "later" });
@@ -1570,8 +1525,6 @@ describe("saved routing diagnostics", () => {
     expect(result).toBe(
       `settings ${saved === undefined ? "missing" : "present"}; ${test.diagnostic}`,
     );
-    // Diagnostics must agree with the existing exact routing matcher, including
-    // its case/spacing and duplicate-key rules, without changing those rules.
     expect(matchesRouting(saved && "env" in saved ? saved.env : {}, config)).toBe(
       test.diagnostic === configured,
     );

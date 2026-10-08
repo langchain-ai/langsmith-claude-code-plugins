@@ -2,7 +2,7 @@
 import { fileURLToPath } from "node:url";
 import { ConfigError, loadConfig } from "../proxy/config.js";
 import { createProxy, identity } from "../proxy/server.js";
-import { COMMAND_GUIDANCE } from "../proxy/options.js";
+import { COMMAND_GUIDANCE } from "../proxy/proxy-constants.js";
 import { SetupError } from "../proxy/options.js";
 import { handleGatewayInput } from "../proxy/commands.js";
 import { readStdin } from "../utils/stdin.js";
@@ -10,12 +10,9 @@ import { readStdin } from "../utils/stdin.js";
 const entry = fileURLToPath(import.meta.url);
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
-  // Only hook stdin or the exact internal daemon argv is executable. Reject
-  // everything else before config reads, input handling or daemon side effects.
   if (command !== undefined && (command !== "daemon" || args.length !== 0))
     throw new SetupError(COMMAND_GUIDANCE);
   if (command === undefined) {
-    // Claude supplies one JSON payload and owns the hook timeout.
     const input: Parameters<typeof handleGatewayInput>[0] = await readStdin();
     await handleGatewayInput(input, entry);
     return;
@@ -26,7 +23,6 @@ async function main(): Promise<void> {
     // The same bundle runs in a separate background process so later model
     // requests and streams can be served after the short-lived hooks exit.
     const { server, drain } = createProxy(config);
-    // This process outlives hooks, so notice config changes without another hook.
     const watch = setInterval(() => {
       try {
         const current = loadConfig();
@@ -45,8 +41,6 @@ async function main(): Promise<void> {
   }
 }
 void main().catch((error) => {
-  // Hook errors never block tracing/Claude and never include tokens, CLI stderr,
-  // request bodies, or configuration. Daemon stdio is detached to /dev/null.
   process.stderr.write(
     error instanceof SetupError || error instanceof ConfigError
       ? error.message + "\n"

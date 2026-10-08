@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 // dist/src/proxy/config.js
 import { lstatSync as lstatSync2 } from "node:fs";
-import { isAbsolute, join as join2, normalize } from "node:path";
+import { join as join2 } from "node:path";
 import { userInfo } from "node:os";
 
 // dist/src/proxy/files.js
@@ -111,23 +111,144 @@ function transaction(writes) {
   }
 }
 
+// dist/src/proxy/proxy-constants.js
+var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
+var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and put --identity-token-command last, followed by a command that prints one token on standard output. The daemon runs that command with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs quotes, pipes or anything else your shell sets up. Add --identity-token-ttl SECONDS to change how long each result is reused from the default 300.";
+var STATUS_GUIDANCE = "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
+var TTL_RANGE_GUIDANCE = "Identity token cache seconds must be between 1 and 3600";
+var TENANT_HEADER_GUIDANCE = "Send x-tenant-id at most once and as a workspace UUID. Drop the header to use the workspace saved in your gateway configuration.";
+var ORIGIN_SHAPE_GUIDANCE = "Endpoints must be HTTPS DNS origins without credentials, path, query or fragment";
+var ORIGIN_DNS_GUIDANCE = "Endpoints must use public DNS names and HTTPS ports 1-65535";
+var API_URL = "https://api.smith.langchain.com";
+var UPSTREAM = "https://gateway.smith.langchain.com";
+var PROTOCOL_VERSION = 10;
+var KEY_HEADER = "x-langsmith-proxy-key";
+var TENANT_HEADER = "x-tenant-id";
+var BEARER_TOKEN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+var WORKSPACE_ID = /^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/;
+var PROFILE_NAME = /^[a-zA-Z0-9_.-]{1,128}$/;
+var SECRET = /^[a-f0-9]{64}$/;
+var SETTINGS_TARGET = /\/\.claude\/settings(?:\.local)?\.json$/;
+var TTL_SECONDS = /^[0-9]{1,5}$/;
+var WHITESPACE = /\s/;
+var ORIGIN = /^https:\/\/[a-zA-Z0-9.-]+(?::[0-9]{1,5})?\/?$/;
+var DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+var TOP_LEVEL_LABEL = /^[a-z][a-z0-9-]*$/;
+var PRIVATE_HOST = /(?:^|\.)(?:localhost|local|internal|home|lan)$/;
+var CONTROL = /[\x00-\x1f\x7f]/;
+var MAX_ORIGIN_LENGTH = 2048;
+var MAX_HOSTNAME_LENGTH = 253;
+var MIN_URL_PORT = 1;
+var MAX_URL_PORT = 65535;
+var MIN_PORT = 1024;
+var MAX_PORT = 65535;
+var MAX_SETTINGS_TARGETS = 128;
+var MAX_PATH_LENGTH = 4096;
+var SHELL = "/bin/sh";
+var MAX_TOKEN_BYTES = 16384;
+var EXPIRY_SKEW_MS = 5e3;
+var EXPIRY_MARGIN_MS = 6e4;
+var RETRY_AFTER_MS = 2e3;
+var MAX_IDENTITY_TOKEN_COMMAND = 4096;
+var CREDENTIAL_TIMEOUT_MS = 1e4;
+var CLI_TOKEN_TTL_MS = 6e4;
+var DEFAULT_IDENTITY_TOKEN_TTL_MS = 5 * 6e4;
+var MIN_IDENTITY_TOKEN_TTL_MS = 1e3;
+var MAX_IDENTITY_TOKEN_TTL_MS = 60 * 6e4;
+var CONFIG_KEYS = [
+  "enabled",
+  "settingsTargets",
+  "cli",
+  "profile",
+  "port",
+  "secret",
+  "apiUrl",
+  "gatewayUrl",
+  "useClaudeSubscription",
+  "identityTokenCommand",
+  "identityTokenTtlMs",
+  "workspaceId"
+];
+var SETUP_FLAGS = [
+  "--scope",
+  "--cli",
+  "--port",
+  "--profile",
+  "--api-url",
+  "--gateway-url",
+  "--identity-token-ttl",
+  "--workspace-id"
+];
+var hop = /* @__PURE__ */ new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "proxy-connection"
+]);
+var routing = /* @__PURE__ */ new Set([
+  "authorization",
+  "x-auth-source",
+  "x-gateway-key",
+  "gateway-key",
+  "x-api-key",
+  "x-tenant-id",
+  "x-workspace-id",
+  "x-project-id",
+  "x-auth-mode",
+  "x-gateway-auth-mode",
+  "x-service-key",
+  "x-auth-token",
+  "x-secret-token"
+]);
+var MAX_REQUEST_BYTES = 60 * 1024 * 1024;
+var AUTH = [
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_API_KEY",
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  "CLAUDE_CODE_USE_FOUNDRY",
+  "ANTHROPIC_FOUNDRY_API_KEY",
+  "ANTHROPIC_FOUNDRY_BASE_URL",
+  "CLAUDE_CODE_API_KEY_HELPER"
+];
+
+// dist/src/proxy/config-validation.js
+import { isAbsolute, normalize } from "node:path";
+var wellFormedOrigin = (value) => typeof value === "string" && value.length <= MAX_ORIGIN_LENGTH && !WHITESPACE.test(value) && ORIGIN.test(value);
+var publicDnsOrigin = (url) => {
+  const labels = url.hostname.split(".");
+  const port = url.port === "" ? void 0 : Number(url.port);
+  return url.hostname.length <= MAX_HOSTNAME_LENGTH && labels.length >= 2 && labels.every((label) => DNS_LABEL.test(label)) && TOP_LEVEL_LABEL.test(labels.at(-1)) && !PRIVATE_HOST.test(url.hostname) && (port === void 0 || port >= MIN_URL_PORT && port <= MAX_URL_PORT);
+};
+var absent = (value, valid) => value === void 0 || valid(value);
+var isIdentityTokenCommand = (value) => typeof value === "string" && value.trim().length > 0 && value.length <= MAX_IDENTITY_TOKEN_COMMAND && !CONTROL.test(value);
+var isIdentityTokenTtlMs = (value) => Number.isInteger(value) && value >= MIN_IDENTITY_TOKEN_TTL_MS && value <= MAX_IDENTITY_TOKEN_TTL_MS;
+var isWorkspaceId = (value) => typeof value === "string" && WORKSPACE_ID.test(value);
+var isProfile = (value) => typeof value === "string" && PROFILE_NAME.test(value);
+var isCliPath = (value) => typeof value === "string" && isAbsolute(value);
+var isPort = (value) => Number.isInteger(value) && value >= MIN_PORT && value <= MAX_PORT;
+var isSecret = (value) => typeof value === "string" && SECRET.test(value);
+var isSettingsTarget = (value) => typeof value === "string" && value.length <= MAX_PATH_LENGTH && isAbsolute(value) && normalize(value) === value && !value.includes("\0") && SETTINGS_TARGET.test(value);
+var isSettingsTargets = (value) => Array.isArray(value) && value.length <= MAX_SETTINGS_TARGETS && value.every((target) => isSettingsTarget(target));
+var onlyKnownKeys = (value) => Object.keys(value).every((key) => CONFIG_KEYS.includes(key));
+var isSavedConfig = (c) => typeof c.enabled === "boolean" && typeof c.useClaudeSubscription === "boolean" && isCliPath(c.cli) && absent(c.profile, isProfile) && isPort(c.port) && isSecret(c.secret) && absent(c.settingsTargets, isSettingsTargets) && absent(c.identityTokenCommand, isIdentityTokenCommand) && absent(c.identityTokenTtlMs, isIdentityTokenTtlMs) && absent(c.workspaceId, isWorkspaceId) && onlyKnownKeys(c);
+
 // dist/src/proxy/config.js
 var ConfigError = class extends Error {
 };
-var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
-var API_URL = "https://api.smith.langchain.com";
-var UPSTREAM = "https://gateway.smith.langchain.com";
-var KEY_HEADER = "x-langsmith-proxy-key";
 var userHome = () => userInfo().homedir;
 var configDir = (home = userHome()) => join2(home, ".claude", "langsmith-proxy");
 function httpsOrigin(value) {
-  if (typeof value !== "string" || value.length > 2048 || /\s/.test(value) || !/^https:\/\/[a-zA-Z0-9.-]+(?::[0-9]{1,5})?\/?$/.test(value))
-    throw new Error("Endpoints must be HTTPS DNS origins without credentials, path, query or fragment");
+  if (!wellFormedOrigin(value))
+    throw new Error(ORIGIN_SHAPE_GUIDANCE);
   const url = new URL(value);
-  const host = url.hostname;
-  const labels = host.split(".");
-  if (host.length > 253 || labels.length < 2 || labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) || !/^[a-z][a-z0-9-]*$/.test(labels.at(-1)) || /(?:^|\.)(?:localhost|local|internal|home|lan)$/.test(host) || url.port !== "" && (Number(url.port) < 1 || Number(url.port) > 65535))
-    throw new Error("Endpoints must use public DNS names and HTTPS ports 1-65535");
+  if (!publicDnsOrigin(url))
+    throw new Error(ORIGIN_DNS_GUIDANCE);
   return url.origin;
 }
 function endpoints(c) {
@@ -159,17 +280,7 @@ function loadConfig(home = userHome(), includeDisabled = false) {
   if (!saved)
     return;
   const c = JSON.parse(saved.text);
-  if (!c || typeof c.enabled !== "boolean" || typeof c.useClaudeSubscription !== "boolean" || typeof c.cli !== "string" || !isAbsolute(c.cli) || c.profile !== void 0 && (typeof c.profile !== "string" || !/^[a-zA-Z0-9_.-]{1,128}$/.test(c.profile)) || !Number.isInteger(c.port) || c.port < 1024 || c.port > 65535 || typeof c.secret !== "string" || !/^[a-f0-9]{64}$/.test(c.secret) || c.settingsTargets !== void 0 && (!Array.isArray(c.settingsTargets) || c.settingsTargets.length > 128 || c.settingsTargets.some((path) => typeof path !== "string" || path.length > 4096 || !isAbsolute(path) || normalize(path) !== path || path.includes("\0") || !/\/\.claude\/settings(?:\.local)?\.json$/.test(path))) || Object.keys(c).some((k) => ![
-    "enabled",
-    "settingsTargets",
-    "cli",
-    "profile",
-    "port",
-    "secret",
-    "apiUrl",
-    "gatewayUrl",
-    "useClaudeSubscription"
-  ].includes(k)))
+  if (!c || !isSavedConfig(c))
     throw new ConfigError(CONFIG_UPDATE_GUIDANCE);
   let selected;
   try {
@@ -199,20 +310,31 @@ import { spawn } from "node:child_process";
 function cliEnvironment() {
   return { HOME: userHome(), PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
 }
-function cliToken(config, timeoutMs = 1e4, signal) {
+function cliToken(config, timeoutMs = CREDENTIAL_TIMEOUT_MS, signal) {
+  return spawnToken(config.cli, [
+    ...config.profile === void 0 ? [] : ["--profile", config.profile],
+    "--api-url",
+    endpoints(config).apiUrl,
+    "--format=pretty",
+    "auth",
+    "token"
+  ], timeoutMs, signal);
+}
+function commandToken(command, timeoutMs = CREDENTIAL_TIMEOUT_MS, signal) {
+  return spawnToken(SHELL, ["-c", command], timeoutMs, signal);
+}
+function spawnToken(command, args, timeoutMs, signal) {
   return new Promise((resolve2, reject) => {
     if (signal?.aborted) {
       reject(new Error("LangSmith token unavailable"));
       return;
     }
-    const child = spawn(config.cli, [
-      ...config.profile === void 0 ? [] : ["--profile", config.profile],
-      "--api-url",
-      endpoints(config).apiUrl,
-      "--format=pretty",
-      "auth",
-      "token"
-    ], { cwd: userHome(), env: cliEnvironment(), stdio: ["ignore", "pipe", "ignore"], shell: false });
+    const child = spawn(command, args, {
+      cwd: userHome(),
+      env: cliEnvironment(),
+      stdio: ["ignore", "pipe", "ignore"],
+      shell: false
+    });
     let output = "";
     let settled = false;
     const finish = (token) => {
@@ -238,7 +360,7 @@ function cliToken(config, timeoutMs = 1e4, signal) {
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
       output += chunk;
-      if (output.length > 16384) {
+      if (output.length > MAX_TOKEN_BYTES) {
         child.kill("SIGKILL");
         finish();
       }
@@ -246,19 +368,21 @@ function cliToken(config, timeoutMs = 1e4, signal) {
     child.on("error", () => finish());
     child.on("close", (code) => {
       const token = output.trim();
-      finish(!signal?.aborted && code === 0 && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token) ? token : void 0);
+      finish(!signal?.aborted && code === 0 && BEARER_TOKEN.test(token) ? token : void 0);
     });
   });
 }
 var TokenCache = class {
   load;
   now;
+  ttlMs;
   cached;
   pending;
   retryAt = 0;
-  constructor(load, now = Date.now) {
+  constructor(load, now = Date.now, ttlMs = CLI_TOKEN_TTL_MS) {
     this.load = load;
     this.now = now;
+    this.ttlMs = ttlMs;
   }
   get loading() {
     return this.pending !== void 0;
@@ -272,13 +396,16 @@ var TokenCache = class {
       return Promise.reject(new Error("LangSmith token unavailable"));
     this.pending = this.load().then((token) => {
       const exp = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).exp;
-      if (typeof exp !== "number" || !Number.isFinite(exp) || exp * 1e3 < this.now() + 5e3)
+      if (typeof exp !== "number" || !Number.isFinite(exp) || exp * 1e3 < this.now() + EXPIRY_SKEW_MS)
         throw new Error("Expired token");
-      this.cached = { token, until: Math.min(this.now() + 6e4, exp * 1e3 - 6e4) };
+      this.cached = {
+        token,
+        until: Math.min(this.now() + this.ttlMs, exp * 1e3 - EXPIRY_MARGIN_MS)
+      };
       return token;
     }).catch(() => {
       this.cached = void 0;
-      this.retryAt = this.now() + 2e3;
+      this.retryAt = this.now() + RETRY_AFTER_MS;
       throw new Error("LangSmith token unavailable");
     }).finally(() => {
       this.pending = void 0;
@@ -286,6 +413,11 @@ var TokenCache = class {
     return this.pending;
   }
 };
+function commandGuidance(config) {
+  const reused = (config.identityTokenTtlMs ?? DEFAULT_IDENTITY_TOKEN_TTL_MS) / 1e3;
+  return `LangSmith authentication unavailable. Your configured identity token command did not print one unexpired bearer token on standard output, so it exited non-zero, printed something else, or ran past ${CREDENTIAL_TIMEOUT_MS / 1e3} seconds. It runs with ${SHELL} from your home directory and gets only HOME and a standard PATH, so anything your shell profile or virtual environment normally sets up is missing even when the same command works in your terminal. A good result is reused for ${reused} seconds, or less when the token expires sooner, and a failure is remembered for ${RETRY_AFTER_MS / 1e3} seconds. Fix the command and send the request again, since nothing is replayed for you.
+`;
+}
 function loginGuidance(config) {
   return `LangSmith authentication unavailable. Stop gateway sessions and other CLI writers, then log in in a separate terminal using your pinned CLI executable with: ${config.profile === void 0 ? "" : `--profile ${config.profile} `}--api-url ${endpoints(config).apiUrl} auth login. Use a profile matching the selected API (optionally pin it with --profile): --api-url does not change an existing saved OAuth issuer. Review that issuer privately before login/refresh. Then retry the request; token lookup failures are cached for two seconds. Failed requests are not replayed automatically. Hooks never open a browser.
 `;
@@ -293,14 +425,17 @@ function loginGuidance(config) {
 
 // dist/src/proxy/server.js
 var identity = (c) => createHash("sha256").update(JSON.stringify([
-  8,
+  PROTOCOL_VERSION,
   c.useClaudeSubscription,
   c.cli,
   c.profile,
   c.port,
   c.secret,
   endpoints(c).apiUrl,
-  endpoints(c).gatewayUrl
+  endpoints(c).gatewayUrl,
+  c.identityTokenCommand,
+  c.identityTokenTtlMs,
+  c.workspaceId
 ])).digest("hex");
 function authenticated(req, secret) {
   const keys = req.rawHeaders.filter((_, i) => i % 2 === 0 && req.rawHeaders[i].toLowerCase() === KEY_HEADER);
@@ -327,32 +462,6 @@ function nativeToken(req) {
   }
   return token;
 }
-var hop = /* @__PURE__ */ new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-  "proxy-connection"
-]);
-var routing = /* @__PURE__ */ new Set([
-  "authorization",
-  "x-auth-source",
-  "x-gateway-key",
-  "gateway-key",
-  "x-api-key",
-  "x-tenant-id",
-  "x-workspace-id",
-  "x-project-id",
-  "x-auth-mode",
-  "x-gateway-auth-mode",
-  "x-service-key",
-  "x-auth-token",
-  "x-secret-token"
-]);
 function cleanHeaders(headers, request = true) {
   const blocked = /* @__PURE__ */ new Set([
     ...hop,
@@ -383,7 +492,6 @@ function upstreamPath(method, raw) {
   }
   return method === "GET" && path.startsWith("/v1/models/") ? "/anthropic" + raw : raw;
 }
-var MAX_REQUEST_BYTES = 60 * 1024 * 1024;
 var RequestError = class extends Error {
   status;
   constructor(status, message) {
@@ -391,6 +499,14 @@ var RequestError = class extends Error {
     this.status = status;
   }
 };
+function callerWorkspace(req) {
+  const values = req.rawHeaders.filter((_, i) => i % 2 === 1 && req.rawHeaders[i - 1].toLowerCase() === TENANT_HEADER);
+  if (values.length === 0)
+    return void 0;
+  if (values.length !== 1 || !isWorkspaceId(values[0]))
+    throw new RequestError(400, TENANT_HEADER_GUIDANCE);
+  return values[0];
+}
 function readBody(req) {
   return new Promise((resolve2, reject) => {
     const chunks = [];
@@ -527,7 +643,11 @@ function reply(res, status, message) {
 function createProxy(config, options = {}) {
   const upstreamOrigin = new URL(endpoints(config).gatewayUrl);
   const credentialAbort = new AbortController();
-  const tokens = new TokenCache(options.token ?? (() => cliToken(config, 1e4, credentialAbort.signal)));
+  const command = config.identityTokenCommand;
+  const fetchToken = command === void 0 ? options.token ?? (() => cliToken(config, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal)) : () => commandToken(command, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal);
+  const ttlMs = command === void 0 ? CLI_TOKEN_TTL_MS : config.identityTokenTtlMs ?? DEFAULT_IDENTITY_TOKEN_TTL_MS;
+  const tokens = new TokenCache(fetchToken, Date.now, ttlMs);
+  const unavailable = () => command === void 0 ? loginGuidance(config) : commandGuidance(config);
   const sessions = options.sessions ?? new Sessions();
   const transport = options.transport ?? https.request;
   let draining = false;
@@ -605,6 +725,7 @@ function createProxy(config, options = {}) {
       end();
     };
     void (async () => {
+      const workspace = callerWorkspace(req) ?? config.workspaceId;
       const prepared = req.method === "POST" ? await prepareBody(req, path) : void 0;
       if (ended || res.destroyed)
         return;
@@ -617,13 +738,15 @@ function createProxy(config, options = {}) {
       if (draining)
         throw new RequestError(503, "Local proxy draining");
       const token = await tokens.get().catch(() => {
-        throw new RequestError(503, loginGuidance(config));
+        throw new RequestError(503, unavailable());
       });
       if (ended || res.destroyed)
         return;
       if (draining)
         throw new RequestError(503, "Local proxy draining");
       headers.authorization = `Bearer ${token}`;
+      if (workspace)
+        headers[TENANT_HEADER] = workspace;
       if (native)
         headers["x-langsmith-anthropic-passthrough"] = native;
       outgoing = transport({
@@ -716,13 +839,21 @@ function createProxy(config, options = {}) {
 // dist/src/proxy/options.js
 var SetupError = class extends Error {
 };
-var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic.";
+function identityTokenTtl(seconds) {
+  if (seconds === void 0)
+    return void 0;
+  const ms = Number(seconds) * 1e3;
+  if (!TTL_SECONDS.test(seconds) || !isIdentityTokenTtlMs(ms))
+    throw new SetupError(TTL_RANGE_GUIDANCE);
+  return ms;
+}
 function parseSetupArgs(rest) {
   const usage = COMMAND_GUIDANCE;
   if (rest.some((arg) => typeof arg !== "string" || !arg || [...arg].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)))
     throw new SetupError(usage);
   const flags = /* @__PURE__ */ new Map();
   let useClaudeSubscription = false;
+  let command;
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
     if (arg === "--use-claude-subscription") {
@@ -731,7 +862,14 @@ function parseSetupArgs(rest) {
       useClaudeSubscription = true;
       continue;
     }
-    if (!["--scope", "--cli", "--port", "--profile", "--api-url", "--gateway-url"].includes(arg) || flags.has(arg) || !rest[i + 1] || rest[i + 1].startsWith("--"))
+    if (arg === "--identity-token-command") {
+      const tail = rest.slice(i + 1).join(" ");
+      if (!isIdentityTokenCommand(tail))
+        throw new SetupError(usage);
+      command = tail;
+      break;
+    }
+    if (!SETUP_FLAGS.includes(arg) || flags.has(arg) || !rest[i + 1] || rest[i + 1].startsWith("--"))
       throw new SetupError(usage);
     flags.set(arg, rest[++i]);
   }
@@ -749,8 +887,17 @@ function parseSetupArgs(rest) {
     result.port = Number(port);
   }
   result.profile = flags.get("--profile");
-  if (result.profile !== void 0 && !/^[a-zA-Z0-9_.-]{1,128}$/.test(result.profile))
+  if (result.profile !== void 0 && !PROFILE_NAME.test(result.profile))
     throw new SetupError("Invalid CLI profile name");
+  result.identityTokenCommand = command;
+  result.identityTokenTtlMs = identityTokenTtl(flags.get("--identity-token-ttl"));
+  result.workspaceId = flags.get("--workspace-id");
+  if (result.workspaceId !== void 0 && !isWorkspaceId(result.workspaceId))
+    throw new SetupError("Workspace id must be a UUID");
+  if (command !== void 0 && result.workspaceId === void 0)
+    throw new SetupError("An identity token command also requires --workspace-id");
+  if (command === void 0 && result.identityTokenTtlMs !== void 0)
+    throw new SetupError("Identity token cache seconds apply only with an identity token command");
   if (flags.has("--api-url") || flags.has("--gateway-url")) {
     try {
       Object.assign(result, endpoints({ apiUrl: flags.get("--api-url"), gatewayUrl: flags.get("--gateway-url") }));
@@ -765,7 +912,6 @@ function parseDisableArgs(args) {
     throw new SetupError(COMMAND_GUIDANCE);
   return parseSetupArgs(args);
 }
-var STATUS_GUIDANCE = "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
 function parseStatusArgs(args) {
   if (args.length === 0)
     return {};
@@ -811,8 +957,9 @@ function validateCLI(cli) {
   accessSync(cli, constants2.X_OK);
   return cli;
 }
-function createConfig(cli, profile, port, home = userHome(), urls = {}, useClaudeSubscription = false) {
-  if (typeof useClaudeSubscription !== "boolean" || !isAbsolute2(cli) || profile !== void 0 && (typeof profile !== "string" || !/^[a-zA-Z0-9_.-]{1,128}$/.test(profile)) || !Number.isInteger(port) || port < 1024 || port > 65535)
+function createConfig(cli, profile, port, home = userHome(), urls = {}, useClaudeSubscription = false, credentials = {}) {
+  const valid = typeof useClaudeSubscription === "boolean" && isAbsolute2(cli) && absent(profile, isProfile) && isPort(port) && absent(credentials.identityTokenCommand, isIdentityTokenCommand) && absent(credentials.identityTokenTtlMs, isIdentityTokenTtlMs) && absent(credentials.workspaceId, isWorkspaceId);
+  if (!valid)
     throw new Error("Invalid setup arguments");
   const selected = endpoints(urls);
   cli = validateCLI(cli);
@@ -829,6 +976,7 @@ function createConfig(cli, profile, port, home = userHome(), urls = {}, useClaud
     enabled: true,
     useClaudeSubscription,
     ...selected,
+    ...credentials,
     cli,
     profile,
     port,
@@ -998,16 +1146,6 @@ function routingTargets(home, cwd, config) {
 var fail = (message) => {
   throw new SetupError(message);
 };
-var AUTH = [
-  "ANTHROPIC_AUTH_TOKEN",
-  "ANTHROPIC_API_KEY",
-  "CLAUDE_CODE_USE_BEDROCK",
-  "CLAUDE_CODE_USE_VERTEX",
-  "CLAUDE_CODE_USE_FOUNDRY",
-  "ANTHROPIC_FOUNDRY_API_KEY",
-  "ANTHROPIC_FOUNDRY_BASE_URL",
-  "CLAUDE_CODE_API_KEY_HELPER"
-];
 function object(value) {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return fail("Expected a JSON object; settings were not replaced.");
@@ -1118,9 +1256,12 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       useClaudeSubscription,
       cli: requested.cli === void 0 ? config.cli : validateCLI(requested.cli),
       profile: requested.profile ?? config.profile,
-      port
+      port,
+      identityTokenCommand: requested.identityTokenCommand ?? config.identityTokenCommand,
+      identityTokenTtlMs: requested.identityTokenTtlMs ?? config.identityTokenTtlMs,
+      workspaceId: requested.workspaceId ?? config.workspaceId
     } : void 0;
-    const changing = config && next && (config.cli !== next.cli || config.profile !== next.profile || config.port !== next.port || endpoints(config).apiUrl !== next.apiUrl || endpoints(config).gatewayUrl !== next.gatewayUrl);
+    const changing = config && next && (config.cli !== next.cli || config.profile !== next.profile || config.port !== next.port || config.identityTokenCommand !== next.identityTokenCommand || config.identityTokenTtlMs !== next.identityTokenTtlMs || config.workspaceId !== next.workspaceId || endpoints(config).apiUrl !== next.apiUrl || endpoints(config).gatewayUrl !== next.gatewayUrl);
     if (changing && (initiallyEnabled || active.length))
       fail("Existing pinned CLI/profile/port or endpoints differ. Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit the shared config while other scopes are active.");
     const modeChanged = !!config && config.useClaudeSubscription !== useClaudeSubscription;
@@ -1142,7 +1283,11 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
     if (switching && (base !== target || keys.length !== 1))
       fail("Configured transport settings changed. Review them privately or disable this scope before switching subscription forwarding.");
     if (!config) {
-      createConfig(requested.cli ?? discoverCLI(env), requested.profile, port, home, selected, useClaudeSubscription);
+      createConfig(requested.cli ?? discoverCLI(env), requested.profile, port, home, selected, useClaudeSubscription, {
+        identityTokenCommand: requested.identityTokenCommand,
+        identityTokenTtlMs: requested.identityTokenTtlMs,
+        workspaceId: requested.workspaceId
+      });
       config = loadConfig(home);
     }
     const effective = next ?? config;

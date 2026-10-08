@@ -1,22 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import http from "node:http";
 import * as childProcess from "node:child_process";
 import { handleGatewayInput } from "./commands.js";
 import { connect } from "node:net";
 import { createHash } from "node:crypto";
-import type https from "node:https";
 import { once } from "node:events";
-import {
-  mkdtempSync,
-  realpathSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-  chmodSync,
-  rmSync,
-  statSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync, chmodSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   createProxy,
@@ -25,118 +14,27 @@ import {
   Sessions,
   identity,
   nativeToken,
-  MAX_REQUEST_BYTES,
 } from "./server.js";
-import {
-  API_URL,
-  endpoints,
-  KEY_HEADER,
-  UPSTREAM,
-  configDir,
-  loadConfig,
-  type ProxyConfig,
-} from "./config.js";
+import { endpoints, configDir, loadConfig } from "./config.js";
+import { API_URL, KEY_HEADER, MAX_REQUEST_BYTES, UPSTREAM } from "./proxy-constants.js";
 import { cliToken, loginGuidance, TokenCache } from "./token.js";
 import { control, ensure, gatewayHook, waitForStopped } from "./lifecycle.js";
 import { createConfig } from "./setup.js";
+import {
+  base,
+  fixture,
+  jwt,
+  native,
+  nativeAuthorization,
+  provisionGlobal,
+  request,
+  temporary,
+} from "./fixtures/proxy-sandbox.js";
+import { cleanup, listen } from "./fixtures/server-sandbox.js";
 
 vi.mock("node:child_process", async (original) => ({
   ...(await original<typeof import("node:child_process")>()),
 }));
-
-// Synthetic native token; never read actual Claude or CLI credentials in tests.
-const native = `sk-ant-oat01-${"test_native-".repeat(8)}`;
-const nativeAuthorization = `Bearer ${native}`;
-const jwt = (exp = Date.now() / 1000 + 300) =>
-  `e30.${Buffer.from(JSON.stringify({ exp })).toString("base64url")}.signature`;
-const base: ProxyConfig = {
-  enabled: true,
-  useClaudeSubscription: true,
-  cli: "/unused/langsmith",
-  profile: "test",
-  port: 19991,
-  secret: "a".repeat(64),
-};
-const cleanup: (() => void)[] = [];
-afterEach(() => {
-  for (const f of cleanup.splice(0).reverse()) f();
-});
-function temporary() {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ls-proxy-test-")));
-  cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
-  return dir;
-}
-async function listen(server: http.Server) {
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  cleanup.push(() => {
-    server.closeAllConnections();
-    server.close();
-  });
-  return (server.address() as { port: number }).port;
-}
-async function fixture(
-  handler: http.RequestListener = (_req, res) => res.end("ok"),
-  token = vi.fn(async () => jwt()),
-  urls: { apiUrl?: string; gatewayUrl?: string; useClaudeSubscription?: boolean } = {},
-) {
-  const upstream = http.createServer(handler);
-  const upstreamPort = await listen(upstream);
-  const targets: https.RequestOptions[] = [];
-  const transport = ((options: https.RequestOptions, cb: (r: http.IncomingMessage) => void) => {
-    targets.push(options);
-    return http.request(
-      { ...options, protocol: "http:", hostname: "127.0.0.1", port: upstreamPort },
-      cb,
-    );
-  }) as typeof https.request;
-  const config = { ...base, ...urls };
-  const proxy = createProxy(config, { transport, token });
-  config.port = await listen(proxy.server);
-  return { ...proxy, config, targets, token };
-}
-function request(
-  c: ProxyConfig,
-  path = "/v1/messages",
-  opts: {
-    method?: string;
-    headers?: http.OutgoingHttpHeaders | string[];
-    body?: string | Buffer;
-  } = {},
-) {
-  return new Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }>(
-    (resolve, reject) => {
-      const req = http.request(
-        {
-          hostname: "127.0.0.1",
-          port: c.port,
-          path,
-          method: opts.method ?? "POST",
-          headers: Array.isArray(opts.headers)
-            ? [KEY_HEADER, c.secret, "Host", `127.0.0.1:${c.port}`, ...opts.headers]
-            : Object.fromEntries(
-                Object.entries({
-                  [KEY_HEADER]: c.secret,
-                  authorization: nativeAuthorization,
-                  ...opts.headers,
-                }).filter(([, value]) => value !== undefined),
-              ),
-        },
-        (res) => {
-          let body = "";
-          res.setEncoding("utf8");
-          res.on("data", (c) => (body += c));
-          res.on("end", () => resolve({ status: res.statusCode!, body, headers: res.headers }));
-          res.on("error", reject);
-        },
-      );
-      req.on("error", reject);
-      req.end(
-        opts.body ?? ((opts.method ?? "POST") === "POST" ? '{"model":"claude-test"}' : undefined),
-      );
-    },
-  );
-}
 
 describe("raw Bearer parsing", () => {
   it("rejects whitespace, controls, comma ambiguity and unsafe header characters without normalization", () => {
@@ -402,7 +300,6 @@ describe("local boundary and upstream targeting", () => {
         "gateway-key": "evil",
         "x-langsmith-auth-mode": "malicious",
         "x-langsmith-project": "evil",
-        "x-tenant-id": "evil",
         "proxy-authorization": "secret",
         connection: "x-remove, authorization, x-langsmith-anthropic-passthrough",
         "x-remove": "secret",
@@ -421,7 +318,6 @@ describe("local boundary and upstream targeting", () => {
       "gateway-key",
       "x-langsmith-auth-mode",
       "x-langsmith-project",
-      "x-tenant-id",
       "proxy-authorization",
       "x-remove",
     ])
@@ -847,7 +743,7 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     await expect(cache.get()).rejects.toThrow("LangSmith token unavailable");
     expect(load).toHaveBeenCalledTimes(1);
     now += 1;
-    expect(load).toHaveBeenCalledTimes(1); // No automatic retry of failed work.
+    expect(load).toHaveBeenCalledTimes(1);
     await expect(cache.get()).resolves.toBe(token);
     expect(load).toHaveBeenCalledTimes(2);
   });
@@ -894,20 +790,6 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     await expect(cliToken({ ...base, cli })).rejects.toThrow(/^LangSmith token unavailable$/);
   });
 });
-
-function provisionGlobal(home: string, config: ProxyConfig) {
-  writeFileSync(
-    join(home, ".claude/settings.json"),
-    JSON.stringify({
-      env: {
-        ANTHROPIC_BASE_URL: `http://127.0.0.1:${config.port}`,
-        ANTHROPIC_CUSTOM_HEADERS: `X-LangSmith-Proxy-Key: ${config.secret}`,
-      },
-    }),
-    { mode: 0o600 },
-  );
-}
-
 describe("shared lifecycle and explicit configuration", () => {
   it("health and session registration stay fast without authentication; removed auth-check is inert", async () => {
     const token = vi.fn(async (): Promise<string> => {
@@ -1011,8 +893,6 @@ describe("shared lifecycle and explicit configuration", () => {
               });
         if (routing !== "absent")
           for (const target of paths) writeFileSync(target, text, { mode: 0o600 });
-        // The absent case represents managed-only routing. No managed policy fixture
-        // or parser is needed: hooks only consume the enabled private config.
         const daemon = createProxy(f.config, { token: f.token });
         cleanup.push(() => daemon.drain());
         const unref = vi.fn();
@@ -1075,7 +955,6 @@ describe("shared lifecycle and explicit configuration", () => {
     const home = temporary();
     mkdirSync(configDir(home), { recursive: true, mode: 0o700 });
     writeFileSync(join(configDir(home), "config.json"), JSON.stringify(config), { mode: 0o600 });
-    // End still releases a lease after routing settings have been removed.
     await gatewayHook("SessionEnd", "one", "/must-not-spawn", home);
     expect(methods).toEqual(["DELETE"]);
   });
@@ -1153,8 +1032,6 @@ describe("shared lifecycle and explicit configuration", () => {
     const server = http.createServer((_req, res) => res.end(oldIdentity()));
     config.port = await listen(server);
     expect(await control(config, "GET", "/_langsmith/health")).not.toBe(identity(config));
-    // Candidate exits without touching real config or credentials; the foreign
-    // listener must remain alive and never count as a compatible daemon.
     const entry = join(temporary(), "candidate.cjs");
     writeFileSync(entry, "process.exit(0)");
     await expect(ensure(config, entry)).rejects.toThrow("Local proxy unavailable");

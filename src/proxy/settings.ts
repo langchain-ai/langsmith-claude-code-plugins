@@ -1,13 +1,8 @@
 import { accessSync, constants, mkdirSync, rmdirSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
-import {
-  configDir,
-  endpoints,
-  loadConfig,
-  privatePath,
-  userHome,
-  type ProxyConfig,
-} from "./config.js";
+import { configDir, endpoints, loadConfig, privatePath, userHome } from "./config.js";
+import { AUTH } from "./proxy-constants.js";
+import type { ObjectValue, ProxyConfig } from "./proxy-models.js";
 import {
   atomic,
   transaction,
@@ -34,21 +29,9 @@ import {
 } from "./scopes.js";
 export { SetupError } from "./options.js";
 
-// Only fixed, non-sensitive diagnostics may reach the command's output.
 const fail = (message: string): never => {
   throw new SetupError(message);
 };
-const AUTH = [
-  "ANTHROPIC_AUTH_TOKEN",
-  "ANTHROPIC_API_KEY",
-  "CLAUDE_CODE_USE_BEDROCK",
-  "CLAUDE_CODE_USE_VERTEX",
-  "CLAUDE_CODE_USE_FOUNDRY",
-  "ANTHROPIC_FOUNDRY_API_KEY",
-  "ANTHROPIC_FOUNDRY_BASE_URL",
-  "CLAUDE_CODE_API_KEY_HELPER",
-];
-type ObjectValue = Record<string, unknown>;
 function object(value: unknown): ObjectValue {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return fail("Expected a JSON object; settings were not replaced.");
@@ -80,7 +63,6 @@ function validateHeaders(value: string | undefined): void {
       )
     )
       return fail("Conflicting or malformed custom headers; review them privately before setup.");
-    // Enable-only preflight: let the client derive Host from the loopback URL.
     if (/^host$/i.test(match[1]))
       fail(
         "Custom Host headers are unsupported by persistent setup. Remove the Host header explicitly so the client uses the loopback target; review headers privately.",
@@ -193,6 +175,9 @@ export async function enable(
           cli: requested.cli === undefined ? config.cli : validateCLI(requested.cli),
           profile: requested.profile ?? config.profile,
           port,
+          identityTokenCommand: requested.identityTokenCommand ?? config.identityTokenCommand,
+          identityTokenTtlMs: requested.identityTokenTtlMs ?? config.identityTokenTtlMs,
+          workspaceId: requested.workspaceId ?? config.workspaceId,
         }
       : undefined;
     const changing =
@@ -201,6 +186,9 @@ export async function enable(
       (config.cli !== next.cli ||
         config.profile !== next.profile ||
         config.port !== next.port ||
+        config.identityTokenCommand !== next.identityTokenCommand ||
+        config.identityTokenTtlMs !== next.identityTokenTtlMs ||
+        config.workspaceId !== next.workspaceId ||
         endpoints(config).apiUrl !== next.apiUrl ||
         endpoints(config).gatewayUrl !== next.gatewayUrl);
     if (changing && (initiallyEnabled || active.length))
@@ -225,8 +213,6 @@ export async function enable(
       fail(
         "Conflicting ANTHROPIC_BASE_URL. Remove it explicitly before setup; it will not be overwritten.",
       );
-    // Retained local key recognizes same-session re-enable without importing
-    // inherited headers into the selected settings file.
     const retainedHeaders = !!config && !prior && env[HEADERS] === withProxyKey(headers, config);
     // Do not copy shell/project headers (potential secrets) into user settings.
     if (
@@ -254,10 +240,14 @@ export async function enable(
         home,
         selected,
         useClaudeSubscription,
+        {
+          identityTokenCommand: requested.identityTokenCommand,
+          identityTokenTtlMs: requested.identityTokenTtlMs,
+          workspaceId: requested.workspaceId,
+        },
       );
       config = loadConfig(home)!;
     }
-    // Validate the selected executable; retain the old config for listener drain.
     const effective = next ?? config;
     if (validateCLI(effective.cli) !== effective.cli)
       fail("Pinned CLI path changed; resolve privately before retrying.");
@@ -284,7 +274,6 @@ export async function enable(
       for (const item of targets) unchangedRouting(item.path, item.saved);
       config = next;
     }
-    // Re-enable retained config without rotating the local key.
     if (!loadConfig(home)) atomic(p.config, jsonText(config), configSnapshot);
     const currentConfig = snapshot(p.config, true);
     try {
@@ -358,7 +347,6 @@ export function disable(
 ): void {
   const requested = parseDisableArgs(args);
   supportedHome(home, env);
-  // Missing installation is a true no-op.
   if (!loadConfig(home, true)) return;
   const unlock = lock(home);
   try {
@@ -410,7 +398,6 @@ export function disable(
   }
 }
 
-// Status observes actual disk routing, never legacy receipts or list membership.
 export function routingStatus(paths: ReturnType<typeof targetPaths>, config?: ProxyConfig): string {
   const current = routingSnapshot(paths.settings);
   const env = routingEnv(current);

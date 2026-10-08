@@ -1,7 +1,9 @@
 import http from "node:http";
 import { connect } from "node:net";
 import { spawn } from "node:child_process";
-import { KEY_HEADER, loadConfig, userHome, type ProxyConfig } from "./config.js";
+import { loadConfig, userHome } from "./config.js";
+import { KEY_HEADER } from "./proxy-constants.js";
+import type { ProxyConfig } from "./proxy-models.js";
 import { identity } from "./server.js";
 import { cliEnvironment } from "./token.js";
 
@@ -36,7 +38,6 @@ export function control(
         );
       },
     );
-    // Wall-clock timeout, not a socket-inactivity timer.
     const timer = setTimeout(() => req.destroy(new Error("Local proxy unavailable")), timeoutMs);
     req.on("close", () => clearTimeout(timer));
     req.on("error", () => reject(new Error("Local proxy unavailable")));

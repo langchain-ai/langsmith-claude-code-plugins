@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
-import { loadConfig, type ProxyConfig } from "./config.js";
+import { loadConfig } from "./config.js";
+import type { ProxyConfig } from "./proxy-models.js";
 import { createProxy } from "./server.js";
 
 vi.mock("./config.js", async (original) => ({
