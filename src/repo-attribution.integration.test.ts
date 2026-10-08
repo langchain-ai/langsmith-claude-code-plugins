@@ -185,7 +185,7 @@ describe("a turn working across repositories", () => {
     expect(toolRun("Edit")).toMatchObject({ repository_name: "acme/a", git_branch: "trunk-a" });
   }, 120_000);
 
-  it("gives a shell command the directory it ran in, not the repository the turn found", async () => {
+  it("keeps the turn's repository off a shell command that ran outside one", async () => {
     const session = "shell-cwd";
     const path = join(sandbox.root, `${session}.jsonl`);
     const base = { session_id: session, transcript_path: path, cwd: sandbox.root };
