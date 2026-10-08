@@ -198,11 +198,11 @@ var require_p_finally = __commonJS({
       onFinally = onFinally || (() => {
       });
       return promise.then(
-        (val) => new Promise((resolve3) => {
-          resolve3(onFinally());
+        (val) => new Promise((resolve4) => {
+          resolve4(onFinally());
         }).then(() => val),
-        (err) => new Promise((resolve3) => {
-          resolve3(onFinally());
+        (err) => new Promise((resolve4) => {
+          resolve4(onFinally());
         }).then(() => {
           throw err;
         })
@@ -222,18 +222,18 @@ var require_p_timeout = __commonJS({
         this.name = "TimeoutError";
       }
     };
-    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve3, reject) => {
+    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve4, reject) => {
       if (typeof milliseconds !== "number" || milliseconds < 0) {
         throw new TypeError("Expected `milliseconds` to be a positive number");
       }
       if (milliseconds === Infinity) {
-        resolve3(promise);
+        resolve4(promise);
         return;
       }
       const timer = setTimeout(() => {
         if (typeof fallback === "function") {
           try {
-            resolve3(fallback());
+            resolve4(fallback());
           } catch (error2) {
             reject(error2);
           }
@@ -248,7 +248,7 @@ var require_p_timeout = __commonJS({
       }, milliseconds);
       pFinally(
         // eslint-disable-next-line promise/prefer-await-to-then
-        promise.then(resolve3, reject),
+        promise.then(resolve4, reject),
         () => {
           clearTimeout(timer);
         }
@@ -466,7 +466,7 @@ var require_dist = __commonJS({
       Adds a sync or async task to the queue. Always returns a promise.
       */
       async add(fn, options = {}) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve4, reject) => {
           const run = async () => {
             this._pendingCount++;
             this._intervalCount++;
@@ -477,7 +477,7 @@ var require_dist = __commonJS({
                 }
                 return void 0;
               });
-              resolve3(await operation);
+              resolve4(await operation);
             } catch (error2) {
               reject(error2);
             }
@@ -528,11 +528,11 @@ var require_dist = __commonJS({
         if (this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve3) => {
+        return new Promise((resolve4) => {
           const existingResolve = this._resolveEmpty;
           this._resolveEmpty = () => {
             existingResolve();
-            resolve3();
+            resolve4();
           };
         });
       }
@@ -545,11 +545,11 @@ var require_dist = __commonJS({
         if (this._pendingCount === 0 && this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve3) => {
+        return new Promise((resolve4) => {
           const existingResolve = this._resolveIdle;
           this._resolveIdle = () => {
             existingResolve();
-            resolve3();
+            resolve4();
           };
         });
       }
@@ -2445,7 +2445,7 @@ async function onAttemptFailure({ error: error2, attemptNumber, retriesConsumed,
   const delayTime = calculateDelay(retriesConsumed, options);
   const finalDelay = Math.min(delayTime, remainingTime);
   if (finalDelay > 0) {
-    await new Promise((resolve3, reject) => {
+    await new Promise((resolve4, reject) => {
       const onAbort = () => {
         clearTimeout(timeoutToken);
         options.signal?.removeEventListener("abort", onAbort);
@@ -2453,7 +2453,7 @@ async function onAttemptFailure({ error: error2, attemptNumber, retriesConsumed,
       };
       const timeoutToken = setTimeout(() => {
         options.signal?.removeEventListener("abort", onAbort);
-        resolve3();
+        resolve4();
       }, finalDelay);
       if (options.unref) {
         timeoutToken.unref?.();
@@ -2863,7 +2863,7 @@ var safeJSON = (text) => {
 };
 
 // node_modules/.pnpm/langsmith@0.10.5/node_modules/langsmith/dist/_openapi_client/internal/utils/sleep.js
-var sleep = (ms) => new Promise((resolve3) => setTimeout(resolve3, ms));
+var sleep = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
 
 // node_modules/.pnpm/langsmith@0.10.5/node_modules/langsmith/dist/_openapi_client/version.js
 var VERSION = "0.0.1";
@@ -3542,8 +3542,8 @@ var __classPrivateFieldGet = function(receiver, state, kind, f2) {
 var _APIPromise_client;
 var APIPromise = class _APIPromise extends Promise {
   constructor(client2, responsePromise, parseResponse = defaultParseResponse) {
-    super((resolve3) => {
-      resolve3(null);
+    super((resolve4) => {
+      resolve4(null);
     });
     Object.defineProperty(this, "responsePromise", {
       enumerable: true,
@@ -6491,7 +6491,7 @@ var LOCK_POLL_INTERVAL_MS = 10;
 var LOCK_STALE_AFTER_MS = 1e4;
 var LOCK_METADATA_FILE = "created_at";
 function sleep2(ms) {
-  return new Promise((resolve3) => setTimeout(resolve3, ms));
+  return new Promise((resolve4) => setTimeout(resolve4, ms));
 }
 function isEEXIST(err) {
   return typeof err === "object" && err !== null && err.code === "EEXIST";
@@ -7427,8 +7427,8 @@ var SerializeWorker = class {
     if (!ok)
       return null;
     const id = this.nextId++;
-    return new Promise((resolve3, reject) => {
-      this.pending.set(id, { resolve: resolve3, reject });
+    return new Promise((resolve4, reject) => {
+      this.pending.set(id, { resolve: resolve4, reject });
       try {
         this.worker.postMessage({ id, op: "serialize", payload });
       } catch (e) {
@@ -7585,7 +7585,7 @@ var handle429 = async (response) => {
   if (response?.status === 429) {
     const retryAfter = parseInt(response.headers.get("retry-after") ?? "10", 10) * 1e3;
     if (retryAfter > 0) {
-      await new Promise((resolve3) => setTimeout(resolve3, retryAfter));
+      await new Promise((resolve4) => setTimeout(resolve4, retryAfter));
       return true;
     }
   }
@@ -7684,8 +7684,8 @@ var AutoBatchQueue = class {
   }
   push(item) {
     let itemPromiseResolve;
-    const itemPromise = new Promise((resolve3) => {
-      itemPromiseResolve = resolve3;
+    const itemPromise = new Promise((resolve4) => {
+      itemPromiseResolve = resolve4;
     });
     const size = estimateSerializedSize(item.item).size;
     if (this.sizeBytes + size > this.maxSizeBytes && this.items.length > 0) {
@@ -12689,7 +12689,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       console.warn("[WARNING]: When tracing in manual flush mode, you must call `await client.flush()` manually to submit trace batches.");
       return Promise.resolve();
     }
-    await new Promise((resolve3) => setTimeout(resolve3, 1));
+    await new Promise((resolve4) => setTimeout(resolve4, 1));
     while (this._pendingDrains.size > 0) {
       await Promise.all([...this._pendingDrains]);
     }
@@ -14270,7 +14270,7 @@ function lockPath(stateFilePath) {
   return `${stateFilePath}.lock`;
 }
 function sleep3(ms) {
-  return new Promise((resolve3) => setTimeout(resolve3, ms));
+  return new Promise((resolve4) => setTimeout(resolve4, ms));
 }
 async function acquireLock(stateFilePath) {
   const lock = lockPath(stateFilePath);
@@ -14552,32 +14552,12 @@ function createRunTree(config, mode = "full") {
 }
 
 // dist/src/repo-attribution.js
-import { existsSync as existsSync3, statSync as statSync5 } from "node:fs";
-import { dirname as dirname5, isAbsolute, join as join3, resolve as resolve2, sep } from "node:path";
-var rootByDirectory = /* @__PURE__ */ new Map();
-var attributionByRoot = /* @__PURE__ */ new Map();
-var identifierByRoot = /* @__PURE__ */ new Map();
-function toolPathFromInput(toolInput, sessionCwd) {
-  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
-    return { namedAPath: false };
-  }
-  const input = toolInput;
-  let namedAPath = false;
-  for (const key of TOOL_PATH_INPUT_KEYS) {
-    const value = input[key];
-    if (typeof value !== "string" || value.length === 0)
-      continue;
-    namedAPath = true;
-    if (isAbsolute(value))
-      return { path: value, namedAPath };
-    if (!sessionCwd || !isAbsolute(sessionCwd))
-      continue;
-    const resolved = resolve2(sessionCwd, value);
-    if (existsSync3(resolved))
-      return { path: resolved, namedAPath };
-  }
-  return { namedAPath };
-}
+import { existsSync as existsSync3 } from "node:fs";
+import { isAbsolute, resolve as resolve3 } from "node:path";
+
+// dist/src/repo-attribution-paths.js
+import { statSync as statSync5 } from "node:fs";
+import { dirname as dirname5, join as join3, resolve as resolve2, sep } from "node:path";
 function outsideGitDirectory(path3) {
   const nestedAt = path3.indexOf(`${sep}.git${sep}`);
   if (nestedAt > 0)
@@ -14614,6 +14594,32 @@ function rootFromGitMarker(directory) {
       return null;
     current = parent;
   }
+}
+
+// dist/src/repo-attribution.js
+var rootByDirectory = /* @__PURE__ */ new Map();
+var attributionByRoot = /* @__PURE__ */ new Map();
+var identifierByRoot = /* @__PURE__ */ new Map();
+function toolPathFromInput(toolInput, sessionCwd) {
+  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
+    return { namedAPath: false };
+  }
+  const input = toolInput;
+  let namedAPath = false;
+  for (const key of TOOL_PATH_INPUT_KEYS) {
+    const value = input[key];
+    if (typeof value !== "string" || value.length === 0)
+      continue;
+    namedAPath = true;
+    if (isAbsolute(value))
+      return { path: value, namedAPath };
+    if (!sessionCwd || !isAbsolute(sessionCwd))
+      continue;
+    const resolved = resolve3(sessionCwd, value);
+    if (existsSync3(resolved))
+      return { path: resolved, namedAPath };
+  }
+  return { namedAPath };
 }
 function rootForPath(path3) {
   const directory = nearestExistingDirectory(path3);
@@ -15417,13 +15423,13 @@ function isPayloadForHook(input, event2) {
 
 // dist/src/utils/stdin.js
 function readStdin() {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve4, reject) => {
     let data = "";
     process.stdin.setEncoding("utf-8");
     process.stdin.on("data", (chunk) => data += chunk);
     process.stdin.on("end", () => {
       try {
-        resolve3(JSON.parse(data));
+        resolve4(JSON.parse(data));
       } catch (err) {
         reject(new Error(`Failed to parse hook input: ${err}`));
       }

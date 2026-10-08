@@ -1,8 +1,8 @@
 // A session started in a central folder works across several repositories, so its working
 // directory says nothing about the repository a given tool call touched.
 
-import { existsSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { existsSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import {
   getGitUserName,
   getGitInfo,
@@ -11,7 +11,8 @@ import {
   getRepoUrl,
   pinnedRepositoryKeys,
 } from "./config.js";
-import { GIT_DIRECTORY_NAME, REPOSITORY_METADATA_KEYS, TOOL_PATH_INPUT_KEYS } from "./constants.js";
+import { REPOSITORY_METADATA_KEYS, TOOL_PATH_INPUT_KEYS } from "./constants.js";
+import { nearestExistingDirectory, rootFromGitMarker } from "./repo-attribution-paths.js";
 import type { RepositoryAttribution, ToolPathLookup } from "./types.js";
 
 const rootByDirectory = new Map<string, string | null | undefined>();
@@ -34,41 +35,6 @@ export function toolPathFromInput(toolInput: unknown, sessionCwd?: string): Tool
     if (existsSync(resolved)) return { path: resolved, namedAPath };
   }
   return { namedAPath };
-}
-
-function outsideGitDirectory(path: string): string {
-  const nestedAt = path.indexOf(`${sep}.git${sep}`);
-  if (nestedAt > 0) return path.slice(0, nestedAt);
-  const trailing = `${sep}.git`;
-  return path.endsWith(trailing) && path.length > trailing.length
-    ? path.slice(0, -trailing.length)
-    : path;
-}
-
-function nearestExistingDirectory(path: string): string | undefined {
-  let current = outsideGitDirectory(path);
-  for (;;) {
-    const parent = dirname(current);
-    const reachedFilesystemRoot = parent === current;
-    if (reachedFilesystemRoot) return undefined;
-    try {
-      if (statSync(current).isDirectory()) return current;
-    } catch {}
-    current = parent;
-  }
-}
-
-function rootFromGitMarker(directory: string): string | null | undefined {
-  let current = resolve(directory);
-  for (;;) {
-    try {
-      if (statSync(join(current, GIT_DIRECTORY_NAME)).isDirectory()) return current;
-      return undefined;
-    } catch {}
-    const parent = dirname(current);
-    if (parent === current) return null;
-    current = parent;
-  }
 }
 
 function rootForPath(path: string): string | null | undefined {
