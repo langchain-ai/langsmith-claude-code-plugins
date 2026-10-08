@@ -33,6 +33,8 @@ Run these inside Claude Code. Installing changes nothing on its own, since routi
 /langsmith-gateway:setup --scope global
 ```
 
+If you pay Anthropic through a Claude subscription rather than an API key, add `--use-claude-subscription` so your own Claude login is passed through.
+
 Everything in the conversation reaches the gateway, meaning your prompts, your tool inputs and outputs and the replies, with nothing removed. Only turn this on for a gateway you trust with that content.
 
 Claude Code's own model selection still decides which provider you reach, so `/model openai/gpt-4.1` works and the gateway supplies that key.
