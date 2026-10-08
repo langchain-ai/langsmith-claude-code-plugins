@@ -1,5 +1,5 @@
 export interface CredentialIdentity {
-  credentialCommand?: string;
+  identityTokenCommand?: string;
   credentialTtlMs?: number;
   workspaceId?: string;
 }

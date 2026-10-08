@@ -143,7 +143,7 @@ export class TokenCache {
 
 export function commandGuidance(config: ProxyConfig): string {
   const reused = (config.credentialTtlMs ?? DEFAULT_CREDENTIAL_TTL_MS) / 1000;
-  return `LangSmith authentication unavailable. Your configured credential command did not print one unexpired bearer token on standard output, so it exited non-zero, printed something else, or ran past ${CREDENTIAL_TIMEOUT_MS / 1000} seconds. It runs with ${SHELL} from your home directory and gets only HOME and a standard PATH, so anything your shell profile or virtual environment normally sets up is missing even when the same command works in your terminal. A good result is reused for ${reused} seconds, or less when the token expires sooner, and a failure is remembered for ${RETRY_AFTER_MS / 1000} seconds. Fix the command and send the request again, since nothing is replayed for you.\n`;
+  return `LangSmith authentication unavailable. Your configured identity token command did not print one unexpired bearer token on standard output, so it exited non-zero, printed something else, or ran past ${CREDENTIAL_TIMEOUT_MS / 1000} seconds. It runs with ${SHELL} from your home directory and gets only HOME and a standard PATH, so anything your shell profile or virtual environment normally sets up is missing even when the same command works in your terminal. A good result is reused for ${reused} seconds, or less when the token expires sooner, and a failure is remembered for ${RETRY_AFTER_MS / 1000} seconds. Fix the command and send the request again, since nothing is replayed for you.\n`;
 }
 
 export function loginGuidance(config: ProxyConfig): string {

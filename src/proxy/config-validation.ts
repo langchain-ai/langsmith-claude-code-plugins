@@ -3,9 +3,9 @@ import {
   CONFIG_KEYS,
   CONTROL,
   DNS_LABEL,
-  MAX_CREDENTIAL_COMMAND,
   MAX_CREDENTIAL_TTL_MS,
   MAX_HOSTNAME_LENGTH,
+  MAX_IDENTITY_TOKEN_COMMAND,
   MAX_ORIGIN_LENGTH,
   MAX_PATH_LENGTH,
   MAX_PORT,
@@ -47,10 +47,10 @@ export const publicDnsOrigin = (url: URL): boolean => {
 export const absent = (value: unknown, valid: (v: unknown) => boolean): boolean =>
   value === undefined || valid(value);
 
-export const isCredentialCommand = (value: unknown): value is string =>
+export const isIdentityTokenCommand = (value: unknown): value is string =>
   typeof value === "string" &&
   value.trim().length > 0 &&
-  value.length <= MAX_CREDENTIAL_COMMAND &&
+  value.length <= MAX_IDENTITY_TOKEN_COMMAND &&
   !CONTROL.test(value);
 
 export const isCredentialTtlMs = (value: unknown): value is number =>
@@ -97,7 +97,7 @@ export const isSavedConfig = (c: ProxyConfig): boolean =>
   isPort(c.port) &&
   isSecret(c.secret) &&
   absent(c.settingsTargets, isSettingsTargets) &&
-  absent(c.credentialCommand, isCredentialCommand) &&
+  absent(c.identityTokenCommand, isIdentityTokenCommand) &&
   absent(c.credentialTtlMs, isCredentialTtlMs) &&
   absent(c.workspaceId, isWorkspaceId) &&
   onlyKnownKeys(c);

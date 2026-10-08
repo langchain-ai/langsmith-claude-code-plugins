@@ -92,7 +92,7 @@ export async function existingInstall(extra: Record<string, unknown> = {}) {
     ...base,
     cli: "/bin/sh",
     port,
-    credentialCommand: SAVED_COMMAND,
+    identityTokenCommand: SAVED_COMMAND,
     workspaceId: WORKSPACE,
     ...extra,
   } as ProxyConfig;

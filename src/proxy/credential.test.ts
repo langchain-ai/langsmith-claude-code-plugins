@@ -21,10 +21,10 @@ import {
   WORKSPACE,
 } from "./fixtures/credential-sandbox.js";
 
-describe("credential command", () => {
+describe("identity token command", () => {
   it("sends the configured workspace id", async () => {
     const { config, seen } = await fixture({
-      credentialCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
+      identityTokenCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
       workspaceId: WORKSPACE,
     });
     expect((await send(config)).status).toBe(200);
@@ -34,7 +34,7 @@ describe("credential command", () => {
   it("re-runs the command once the cache window passes", async () => {
     const path = tokenFile(unexpiredToken("first"));
     const { config, seen } = await fixture({
-      credentialCommand: `cat ${path}`,
+      identityTokenCommand: `cat ${path}`,
       credentialTtlMs: 1000,
     });
     expect((await send(config)).status).toBe(200);
@@ -52,15 +52,15 @@ describe("credential command", () => {
       `echo e30.${Buffer.from('{"exp":1}').toString("base64url")}.s`,
     ],
   ])("reports %s", async (_name, command) => {
-    const { config } = await fixture({ credentialCommand: command });
+    const { config } = await fixture({ identityTokenCommand: command });
     const { status, body } = await send(config);
     expect(status).toBe(503);
-    expect(body).toContain("Your configured credential command");
+    expect(body).toContain("Your configured identity token command");
   });
 
   it("runs the command without the caller's environment", async () => {
     const { config, seen } = await fixture({
-      credentialCommand: `test -z "$ANTHROPIC_API_KEY" && cat ${tokenFile(unexpiredToken("clean"))}`,
+      identityTokenCommand: `test -z "$ANTHROPIC_API_KEY" && cat ${tokenFile(unexpiredToken("clean"))}`,
     });
     process.env.ANTHROPIC_API_KEY = "must-not-reach-the-helper";
     cleanup.push(() => delete process.env.ANTHROPIC_API_KEY);
@@ -72,7 +72,7 @@ describe("credential command", () => {
 describe("caller supplied workspace", () => {
   it("routes to the workspace the caller sends when none is configured", async () => {
     const { config, seen } = await fixture({
-      credentialCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
+      identityTokenCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
     });
     expect((await send(config, { "x-tenant-id": CALLER_WORKSPACE })).status).toBe(200);
     expect(seen[0]["x-tenant-id"]).toBe(CALLER_WORKSPACE);
@@ -80,7 +80,7 @@ describe("caller supplied workspace", () => {
 
   it("prefers the workspace the caller sends over the configured one", async () => {
     const { config, seen } = await fixture({
-      credentialCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
+      identityTokenCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
       workspaceId: WORKSPACE,
     });
     expect((await send(config, { "x-tenant-id": CALLER_WORKSPACE })).status).toBe(200);
@@ -89,7 +89,7 @@ describe("caller supplied workspace", () => {
 
   it("sends no workspace when neither the caller nor the configuration names one", async () => {
     const { config, seen } = await fixture({
-      credentialCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
+      identityTokenCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
     });
     expect((await send(config)).status).toBe(200);
     expect(seen[0]["x-tenant-id"]).toBeUndefined();
@@ -101,7 +101,7 @@ describe("caller supplied workspace", () => {
     ["sent twice", [CALLER_WORKSPACE, WORKSPACE]],
   ])("refuses a workspace header that is %s", async (_name, value) => {
     const { config, seen } = await fixture({
-      credentialCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
+      identityTokenCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
       workspaceId: WORKSPACE,
     });
     const { status, body } = await send(config, { "x-tenant-id": value });
@@ -113,9 +113,9 @@ describe("caller supplied workspace", () => {
 
 describe("credential configuration", () => {
   it.each([
-    ["blank command", "credentialCommand", "   "],
-    ["command carrying a newline", "credentialCommand", "cat /tmp/a\nrm -rf /"],
-    ["command past the length limit", "credentialCommand", `cat ${"a".repeat(4097)}`],
+    ["blank command", "identityTokenCommand", "   "],
+    ["command carrying a newline", "identityTokenCommand", "cat /tmp/a\nrm -rf /"],
+    ["command past the length limit", "identityTokenCommand", `cat ${"a".repeat(4097)}`],
     ["window under one second", "credentialTtlMs", 10],
     ["window over one hour", "credentialTtlMs", 3_600_001],
     ["workspace that is not a UUID", "workspaceId", "not-a-uuid"],
@@ -126,31 +126,39 @@ describe("credential configuration", () => {
   it("accepts a saved command, window and workspace", () => {
     expect(
       loadConfig(
-        savedConfig({ credentialCommand: "cat /t", credentialTtlMs: 5000, workspaceId: WORKSPACE }),
+        savedConfig({
+          identityTokenCommand: "cat /t",
+          credentialTtlMs: 5000,
+          workspaceId: WORKSPACE,
+        }),
         true,
       ),
-    ).toMatchObject({ credentialCommand: "cat /t", credentialTtlMs: 5000, workspaceId: WORKSPACE });
+    ).toMatchObject({
+      identityTokenCommand: "cat /t",
+      credentialTtlMs: 5000,
+      workspaceId: WORKSPACE,
+    });
   });
 
   it("changes the daemon identity when any new field changes", () => {
     const original = identity(base);
-    expect(identity({ ...base, credentialCommand: "cat /t" })).not.toBe(original);
+    expect(identity({ ...base, identityTokenCommand: "cat /t" })).not.toBe(original);
     expect(identity({ ...base, credentialTtlMs: 5000 })).not.toBe(original);
     expect(identity({ ...base, workspaceId: WORKSPACE })).not.toBe(original);
   });
 
   it.each([
-    ["a command without a workspace", "--credential-command cat /t"],
+    ["a command without a workspace", "--identity-token-command cat /t"],
     [
       "a window of zero",
-      `--credential-ttl 0 --workspace-id ${WORKSPACE} --credential-command cat /t`,
+      `--credential-ttl 0 --workspace-id ${WORKSPACE} --identity-token-command cat /t`,
     ],
     ["a window without a command", `--credential-ttl 60 --workspace-id ${WORKSPACE}`],
-    ["an empty command", `--workspace-id ${WORKSPACE} --credential-command`],
-    ["a workspace that is not a UUID", "--workspace-id not-a-uuid --credential-command cat /t"],
+    ["an empty command", `--workspace-id ${WORKSPACE} --identity-token-command`],
+    ["a workspace that is not a UUID", "--workspace-id not-a-uuid --identity-token-command cat /t"],
     [
       "a window written as an exponent",
-      `--credential-ttl 6e2 --workspace-id ${WORKSPACE} --credential-command cat /t`,
+      `--credential-ttl 6e2 --workspace-id ${WORKSPACE} --identity-token-command cat /t`,
     ],
   ])("rejects setup given %s", (_name, args) => {
     expect(() => setup(args)).toThrow();
@@ -163,7 +171,7 @@ describe("credential configuration", () => {
     writeFileSync(entry, "", { mode: 0o600 });
     await enable(
       entry,
-      `--scope global --cli /bin/sh --port 52599 --credential-ttl 60 --workspace-id ${WORKSPACE} --credential-command cat /tmp/t.jwt`.split(
+      `--scope global --cli /bin/sh --port 52599 --credential-ttl 60 --workspace-id ${WORKSPACE} --identity-token-command cat /tmp/t.jwt`.split(
         " ",
       ),
       {},
@@ -171,21 +179,21 @@ describe("credential configuration", () => {
       home,
     ).catch(() => undefined);
     expect(JSON.parse(readFileSync(join(configDir(home), "config.json"), "utf8"))).toMatchObject({
-      credentialCommand: "cat /tmp/t.jwt",
+      identityTokenCommand: "cat /tmp/t.jwt",
       credentialTtlMs: 60_000,
       workspaceId: WORKSPACE,
     });
   });
 
   it.each([
-    ["command", `--workspace-id ${WORKSPACE} --credential-command cat /tmp/different.jwt`],
+    ["command", `--workspace-id ${WORKSPACE} --identity-token-command cat /tmp/different.jwt`],
     [
       "window",
-      `--credential-ttl 120 --workspace-id ${WORKSPACE} --credential-command ${SAVED_COMMAND}`,
+      `--credential-ttl 120 --workspace-id ${WORKSPACE} --identity-token-command ${SAVED_COMMAND}`,
     ],
     [
       "workspace",
-      `--workspace-id 11111111-2222-3333-4444-555555555555 --credential-command ${SAVED_COMMAND}`,
+      `--workspace-id 11111111-2222-3333-4444-555555555555 --identity-token-command ${SAVED_COMMAND}`,
     ],
   ])("refuses to change a saved %s while a scope is active", async (_name, args) => {
     const { run } = await existingInstall();

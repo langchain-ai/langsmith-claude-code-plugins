@@ -1,5 +1,5 @@
 import { endpoints } from "./config.js";
-import { isCredentialCommand, isCredentialTtlMs, isWorkspaceId } from "./config-validation.js";
+import { isCredentialTtlMs, isIdentityTokenCommand, isWorkspaceId } from "./config-validation.js";
 import {
   COMMAND_GUIDANCE,
   PROFILE_NAME,
@@ -42,9 +42,9 @@ export function parseSetupArgs(rest: string[]): SetupOptions {
       useClaudeSubscription = true;
       continue;
     }
-    if (arg === "--credential-command") {
+    if (arg === "--identity-token-command") {
       const tail = rest.slice(i + 1).join(" ");
-      if (!isCredentialCommand(tail)) throw new SetupError(usage);
+      if (!isIdentityTokenCommand(tail)) throw new SetupError(usage);
       command = tail;
       break;
     }
@@ -71,15 +71,15 @@ export function parseSetupArgs(rest: string[]): SetupOptions {
   result.profile = flags.get("--profile");
   if (result.profile !== undefined && !PROFILE_NAME.test(result.profile))
     throw new SetupError("Invalid CLI profile name");
-  result.credentialCommand = command;
+  result.identityTokenCommand = command;
   result.credentialTtlMs = credentialTtl(flags.get("--credential-ttl"));
   result.workspaceId = flags.get("--workspace-id");
   if (result.workspaceId !== undefined && !isWorkspaceId(result.workspaceId))
     throw new SetupError("Workspace id must be a UUID");
   if (command !== undefined && result.workspaceId === undefined)
-    throw new SetupError("A credential command also requires --workspace-id");
+    throw new SetupError("An identity token command also requires --workspace-id");
   if (command === undefined && result.credentialTtlMs !== undefined)
-    throw new SetupError("Credential cache seconds apply only with a credential command");
+    throw new SetupError("Credential cache seconds apply only with an identity token command");
   if (flags.has("--api-url") || flags.has("--gateway-url")) {
     try {
       Object.assign(

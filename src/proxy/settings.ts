@@ -175,7 +175,7 @@ export async function enable(
           cli: requested.cli === undefined ? config.cli : validateCLI(requested.cli),
           profile: requested.profile ?? config.profile,
           port,
-          credentialCommand: requested.credentialCommand ?? config.credentialCommand,
+          identityTokenCommand: requested.identityTokenCommand ?? config.identityTokenCommand,
           credentialTtlMs: requested.credentialTtlMs ?? config.credentialTtlMs,
           workspaceId: requested.workspaceId ?? config.workspaceId,
         }
@@ -186,7 +186,7 @@ export async function enable(
       (config.cli !== next.cli ||
         config.profile !== next.profile ||
         config.port !== next.port ||
-        config.credentialCommand !== next.credentialCommand ||
+        config.identityTokenCommand !== next.identityTokenCommand ||
         config.credentialTtlMs !== next.credentialTtlMs ||
         config.workspaceId !== next.workspaceId ||
         endpoints(config).apiUrl !== next.apiUrl ||
@@ -241,7 +241,7 @@ export async function enable(
         selected,
         useClaudeSubscription,
         {
-          credentialCommand: requested.credentialCommand,
+          identityTokenCommand: requested.identityTokenCommand,
           credentialTtlMs: requested.credentialTtlMs,
           workspaceId: requested.workspaceId,
         },

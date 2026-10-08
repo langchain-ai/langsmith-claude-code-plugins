@@ -36,7 +36,7 @@ export const identity = (c: ProxyConfig) =>
         c.secret,
         endpoints(c).apiUrl,
         endpoints(c).gatewayUrl,
-        c.credentialCommand,
+        c.identityTokenCommand,
         c.credentialTtlMs,
         c.workspaceId,
       ]),
@@ -285,7 +285,7 @@ export function createProxy(
 ) {
   const upstreamOrigin = new URL(endpoints(config).gatewayUrl);
   const credentialAbort = new AbortController();
-  const command = config.credentialCommand;
+  const command = config.identityTokenCommand;
   const fetchToken =
     command === undefined
       ? (options.token ?? (() => cliToken(config, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal)))
