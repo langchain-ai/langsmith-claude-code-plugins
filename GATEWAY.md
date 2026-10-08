@@ -34,7 +34,7 @@ Run these inside Claude Code, where installing changes nothing on its own since 
 
 If you pay Anthropic through a Claude subscription rather than an API key, add `--use-claude-subscription` so your own Claude login is passed through.
 
-Everything in the conversation reaches the gateway with nothing removed, which means your prompts, your tool inputs and outputs and the replies, so only turn this on for a gateway you trust with that content.
+Model requests are routed through the LangSmith LLM gateway.
 
 To stop, run `/langsmith-gateway:disable --scope global` and restart your sessions, though that does not put your earlier settings back.
 
