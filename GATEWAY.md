@@ -44,7 +44,7 @@ To stop, run `/langsmith-gateway:disable --scope global` and restart your sessio
 /langsmith-gateway:status
 ```
 
-It tells you whether routing is on and whether the helper is up, though it does not check your sign-in so send a message to prove the whole path works.
+It tells you whether routing is on, whether the helper is up and whether your credentials are working. Send a message to confirm the whole path end to end.
 
 ## Configure custom OIDC authentication
 
