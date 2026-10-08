@@ -1,7 +1,7 @@
 import { accessSync, constants, mkdirSync, rmdirSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { configDir, endpoints, loadConfig, privatePath, userHome } from "./config.js";
-import { AUTH } from "./proxy-constants.js";
+import { AUTH, CREDENTIAL_SOURCE_GUIDANCE } from "./proxy-constants.js";
 import type { ObjectValue, ProxyConfig } from "./proxy-models.js";
 import {
   atomic,
@@ -110,9 +110,7 @@ function discoverCLI(env: NodeJS.ProcessEnv): string {
       /* Try next absolute PATH entry. */
     }
   }
-  return fail(
-    "LangSmith CLI not found. Install it using the README, complete terminal login with your selected profile and API URL (review the saved OAuth issuer), then retry /langsmith-gateway:setup.",
-  );
+  return fail(CREDENTIAL_SOURCE_GUIDANCE);
 }
 export async function enable(
   entry: string,
@@ -234,7 +232,8 @@ export async function enable(
       );
     if (!config) {
       createConfig(
-        requested.cli ?? discoverCLI(env),
+        requested.cli ??
+          (requested.identityTokenCommand === undefined ? discoverCLI(env) : undefined),
         requested.profile,
         port,
         home,
@@ -249,7 +248,7 @@ export async function enable(
       config = loadConfig(home)!;
     }
     const effective = next ?? config;
-    if (validateCLI(effective.cli) !== effective.cli)
+    if (effective.cli !== undefined && validateCLI(effective.cli) !== effective.cli)
       fail("Pinned CLI path changed; resolve privately before retrying.");
     let configSnapshot = snapshot(p.config, true);
     if (switching) {

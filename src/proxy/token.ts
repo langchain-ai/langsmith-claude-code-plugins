@@ -22,6 +22,7 @@ export function cliToken(
   timeoutMs = CREDENTIAL_TIMEOUT_MS,
   signal?: AbortSignal,
 ): Promise<string> {
+  if (config.cli === undefined) return Promise.reject(new Error("LangSmith token unavailable"));
   return spawnToken(
     config.cli,
     [

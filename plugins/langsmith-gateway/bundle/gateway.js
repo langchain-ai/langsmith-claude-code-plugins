@@ -114,6 +114,7 @@ function transaction(writes) {
 // dist/src/proxy/proxy-constants.js
 var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
 var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and put --identity-token-command last, followed by a command that prints one token on standard output. The daemon runs that command with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs quotes, pipes or anything else your shell sets up. Add --identity-token-ttl SECONDS to change how long each result is reused from the default 300.";
+var CREDENTIAL_SOURCE_GUIDANCE = "Setup needs one of two ways to sign in and found neither. Either install the LangSmith CLI using the README and complete terminal login with your selected profile and API URL (review the saved OAuth issuer), or add --workspace-id UUID and --identity-token-command with a command that prints your identity token. Then retry /langsmith-gateway:setup.";
 var STATUS_GUIDANCE = "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
 var TTL_RANGE_GUIDANCE = "Identity token cache seconds must be between 1 and 3600";
 var TENANT_HEADER_GUIDANCE = "Send x-tenant-id at most once and as a workspace UUID. Drop the header to use the workspace saved in your gateway configuration.";
@@ -236,7 +237,7 @@ var isSecret = (value) => typeof value === "string" && SECRET.test(value);
 var isSettingsTarget = (value) => typeof value === "string" && value.length <= MAX_PATH_LENGTH && isAbsolute(value) && normalize(value) === value && !value.includes("\0") && SETTINGS_TARGET.test(value);
 var isSettingsTargets = (value) => Array.isArray(value) && value.length <= MAX_SETTINGS_TARGETS && value.every((target) => isSettingsTarget(target));
 var onlyKnownKeys = (value) => Object.keys(value).every((key) => CONFIG_KEYS.includes(key));
-var isSavedConfig = (c) => typeof c.enabled === "boolean" && typeof c.useClaudeSubscription === "boolean" && isCliPath(c.cli) && absent(c.profile, isProfile) && isPort(c.port) && isSecret(c.secret) && absent(c.settingsTargets, isSettingsTargets) && absent(c.identityTokenCommand, isIdentityTokenCommand) && absent(c.identityTokenTtlMs, isIdentityTokenTtlMs) && absent(c.workspaceId, isWorkspaceId) && onlyKnownKeys(c);
+var isSavedConfig = (c) => typeof c.enabled === "boolean" && typeof c.useClaudeSubscription === "boolean" && (c.identityTokenCommand === void 0 ? isCliPath(c.cli) : absent(c.cli, isCliPath)) && absent(c.profile, isProfile) && isPort(c.port) && isSecret(c.secret) && absent(c.settingsTargets, isSettingsTargets) && absent(c.identityTokenCommand, isIdentityTokenCommand) && absent(c.identityTokenTtlMs, isIdentityTokenTtlMs) && absent(c.workspaceId, isWorkspaceId) && onlyKnownKeys(c);
 
 // dist/src/proxy/config.js
 var ConfigError = class extends Error {
@@ -311,6 +312,8 @@ function cliEnvironment() {
   return { HOME: userHome(), PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
 }
 function cliToken(config, timeoutMs = CREDENTIAL_TIMEOUT_MS, signal) {
+  if (config.cli === void 0)
+    return Promise.reject(new Error("LangSmith token unavailable"));
   return spawnToken(config.cli, [
     ...config.profile === void 0 ? [] : ["--profile", config.profile],
     "--api-url",
@@ -958,11 +961,12 @@ function validateCLI(cli) {
   return cli;
 }
 function createConfig(cli, profile, port, home = userHome(), urls = {}, useClaudeSubscription = false, credentials = {}) {
-  const valid = typeof useClaudeSubscription === "boolean" && isAbsolute2(cli) && absent(profile, isProfile) && isPort(port) && absent(credentials.identityTokenCommand, isIdentityTokenCommand) && absent(credentials.identityTokenTtlMs, isIdentityTokenTtlMs) && absent(credentials.workspaceId, isWorkspaceId);
+  const valid = typeof useClaudeSubscription === "boolean" && (cli === void 0 ? credentials.identityTokenCommand !== void 0 : isAbsolute2(cli)) && absent(profile, isProfile) && isPort(port) && absent(credentials.identityTokenCommand, isIdentityTokenCommand) && absent(credentials.identityTokenTtlMs, isIdentityTokenTtlMs) && absent(credentials.workspaceId, isWorkspaceId);
   if (!valid)
     throw new Error("Invalid setup arguments");
   const selected = endpoints(urls);
-  cli = validateCLI(cli);
+  if (cli !== void 0)
+    cli = validateCLI(cli);
   directories(home, true);
   const dir = configDir(home);
   try {
@@ -1216,7 +1220,7 @@ function discoverCLI(env) {
     } catch {
     }
   }
-  return fail("LangSmith CLI not found. Install it using the README, complete terminal login with your selected profile and API URL (review the saved OAuth issuer), then retry /langsmith-gateway:setup.");
+  return fail(CREDENTIAL_SOURCE_GUIDANCE);
 }
 async function enable(entry2, args, env = process.env, home = userHome(), cwd = process.cwd()) {
   const requested = parseSetupArgs(args);
@@ -1283,7 +1287,7 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
     if (switching && (base !== target || keys.length !== 1))
       fail("Configured transport settings changed. Review them privately or disable this scope before switching subscription forwarding.");
     if (!config) {
-      createConfig(requested.cli ?? discoverCLI(env), requested.profile, port, home, selected, useClaudeSubscription, {
+      createConfig(requested.cli ?? (requested.identityTokenCommand === void 0 ? discoverCLI(env) : void 0), requested.profile, port, home, selected, useClaudeSubscription, {
         identityTokenCommand: requested.identityTokenCommand,
         identityTokenTtlMs: requested.identityTokenTtlMs,
         workspaceId: requested.workspaceId
@@ -1291,7 +1295,7 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       config = loadConfig(home);
     }
     const effective = next ?? config;
-    if (validateCLI(effective.cli) !== effective.cli)
+    if (effective.cli !== void 0 && validateCLI(effective.cli) !== effective.cli)
       fail("Pinned CLI path changed; resolve privately before retrying.");
     let configSnapshot = snapshot(p.config, true);
     if (switching) {

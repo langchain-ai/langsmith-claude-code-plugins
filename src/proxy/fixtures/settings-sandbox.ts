@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, vi } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as os from "node:os";
@@ -27,6 +35,24 @@ export const args = () => [
   "52507",
 ];
 export const run = () => enable("/fake/gateway.js", args(), {});
+export const WORKSPACE = "11111111-2222-3333-4444-555555555555";
+export const TOKEN_COMMAND = "printf token";
+export const tokenArgs = (cli?: string) => [
+  "--scope",
+  "global",
+  ...(cli === undefined ? [] : ["--cli", cli]),
+  "--workspace-id",
+  WORKSPACE,
+  "--identity-token-command",
+  TOKEN_COMMAND,
+];
+export const noCliEnv = { PATH: "relative:/does-not-exist" };
+export function installCli(): { PATH: string } {
+  const dir = join(home, "bin");
+  mkdirSync(dir, { mode: 0o700 });
+  symlinkSync(process.execPath, join(dir, "langsmith"));
+  return { PATH: `relative:${dir}` };
+}
 beforeEach(() => {
   home = realpathSync(mkdtempSync(join(tmpdir(), "gateway-settings-")));
   vi.mocked(os.userInfo).mockReturnValue({ homedir: home } as ReturnType<typeof os.userInfo>);

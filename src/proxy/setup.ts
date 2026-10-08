@@ -24,7 +24,7 @@ export function validateCLI(cli: string): string {
 }
 
 export function createConfig(
-  cli: string,
+  cli: string | undefined,
   profile: string | undefined,
   port: number,
   home = userHome(),
@@ -34,7 +34,7 @@ export function createConfig(
 ): void {
   const valid =
     typeof useClaudeSubscription === "boolean" &&
-    isAbsolute(cli) &&
+    (cli === undefined ? credentials.identityTokenCommand !== undefined : isAbsolute(cli)) &&
     absent(profile, isProfile) &&
     isPort(port) &&
     absent(credentials.identityTokenCommand, isIdentityTokenCommand) &&
@@ -42,7 +42,7 @@ export function createConfig(
     absent(credentials.workspaceId, isWorkspaceId);
   if (!valid) throw new Error("Invalid setup arguments");
   const selected = endpoints(urls);
-  cli = validateCLI(cli);
+  if (cli !== undefined) cli = validateCLI(cli);
   directories(home, true);
   const dir = configDir(home);
   try {

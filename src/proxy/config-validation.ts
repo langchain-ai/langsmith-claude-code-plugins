@@ -92,7 +92,7 @@ export const onlyKnownKeys = (value: object): boolean =>
 export const isSavedConfig = (c: ProxyConfig): boolean =>
   typeof c.enabled === "boolean" &&
   typeof c.useClaudeSubscription === "boolean" &&
-  isCliPath(c.cli) &&
+  (c.identityTokenCommand === undefined ? isCliPath(c.cli) : absent(c.cli, isCliPath)) &&
   absent(c.profile, isProfile) &&
   isPort(c.port) &&
   isSecret(c.secret) &&
