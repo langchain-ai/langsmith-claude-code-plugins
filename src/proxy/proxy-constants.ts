@@ -2,12 +2,12 @@ export const CONFIG_UPDATE_GUIDANCE =
   "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
 
 export const COMMAND_GUIDANCE =
-  "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and put --identity-token-command last, followed by a command that prints one token on standard output. The daemon runs that command with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs quotes, pipes or anything else your shell sets up. Add --credential-ttl SECONDS to change how long each result is reused from the default 300.";
+  "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and put --identity-token-command last, followed by a command that prints one token on standard output. The daemon runs that command with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs quotes, pipes or anything else your shell sets up. Add --identity-token-ttl SECONDS to change how long each result is reused from the default 300.";
 
 export const STATUS_GUIDANCE =
   "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
 
-export const TTL_RANGE_GUIDANCE = "Credential cache seconds must be between 1 and 3600";
+export const TTL_RANGE_GUIDANCE = "Identity token cache seconds must be between 1 and 3600";
 
 export const TENANT_HEADER_GUIDANCE =
   "Send x-tenant-id at most once and as a workspace UUID. Drop the header to use the workspace saved in your gateway configuration.";
@@ -54,9 +54,9 @@ export const RETRY_AFTER_MS = 2000;
 export const MAX_IDENTITY_TOKEN_COMMAND = 4096;
 export const CREDENTIAL_TIMEOUT_MS = 10_000;
 export const CLI_TOKEN_TTL_MS = 60_000;
-export const DEFAULT_CREDENTIAL_TTL_MS = 5 * 60_000;
-export const MIN_CREDENTIAL_TTL_MS = 1000;
-export const MAX_CREDENTIAL_TTL_MS = 60 * 60_000;
+export const DEFAULT_IDENTITY_TOKEN_TTL_MS = 5 * 60_000;
+export const MIN_IDENTITY_TOKEN_TTL_MS = 1000;
+export const MAX_IDENTITY_TOKEN_TTL_MS = 60 * 60_000;
 
 export const CONFIG_KEYS = [
   "enabled",
@@ -69,7 +69,7 @@ export const CONFIG_KEYS = [
   "gatewayUrl",
   "useClaudeSubscription",
   "identityTokenCommand",
-  "credentialTtlMs",
+  "identityTokenTtlMs",
   "workspaceId",
 ];
 
@@ -80,7 +80,7 @@ export const SETUP_FLAGS = [
   "--profile",
   "--api-url",
   "--gateway-url",
-  "--credential-ttl",
+  "--identity-token-ttl",
   "--workspace-id",
 ];
 

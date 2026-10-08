@@ -176,7 +176,7 @@ export async function enable(
           profile: requested.profile ?? config.profile,
           port,
           identityTokenCommand: requested.identityTokenCommand ?? config.identityTokenCommand,
-          credentialTtlMs: requested.credentialTtlMs ?? config.credentialTtlMs,
+          identityTokenTtlMs: requested.identityTokenTtlMs ?? config.identityTokenTtlMs,
           workspaceId: requested.workspaceId ?? config.workspaceId,
         }
       : undefined;
@@ -187,7 +187,7 @@ export async function enable(
         config.profile !== next.profile ||
         config.port !== next.port ||
         config.identityTokenCommand !== next.identityTokenCommand ||
-        config.credentialTtlMs !== next.credentialTtlMs ||
+        config.identityTokenTtlMs !== next.identityTokenTtlMs ||
         config.workspaceId !== next.workspaceId ||
         endpoints(config).apiUrl !== next.apiUrl ||
         endpoints(config).gatewayUrl !== next.gatewayUrl);
@@ -242,7 +242,7 @@ export async function enable(
         useClaudeSubscription,
         {
           identityTokenCommand: requested.identityTokenCommand,
-          credentialTtlMs: requested.credentialTtlMs,
+          identityTokenTtlMs: requested.identityTokenTtlMs,
           workspaceId: requested.workspaceId,
         },
       );

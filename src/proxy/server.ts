@@ -9,7 +9,7 @@ import { endpoints } from "./config.js";
 import {
   CLI_TOKEN_TTL_MS,
   CREDENTIAL_TIMEOUT_MS,
-  DEFAULT_CREDENTIAL_TTL_MS,
+  DEFAULT_IDENTITY_TOKEN_TTL_MS,
   KEY_HEADER,
   MAX_REQUEST_BYTES,
   PROTOCOL_VERSION,
@@ -37,7 +37,7 @@ export const identity = (c: ProxyConfig) =>
         endpoints(c).apiUrl,
         endpoints(c).gatewayUrl,
         c.identityTokenCommand,
-        c.credentialTtlMs,
+        c.identityTokenTtlMs,
         c.workspaceId,
       ]),
     )
@@ -293,7 +293,7 @@ export function createProxy(
   const ttlMs =
     command === undefined
       ? CLI_TOKEN_TTL_MS
-      : (config.credentialTtlMs ?? DEFAULT_CREDENTIAL_TTL_MS);
+      : (config.identityTokenTtlMs ?? DEFAULT_IDENTITY_TOKEN_TTL_MS);
   const tokens = new TokenCache(fetchToken, Date.now, ttlMs);
   const unavailable = () =>
     command === undefined ? loginGuidance(config) : commandGuidance(config);

@@ -127,7 +127,7 @@ describe("separate marketplace packages", () => {
           ? "description: Show read-only gateway routing and shared proxy status"
           : `description: ${name === "setup" ? "Enable" : "Disable"} gateway settings deterministically for an explicit scope`,
         name === "setup"
-          ? `argument-hint: "--scope global|project [--use-claude-subscription] [--profile name] [--api-url HTTPS_ORIGIN --gateway-url HTTPS_ORIGIN] [--cli /absolute/path --port 52507] [--workspace-id UUID --credential-ttl 300 --identity-token-command cmd args (last)]"`
+          ? `argument-hint: "--scope global|project [--use-claude-subscription] [--profile name] [--api-url HTTPS_ORIGIN --gateway-url HTTPS_ORIGIN] [--cli /absolute/path --port 52507] [--workspace-id UUID --identity-token-ttl 300 --identity-token-command cmd args (last)]"`
           : name === "status"
             ? `argument-hint: "[--scope global|project]"`
             : `argument-hint: "--scope global|project"`,

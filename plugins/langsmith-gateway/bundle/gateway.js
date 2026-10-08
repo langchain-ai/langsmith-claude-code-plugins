@@ -113,9 +113,9 @@ function transaction(writes) {
 
 // dist/src/proxy/proxy-constants.js
 var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
-var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and put --identity-token-command last, followed by a command that prints one token on standard output. The daemon runs that command with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs quotes, pipes or anything else your shell sets up. Add --credential-ttl SECONDS to change how long each result is reused from the default 300.";
+var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and put --identity-token-command last, followed by a command that prints one token on standard output. The daemon runs that command with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs quotes, pipes or anything else your shell sets up. Add --identity-token-ttl SECONDS to change how long each result is reused from the default 300.";
 var STATUS_GUIDANCE = "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
-var TTL_RANGE_GUIDANCE = "Credential cache seconds must be between 1 and 3600";
+var TTL_RANGE_GUIDANCE = "Identity token cache seconds must be between 1 and 3600";
 var TENANT_HEADER_GUIDANCE = "Send x-tenant-id at most once and as a workspace UUID. Drop the header to use the workspace saved in your gateway configuration.";
 var ORIGIN_SHAPE_GUIDANCE = "Endpoints must be HTTPS DNS origins without credentials, path, query or fragment";
 var ORIGIN_DNS_GUIDANCE = "Endpoints must use public DNS names and HTTPS ports 1-65535";
@@ -152,9 +152,9 @@ var RETRY_AFTER_MS = 2e3;
 var MAX_IDENTITY_TOKEN_COMMAND = 4096;
 var CREDENTIAL_TIMEOUT_MS = 1e4;
 var CLI_TOKEN_TTL_MS = 6e4;
-var DEFAULT_CREDENTIAL_TTL_MS = 5 * 6e4;
-var MIN_CREDENTIAL_TTL_MS = 1e3;
-var MAX_CREDENTIAL_TTL_MS = 60 * 6e4;
+var DEFAULT_IDENTITY_TOKEN_TTL_MS = 5 * 6e4;
+var MIN_IDENTITY_TOKEN_TTL_MS = 1e3;
+var MAX_IDENTITY_TOKEN_TTL_MS = 60 * 6e4;
 var CONFIG_KEYS = [
   "enabled",
   "settingsTargets",
@@ -166,7 +166,7 @@ var CONFIG_KEYS = [
   "gatewayUrl",
   "useClaudeSubscription",
   "identityTokenCommand",
-  "credentialTtlMs",
+  "identityTokenTtlMs",
   "workspaceId"
 ];
 var SETUP_FLAGS = [
@@ -176,7 +176,7 @@ var SETUP_FLAGS = [
   "--profile",
   "--api-url",
   "--gateway-url",
-  "--credential-ttl",
+  "--identity-token-ttl",
   "--workspace-id"
 ];
 var hop = /* @__PURE__ */ new Set([
@@ -227,7 +227,7 @@ var publicDnsOrigin = (url) => {
 };
 var absent = (value, valid) => value === void 0 || valid(value);
 var isIdentityTokenCommand = (value) => typeof value === "string" && value.trim().length > 0 && value.length <= MAX_IDENTITY_TOKEN_COMMAND && !CONTROL.test(value);
-var isCredentialTtlMs = (value) => Number.isInteger(value) && value >= MIN_CREDENTIAL_TTL_MS && value <= MAX_CREDENTIAL_TTL_MS;
+var isIdentityTokenTtlMs = (value) => Number.isInteger(value) && value >= MIN_IDENTITY_TOKEN_TTL_MS && value <= MAX_IDENTITY_TOKEN_TTL_MS;
 var isWorkspaceId = (value) => typeof value === "string" && WORKSPACE_ID.test(value);
 var isProfile = (value) => typeof value === "string" && PROFILE_NAME.test(value);
 var isCliPath = (value) => typeof value === "string" && isAbsolute(value);
@@ -236,7 +236,7 @@ var isSecret = (value) => typeof value === "string" && SECRET.test(value);
 var isSettingsTarget = (value) => typeof value === "string" && value.length <= MAX_PATH_LENGTH && isAbsolute(value) && normalize(value) === value && !value.includes("\0") && SETTINGS_TARGET.test(value);
 var isSettingsTargets = (value) => Array.isArray(value) && value.length <= MAX_SETTINGS_TARGETS && value.every((target) => isSettingsTarget(target));
 var onlyKnownKeys = (value) => Object.keys(value).every((key) => CONFIG_KEYS.includes(key));
-var isSavedConfig = (c) => typeof c.enabled === "boolean" && typeof c.useClaudeSubscription === "boolean" && isCliPath(c.cli) && absent(c.profile, isProfile) && isPort(c.port) && isSecret(c.secret) && absent(c.settingsTargets, isSettingsTargets) && absent(c.identityTokenCommand, isIdentityTokenCommand) && absent(c.credentialTtlMs, isCredentialTtlMs) && absent(c.workspaceId, isWorkspaceId) && onlyKnownKeys(c);
+var isSavedConfig = (c) => typeof c.enabled === "boolean" && typeof c.useClaudeSubscription === "boolean" && isCliPath(c.cli) && absent(c.profile, isProfile) && isPort(c.port) && isSecret(c.secret) && absent(c.settingsTargets, isSettingsTargets) && absent(c.identityTokenCommand, isIdentityTokenCommand) && absent(c.identityTokenTtlMs, isIdentityTokenTtlMs) && absent(c.workspaceId, isWorkspaceId) && onlyKnownKeys(c);
 
 // dist/src/proxy/config.js
 var ConfigError = class extends Error {
@@ -414,7 +414,7 @@ var TokenCache = class {
   }
 };
 function commandGuidance(config) {
-  const reused = (config.credentialTtlMs ?? DEFAULT_CREDENTIAL_TTL_MS) / 1e3;
+  const reused = (config.identityTokenTtlMs ?? DEFAULT_IDENTITY_TOKEN_TTL_MS) / 1e3;
   return `LangSmith authentication unavailable. Your configured identity token command did not print one unexpired bearer token on standard output, so it exited non-zero, printed something else, or ran past ${CREDENTIAL_TIMEOUT_MS / 1e3} seconds. It runs with ${SHELL} from your home directory and gets only HOME and a standard PATH, so anything your shell profile or virtual environment normally sets up is missing even when the same command works in your terminal. A good result is reused for ${reused} seconds, or less when the token expires sooner, and a failure is remembered for ${RETRY_AFTER_MS / 1e3} seconds. Fix the command and send the request again, since nothing is replayed for you.
 `;
 }
@@ -434,7 +434,7 @@ var identity = (c) => createHash("sha256").update(JSON.stringify([
   endpoints(c).apiUrl,
   endpoints(c).gatewayUrl,
   c.identityTokenCommand,
-  c.credentialTtlMs,
+  c.identityTokenTtlMs,
   c.workspaceId
 ])).digest("hex");
 function authenticated(req, secret) {
@@ -645,7 +645,7 @@ function createProxy(config, options = {}) {
   const credentialAbort = new AbortController();
   const command = config.identityTokenCommand;
   const fetchToken = command === void 0 ? options.token ?? (() => cliToken(config, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal)) : () => commandToken(command, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal);
-  const ttlMs = command === void 0 ? CLI_TOKEN_TTL_MS : config.credentialTtlMs ?? DEFAULT_CREDENTIAL_TTL_MS;
+  const ttlMs = command === void 0 ? CLI_TOKEN_TTL_MS : config.identityTokenTtlMs ?? DEFAULT_IDENTITY_TOKEN_TTL_MS;
   const tokens = new TokenCache(fetchToken, Date.now, ttlMs);
   const unavailable = () => command === void 0 ? loginGuidance(config) : commandGuidance(config);
   const sessions = options.sessions ?? new Sessions();
@@ -839,11 +839,11 @@ function createProxy(config, options = {}) {
 // dist/src/proxy/options.js
 var SetupError = class extends Error {
 };
-function credentialTtl(seconds) {
+function identityTokenTtl(seconds) {
   if (seconds === void 0)
     return void 0;
   const ms = Number(seconds) * 1e3;
-  if (!TTL_SECONDS.test(seconds) || !isCredentialTtlMs(ms))
+  if (!TTL_SECONDS.test(seconds) || !isIdentityTokenTtlMs(ms))
     throw new SetupError(TTL_RANGE_GUIDANCE);
   return ms;
 }
@@ -890,14 +890,14 @@ function parseSetupArgs(rest) {
   if (result.profile !== void 0 && !PROFILE_NAME.test(result.profile))
     throw new SetupError("Invalid CLI profile name");
   result.identityTokenCommand = command;
-  result.credentialTtlMs = credentialTtl(flags.get("--credential-ttl"));
+  result.identityTokenTtlMs = identityTokenTtl(flags.get("--identity-token-ttl"));
   result.workspaceId = flags.get("--workspace-id");
   if (result.workspaceId !== void 0 && !isWorkspaceId(result.workspaceId))
     throw new SetupError("Workspace id must be a UUID");
   if (command !== void 0 && result.workspaceId === void 0)
     throw new SetupError("An identity token command also requires --workspace-id");
-  if (command === void 0 && result.credentialTtlMs !== void 0)
-    throw new SetupError("Credential cache seconds apply only with an identity token command");
+  if (command === void 0 && result.identityTokenTtlMs !== void 0)
+    throw new SetupError("Identity token cache seconds apply only with an identity token command");
   if (flags.has("--api-url") || flags.has("--gateway-url")) {
     try {
       Object.assign(result, endpoints({ apiUrl: flags.get("--api-url"), gatewayUrl: flags.get("--gateway-url") }));
@@ -958,7 +958,7 @@ function validateCLI(cli) {
   return cli;
 }
 function createConfig(cli, profile, port, home = userHome(), urls = {}, useClaudeSubscription = false, credentials = {}) {
-  const valid = typeof useClaudeSubscription === "boolean" && isAbsolute2(cli) && absent(profile, isProfile) && isPort(port) && absent(credentials.identityTokenCommand, isIdentityTokenCommand) && absent(credentials.credentialTtlMs, isCredentialTtlMs) && absent(credentials.workspaceId, isWorkspaceId);
+  const valid = typeof useClaudeSubscription === "boolean" && isAbsolute2(cli) && absent(profile, isProfile) && isPort(port) && absent(credentials.identityTokenCommand, isIdentityTokenCommand) && absent(credentials.identityTokenTtlMs, isIdentityTokenTtlMs) && absent(credentials.workspaceId, isWorkspaceId);
   if (!valid)
     throw new Error("Invalid setup arguments");
   const selected = endpoints(urls);
@@ -1258,10 +1258,10 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       profile: requested.profile ?? config.profile,
       port,
       identityTokenCommand: requested.identityTokenCommand ?? config.identityTokenCommand,
-      credentialTtlMs: requested.credentialTtlMs ?? config.credentialTtlMs,
+      identityTokenTtlMs: requested.identityTokenTtlMs ?? config.identityTokenTtlMs,
       workspaceId: requested.workspaceId ?? config.workspaceId
     } : void 0;
-    const changing = config && next && (config.cli !== next.cli || config.profile !== next.profile || config.port !== next.port || config.identityTokenCommand !== next.identityTokenCommand || config.credentialTtlMs !== next.credentialTtlMs || config.workspaceId !== next.workspaceId || endpoints(config).apiUrl !== next.apiUrl || endpoints(config).gatewayUrl !== next.gatewayUrl);
+    const changing = config && next && (config.cli !== next.cli || config.profile !== next.profile || config.port !== next.port || config.identityTokenCommand !== next.identityTokenCommand || config.identityTokenTtlMs !== next.identityTokenTtlMs || config.workspaceId !== next.workspaceId || endpoints(config).apiUrl !== next.apiUrl || endpoints(config).gatewayUrl !== next.gatewayUrl);
     if (changing && (initiallyEnabled || active.length))
       fail("Existing pinned CLI/profile/port or endpoints differ. Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit the shared config while other scopes are active.");
     const modeChanged = !!config && config.useClaudeSubscription !== useClaudeSubscription;
@@ -1285,7 +1285,7 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
     if (!config) {
       createConfig(requested.cli ?? discoverCLI(env), requested.profile, port, home, selected, useClaudeSubscription, {
         identityTokenCommand: requested.identityTokenCommand,
-        credentialTtlMs: requested.credentialTtlMs,
+        identityTokenTtlMs: requested.identityTokenTtlMs,
         workspaceId: requested.workspaceId
       });
       config = loadConfig(home);

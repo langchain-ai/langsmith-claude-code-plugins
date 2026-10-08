@@ -5,8 +5,8 @@ import { atomic, directories, jsonText, snapshot } from "./files.js";
 import { configDir, endpoints, privatePath, userHome } from "./config.js";
 import {
   absent,
-  isCredentialTtlMs,
   isIdentityTokenCommand,
+  isIdentityTokenTtlMs,
   isPort,
   isProfile,
   isWorkspaceId,
@@ -38,7 +38,7 @@ export function createConfig(
     absent(profile, isProfile) &&
     isPort(port) &&
     absent(credentials.identityTokenCommand, isIdentityTokenCommand) &&
-    absent(credentials.credentialTtlMs, isCredentialTtlMs) &&
+    absent(credentials.identityTokenTtlMs, isIdentityTokenTtlMs) &&
     absent(credentials.workspaceId, isWorkspaceId);
   if (!valid) throw new Error("Invalid setup arguments");
   const selected = endpoints(urls);

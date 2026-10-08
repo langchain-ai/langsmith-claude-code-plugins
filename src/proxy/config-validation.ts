@@ -3,15 +3,15 @@ import {
   CONFIG_KEYS,
   CONTROL,
   DNS_LABEL,
-  MAX_CREDENTIAL_TTL_MS,
   MAX_HOSTNAME_LENGTH,
   MAX_IDENTITY_TOKEN_COMMAND,
+  MAX_IDENTITY_TOKEN_TTL_MS,
   MAX_ORIGIN_LENGTH,
   MAX_PATH_LENGTH,
   MAX_PORT,
   MAX_SETTINGS_TARGETS,
   MAX_URL_PORT,
-  MIN_CREDENTIAL_TTL_MS,
+  MIN_IDENTITY_TOKEN_TTL_MS,
   MIN_PORT,
   MIN_URL_PORT,
   ORIGIN,
@@ -53,10 +53,10 @@ export const isIdentityTokenCommand = (value: unknown): value is string =>
   value.length <= MAX_IDENTITY_TOKEN_COMMAND &&
   !CONTROL.test(value);
 
-export const isCredentialTtlMs = (value: unknown): value is number =>
+export const isIdentityTokenTtlMs = (value: unknown): value is number =>
   Number.isInteger(value) &&
-  (value as number) >= MIN_CREDENTIAL_TTL_MS &&
-  (value as number) <= MAX_CREDENTIAL_TTL_MS;
+  (value as number) >= MIN_IDENTITY_TOKEN_TTL_MS &&
+  (value as number) <= MAX_IDENTITY_TOKEN_TTL_MS;
 
 export const isWorkspaceId = (value: unknown): value is string =>
   typeof value === "string" && WORKSPACE_ID.test(value);
@@ -98,6 +98,6 @@ export const isSavedConfig = (c: ProxyConfig): boolean =>
   isSecret(c.secret) &&
   absent(c.settingsTargets, isSettingsTargets) &&
   absent(c.identityTokenCommand, isIdentityTokenCommand) &&
-  absent(c.credentialTtlMs, isCredentialTtlMs) &&
+  absent(c.identityTokenTtlMs, isIdentityTokenTtlMs) &&
   absent(c.workspaceId, isWorkspaceId) &&
   onlyKnownKeys(c);

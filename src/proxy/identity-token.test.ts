@@ -19,7 +19,7 @@ import {
   tokenFile,
   unexpiredToken,
   WORKSPACE,
-} from "./fixtures/credential-sandbox.js";
+} from "./fixtures/identity-token-sandbox.js";
 
 describe("identity token command", () => {
   it("sends the configured workspace id", async () => {
@@ -35,7 +35,7 @@ describe("identity token command", () => {
     const path = tokenFile(unexpiredToken("first"));
     const { config, seen } = await fixture({
       identityTokenCommand: `cat ${path}`,
-      credentialTtlMs: 1000,
+      identityTokenTtlMs: 1000,
     });
     expect((await send(config)).status).toBe(200);
     writeFileSync(path, unexpiredToken("second"), { mode: 0o600 });
@@ -111,13 +111,13 @@ describe("caller supplied workspace", () => {
   });
 });
 
-describe("credential configuration", () => {
+describe("identity token configuration", () => {
   it.each([
     ["blank command", "identityTokenCommand", "   "],
     ["command carrying a newline", "identityTokenCommand", "cat /tmp/a\nrm -rf /"],
     ["command past the length limit", "identityTokenCommand", `cat ${"a".repeat(4097)}`],
-    ["window under one second", "credentialTtlMs", 10],
-    ["window over one hour", "credentialTtlMs", 3_600_001],
+    ["window under one second", "identityTokenTtlMs", 10],
+    ["window over one hour", "identityTokenTtlMs", 3_600_001],
     ["workspace that is not a UUID", "workspaceId", "not-a-uuid"],
   ])("rejects a saved %s", (_name, key, value) => {
     expect(() => loadConfig(savedConfig({ [key]: value }), true)).toThrow();
@@ -128,14 +128,14 @@ describe("credential configuration", () => {
       loadConfig(
         savedConfig({
           identityTokenCommand: "cat /t",
-          credentialTtlMs: 5000,
+          identityTokenTtlMs: 5000,
           workspaceId: WORKSPACE,
         }),
         true,
       ),
     ).toMatchObject({
       identityTokenCommand: "cat /t",
-      credentialTtlMs: 5000,
+      identityTokenTtlMs: 5000,
       workspaceId: WORKSPACE,
     });
   });
@@ -143,7 +143,7 @@ describe("credential configuration", () => {
   it("changes the daemon identity when any new field changes", () => {
     const original = identity(base);
     expect(identity({ ...base, identityTokenCommand: "cat /t" })).not.toBe(original);
-    expect(identity({ ...base, credentialTtlMs: 5000 })).not.toBe(original);
+    expect(identity({ ...base, identityTokenTtlMs: 5000 })).not.toBe(original);
     expect(identity({ ...base, workspaceId: WORKSPACE })).not.toBe(original);
   });
 
@@ -151,14 +151,14 @@ describe("credential configuration", () => {
     ["a command without a workspace", "--identity-token-command cat /t"],
     [
       "a window of zero",
-      `--credential-ttl 0 --workspace-id ${WORKSPACE} --identity-token-command cat /t`,
+      `--identity-token-ttl 0 --workspace-id ${WORKSPACE} --identity-token-command cat /t`,
     ],
-    ["a window without a command", `--credential-ttl 60 --workspace-id ${WORKSPACE}`],
+    ["a window without a command", `--identity-token-ttl 60 --workspace-id ${WORKSPACE}`],
     ["an empty command", `--workspace-id ${WORKSPACE} --identity-token-command`],
     ["a workspace that is not a UUID", "--workspace-id not-a-uuid --identity-token-command cat /t"],
     [
       "a window written as an exponent",
-      `--credential-ttl 6e2 --workspace-id ${WORKSPACE} --identity-token-command cat /t`,
+      `--identity-token-ttl 6e2 --workspace-id ${WORKSPACE} --identity-token-command cat /t`,
     ],
   ])("rejects setup given %s", (_name, args) => {
     expect(() => setup(args)).toThrow();
@@ -171,7 +171,7 @@ describe("credential configuration", () => {
     writeFileSync(entry, "", { mode: 0o600 });
     await enable(
       entry,
-      `--scope global --cli /bin/sh --port 52599 --credential-ttl 60 --workspace-id ${WORKSPACE} --identity-token-command cat /tmp/t.jwt`.split(
+      `--scope global --cli /bin/sh --port 52599 --identity-token-ttl 60 --workspace-id ${WORKSPACE} --identity-token-command cat /tmp/t.jwt`.split(
         " ",
       ),
       {},
@@ -180,7 +180,7 @@ describe("credential configuration", () => {
     ).catch(() => undefined);
     expect(JSON.parse(readFileSync(join(configDir(home), "config.json"), "utf8"))).toMatchObject({
       identityTokenCommand: "cat /tmp/t.jwt",
-      credentialTtlMs: 60_000,
+      identityTokenTtlMs: 60_000,
       workspaceId: WORKSPACE,
     });
   });
@@ -189,7 +189,7 @@ describe("credential configuration", () => {
     ["command", `--workspace-id ${WORKSPACE} --identity-token-command cat /tmp/different.jwt`],
     [
       "window",
-      `--credential-ttl 120 --workspace-id ${WORKSPACE} --identity-token-command ${SAVED_COMMAND}`,
+      `--identity-token-ttl 120 --workspace-id ${WORKSPACE} --identity-token-command ${SAVED_COMMAND}`,
     ],
     [
       "workspace",
@@ -200,7 +200,7 @@ describe("credential configuration", () => {
     await expect(run(args)).rejects.toThrow(/disable first/);
   });
 
-  it("keeps saved credentials when setup runs again without them", async () => {
+  it("keeps the saved identity token settings when setup runs again without them", async () => {
     const { run } = await existingInstall();
     const failure = await run("").then(
       () => undefined,

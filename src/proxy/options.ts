@@ -1,5 +1,9 @@
 import { endpoints } from "./config.js";
-import { isCredentialTtlMs, isIdentityTokenCommand, isWorkspaceId } from "./config-validation.js";
+import {
+  isIdentityTokenCommand,
+  isIdentityTokenTtlMs,
+  isWorkspaceId,
+} from "./config-validation.js";
 import {
   COMMAND_GUIDANCE,
   PROFILE_NAME,
@@ -13,10 +17,10 @@ import type { SetupOptions } from "./proxy-models.js";
 // Diagnostics contain no supplied values (arguments may contain accidental secrets).
 export class SetupError extends Error {}
 
-function credentialTtl(seconds: string | undefined): number | undefined {
+function identityTokenTtl(seconds: string | undefined): number | undefined {
   if (seconds === undefined) return undefined;
   const ms = Number(seconds) * 1000;
-  if (!TTL_SECONDS.test(seconds) || !isCredentialTtlMs(ms))
+  if (!TTL_SECONDS.test(seconds) || !isIdentityTokenTtlMs(ms))
     throw new SetupError(TTL_RANGE_GUIDANCE);
   return ms;
 }
@@ -72,14 +76,14 @@ export function parseSetupArgs(rest: string[]): SetupOptions {
   if (result.profile !== undefined && !PROFILE_NAME.test(result.profile))
     throw new SetupError("Invalid CLI profile name");
   result.identityTokenCommand = command;
-  result.credentialTtlMs = credentialTtl(flags.get("--credential-ttl"));
+  result.identityTokenTtlMs = identityTokenTtl(flags.get("--identity-token-ttl"));
   result.workspaceId = flags.get("--workspace-id");
   if (result.workspaceId !== undefined && !isWorkspaceId(result.workspaceId))
     throw new SetupError("Workspace id must be a UUID");
   if (command !== undefined && result.workspaceId === undefined)
     throw new SetupError("An identity token command also requires --workspace-id");
-  if (command === undefined && result.credentialTtlMs !== undefined)
-    throw new SetupError("Credential cache seconds apply only with an identity token command");
+  if (command === undefined && result.identityTokenTtlMs !== undefined)
+    throw new SetupError("Identity token cache seconds apply only with an identity token command");
   if (flags.has("--api-url") || flags.has("--gateway-url")) {
     try {
       Object.assign(

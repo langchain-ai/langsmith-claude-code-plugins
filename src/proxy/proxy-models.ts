@@ -1,6 +1,6 @@
 export interface CredentialIdentity {
   identityTokenCommand?: string;
-  credentialTtlMs?: number;
+  identityTokenTtlMs?: number;
   workspaceId?: string;
 }
 
