@@ -605,6 +605,23 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
     expect(config.identityTokenCommand).toBe(TOKEN_COMMAND);
     expect(Object.hasOwn(json(join(configDir(home), "config.json")), "cli")).toBe(false);
   });
+  it("re-runs setup on the token path after the saved CLI disappears", async () => {
+    const env = installCli();
+    await enable("/fake", tokenArgs(cliPath()), env);
+    rmSync(cliPath());
+    await enable("/fake", ["--scope", "global"], env);
+    const config = loadConfig()!;
+    expect(config.identityTokenCommand).toBe(TOKEN_COMMAND);
+    expect(config.workspaceId).toBe(WORKSPACE);
+  });
+  it("still refuses a genuinely changed pinned CLI while a scope is active", async () => {
+    const env = installCli();
+    await enable("/fake", tokenArgs(cliPath()), env);
+    await expect(
+      enable("/fake", ["--scope", "global", "--cli", process.execPath], env),
+    ).rejects.toThrow("disable first");
+    expect(loadConfig()!.cli).toBe(cliPath());
+  });
   it("refuses malformed settings and changed pinned arguments", async () => {
     writeFileSync(settings, "not-json", { mode: 0o600 });
     await expect(run()).rejects.toThrow();

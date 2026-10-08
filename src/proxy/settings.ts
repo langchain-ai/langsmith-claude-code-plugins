@@ -184,7 +184,7 @@ export async function enable(
     const changing =
       config &&
       next &&
-      (config.cli !== next.cli ||
+      ((requested.cli !== undefined && config.cli !== next.cli) ||
         config.profile !== next.profile ||
         config.port !== next.port ||
         config.identityTokenCommand !== next.identityTokenCommand ||

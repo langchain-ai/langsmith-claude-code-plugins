@@ -1272,7 +1272,7 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       identityTokenTtlMs: requested.identityTokenTtlMs ?? config.identityTokenTtlMs,
       workspaceId: requested.workspaceId ?? config.workspaceId
     } : void 0;
-    const changing = config && next && (config.cli !== next.cli || config.profile !== next.profile || config.port !== next.port || config.identityTokenCommand !== next.identityTokenCommand || config.identityTokenTtlMs !== next.identityTokenTtlMs || config.workspaceId !== next.workspaceId || endpoints(config).apiUrl !== next.apiUrl || endpoints(config).gatewayUrl !== next.gatewayUrl);
+    const changing = config && next && (requested.cli !== void 0 && config.cli !== next.cli || config.profile !== next.profile || config.port !== next.port || config.identityTokenCommand !== next.identityTokenCommand || config.identityTokenTtlMs !== next.identityTokenTtlMs || config.workspaceId !== next.workspaceId || endpoints(config).apiUrl !== next.apiUrl || endpoints(config).gatewayUrl !== next.gatewayUrl);
     if (changing && (initiallyEnabled || active.length))
       fail("Existing pinned CLI/profile/port or endpoints differ. Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit the shared config while other scopes are active.");
     const modeChanged = !!config && config.useClaudeSubscription !== useClaudeSubscription;
