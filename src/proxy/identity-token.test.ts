@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { identity } from "./server.js";
 import { configDir, loadConfig } from "./config.js";
 import { enable } from "./settings.js";
+import { parseGatewayCommand } from "./options.js";
 import { createConfig } from "./setup.js";
 import { cleanup } from "./fixtures/server-sandbox.js";
 import {
@@ -162,6 +163,49 @@ describe("identity token configuration", () => {
     ],
   ])("rejects setup given %s", (_name, args) => {
     expect(() => setup(args)).toThrow();
+  });
+
+  it("keeps reading an unquoted command to the end of the line", () => {
+    expect(
+      setup(
+        `--workspace-id ${WORKSPACE} --identity-token-command cat /tmp/t.jwt --identity-token-ttl 60`,
+      ),
+    ).toMatchObject({
+      identityTokenCommand: "cat /tmp/t.jwt --identity-token-ttl 60",
+      identityTokenTtlMs: undefined,
+    });
+  });
+
+  it.each(["'", '"'])("strips one surrounding %s and reads the flags after it", (quote) => {
+    expect(
+      setup(
+        `--identity-token-command ${quote}cat /tmp/t.jwt${quote} --workspace-id ${WORKSPACE} --identity-token-ttl 60`,
+      ),
+    ).toMatchObject({
+      identityTokenCommand: "cat /tmp/t.jwt",
+      workspaceId: WORKSPACE,
+      identityTokenTtlMs: 60_000,
+    });
+  });
+
+  it("keeps quotes that belong to the command itself", () => {
+    expect(
+      setup(`--identity-token-command "sh -c 'cat /tmp/t.jwt'" --workspace-id ${WORKSPACE}`),
+    ).toMatchObject({ identityTokenCommand: "sh -c 'cat /tmp/t.jwt'" });
+  });
+
+  it("lets a quoted command through the slash command filter", () => {
+    expect(
+      parseGatewayCommand(
+        `/langsmith-gateway:setup --scope global --identity-token-command "cat /tmp/t.jwt" --workspace-id ${WORKSPACE}`,
+      ),
+    ).toMatchObject({ command: "setup" });
+  });
+
+  it("refuses an unterminated quote instead of swallowing the rest of the line", () => {
+    expect(() =>
+      setup(`--identity-token-command "cat /tmp/t.jwt --workspace-id ${WORKSPACE}`),
+    ).toThrow("Unterminated quote");
   });
 
   it("saves the command, window and workspace that setup was given", async () => {

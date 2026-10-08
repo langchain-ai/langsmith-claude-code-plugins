@@ -1,11 +1,11 @@
 export const CONFIG_UPDATE_GUIDANCE =
-  "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
+  "Invalid proxy configuration. A one-time private config update is required, so keep your existing key, CLI, profile, port and addresses, and set enabled and useClaudeSubscription explicitly even when disabled. Do not paste secrets.";
 
 export const COMMAND_GUIDANCE =
-  "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and put --identity-token-command last, followed by a command that prints one token on standard output. The daemon runs that command with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs quotes, pipes or anything else your shell sets up. Add --identity-token-ttl SECONDS to change how long each result is reused from the default 300.";
+  "Run /langsmith-gateway:setup --scope global|project within Claude Code, or /langsmith-gateway:disable to turn it off. To sign in with your own identity token, add --workspace-id UUID and --identity-token-command \"your command\", where the command prints one token. See GATEWAY.md for the other flags.";
 
 export const CREDENTIAL_SOURCE_GUIDANCE =
-  "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI using the README and complete terminal login with your selected profile and API URL (review the saved OAuth issuer), or add --workspace-id UUID and --identity-token-command with a command that prints your identity token. Then retry /langsmith-gateway:setup.";
+  "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI and sign in, or add --workspace-id UUID and --identity-token-command. Then retry setup.";
 
 export const CONFLICTING_AUTH_GUIDANCE =
   "Conflicting provider/auth setting; client auth overrides are not supported by this setup.";
@@ -21,7 +21,7 @@ export const CONFLICT_SETTINGS_GUIDANCE = "Remove from that file.";
 export const CONFLICT_RETRY_GUIDANCE = "Then retry setup.";
 
 export const PINNED_CHANGE_GUIDANCE =
-  "Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit the shared config while other scopes are active.";
+  "The running daemon holds the old values, so disable first for every active scope with /langsmith-gateway:disable --scope global|project. Stop other gateway sessions, then retry setup.";
 
 export const PINNED_FIELD_LABELS = {
   cli: "CLI path",
@@ -38,6 +38,11 @@ export const STATUS_GUIDANCE =
   "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
 
 export const TTL_RANGE_GUIDANCE = "Identity token cache seconds must be between 1 and 3600";
+
+export const QUOTE_GUIDANCE =
+  "Unterminated quote after --identity-token-command. Close the quote around your command, or write the command unquoted and last.";
+
+export const QUOTES = ["'", '"'];
 
 export const TENANT_HEADER_GUIDANCE =
   "Send x-tenant-id at most once and as a workspace UUID. Drop the header to use the workspace saved in your gateway configuration.";

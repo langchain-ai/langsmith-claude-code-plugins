@@ -7,6 +7,8 @@ import {
 import {
   COMMAND_GUIDANCE,
   PROFILE_NAME,
+  QUOTE_GUIDANCE,
+  QUOTES,
   SETUP_FLAGS,
   STATUS_GUIDANCE,
   TTL_RANGE_GUIDANCE,
@@ -47,10 +49,26 @@ export function parseSetupArgs(rest: string[]): SetupOptions {
       continue;
     }
     if (arg === "--identity-token-command") {
-      const tail = rest.slice(i + 1).join(" ");
-      if (!isIdentityTokenCommand(tail)) throw new SetupError(usage);
-      command = tail;
-      break;
+      if (command !== undefined) throw new SetupError(usage);
+      const tail = rest.slice(i + 1);
+      const quote = tail.length && QUOTES.includes(tail[0][0]) ? tail[0][0] : undefined;
+      if (quote === undefined) {
+        const joined = tail.join(" ");
+        if (!isIdentityTokenCommand(joined)) throw new SetupError(usage);
+        command = joined;
+        break;
+      }
+      const end = tail.findIndex(
+        (part, index) => part.endsWith(quote) && (index > 0 || part.length > 1),
+      );
+      if (end === -1) throw new SetupError(QUOTE_GUIDANCE);
+      command = tail
+        .slice(0, end + 1)
+        .join(" ")
+        .slice(1, -1);
+      if (!isIdentityTokenCommand(command)) throw new SetupError(usage);
+      i += end + 1;
+      continue;
     }
     if (
       !SETUP_FLAGS.includes(arg) ||
@@ -119,7 +137,7 @@ export function parseGatewayCommand(
   if (!match) return;
   const rest = prompt.slice(match[0].length);
   // eslint-disable-next-line no-control-regex
-  if (/[\r\n\x00-\x1f'"`$;&|<>\\]/.test(rest))
+  if (/[\r\n\x00-\x1f`$;&|<>\\]/.test(rest))
     throw new SetupError(match[1] === "status" ? STATUS_GUIDANCE : COMMAND_GUIDANCE);
   const args = rest.trim() ? rest.trim().split(/ +/) : [];
   const command = match[1] as "setup" | "disable" | "status";
