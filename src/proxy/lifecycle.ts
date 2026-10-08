@@ -2,7 +2,7 @@ import http from "node:http";
 import { connect } from "node:net";
 import { spawn } from "node:child_process";
 import { loadConfig, userHome } from "./config.js";
-import { KEY_HEADER } from "./proxy-constants.js";
+import { HEALTH_PATH, KEY_HEADER } from "./proxy-constants.js";
 import type { ProxyConfig } from "./proxy-models.js";
 import { identity } from "./server.js";
 import { cliEnvironment } from "./token.js";
@@ -46,7 +46,7 @@ export function control(
 }
 export async function healthy(config: ProxyConfig): Promise<boolean> {
   try {
-    return (await control(config, "GET", "/_langsmith/health")) === identity(config);
+    return (await control(config, "GET", HEALTH_PATH)) === identity(config);
   } catch {
     return false;
   }

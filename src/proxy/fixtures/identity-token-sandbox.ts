@@ -4,8 +4,8 @@ import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createProxy, identity } from "../server.js";
-import { KEY_HEADER } from "../proxy-constants.js";
-import type { ProxyConfig } from "../proxy-models.js";
+import { CREDENTIAL_STATE_PATH, KEY_HEADER } from "../proxy-constants.js";
+import type { CredentialState, ProxyConfig } from "../proxy-models.js";
 import { parseSetupArgs } from "../options.js";
 import { enable } from "../settings.js";
 import { cleanup, listen } from "./server-sandbox.js";
@@ -50,13 +50,13 @@ export async function fixture(extra: Partial<ProxyConfig> = {}) {
   config.port = await listen(proxy.server);
   return { config, seen };
 }
-export function send(c: ProxyConfig, headers: http.OutgoingHttpHeaders = {}) {
+export function send(c: ProxyConfig, headers: http.OutgoingHttpHeaders = {}, path = "/v1/models") {
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
     const req = http.request(
       {
         hostname: "127.0.0.1",
         port: c.port,
-        path: "/v1/models",
+        path,
         method: "GET",
         headers: { [KEY_HEADER]: c.secret, host: `127.0.0.1:${c.port}`, ...headers },
       },
@@ -70,6 +70,11 @@ export function send(c: ProxyConfig, headers: http.OutgoingHttpHeaders = {}) {
     req.on("error", reject);
     req.end();
   });
+}
+export async function credentialReport(c: ProxyConfig): Promise<CredentialState> {
+  const { status, body } = await send(c, {}, CREDENTIAL_STATE_PATH);
+  if (status !== 200) throw new Error(`Credential report unavailable: ${status}`);
+  return JSON.parse(body) as CredentialState;
 }
 export function savedConfig(extra: Record<string, unknown>) {
   const dir = temporary();

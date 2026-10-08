@@ -9,6 +9,7 @@ import { cleanup } from "./fixtures/server-sandbox.js";
 import {
   base,
   CALLER_WORKSPACE,
+  credentialReport,
   existingInstall,
   fixture,
   savedConfig,
@@ -56,6 +57,19 @@ describe("identity token command", () => {
     const { status, body } = await send(config);
     expect(status).toBe(503);
     expect(body).toContain("Your configured identity token command");
+  });
+
+  it("records whether the credential was obtained, and never reports the credential itself", async () => {
+    const broken = await fixture({ identityTokenCommand: "exit 1" });
+    expect(await credentialReport(broken.config)).toEqual({});
+    expect((await send(broken.config)).status).toBe(503);
+    expect(await credentialReport(broken.config)).toEqual({ sinceFailureMs: expect.any(Number) });
+    const token = unexpiredToken("recorded");
+    const working = await fixture({ identityTokenCommand: `cat ${tokenFile(token)}` });
+    expect((await send(working.config)).status).toBe(200);
+    const report = await credentialReport(working.config);
+    expect(report).toEqual({ sinceSuccessMs: expect.any(Number) });
+    expect(JSON.stringify(report)).not.toContain(token.split(".")[1]);
   });
 
   it("runs the command without the caller's environment", async () => {

@@ -397,7 +397,10 @@ require("node:module").syncBuiltinESMExports();
           reason: expect.stringContaining("configured to use the local gateway proxy"),
         });
       }
-      expect(controls).toEqual(Array(6).fill("GET /_langsmith/health"));
+      const probes = ["health", "health", "health", "credential"].map(
+        (p) => `GET /_langsmith/${p}`,
+      );
+      expect(controls).toEqual([...probes, ...probes]);
       expect(token).not.toHaveBeenCalled();
       expect(json(settings).env.ANTHROPIC_CUSTOM_HEADERS).toBe(
         `X-Test: keep\nX-LangSmith-Proxy-Key: ${config.secret}`,

@@ -27,6 +27,11 @@ export interface SetupOptions extends CredentialIdentity {
   gatewayUrl?: string;
 }
 
+export interface CredentialState {
+  sinceSuccessMs?: number;
+  sinceFailureMs?: number;
+}
+
 export interface Endpoints {
   apiUrl: string;
   gatewayUrl: string;
