@@ -7,13 +7,18 @@ import https from "node:https";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { endpoints } from "./config.js";
 import {
+  API_KEY_SLOT,
+  BEARER_SLOT,
   CLI_TOKEN_TTL_MS,
+  CREDENTIAL_PREFIX,
+  CREDENTIAL_SLOT_GUIDANCE,
   CREDENTIAL_STATE_PATH,
   CREDENTIAL_TIMEOUT_MS,
   DEFAULT_IDENTITY_TOKEN_TTL_MS,
   HEALTH_PATH,
   KEY_HEADER,
   MAX_REQUEST_BYTES,
+  PASSTHROUGH_HEADER,
   PROTOCOL_VERSION,
   TENANT_HEADER,
   TENANT_HEADER_GUIDANCE,
@@ -22,6 +27,7 @@ import {
   routing,
 } from "./proxy-constants.js";
 import { isWorkspaceId } from "./config-validation.js";
+import { bearerCredential, slotPresent, slotValue } from "./header-slots.js";
 import type { ProxyConfig } from "./proxy-models.js";
 import { TokenCache, cliToken, commandToken, commandGuidance, loginGuidance } from "./token.js";
 
@@ -57,22 +63,20 @@ export function authenticated(req: IncomingMessage, secret: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-// Node may discard duplicate Authorization values in req.headers; inspect the wire
-// header count before extracting a single raw token. Never echo credentials.
-// This is transport validation, not proof of OAuth validity; the provider decides.
+// Node may discard duplicate values in req.headers; inspect the wire header count
+// before extracting a single raw token from whichever slot the client used. Never
+// echo credentials. This is transport validation, not proof of OAuth validity;
+// the provider decides.
 export function nativeToken(req: IncomingMessage): string | undefined {
-  const count = req.rawHeaders.filter(
-    (name, i) => i % 2 === 0 && name.toLowerCase() === "authorization",
-  ).length;
-  const value = req.headers.authorization;
-  if (count !== 1 || typeof value !== "string") return;
-  if (!/^Bearer /i.test(value)) return;
-  const token = value.slice(7);
+  const token = slotPresent(req, BEARER_SLOT)
+    ? bearerCredential(slotValue(req, BEARER_SLOT))
+    : slotValue(req, API_KEY_SLOT);
+  if (token === undefined) return;
   // eslint-disable-next-line no-control-regex
-  if (!token.startsWith("sk-ant-") || token.length <= 7 || /[\s\x00-\x1f\x7f-\x9f,]/.test(token))
+  if (!token.startsWith(CREDENTIAL_PREFIX) || token.length <= 7 || /[\s\x00-\x1f\x7f-\x9f,]/.test(token))
     return;
   try {
-    http.validateHeaderValue("x-langsmith-anthropic-passthrough", token);
+    http.validateHeaderValue(PASSTHROUGH_HEADER, token);
   } catch {
     return;
   }
@@ -349,11 +353,7 @@ export function createProxy(
     }
     const native = config.useClaudeSubscription ? nativeToken(req) : undefined;
     if (config.useClaudeSubscription && !native) {
-      reply(
-        res,
-        401,
-        "Exactly one Authorization: Bearer sk-ant-... with a nonempty, header-safe suffix required",
-      );
+      reply(res, 401, CREDENTIAL_SLOT_GUIDANCE);
       return;
     }
     const headers = cleanHeaders(req.headers);
@@ -406,7 +406,7 @@ export function createProxy(
       // Anthropic (including fallback legs); other destinations ignore it.
       headers.authorization = `Bearer ${token}`;
       if (workspace) headers[TENANT_HEADER] = workspace;
-      if (native) headers["x-langsmith-anthropic-passthrough"] = native;
+      if (native) headers[PASSTHROUGH_HEADER] = native;
       outgoing = transport(
         {
           protocol: "https:",

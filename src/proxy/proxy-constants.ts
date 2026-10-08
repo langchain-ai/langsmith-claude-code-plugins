@@ -8,10 +8,13 @@ export const CREDENTIAL_SOURCE_GUIDANCE =
   "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI and sign in, or add --workspace-id UUID and --identity-token-command. Then retry setup.";
 
 export const CONFLICTING_AUTH_GUIDANCE =
-  "Conflicting provider/auth setting; client auth overrides are not supported by this setup.";
+  "Conflicting provider setting; it would send requests to another provider instead of the local proxy.";
 
 export const CONFLICTING_BASE_GUIDANCE =
   "Conflicting Claude API address setting; it will not be overwritten.";
+
+export const BASE_OVERWRITE_NOTICE =
+  "Your Claude API address already pointed at the LangSmith gateway, so setup replaced it with the local proxy address; ";
 
 export const CONFLICT_ENVIRONMENT_GUIDANCE =
   "Unset in your shell and restart Claude Code, since it reads these at startup.";
@@ -56,6 +59,13 @@ export const API_URL = "https://api.smith.langchain.com";
 export const UPSTREAM = "https://gateway.smith.langchain.com";
 export const PROTOCOL_VERSION = 11;
 export const KEY_HEADER = "x-langsmith-proxy-key";
+export const BEARER_SLOT = "authorization";
+export const API_KEY_SLOT = "x-api-key";
+export const PASSTHROUGH_HEADER = "x-langsmith-anthropic-passthrough";
+export const CREDENTIAL_PREFIX = "sk-ant-";
+export const BEARER_PREFIX = /^Bearer /i;
+export const CREDENTIAL_SLOT_GUIDANCE =
+  "Exactly one sk-ant-... credential with a nonempty, header-safe suffix required, sent once as either Authorization: Bearer or x-api-key";
 export const TENANT_HEADER = "x-tenant-id";
 export const HEALTH_PATH = "/_langsmith/health";
 export const CREDENTIAL_STATE_PATH = "/_langsmith/credential";
@@ -173,13 +183,8 @@ export const routing = new Set([
 
 export const MAX_REQUEST_BYTES = 60 * 1024 * 1024;
 
-export const AUTH = [
-  "ANTHROPIC_AUTH_TOKEN",
-  "ANTHROPIC_API_KEY",
+export const PROVIDER_ROUTING = [
   "CLAUDE_CODE_USE_BEDROCK",
   "CLAUDE_CODE_USE_VERTEX",
   "CLAUDE_CODE_USE_FOUNDRY",
-  "ANTHROPIC_FOUNDRY_API_KEY",
-  "ANTHROPIC_FOUNDRY_BASE_URL",
-  "CLAUDE_CODE_API_KEY_HELPER",
 ];

@@ -16,7 +16,13 @@ import {
   nativeToken,
 } from "./server.js";
 import { endpoints, configDir, loadConfig } from "./config.js";
-import { API_URL, KEY_HEADER, MAX_REQUEST_BYTES, UPSTREAM } from "./proxy-constants.js";
+import {
+  API_URL,
+  CREDENTIAL_SLOT_GUIDANCE,
+  KEY_HEADER,
+  MAX_REQUEST_BYTES,
+  UPSTREAM,
+} from "./proxy-constants.js";
 import { cliToken, loginGuidance, TokenCache } from "./token.js";
 import { control, ensure, gatewayHook, waitForStopped } from "./lifecycle.js";
 import { createConfig } from "./setup.js";
@@ -96,6 +102,43 @@ describe("local boundary and upstream targeting", () => {
     expect(received.authorization).toBe(`Bearer ${lsToken}`);
     expect(received["x-api-key"]).toBeUndefined();
   });
+  it("carries a credential the client sent in the api key slot with no bearer", async () => {
+    let received: http.IncomingHttpHeaders = {};
+    const f = await fixture((req, res) => {
+      received = req.headers;
+      res.end("ok");
+    });
+    const result = await request(f.config, undefined, {
+      headers: { authorization: undefined, "x-api-key": native },
+    });
+    expect(result.status).toBe(200);
+    expect(f.targets).toHaveLength(1);
+    expect(received["x-langsmith-anthropic-passthrough"]).toBe(native);
+    expect(received["x-api-key"]).toBeUndefined();
+  });
+  it("carries the bearer credential when both slots are filled", async () => {
+    let received: http.IncomingHttpHeaders = {};
+    const f = await fixture((req, res) => {
+      received = req.headers;
+      res.end("ok");
+    });
+    const result = await request(f.config, undefined, {
+      headers: { authorization: nativeAuthorization, "x-api-key": "sk-ant-api03-other" },
+    });
+    expect(result.status).toBe(200);
+    expect(received["x-langsmith-anthropic-passthrough"]).toBe(native);
+  });
+  it.each([
+    { authorization: undefined },
+    { authorization: undefined, "x-api-key": "not-an-anthropic-credential" },
+  ])("rejects clearly when no slot carries a usable credential: %j", async (headers) => {
+    const f = await fixture();
+    const result = await request(f.config, undefined, { headers });
+    expect(result.status).toBe(401);
+    expect(result.body).toBe(CREDENTIAL_SLOT_GUIDANCE);
+    expect(f.token).not.toHaveBeenCalled();
+    expect(f.targets).toHaveLength(0);
+  });
   it("rejects control bytes on the wire before CLI refresh or forwarding", async () => {
     const f = await fixture();
     // http.request rejects most of these itself; bypass that client-side check.
@@ -139,14 +182,13 @@ describe("local boundary and upstream targeting", () => {
     expect(f.token).not.toHaveBeenCalled();
     expect(f.targets).toHaveLength(0);
   });
-  it("rejects missing, malformed, API-key-only and multiple native auth before CLI refresh", async () => {
+  it("ignores the api key slot whenever a bearer slot is present, however malformed", async () => {
     const f = await fixture();
     const logs = ["log", "warn", "error", "debug", "info"].map((method) =>
       vi.spyOn(console, method as "log").mockImplementation(() => {}),
     );
     try {
       for (const authorization of [
-        undefined,
         "",
         native,
         `Basic ${native}`,
@@ -173,9 +215,7 @@ describe("local boundary and upstream targeting", () => {
           },
         });
         expect(r.status).toBe(401);
-        expect(r.body).toBe(
-          "Exactly one Authorization: Bearer sk-ant-... with a nonempty, header-safe suffix required",
-        );
+        expect(r.body).toBe(CREDENTIAL_SLOT_GUIDANCE);
         expect(r.body).not.toContain(native);
       }
       // Differently cased duplicate field names must not evade raw-header counting.
