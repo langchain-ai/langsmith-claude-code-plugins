@@ -1,6 +1,6 @@
 # LangSmith Gateway for Claude Code
 
-Sends Claude Code's model requests through [LangSmith](https://smith.langchain.com) instead of straight to the company that runs the model. A small helper program runs on your machine and passes each request on, and LangSmith holds the keys, pays for the call and can record it. You keep using Claude Code exactly as before.
+The [LangSmith](https://smith.langchain.com) gateway routes model requests for many providers, holding the keys and paying for the calls. This plugin points Claude Code at it, so a small helper runs on your machine and passes each request on. You keep using Claude Code exactly as before.
 
 This is a different plugin from LangSmith tracing. Neither needs the other, and turning this on does not start tracing your conversations.
 
@@ -35,9 +35,9 @@ Run these inside Claude Code. Installing changes nothing on its own, since routi
 
 Choose `project` to route only the project you are in, or `global` to route every project. Setup saves a secret in the project's `.claude/settings.local.json`, so do not commit that file to git. Your sign-in is checked on your first message, not during setup.
 
-Everything in the conversation reaches LangSmith, meaning your prompts, your tool inputs and outputs and the replies, with nothing removed. Only turn this on for a gateway you trust with that content. Your Claude login stays out of it unless you add `--use-claude-subscription`, which passes it through to Anthropic.
+Everything in the conversation reaches the gateway, meaning your prompts, your tool inputs and outputs and the replies, with nothing removed. Only turn this on for a gateway you trust with that content. Your Claude login stays out of it unless you add `--use-claude-subscription`, which passes it through to Anthropic.
 
-Keep using Anthropic's models and nothing else changes, or pick another company with `/model openai/gpt-4.1` and LangSmith supplies the key.
+Claude Code's own model selection still decides which provider you reach, so `/model openai/gpt-4.1` works and the gateway supplies that key.
 
 To stop, run `/langsmith-gateway:disable --scope project`, and again with `--scope global` if you turned both on, then restart your sessions. Your earlier settings are not put back.
 
@@ -54,11 +54,11 @@ It says whether your settings point at the helper and whether the helper answers
 Instead of signing into LangSmith, hand over a token your employer already issues you. You give the plugin a command to run, and whatever that command prints becomes your token. Say something at work keeps a fresh token in `~/.oidc/profile.jwt`, so your command only has to print that file:
 
 ```text
-/langsmith-gateway:setup --scope project --workspace-id 11111111-2222-3333-4444-555555555555 --identity-token-command cat ~/.oidc/profile.jwt
+/langsmith-gateway:setup --scope project --identity-token-command "cat ~/.oidc/profile.jwt" --workspace-id 11111111-2222-3333-4444-555555555555
 ```
 
 - Name your LangSmith workspace too, as the long dashed id in your workspace settings.
-- Put the command last, because everything after it is swallowed into the command.
+- Quote the command, as above, so you can keep writing flags after it.
 - The command runs without the setup your terminal normally gives you, so write out full paths.
 - It has to print the token and nothing else, and finish within ten seconds.
 - A good token is reused for five minutes. Change that with `--identity-token-ttl` and a number of seconds.
