@@ -11,6 +11,8 @@ export function startQueueFlusher(cwd: string, sessionId: string): void {
       stdio: "ignore",
       windowsHide: true,
     });
+    // A spawn that fails reports it as an event, which Node turns into a crash if nobody listens.
+    child.on("error", (err) => warn(`The queue flusher could not start: ${err}`));
     child.unref();
     debug(`Started detached queue flusher (pid ${child.pid})`);
   } catch (err) {

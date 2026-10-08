@@ -13,7 +13,8 @@ import {
   discardEmptyQueue,
   listQueues,
   nextQueued,
-  foreignQueueIsFlushable,
+  foreignQueueLooksAbandoned,
+  queueOrigin,
   queueSessionDir,
   removeQueued,
   recordFailure,
@@ -56,9 +57,9 @@ function watchUploadFailures(client: Client): () => unknown {
   };
 }
 
-async function flushQueue(dir: string, config: Config): Promise<void> {
-  const lock = `${dir}.flush`;
-  if (!tryAcquireLock(lock)) {
+async function flushQueue(dir: string, config: Config, origin: string): Promise<void> {
+  const flushTarget = `${dir}.flush`;
+  if (!tryAcquireLock(flushTarget)) {
     debug(`Another flusher already owns ${dir}`);
     return;
   }
@@ -73,6 +74,10 @@ async function flushQueue(dir: string, config: Config): Promise<void> {
         removeQueued(dir, entry.queue_id);
         continue;
       }
+      if (entry.origin !== origin) {
+        warn(`Leaving ${dir} alone: its next run was queued for a different LangSmith account`);
+        break;
+      }
       const runTree = createRunTree(
         { ...entry.run, client, replicas: config.replicas } as never,
         entry.tracing,
@@ -80,7 +85,7 @@ async function flushQueue(dir: string, config: Config): Promise<void> {
       await runTree.postRun();
       const failure = lastUploadError();
       if (failure) {
-        warn(`Queued run upload failed, leaving it for a later retry: ${failure}`);
+        warn(`Queued run upload failed: ${failure}`);
         recordFailure(dir, entry.queue_id);
         return;
       }
@@ -88,7 +93,7 @@ async function flushQueue(dir: string, config: Config): Promise<void> {
     }
     discardEmptyQueue(dir);
   } finally {
-    releaseLock(lock);
+    releaseLock(flushTarget);
   }
 }
 
@@ -96,15 +101,16 @@ export async function main(cwd: string, sessionId?: string): Promise<void> {
   const config = initHook(cwd);
   if (!config) return;
   const own = sessionId ? queueSessionDir(config.stateFilePath, sessionId) : undefined;
+  const origin = queueOrigin(config);
   for (const dir of listQueues(config.stateFilePath)) {
     const mine = dir === own;
-    if (!mine && !foreignQueueIsFlushable(dir)) {
+    if (!mine && !foreignQueueLooksAbandoned(dir)) {
+      debug(`Not flushing ${dir}, which another session may still be writing to`);
       discardEmptyQueue(dir);
-      debug(`Leaving ${dir} to the session that still owns it`);
       continue;
     }
     try {
-      await flushQueue(dir, config);
+      await flushQueue(dir, config, origin);
     } catch (err) {
       warn(`Could not flush ${dir}: ${err}`);
     }

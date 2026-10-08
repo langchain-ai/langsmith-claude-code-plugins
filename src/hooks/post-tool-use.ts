@@ -24,7 +24,7 @@ import { repoScopedMetadata, sessionScopedMetadata } from "../repo-attribution.j
 import { createRunTree, runConfigForMode } from "../privacy.js";
 import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
-import { enqueueRun } from "../queue.js";
+import { enqueueRun, queueOrigin } from "../queue.js";
 
 interface PostToolUseHookInput {
   session_id: string;
@@ -180,6 +180,7 @@ export async function main(): Promise<void> {
         },
       },
       tracing,
+      queueOrigin(config),
     );
   }
 

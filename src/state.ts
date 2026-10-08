@@ -5,14 +5,19 @@
 
 import { readFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { STATE_TEMP_SUFFIX } from "./constants.js";
+import { PRIVATE_FILE_MODE, STATE_TEMP_SUFFIX } from "./constants.js";
 import { publishByRename } from "./utils/atomic-file.js";
 import { withFileLock } from "./utils/file-lock.js";
 import type { TracingState, SessionState } from "./types.js";
 
 /** Published by rename, since readers load state without the lock and must never see a half-written file. */
 function publishState(stateFilePath: string, state: TracingState): void {
-  publishByRename(stateFilePath, JSON.stringify(state, null, 2), STATE_TEMP_SUFFIX);
+  publishByRename(
+    stateFilePath,
+    JSON.stringify(state, null, 2),
+    STATE_TEMP_SUFFIX,
+    PRIVATE_FILE_MODE,
+  );
 }
 
 /**

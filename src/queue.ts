@@ -11,23 +11,40 @@
 
 import { mkdirSync, readFileSync, readdirSync, rmdirSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import {
+  EMPTY_QUEUE_MIN_IDLE_MS,
+  FOREIGN_QUEUE_MIN_RECORD_AGE_MS,
+  PRIVATE_DIR_MODE,
+  PRIVATE_FILE_MODE,
   QUEUE_DIR_NAME,
   QUEUE_FILE_SUFFIX,
   QUEUE_ID_TIME_WIDTH,
   QUEUE_MAX_ATTEMPTS,
   QUEUE_MAX_ENTRIES,
+  QUEUE_ORIGIN_LENGTH,
   QUEUE_RUN_MAX_AGE_MS,
   QUEUE_SESSION_UNSAFE_CHARS,
-  FOREIGN_QUEUE_MIN_RECORD_AGE_MS,
-  EMPTY_QUEUE_MIN_IDLE_MS,
   QUEUE_TEMP_SUFFIX,
 } from "./constants.js";
 import { publishByRename } from "./utils/atomic-file.js";
 import { runConfigForMode } from "./privacy.js";
 import { debug, warn } from "./logger.js";
-import type { QueuedRun, TracingMode } from "./types.js";
+import type { QueueDestination, QueuedRun, TracingMode } from "./types.js";
+
+/** Identifies the account a run was queued for, from the key and everywhere the upload would go. */
+export function queueOrigin(destination: QueueDestination): string {
+  const identity = JSON.stringify([
+    destination.apiBaseUrl,
+    destination.replicas ?? null,
+    destination.redact ?? false,
+    destination.redactExtraRules ?? null,
+  ]);
+  return createHmac("sha256", destination.apiKey)
+    .update(identity)
+    .digest("hex")
+    .slice(0, QUEUE_ORIGIN_LENGTH);
+}
 
 export function queueDir(stateFilePath: string): string {
   return join(dirname(stateFilePath), QUEUE_DIR_NAME);
@@ -44,6 +61,14 @@ export function listQueues(stateFilePath: string): string[] {
       .filter((entry) => entry.isDirectory())
       .map((entry) => join(root, entry.name))
       .sort();
+  } catch {
+    return [];
+  }
+}
+
+function names(dir: string): string[] {
+  try {
+    return readdirSync(dir);
   } catch {
     return [];
   }
@@ -89,7 +114,12 @@ export function nextQueued(dir: string): QueuedRun | undefined {
 }
 
 function publish(dir: string, queueId: string, entry: Omit<QueuedRun, "queue_id">): void {
-  publishByRename(entryPath(dir, queueId), JSON.stringify(entry), QUEUE_TEMP_SUFFIX);
+  publishByRename(
+    entryPath(dir, queueId),
+    JSON.stringify(entry),
+    QUEUE_TEMP_SUFFIX,
+    PRIVATE_FILE_MODE,
+  );
 }
 
 function trim(dir: string): void {
@@ -104,15 +134,17 @@ export async function enqueueRun(
   sessionId: string,
   run: Record<string, unknown>,
   tracing: TracingMode,
+  origin: string,
 ): Promise<void> {
   const dir = queueSessionDir(stateFilePath, sessionId);
   const queueId = `${String(Date.now()).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID()}`;
   try {
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
     // Filter before the write, so a muted thread's content never lands on disk.
     publish(dir, queueId, {
       tracing,
       attempts: 0,
+      origin,
       run: runConfigForMode(run, tracing),
     });
     trim(dir);
@@ -135,11 +167,17 @@ export function recordFailure(dir: string, queueId: string): void {
   if (!entry) return;
   const attempts = (entry.attempts ?? 0) + 1;
   if (attempts >= QUEUE_MAX_ATTEMPTS) {
+    warn(`Dropping a queued run after ${attempts} failed uploads: ${queueId}`);
     removeQueued(dir, queueId);
     return;
   }
   try {
-    publish(dir, queueId, { tracing: entry.tracing, attempts, run: entry.run });
+    publish(dir, queueId, {
+      tracing: entry.tracing,
+      attempts,
+      origin: entry.origin,
+      run: entry.run,
+    });
   } catch (err) {
     warn(`Could not record a failed upload: ${err}`);
   }
@@ -149,6 +187,14 @@ export function discardEmptyQueue(dir: string, now: number = Date.now()): void {
   if (entryIds(dir).length > 0) return;
   // A folder created a moment ago has not had its first record written yet.
   if (queueIdleMs(dir, now) < EMPTY_QUEUE_MIN_IDLE_MS) return;
+  // A hook killed mid-publish leaves a staged file the queue ignores but rmdir does not.
+  for (const name of names(dir).filter((entry) => entry.endsWith(QUEUE_TEMP_SUFFIX))) {
+    try {
+      unlinkSync(join(dir, name));
+    } catch {
+      /* ignore */
+    }
+  }
   try {
     rmdirSync(dir);
   } catch {
@@ -164,15 +210,18 @@ export function queueIdleMs(dir: string, now: number = Date.now()): number {
   }
 }
 
-/** When the oldest record was queued, read from the entry name the queue sorts by. */
-export function oldestQueuedAtMs(dir: string): number | undefined {
-  const [oldest] = entryIds(dir);
-  if (oldest === undefined) return undefined;
-  const queuedAt = Number(oldest.slice(0, QUEUE_ID_TIME_WIDTH));
+/** When a record was queued, read from the entry name the queue sorts by. */
+function queuedAtMs(queueId: string): number | undefined {
+  const queuedAt = Number(queueId.slice(0, QUEUE_ID_TIME_WIDTH));
   return Number.isFinite(queuedAt) && queuedAt > 0 ? queuedAt : undefined;
 }
 
-export function foreignQueueIsFlushable(dir: string, now: number = Date.now()): boolean {
+export function oldestQueuedAtMs(dir: string): number | undefined {
+  const [oldest] = entryIds(dir);
+  return oldest === undefined ? undefined : queuedAtMs(oldest);
+}
+
+export function foreignQueueLooksAbandoned(dir: string, now: number = Date.now()): boolean {
   const queuedAt = oldestQueuedAtMs(dir);
   if (queuedAt === undefined) return false;
   return now - queuedAt >= FOREIGN_QUEUE_MIN_RECORD_AGE_MS;
@@ -180,5 +229,8 @@ export function foreignQueueIsFlushable(dir: string, now: number = Date.now()): 
 
 export function runIsTooOldToUpload(entry: QueuedRun, now: number = Date.now()): boolean {
   const started = new Date(entry.run.start_time as string | number).getTime();
-  return Number.isFinite(started) && now - started >= QUEUE_RUN_MAX_AGE_MS;
+  if (Number.isFinite(started)) return now - started >= QUEUE_RUN_MAX_AGE_MS;
+  // Nothing readable says when the run began, so age it by when it was written down instead.
+  const queuedAt = queuedAtMs(entry.queue_id);
+  return queuedAt === undefined || now - queuedAt >= QUEUE_RUN_MAX_AGE_MS;
 }

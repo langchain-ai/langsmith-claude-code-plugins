@@ -64,15 +64,15 @@ var require_eventemitter3 = __commonJS({
       this._eventsCount = 0;
     }
     EventEmitter.prototype.eventNames = function eventNames() {
-      var names = [], events, name;
-      if (this._eventsCount === 0) return names;
+      var names2 = [], events, name;
+      if (this._eventsCount === 0) return names2;
       for (name in events = this._events) {
-        if (has2.call(events, name)) names.push(prefix ? name.slice(1) : name);
+        if (has2.call(events, name)) names2.push(prefix ? name.slice(1) : name);
       }
       if (Object.getOwnPropertySymbols) {
-        return names.concat(Object.getOwnPropertySymbols(events));
+        return names2.concat(Object.getOwnPropertySymbols(events));
       }
-      return names;
+      return names2;
     };
     EventEmitter.prototype.listeners = function listeners(event2) {
       var evt = prefix ? prefix + event2 : event2, handlers = this._events[evt];
@@ -907,6 +907,9 @@ var QUEUE_SESSION_UNSAFE_CHARS = /[^\w.-]/g;
 var QUEUE_TEMP_SUFFIX = ".queue.tmp";
 var STATE_TEMP_SUFFIX = ".state.tmp";
 var LOCK_STAGING_SUFFIX = ".lock.staging";
+var PRIVATE_DIR_MODE = 448;
+var PRIVATE_FILE_MODE = 384;
+var QUEUE_ORIGIN_LENGTH = 12;
 var QUEUE_ID_TIME_WIDTH = 16;
 var QUEUE_MAX_ENTRIES = 500;
 var QUEUE_MAX_ATTEMPTS = 5;
@@ -8228,19 +8231,19 @@ var Client = class _Client {
    * authenticate (see `hasExplicitAuthHeader`), so those must survive.
    */
   get _sdkControlledHeaders() {
-    const names = /* @__PURE__ */ new Set();
+    const names2 = /* @__PURE__ */ new Set();
     if (this.apiKey !== void 0) {
-      names.add("x-api-key");
+      names2.add("x-api-key");
     } else {
       const profileAuthHeader = this.profileAuth?.currentAuthHeader();
       if (profileAuthHeader) {
-        names.add(profileAuthHeader.name.toLowerCase());
+        names2.add(profileAuthHeader.name.toLowerCase());
       }
     }
     if (this.workspaceId) {
-      names.add("x-tenant-id");
+      names2.add("x-tenant-id");
     }
-    return names;
+    return names2;
   }
   /**
    * Headers supplied by the caller, through either `config.headers` or
@@ -13857,14 +13860,14 @@ function expandHome(path3) {
 // dist/src/queue.js
 import { mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync, rmdirSync, statSync as statSync4, unlinkSync as unlinkSync3 } from "node:fs";
 import { dirname as dirname3, join as join3 } from "node:path";
-import { randomUUID as randomUUID2 } from "node:crypto";
+import { createHmac, randomUUID as randomUUID2 } from "node:crypto";
 
 // dist/src/utils/atomic-file.js
 import { openSync, writeSync, closeSync, renameSync as renameSync5 } from "node:fs";
 import { randomUUID } from "node:crypto";
-function publishByRename(path3, contents, tempSuffix) {
+function publishByRename(path3, contents, tempSuffix, mode) {
   const temp = `${path3}.${randomUUID()}${tempSuffix}`;
-  const fd = openSync(temp, "wx");
+  const fd = openSync(temp, "wx", mode);
   try {
     writeSync(fd, contents);
   } finally {
@@ -14057,6 +14060,15 @@ function createRunTree(config, mode = "full") {
 }
 
 // dist/src/queue.js
+function queueOrigin(destination) {
+  const identity = JSON.stringify([
+    destination.apiBaseUrl,
+    destination.replicas ?? null,
+    destination.redact ?? false,
+    destination.redactExtraRules ?? null
+  ]);
+  return createHmac("sha256", destination.apiKey).update(identity).digest("hex").slice(0, QUEUE_ORIGIN_LENGTH);
+}
 function queueDir(stateFilePath) {
   return join3(dirname3(stateFilePath), QUEUE_DIR_NAME);
 }
@@ -14067,6 +14079,13 @@ function listQueues(stateFilePath) {
   const root = queueDir(stateFilePath);
   try {
     return readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => join3(root, entry.name)).sort();
+  } catch {
+    return [];
+  }
+}
+function names(dir) {
+  try {
+    return readdirSync(dir);
   } catch {
     return [];
   }
@@ -14099,7 +14118,7 @@ function nextQueued(dir) {
   return void 0;
 }
 function publish(dir, queueId, entry) {
-  publishByRename(entryPath(dir, queueId), JSON.stringify(entry), QUEUE_TEMP_SUFFIX);
+  publishByRename(entryPath(dir, queueId), JSON.stringify(entry), QUEUE_TEMP_SUFFIX, PRIVATE_FILE_MODE);
 }
 function trim(dir) {
   const ids = entryIds(dir);
@@ -14107,14 +14126,15 @@ function trim(dir) {
     removeQueued(dir, queueId);
   }
 }
-async function enqueueRun(stateFilePath, sessionId, run, tracing) {
+async function enqueueRun(stateFilePath, sessionId, run, tracing, origin) {
   const dir = queueSessionDir(stateFilePath, sessionId);
   const queueId = `${String(Date.now()).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID2()}`;
   try {
-    mkdirSync5(dir, { recursive: true });
+    mkdirSync5(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
     publish(dir, queueId, {
       tracing,
       attempts: 0,
+      origin,
       run: runConfigForMode(run, tracing)
     });
     trim(dir);
@@ -14135,11 +14155,17 @@ function recordFailure2(dir, queueId) {
     return;
   const attempts = (entry.attempts ?? 0) + 1;
   if (attempts >= QUEUE_MAX_ATTEMPTS) {
+    warn(`Dropping a queued run after ${attempts} failed uploads: ${queueId}`);
     removeQueued(dir, queueId);
     return;
   }
   try {
-    publish(dir, queueId, { tracing: entry.tracing, attempts, run: entry.run });
+    publish(dir, queueId, {
+      tracing: entry.tracing,
+      attempts,
+      origin: entry.origin,
+      run: entry.run
+    });
   } catch (err) {
     warn(`Could not record a failed upload: ${err}`);
   }
@@ -14149,6 +14175,12 @@ function discardEmptyQueue(dir, now = Date.now()) {
     return;
   if (queueIdleMs(dir, now) < EMPTY_QUEUE_MIN_IDLE_MS)
     return;
+  for (const name of names(dir).filter((entry) => entry.endsWith(QUEUE_TEMP_SUFFIX))) {
+    try {
+      unlinkSync3(join3(dir, name));
+    } catch {
+    }
+  }
   try {
     rmdirSync(dir);
   } catch {
@@ -14161,14 +14193,15 @@ function queueIdleMs(dir, now = Date.now()) {
     return 0;
   }
 }
-function oldestQueuedAtMs(dir) {
-  const [oldest] = entryIds(dir);
-  if (oldest === void 0)
-    return void 0;
-  const queuedAt = Number(oldest.slice(0, QUEUE_ID_TIME_WIDTH));
+function queuedAtMs(queueId) {
+  const queuedAt = Number(queueId.slice(0, QUEUE_ID_TIME_WIDTH));
   return Number.isFinite(queuedAt) && queuedAt > 0 ? queuedAt : void 0;
 }
-function foreignQueueIsFlushable(dir, now = Date.now()) {
+function oldestQueuedAtMs(dir) {
+  const [oldest] = entryIds(dir);
+  return oldest === void 0 ? void 0 : queuedAtMs(oldest);
+}
+function foreignQueueLooksAbandoned(dir, now = Date.now()) {
   const queuedAt = oldestQueuedAtMs(dir);
   if (queuedAt === void 0)
     return false;
@@ -14176,7 +14209,10 @@ function foreignQueueIsFlushable(dir, now = Date.now()) {
 }
 function runIsTooOldToUpload(entry, now = Date.now()) {
   const started = new Date(entry.run.start_time).getTime();
-  return Number.isFinite(started) && now - started >= QUEUE_RUN_MAX_AGE_MS;
+  if (Number.isFinite(started))
+    return now - started >= QUEUE_RUN_MAX_AGE_MS;
+  const queuedAt = queuedAtMs(entry.queue_id);
+  return queuedAt === void 0 || now - queuedAt >= QUEUE_RUN_MAX_AGE_MS;
 }
 
 // dist/src/utils/file-lock.js
@@ -14304,9 +14340,9 @@ function watchUploadFailures(client2) {
     return seen;
   };
 }
-async function flushQueue(dir, config) {
-  const lock = `${dir}.flush`;
-  if (!tryAcquireLock(lock)) {
+async function flushQueue(dir, config, origin) {
+  const flushTarget = `${dir}.flush`;
+  if (!tryAcquireLock(flushTarget)) {
     debug(`Another flusher already owns ${dir}`);
     return;
   }
@@ -14322,11 +14358,15 @@ async function flushQueue(dir, config) {
         removeQueued(dir, entry.queue_id);
         continue;
       }
+      if (entry.origin !== origin) {
+        warn(`Leaving ${dir} alone: its next run was queued for a different LangSmith account`);
+        break;
+      }
       const runTree = createRunTree({ ...entry.run, client: client2, replicas: config.replicas }, entry.tracing);
       await runTree.postRun();
       const failure = lastUploadError();
       if (failure) {
-        warn(`Queued run upload failed, leaving it for a later retry: ${failure}`);
+        warn(`Queued run upload failed: ${failure}`);
         recordFailure2(dir, entry.queue_id);
         return;
       }
@@ -14334,7 +14374,7 @@ async function flushQueue(dir, config) {
     }
     discardEmptyQueue(dir);
   } finally {
-    releaseLock(lock);
+    releaseLock(flushTarget);
   }
 }
 async function main(cwd, sessionId) {
@@ -14342,15 +14382,16 @@ async function main(cwd, sessionId) {
   if (!config)
     return;
   const own = sessionId ? queueSessionDir(config.stateFilePath, sessionId) : void 0;
+  const origin = queueOrigin(config);
   for (const dir of listQueues(config.stateFilePath)) {
     const mine = dir === own;
-    if (!mine && !foreignQueueIsFlushable(dir)) {
+    if (!mine && !foreignQueueLooksAbandoned(dir)) {
+      debug(`Not flushing ${dir}, which another session may still be writing to`);
       discardEmptyQueue(dir);
-      debug(`Leaving ${dir} to the session that still owns it`);
       continue;
     }
     try {
-      await flushQueue(dir, config);
+      await flushQueue(dir, config, origin);
     } catch (err) {
       warn(`Could not flush ${dir}: ${err}`);
     }
@@ -14803,7 +14844,7 @@ function groupIntoTurns(messages) {
 import { readFileSync as readFileSync10, mkdirSync as mkdirSync7 } from "node:fs";
 import { dirname as dirname6 } from "node:path";
 function publishState(stateFilePath, state) {
-  publishByRename(stateFilePath, JSON.stringify(state, null, 2), STATE_TEMP_SUFFIX);
+  publishByRename(stateFilePath, JSON.stringify(state, null, 2), STATE_TEMP_SUFFIX, PRIVATE_FILE_MODE);
 }
 async function atomicUpdateState(stateFilePath, fn) {
   await withFileLock(stateFilePath, () => {
@@ -15994,7 +16035,7 @@ async function main3() {
           skillName: skillNameFromTool(input.tool_name, input.tool_input)
         })
       }
-    }, tracing);
+    }, tracing, queueOrigin(config));
   }
   await atomicUpdateState(config.stateFilePath, (freshState) => {
     const freshSession = getSessionState(freshState, input.session_id);
@@ -16268,6 +16309,7 @@ function startQueueFlusher(cwd, sessionId) {
       stdio: "ignore",
       windowsHide: true
     });
+    child.on("error", (err) => warn(`The queue flusher could not start: ${err}`));
     child.unref();
     debug(`Started detached queue flusher (pid ${child.pid})`);
   } catch (err) {

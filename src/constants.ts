@@ -71,6 +71,13 @@ const STATE_TEMP_SUFFIX = ".state.tmp";
 /** A lock is staged under this and linked into place, so it never exists without its owner's pid. */
 const LOCK_STAGING_SUFFIX = ".lock.staging";
 
+/** Owner-only, since what the plugin keeps beside the state file holds the same tool input and output the trace does. */
+const PRIVATE_DIR_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
+
+/** Enough of the hashed destination to tell two LangSmith accounts apart on disk. */
+const QUEUE_ORIGIN_LENGTH = 12;
+
 /** Zero-padding that keeps entry names sorting by time well past the year 9999. */
 const QUEUE_ID_TIME_WIDTH = 16;
 
@@ -136,6 +143,9 @@ export {
   STATE_TEMP_SUFFIX,
   LOCK_STAGING_SUFFIX,
   QUEUE_ID_TIME_WIDTH,
+  PRIVATE_DIR_MODE,
+  PRIVATE_FILE_MODE,
+  QUEUE_ORIGIN_LENGTH,
   QUEUE_MAX_ENTRIES,
   QUEUE_MAX_ATTEMPTS,
   QUEUE_RUN_MAX_AGE_MS,

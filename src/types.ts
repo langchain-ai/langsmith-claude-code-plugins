@@ -336,11 +336,22 @@ export interface TracingState {
 
 // ─── Upload queue ───────────────────────────────────────────────────────────
 
+/** Everything an upload depends on beyond the run itself, which decides where it may be sent. */
+export interface QueueDestination {
+  apiBaseUrl: string;
+  apiKey: string;
+  replicas?: unknown;
+  redact?: boolean;
+  redactExtraRules?: unknown;
+}
+
 /** One finished run waiting to be uploaded, written by a hook that did not wait. */
 export interface QueuedRun {
   queue_id: string;
   tracing: TracingMode;
   attempts: number;
+  /** Which LangSmith account this was queued for, so no stranger uploads it to their own. */
+  origin: string;
   /** A RunTree config without `client` or `replicas`, which the flusher supplies. */
   run: Record<string, unknown>;
 }

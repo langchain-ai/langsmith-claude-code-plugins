@@ -164,10 +164,34 @@ export function ageOldestRecord(sessionId: string, ms: number) {
   renameSync(join(dir, oldest), join(dir, `${aged}${oldest.slice(QUEUE_ID_TIME_WIDTH)}`));
 }
 
+/** The hook log for the sandbox home, which is where a warning about a dropped run lands. */
+export function hookLog(): string {
+  try {
+    return readFileSync(join(home, "hook.log"), "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/** Backdates the oldest record's run so the queue reads it as started `ms` ago. */
+export function ageOldestRun(ms: number, sessionId = "s1") {
+  const oldest = entryFiles(sessionId)[0];
+  const entry = JSON.parse(readFileSync(oldest, "utf8"));
+  entry.run.start_time = new Date(Date.now() - ms).toISOString();
+  writeFileSync(oldest, JSON.stringify(entry));
+}
+
 // spawnSync would block this process's event loop, and the fake server lives in it.
-export function hook(event: string, payload: Record<string, unknown>): Promise<void> {
+export function hook(
+  event: string,
+  payload: Record<string, unknown>,
+  overrides: Record<string, string> = {},
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [bundle, event], { cwd: home, env: env() });
+    const child = spawn(process.execPath, [bundle, event], {
+      cwd: home,
+      env: { ...env(), ...overrides },
+    });
     let stderr = "";
     child.stderr.on("data", (chunk) => (stderr += chunk));
     child.on("error", reject);
