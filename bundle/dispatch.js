@@ -14559,11 +14559,12 @@ import { isAbsolute, resolve as resolve3 } from "node:path";
 import { statSync as statSync5 } from "node:fs";
 import { dirname as dirname5, join as join3, resolve as resolve2, sep } from "node:path";
 function outsideGitDirectory(path3) {
-  const nestedAt = path3.indexOf(`${sep}.git${sep}`);
+  const marker = `${sep}${GIT_DIRECTORY_NAME}`;
+  const nestedAt = path3.indexOf(`${marker}${sep}`);
   if (nestedAt > 0)
     return path3.slice(0, nestedAt);
-  const trailing = `${sep}.git`;
-  return path3.endsWith(trailing) && path3.length > trailing.length ? path3.slice(0, -trailing.length) : path3;
+  const endsAtTheMarker = path3.endsWith(marker) && path3.length > marker.length;
+  return endsAtTheMarker ? path3.slice(0, -marker.length) : path3;
 }
 function nearestExistingDirectory(path3) {
   let current = outsideGitDirectory(path3);
@@ -14580,17 +14581,24 @@ function nearestExistingDirectory(path3) {
     current = parent;
   }
 }
+function gitMarkerAt(directory) {
+  try {
+    return statSync5(join3(directory, GIT_DIRECTORY_NAME)).isDirectory() ? "repository root" : "only git can say";
+  } catch {
+    return "nothing here";
+  }
+}
 function rootFromGitMarker(directory) {
   let current = resolve2(directory);
   for (; ; ) {
-    try {
-      if (statSync5(join3(current, GIT_DIRECTORY_NAME)).isDirectory())
-        return current;
+    const marker = gitMarkerAt(current);
+    if (marker === "repository root")
+      return current;
+    if (marker === "only git can say")
       return void 0;
-    } catch {
-    }
     const parent = dirname5(current);
-    if (parent === current)
+    const reachedFilesystemRoot = parent === current;
+    if (reachedFilesystemRoot)
       return null;
     current = parent;
   }
@@ -14627,8 +14635,9 @@ function rootForPath(path3) {
     return void 0;
   if (rootByDirectory.has(directory))
     return rootByDirectory.get(directory);
-  const marked = rootFromGitMarker(directory);
-  const root = marked === void 0 ? getRepoRoot(directory) : marked;
+  const walked = rootFromGitMarker(directory);
+  const onlyGitCanSay = walked === void 0;
+  const root = onlyGitCanSay ? getRepoRoot(directory) : walked;
   rootByDirectory.set(directory, root);
   return root;
 }
@@ -14688,8 +14697,11 @@ function sessionScopedMetadata(base, sessionCwd) {
   return typeof sessionRoot === "string" ? withSessionAuthor(base, sessionRoot) : base;
 }
 function repoScopedMetadata(base, toolInput, sessionCwd) {
-  const lookup = toolPathFromInput(toolInput, sessionCwd);
-  const path3 = lookup.path ?? (lookup.namedAPath ? void 0 : sessionCwd);
+  const { path: toolPath, namedAPath } = toolPathFromInput(toolInput, sessionCwd);
+  const namedSomewhereNothingSits = namedAPath && !toolPath;
+  if (namedSomewhereNothingSits)
+    return base;
+  const path3 = toolPath ?? sessionCwd;
   if (!path3 || !isAbsolute(path3))
     return base;
   const root = rootForPath(path3);

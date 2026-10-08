@@ -186,6 +186,8 @@ export interface ToolPathLookup {
   namedAPath: boolean;
 }
 
+export type GitMarker = "repository root" | "only git can say" | "nothing here";
+
 export interface MetadataWithPins {
   [PINNED_REPOSITORY_KEYS]?: ReadonlySet<string>;
 }

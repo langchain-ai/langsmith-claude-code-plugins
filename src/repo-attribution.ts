@@ -19,7 +19,7 @@ const rootByDirectory = new Map<string, string | null | undefined>();
 const attributionByRoot = new Map<string, RepositoryAttribution>();
 const identifierByRoot = new Map<string, RepositoryAttribution>();
 
-export function toolPathFromInput(toolInput: unknown, sessionCwd?: string): ToolPathLookup {
+function toolPathFromInput(toolInput: unknown, sessionCwd?: string): ToolPathLookup {
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
     return { namedAPath: false };
   }
@@ -41,8 +41,9 @@ function rootForPath(path: string): string | null | undefined {
   const directory = nearestExistingDirectory(path);
   if (!directory) return undefined;
   if (rootByDirectory.has(directory)) return rootByDirectory.get(directory);
-  const marked = rootFromGitMarker(directory);
-  const root = marked === undefined ? getRepoRoot(directory) : marked;
+  const walked = rootFromGitMarker(directory);
+  const onlyGitCanSay = walked === undefined;
+  const root = onlyGitCanSay ? getRepoRoot(directory) : walked;
   rootByDirectory.set(directory, root);
   return root;
 }
@@ -118,8 +119,11 @@ export function repoScopedMetadata(
   toolInput: unknown,
   sessionCwd?: string,
 ): Record<string, unknown> | undefined {
-  const lookup = toolPathFromInput(toolInput, sessionCwd);
-  const path = lookup.path ?? (lookup.namedAPath ? undefined : sessionCwd);
+  const { path: toolPath, namedAPath } = toolPathFromInput(toolInput, sessionCwd);
+  const namedSomewhereNothingSits = namedAPath && !toolPath;
+  if (namedSomewhereNothingSits) return base;
+
+  const path = toolPath ?? sessionCwd;
   if (!path || !isAbsolute(path)) return base;
 
   const root = rootForPath(path);
