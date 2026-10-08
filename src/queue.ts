@@ -28,7 +28,8 @@ import {
   QUEUE_MAX_ATTEMPTS,
   QUEUE_MAX_ENTRIES,
   QUEUE_RUN_MAX_AGE_MS,
-  QUEUE_SESSION_MAX_AGE_MS,
+  FOREIGN_QUEUE_MIN_RECORD_AGE_MS,
+  EMPTY_QUEUE_MIN_IDLE_MS,
   QUEUE_TEMP_SUFFIX,
 } from "./constants.js";
 import { runConfigForMode } from "./privacy.js";
@@ -152,18 +153,15 @@ export function recordFailure(dir: string, queueId: string): void {
   }
 }
 
-export function discardEmptyQueue(dir: string): void {
+export function discardEmptyQueue(dir: string, now: number = Date.now()): void {
   if (entryIds(dir).length > 0) return;
+  // A folder created a moment ago has not had its first record written yet.
+  if (queueIdleMs(dir, now) < EMPTY_QUEUE_MIN_IDLE_MS) return;
   try {
     rmdirSync(dir);
   } catch {
     /* ignore */
   }
-}
-
-export function discardQueue(dir: string): void {
-  for (const queueId of entryIds(dir)) removeQueued(dir, queueId);
-  discardEmptyQueue(dir);
 }
 
 export function queueIdleMs(dir: string, now: number = Date.now()): number {
@@ -174,8 +172,18 @@ export function queueIdleMs(dir: string, now: number = Date.now()): number {
   }
 }
 
-export function queueIsAbandoned(dir: string, now: number = Date.now()): boolean {
-  return queueIdleMs(dir, now) >= QUEUE_SESSION_MAX_AGE_MS;
+/** When the oldest record was queued, read from the entry name the queue sorts by. */
+export function oldestQueuedAtMs(dir: string): number | undefined {
+  const [oldest] = entryIds(dir);
+  if (oldest === undefined) return undefined;
+  const queuedAt = Number(oldest.slice(0, QUEUE_ID_TIME_WIDTH));
+  return Number.isFinite(queuedAt) && queuedAt > 0 ? queuedAt : undefined;
+}
+
+export function foreignQueueIsFlushable(dir: string, now: number = Date.now()): boolean {
+  const queuedAt = oldestQueuedAtMs(dir);
+  if (queuedAt === undefined) return false;
+  return now - queuedAt >= FOREIGN_QUEUE_MIN_RECORD_AGE_MS;
 }
 
 export function runIsTooOldToUpload(entry: QueuedRun, now: number = Date.now()): boolean {

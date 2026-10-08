@@ -905,11 +905,13 @@ var QUEUE_DIR_NAME = "langsmith_queue";
 var QUEUE_FILE_SUFFIX = ".queue.json";
 var QUEUE_TEMP_SUFFIX = ".queue.tmp";
 var STATE_TEMP_SUFFIX = ".state.tmp";
+var LOCK_STAGING_SUFFIX = ".lock.staging";
 var QUEUE_ID_TIME_WIDTH = 16;
 var QUEUE_MAX_ENTRIES = 500;
 var QUEUE_MAX_ATTEMPTS = 5;
 var QUEUE_RUN_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
-var QUEUE_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
+var FOREIGN_QUEUE_MIN_RECORD_AGE_MS = 2 * 60 * 60 * 1e3;
+var EMPTY_QUEUE_MIN_IDLE_MS = 2 * 60 * 60 * 1e3;
 var FLUSH_QUEUE_ARG = "--flush-queue";
 var GH_LOGIN_COMMAND = "gh";
 var GH_LOGIN_ARGUMENTS = ["api", "user", "--jq", ".login"];
@@ -14128,18 +14130,15 @@ function recordFailure2(dir, queueId) {
     warn(`Could not record a failed upload: ${err}`);
   }
 }
-function discardEmptyQueue(dir) {
+function discardEmptyQueue(dir, now = Date.now()) {
   if (entryIds(dir).length > 0)
+    return;
+  if (queueIdleMs(dir, now) < EMPTY_QUEUE_MIN_IDLE_MS)
     return;
   try {
     rmdirSync(dir);
   } catch {
   }
-}
-function discardQueue(dir) {
-  for (const queueId of entryIds(dir))
-    removeQueued(dir, queueId);
-  discardEmptyQueue(dir);
 }
 function queueIdleMs(dir, now = Date.now()) {
   try {
@@ -14148,8 +14147,18 @@ function queueIdleMs(dir, now = Date.now()) {
     return 0;
   }
 }
-function queueIsAbandoned(dir, now = Date.now()) {
-  return queueIdleMs(dir, now) >= QUEUE_SESSION_MAX_AGE_MS;
+function oldestQueuedAtMs(dir) {
+  const [oldest] = entryIds(dir);
+  if (oldest === void 0)
+    return void 0;
+  const queuedAt = Number(oldest.slice(0, QUEUE_ID_TIME_WIDTH));
+  return Number.isFinite(queuedAt) && queuedAt > 0 ? queuedAt : void 0;
+}
+function foreignQueueIsFlushable(dir, now = Date.now()) {
+  const queuedAt = oldestQueuedAtMs(dir);
+  if (queuedAt === void 0)
+    return false;
+  return now - queuedAt >= FOREIGN_QUEUE_MIN_RECORD_AGE_MS;
 }
 function runIsTooOldToUpload(entry, now = Date.now()) {
   const started = new Date(entry.run.start_time).getTime();
@@ -14157,7 +14166,7 @@ function runIsTooOldToUpload(entry, now = Date.now()) {
 }
 
 // dist/src/state.js
-import { readFileSync as readFileSync7, writeSync, mkdirSync as mkdirSync6, openSync, closeSync, renameSync as renameSync6, unlinkSync as unlinkSync4 } from "node:fs";
+import { readFileSync as readFileSync7, writeFileSync as writeFileSync5, writeSync, linkSync, mkdirSync as mkdirSync6, openSync, closeSync, renameSync as renameSync6, unlinkSync as unlinkSync4 } from "node:fs";
 import { dirname as dirname4 } from "node:path";
 import { randomUUID as randomUUID2 } from "node:crypto";
 var LOCK_TIMEOUT_MS = 5e3;
@@ -14193,16 +14202,22 @@ function releaseLock(stateFilePath) {
   }
 }
 function claimLock(lock) {
+  const staging = `${lock}.${randomUUID2()}${LOCK_STAGING_SUFFIX}`;
   try {
-    const fd = openSync(lock, "wx");
-    try {
-      writeSync(fd, String(process.pid));
-    } finally {
-      closeSync(fd);
-    }
+    writeFileSync5(staging, String(process.pid));
+  } catch {
+    return false;
+  }
+  try {
+    linkSync(staging, lock);
     return true;
   } catch {
     return false;
+  } finally {
+    try {
+      unlinkSync4(staging);
+    } catch {
+    }
   }
 }
 function holderIsGone(lock) {
@@ -14213,7 +14228,7 @@ function holderIsGone(lock) {
     return false;
   }
   if (!Number.isInteger(pid) || pid <= 0)
-    return true;
+    return false;
   try {
     process.kill(pid, 0);
     return false;
@@ -14360,7 +14375,6 @@ async function flushQueue(dir, config) {
     debug(`Another flusher already owns ${dir}`);
     return;
   }
-  const abandoned = queueIsAbandoned(dir);
   const { client: client2, lastError } = flusherClient(config);
   try {
     for (; ; ) {
@@ -14384,16 +14398,20 @@ async function flushQueue(dir, config) {
     }
     discardEmptyQueue(dir);
   } finally {
-    if (abandoned)
-      discardQueue(dir);
     releaseLock(lock);
   }
 }
-async function main(cwd) {
+async function main(cwd, sessionId) {
   const config = initHook(cwd);
   if (!config)
     return;
+  const own = sessionId ? queueSessionDir(config.stateFilePath, sessionId) : void 0;
   for (const dir of listQueues(config.stateFilePath)) {
+    const mine = dir === own;
+    if (!mine && !foreignQueueIsFlushable(dir)) {
+      debug(`Leaving ${dir} to the session that still owns it`);
+      continue;
+    }
     try {
       await flushQueue(dir, config);
     } catch (err) {
@@ -16229,10 +16247,10 @@ function runningCompiledBinary() {
 }
 
 // dist/src/utils/detach.js
-function startQueueFlusher(cwd) {
+function startQueueFlusher(cwd, sessionId) {
   try {
     const self = runningCompiledBinary() ? [] : [process.argv[1]];
-    const child = spawn(process.execPath, [...self, FLUSH_QUEUE_ARG, cwd], {
+    const child = spawn(process.execPath, [...self, FLUSH_QUEUE_ARG, cwd, sessionId], {
       detached: true,
       stdio: "ignore",
       windowsHide: true
@@ -16333,7 +16351,7 @@ async function main7() {
   if (!config)
     return;
   debug(`Stop hook started, session=${input.session_id}`);
-  startQueueFlusher(input.cwd);
+  startQueueFlusher(input.cwd, input.session_id);
   if (input.stop_hook_active) {
     debug("stop_hook_active=true, skipping");
     return;
@@ -16908,7 +16926,7 @@ async function main10() {
   const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
   const state = loadState(config.stateFilePath);
   if (state[input.session_id] === void 0)
-    startQueueFlusher(input.cwd);
+    startQueueFlusher(input.cwd, input.session_id);
   const sessionState = getSessionState(state, input.session_id);
   const turnMode = getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
   const expandedTranscript = expandHome(input.transcript_path);
@@ -17092,7 +17110,7 @@ if (argument === "--help" || argument === "-h") {
 } else if (event) {
   void runHookEntry(event, HOOK_HANDLERS[event]);
 } else if (argument === FLUSH_QUEUE_ARG) {
-  void runHookEntry("Stop", () => main(process.argv[3] ?? process.cwd()));
+  void runHookEntry("Stop", () => main(process.argv[3] ?? process.cwd(), process.argv[4]));
 } else if (argument?.startsWith("-")) {
   console.error(`unknown option: ${argument}`);
   console.error(USAGE);

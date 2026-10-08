@@ -11,10 +11,10 @@ import { initHook } from "../utils/hook-init.js";
 import { debug, warn } from "../logger.js";
 import {
   discardEmptyQueue,
-  discardQueue,
   listQueues,
   nextQueued,
-  queueIsAbandoned,
+  foreignQueueIsFlushable,
+  queueSessionDir,
   removeQueued,
   recordFailure,
   runIsTooOldToUpload,
@@ -61,7 +61,6 @@ async function flushQueue(dir: string, config: Config): Promise<void> {
     debug(`Another flusher already owns ${dir}`);
     return;
   }
-  const abandoned = queueIsAbandoned(dir);
   const { client, lastError } = flusherClient(config);
   try {
     for (;;) {
@@ -87,15 +86,20 @@ async function flushQueue(dir: string, config: Config): Promise<void> {
     }
     discardEmptyQueue(dir);
   } finally {
-    if (abandoned) discardQueue(dir);
     releaseLock(lock);
   }
 }
 
-export async function main(cwd: string): Promise<void> {
+export async function main(cwd: string, sessionId?: string): Promise<void> {
   const config = initHook(cwd);
   if (!config) return;
+  const own = sessionId ? queueSessionDir(config.stateFilePath, sessionId) : undefined;
   for (const dir of listQueues(config.stateFilePath)) {
+    const mine = dir === own;
+    if (!mine && !foreignQueueIsFlushable(dir)) {
+      debug(`Leaving ${dir} to the session that still owns it`);
+      continue;
+    }
     try {
       await flushQueue(dir, config);
     } catch (err) {

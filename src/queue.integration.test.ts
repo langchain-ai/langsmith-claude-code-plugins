@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   utimesSync,
   writeFileSync,
@@ -15,7 +16,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { QUEUE_DIR_NAME, QUEUE_FILE_SUFFIX } from "./constants.js";
+import { QUEUE_DIR_NAME, QUEUE_FILE_SUFFIX, QUEUE_ID_TIME_WIDTH } from "./constants.js";
 
 const bundle = fileURLToPath(new URL("../bundle/dispatch.js", import.meta.url));
 
@@ -117,6 +118,43 @@ function writeTranscript() {
       }),
     ].join("\n") + "\n",
   );
+}
+
+function appendTurnToTranscript(turn: number) {
+  const now = new Date().toISOString();
+  const lines = [
+    JSON.stringify({
+      type: "user",
+      promptId: `p${turn}`,
+      timestamp: now,
+      message: { role: "user", content: "hi" },
+    }),
+    JSON.stringify({
+      type: "assistant",
+      promptId: `p${turn}`,
+      timestamp: now,
+      message: {
+        id: `m${turn}`,
+        role: "assistant",
+        model: "claude-opus-4",
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        content: [{ type: "text", text: "ok" }],
+      },
+    }),
+  ];
+  const existing = existsSync(transcript()) ? readFileSync(transcript(), "utf8") : "";
+  writeFileSync(transcript(), existing + lines.join("\n") + "\n");
+}
+
+/** Rewrites an entry's name so the queue reads it as queued `ms` ago. */
+function ageOldestRecord(sessionId: string, ms: number) {
+  const dir = queueDirFor(sessionId);
+  const [oldest] = readdirSync(dir)
+    .filter((name) => name.endsWith(QUEUE_FILE_SUFFIX))
+    .sort();
+  const aged = String(Date.now() - ms).padStart(QUEUE_ID_TIME_WIDTH, "0");
+  renameSync(join(dir, oldest), join(dir, `${aged}${oldest.slice(QUEUE_ID_TIME_WIDTH)}`));
 }
 
 // spawnSync would block this process's event loop, and the fake server lives in it.
@@ -248,11 +286,13 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
 
   // Catches a sweep that never runs, or one that throws leftovers away the way
   // pruneOldSessions throws away stale state.
-  it("flushes a queue left behind by a session that died before its Stop", async () => {
+  it("flushes a queue left behind by a session whose records went stale", async () => {
     writeTranscript();
     await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
     await toolCall(0);
     expect(queued()).toHaveLength(1);
+
+    ageOldestRecord("s1", 3 * 60 * 60 * 1000);
 
     await hook("UserPromptSubmit", {
       session_id: "s2",
@@ -262,6 +302,71 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
 
     expect(await waitFor(() => received.includes("Tool0"))).toBe(true);
     expect(await waitFor(() => queued().length === 0)).toBe(true);
+  });
+
+  // Catches a flush that helps itself to a folder still being written by a live
+  // session elsewhere, which is how two uploaders end up on one folder.
+  it("leaves another session's recent folder completely alone", async () => {
+    writeTranscript();
+    await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
+    await toolCall(0);
+    await hook("UserPromptSubmit", {
+      session_id: "s2",
+      hook_event_name: "UserPromptSubmit",
+      prompt: "a second live session",
+    });
+    await toolCall(1, "s2");
+
+    // s2 takes a turn. s1's folder was written moments ago, so it is not s2's to touch.
+    await hook("Stop", { session_id: "s2", hook_event_name: "Stop", stop_hook_active: false });
+
+    expect(await waitFor(() => received.includes("Tool1"))).toBe(true);
+    expect(queued("s1")).toHaveLength(1);
+    expect(existsSync(queueDirFor("s1"))).toBe(true);
+    expect(received).not.toContain("Tool0");
+  });
+
+  // Catches a sweep that bins the folder its own session is still filling, so a run
+  // queued while the flusher was running disappears.
+  it("flushes its own folder every turn, however fresh the records in it are", async () => {
+    const turn = async (index: number) => {
+      appendTurnToTranscript(index);
+      await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
+      await toolCall(index);
+      await hook("Stop", { hook_event_name: "Stop", stop_hook_active: false });
+    };
+
+    await turn(0);
+    expect(await waitFor(() => received.includes("Tool0"))).toBe(true);
+
+    // The service is briefly unreachable, so this turn's run has to wait on disk.
+    failUploads = true;
+    await turn(1);
+    expect(await waitFor(() => queued().length === 1)).toBe(true);
+
+    failUploads = false;
+    await turn(2);
+    expect(await waitFor(() => received.length >= 3)).toBe(true);
+    expect([...received].sort()).toEqual(["Tool0", "Tool1", "Tool2"]);
+  });
+
+  // Catches two flushers draining one old folder at once, which uploads a run twice
+  // and lets one delete the entry the other is still working on.
+  it("lets only one of two flushers drain the same old folder", async () => {
+    writeTranscript();
+    await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
+    for (let index = 0; index < 6; index++) await toolCall(index);
+
+    ageOldestRecord("s1", 3 * 60 * 60 * 1000);
+
+    await Promise.all([
+      hook("Stop", { session_id: "s2", hook_event_name: "Stop", stop_hook_active: false }),
+      hook("Stop", { session_id: "s3", hook_event_name: "Stop", stop_hook_active: false }),
+    ]);
+
+    expect(await waitFor(() => received.length >= 6)).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect([...received].sort()).toEqual([0, 1, 2, 3, 4, 5].map((index) => `Tool${index}`));
   });
 
   // Catches a flusher lock that outlives the flusher, which stops that session
@@ -278,24 +383,40 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     expect(await waitFor(() => received.includes("Tool0"))).toBe(true);
   });
 
-  // Catches a queue folder that outlives its session for good, which only the next
+  // Catches a drained folder that outlives its session for good, which only the next
   // session on that machine would ever clear, and never if the plugin is removed.
-  it("removes a session folder nothing has written to for a day", async () => {
+  it("removes a drained folder nothing has touched for two hours", async () => {
     writeTranscript();
     await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
     await toolCall(0);
+    await hook("Stop", { hook_event_name: "Stop", stop_hook_active: false });
+    expect(await waitFor(() => queued().length === 0)).toBe(true);
 
-    failUploads = true;
-    const aged = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    const aged = new Date(Date.now() - 3 * 60 * 60 * 1000);
     utimesSync(queueDirFor(), aged, aged);
 
+    await hook("Stop", { hook_event_name: "Stop", stop_hook_active: false });
+    expect(await waitFor(() => !existsSync(queueDirFor()))).toBe(true);
+  });
+
+  // Catches an empty folder removed in the gap between a session creating it and
+  // writing its first record, which loses that record to a vanished directory.
+  it("leaves an empty folder created moments ago alone", async () => {
+    writeTranscript();
+    await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
+    await toolCall(0);
+    await hook("Stop", { hook_event_name: "Stop", stop_hook_active: false });
+    expect(await waitFor(() => queued().length === 0)).toBe(true);
+
+    // Drained seconds ago, so another session may still be about to write to it.
     await hook("UserPromptSubmit", {
       session_id: "s2",
       hook_event_name: "UserPromptSubmit",
       prompt: "a new session",
     });
+    await new Promise((resolve) => setTimeout(resolve, 1500));
 
-    expect(await waitFor(() => !existsSync(queueDirFor()))).toBe(true);
+    expect(existsSync(queueDirFor())).toBe(true);
   });
 
   // Catches a run LangSmith will reject for age being retried forever, and taking

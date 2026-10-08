@@ -5,7 +5,9 @@
 
 import {
   readFileSync,
+  writeFileSync,
   writeSync,
+  linkSync,
   mkdirSync,
   openSync,
   closeSync,
@@ -14,7 +16,7 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
-import { STATE_TEMP_SUFFIX } from "./constants.js";
+import { LOCK_STAGING_SUFFIX, STATE_TEMP_SUFFIX } from "./constants.js";
 import type { TracingState, SessionState } from "./types.js";
 
 // ─── Atomic read-modify-write ────────────────────────────────────────────────
@@ -61,16 +63,25 @@ export function releaseLock(stateFilePath: string): void {
 }
 
 function claimLock(lock: string): boolean {
+  // Linked into place rather than created then written, since a peer that reads a
+  // lock in that gap sees no pid and takes it for abandoned.
+  const staging = `${lock}.${randomUUID()}${LOCK_STAGING_SUFFIX}`;
   try {
-    const fd = openSync(lock, "wx");
-    try {
-      writeSync(fd, String(process.pid));
-    } finally {
-      closeSync(fd);
-    }
+    writeFileSync(staging, String(process.pid));
+  } catch {
+    return false;
+  }
+  try {
+    linkSync(staging, lock);
     return true;
   } catch {
     return false;
+  } finally {
+    try {
+      unlinkSync(staging);
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -81,7 +92,7 @@ function holderIsGone(lock: string): boolean {
   } catch {
     return false;
   }
-  if (!Number.isInteger(pid) || pid <= 0) return true;
+  if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return false;

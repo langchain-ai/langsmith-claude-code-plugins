@@ -130,8 +130,8 @@ export async function main(): Promise<void> {
   );
 
   const state = loadState(config.stateFilePath);
-  // A session that died before its Stop left its queue behind, so sweep on a new one.
-  if (state[input.session_id] === undefined) startQueueFlusher(input.cwd);
+  // Sweep once at the start, for folders other sessions left behind long enough ago to be safe.
+  if (state[input.session_id] === undefined) startQueueFlusher(input.cwd, input.session_id);
   const sessionState = getSessionState(state, input.session_id);
   const turnMode = getThreadTracingMode(
     config.stateFilePath,

@@ -53,7 +53,7 @@ export async function main(): Promise<void> {
   debug(`Stop hook started, session=${input.session_id}`);
 
   // Hand the queued tool runs to a detached uploader, off this turn's response path.
-  startQueueFlusher(input.cwd);
+  startQueueFlusher(input.cwd, input.session_id);
 
   // Skip recursive hook calls.
   if (input.stop_hook_active) {

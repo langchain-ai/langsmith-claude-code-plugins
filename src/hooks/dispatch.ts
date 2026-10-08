@@ -34,7 +34,7 @@ if (argument === "--help" || argument === "-h") {
 } else if (event) {
   void runHookEntry(event, HOOK_HANDLERS[event]);
 } else if (argument === FLUSH_QUEUE_ARG) {
-  void runHookEntry("Stop", () => flushQueue(process.argv[3] ?? process.cwd()));
+  void runHookEntry("Stop", () => flushQueue(process.argv[3] ?? process.cwd(), process.argv[4]));
 } else if (argument?.startsWith("-")) {
   console.error(`unknown option: ${argument}`);
   console.error(USAGE);

@@ -3,10 +3,10 @@ import { runningCompiledBinary } from "./binary-runtime.js";
 import { FLUSH_QUEUE_ARG } from "../constants.js";
 import { debug, warn } from "../logger.js";
 
-export function startQueueFlusher(cwd: string): void {
+export function startQueueFlusher(cwd: string, sessionId: string): void {
   try {
     const self = runningCompiledBinary() ? [] : [process.argv[1]];
-    const child = spawn(process.execPath, [...self, FLUSH_QUEUE_ARG, cwd], {
+    const child = spawn(process.execPath, [...self, FLUSH_QUEUE_ARG, cwd, sessionId], {
       detached: true,
       stdio: "ignore",
       windowsHide: true,
