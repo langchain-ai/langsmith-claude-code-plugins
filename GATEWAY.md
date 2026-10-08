@@ -10,19 +10,16 @@ This is experimental. It is a different plugin from LangSmith tracing, neither o
 
 - A Mac or a Linux machine. Windows does not work.
 - Node.js 20 or newer.
-- The LangSmith command line tool, which is a program you run in your terminal:
+- One way to prove who you are, either the LangSmith command line tool or your own company identity token.
 
-  ```sh
-  curl -fsSL https://cli.langsmith.com/install.sh | sh
-  ```
+The command line tool is a program you run in your terminal. Install it, follow its instructions so `langsmith` works in a new terminal, then sign in:
 
-  Follow the installer's instructions so `langsmith` works in a new terminal, then sign in:
+```sh
+curl -fsSL https://cli.langsmith.com/install.sh | sh
+langsmith auth login
+```
 
-  ```sh
-  langsmith auth login
-  ```
-
-  Finish the sign-in in the browser that opens. If you plan to use your company identity token instead, you can skip the sign-in, but the tool still has to be installed.
+Finish the sign-in in the browser that opens. Skip all of that if you use a company identity token instead, since setup then never looks for the tool.
 
 ## Install
 
@@ -58,16 +55,16 @@ It says whether your settings point at the helper and whether the helper answers
 
 Instead of signing into LangSmith, you can hand over a token your employer already issues you, which is a string that proves who you are. You give the plugin a command, the plugin runs that command, and whatever the command prints becomes the token. This works the same way as Claude Code's own `apiKeyHelper` setting.
 
-Say your company's tooling refreshes a token into a file every hour. Point the plugin at that file:
+Say your own daemon refreshes a token into `~/.oidc/profile.jwt` every hour, so your command just prints that file. Use your own workspace id here, and keep the subscription flag only if your Anthropic credential arrives through your Claude login:
 
 ```text
-/langsmith-gateway:setup --scope project --workspace-id 11111111-2222-3333-4444-555555555555 --identity-token-command cat /var/run/acme/langsmith.jwt
+/langsmith-gateway:setup --scope project --use-claude-subscription --workspace-id 11111111-2222-3333-4444-555555555555 --identity-token-command cat ~/.oidc/profile.jwt
 ```
 
 What to know before you use it:
 
-- Name your LangSmith workspace as well, written as a UUID, which is the long dashed id in your LangSmith workspace settings. Saving it in the command above is the simple route. A program that talks to the helper directly can instead name a workspace on each request, and that choice wins over the saved one.
-- Put the command last, because everything after it is treated as the command.
+- Name your LangSmith workspace as well, written as a UUID, which is the long dashed id in your LangSmith workspace settings.
+- Put the command last, because everything after it is swallowed into the command. A flag written after it is read as part of the command and quietly stops being a flag.
 - The command runs through `/bin/sh` from your home directory and gets only your home directory and a plain search path. Nothing your shell profile or virtual environment normally sets up is there, so use absolute paths, and write a small script if you need quotes, pipes or anything else.
 - It has to print the token and nothing else, and it has to finish within ten seconds.
 - A good result is reused for five minutes, or for less time when the token runs out sooner. Change that window with `--identity-token-ttl` and a number of seconds between 1 and 3600.
@@ -77,17 +74,24 @@ What to know before you use it:
 
 Three failures look alike, so read the wording closely.
 
-- **Our own message naming your credential command.** The command did not produce a usable token, because it failed, printed something else, or ran too long. A command that works in your terminal can still fail here, since it runs without your shell profile.
-- **A plain unauthorized reply with nothing else in it.** Suspect the workspace rather than the token. LangSmith tells you least when it does not recognise the workspace you named.
+- **Our own message naming your identity token command.** The command did not produce a usable token, because it failed, printed something else, or ran too long. A command that works in your terminal can still fail here, since it runs without your shell profile.
+- **A plain unauthorized reply with nothing else in it.** Suspect the workspace rather than the token. A workspace id that is not a real workspace comes back exactly like a bad token, with nothing to tell you which it was.
 - **An error in the model provider's own words.** Your identity is fine and LangSmith reached the provider, so the problem is the key LangSmith used or your access to that model.
 
 Other things that go wrong:
 
 - **Nothing seems routed.** Restart the session, since a session that was already open keeps the settings it started with.
-- **Setup refuses to run.** It will not overwrite an API key, an auth token or a key helper you already set, so remove that yourself and try again.
-- **The local address is taken.** Wait and run setup again rather than killing whatever is listening.
-- **Setup says to disable first.** Changing a saved credential command, workspace, reuse window, port or address means turning routing off everywhere first, since every project shares one helper.
+- **Setup refuses over a credential you already set.** It will not overwrite one, and it rejects eight provider and sign-in settings plus a key helper. It reads both your settings file and the terminal you started Claude Code from, so unset it in your shell as well as deleting it from the file.
+- **The local address is taken.** Wait about 35 seconds and run setup again, rather than killing whatever is listening.
 - **A model that is not Anthropic's breaks a feature that counts tokens.** Only Anthropic models can be counted, and there is no automatic fallback.
+
+## Change your setup later
+
+Setup refuses to change your workspace, your token command, the reuse window, the port, the pinned tool or the addresses while routing is on. Every project shares one helper and it still holds the old values. Change them like this:
+
+1. Turn routing off for every scope you turned on, so both `--scope project` and `--scope global` if you used both.
+2. Run setup again with the new options. If it says the local address is still busy, wait about 35 seconds and run it again.
+3. Restart every session that is still open.
 
 ## Choosing a model
 
@@ -97,7 +101,7 @@ Leave your model settings alone and everything goes to Anthropic as before. Pick
 
 Everything in the conversation goes to the gateway, meaning your prompts, your tool inputs and outputs and the replies, with nothing removed. Tracing's mute and redaction settings do not apply to any of it. Only turn this on for a gateway you trust with that content.
 
-By default your Claude subscription credentials are not sent anywhere. Add `--use-claude-subscription` to your setup command and your Claude login is passed through to Anthropic instead, which also means you have to be signed into Claude. Run setup again without it to stop that.
+By default your Claude subscription credentials are not sent anywhere. Add `--use-claude-subscription` to your setup command and your Claude login is passed through to Anthropic instead, which also means you have to be signed into Claude. Run setup again without it to stop that, which works only when this is the one scope you turned on.
 
 ## Turn it off
 
