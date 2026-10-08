@@ -22,7 +22,7 @@ Run these inside Claude Code to install the plugin from the LangChain marketplac
 
 ```text
 /plugin marketplace add langchain-ai/langsmith-claude-code-plugins
-/plugin install langsmith-gateway@langsmith-claude-code-plugins --scope user
+/plugin install langsmith-gateway@langsmith-claude-code-plugins
 /reload-plugins
 ```
 
@@ -48,29 +48,14 @@ It tells you whether routing is on and whether the helper is up, though it does 
 
 ## Configure custom OIDC authentication
 
-This is for orgs that have a custom OIDC provider configured in LangSmith. You give the plugin a command to run and whatever it prints becomes the token used to authenticate against the gateway:
+This is for orgs that have a custom OIDC provider configured in LangSmith. It maps the token used for gateway authentication to a command you provide, similar to [Anthropic's apiKeyHelper](https://code.claude.com/docs/en/settings-reference):
 
 ```text
 /langsmith-gateway:setup --scope global --identity-token-command "cat ~/.oidc/profile.jwt" --workspace-id 11111111-2222-3333-4444-555555555555
 ```
 
-- Quote the command, as above, so you can keep writing flags after it.
-- Name your LangSmith workspace too, as the long dashed id in your workspace settings.
-- The command runs without the setup your terminal gives you, so write out full paths and print nothing but the token.
-- It runs through `/bin/sh`, so this part needs a Unix-like shell.
-
-## When it does not work
-
-Three failures look alike so read the wording closely.
-
-- **A message from us naming your token command.** The command did not hand back a usable token.
-- **A plain unauthorized reply and nothing else.** Suspect your workspace id rather than your token.
-- **An error in the provider's own words.** Your identity is fine so it is the model or the key behind it.
-
-Other things that go wrong:
-
-- **Nothing seems routed.** Restart the session, since an open one keeps the settings it started with.
-- **Setup refuses because you already have credentials set.** Clear them from your settings file and your shell.
-- **Setup will not change a setting, or the local address is taken.** Turn routing off everywhere, wait about 35 seconds, then run setup again.
+- Quote the command so you can keep writing flags after it.
+- Your workspace id is in your LangSmith workspace settings.
+- The command runs through `/bin/sh` without your terminal's setup, so use full paths and print nothing but the token.
 
 [LangSmith tracing](./README.md) is the separate plugin that records what the agent did.
