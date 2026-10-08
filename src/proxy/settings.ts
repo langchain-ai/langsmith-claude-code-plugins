@@ -1,7 +1,7 @@
 import { accessSync, constants, mkdirSync, rmdirSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { configDir, endpoints, loadConfig, privatePath, userHome } from "./config.js";
-import { AUTH } from "./proxy-constants.js";
+import { AUTH, CREDENTIAL_SOURCE_GUIDANCE } from "./proxy-constants.js";
 import type { ObjectValue, ProxyConfig } from "./proxy-models.js";
 import {
   atomic,
@@ -13,7 +13,7 @@ import {
   unchanged,
   type Snapshot,
 } from "./files.js";
-import { createConfig, validateCLI } from "./setup.js";
+import { createConfig, usableCLI, validateCLI } from "./setup.js";
 import { ensure, waitForStopped } from "./lifecycle.js";
 import { parseSetupArgs, parseDisableArgs, SetupError } from "./options.js";
 import {
@@ -110,9 +110,7 @@ function discoverCLI(env: NodeJS.ProcessEnv): string {
       /* Try next absolute PATH entry. */
     }
   }
-  return fail(
-    "LangSmith CLI not found. Install it using the README, complete terminal login with your selected profile and API URL (review the saved OAuth issuer), then retry /langsmith-gateway:setup.",
-  );
+  return fail(CREDENTIAL_SOURCE_GUIDANCE);
 }
 export async function enable(
   entry: string,
@@ -172,7 +170,10 @@ export async function enable(
           enabled: true,
           ...selected,
           useClaudeSubscription,
-          cli: requested.cli === undefined ? config.cli : validateCLI(requested.cli),
+          cli:
+            requested.cli === undefined
+              ? usableCLI(config.cli, requested.identityTokenCommand ?? config.identityTokenCommand)
+              : validateCLI(requested.cli),
           profile: requested.profile ?? config.profile,
           port,
           identityTokenCommand: requested.identityTokenCommand ?? config.identityTokenCommand,
@@ -183,7 +184,7 @@ export async function enable(
     const changing =
       config &&
       next &&
-      (config.cli !== next.cli ||
+      ((requested.cli !== undefined && config.cli !== next.cli) ||
         config.profile !== next.profile ||
         config.port !== next.port ||
         config.identityTokenCommand !== next.identityTokenCommand ||
@@ -234,7 +235,8 @@ export async function enable(
       );
     if (!config) {
       createConfig(
-        requested.cli ?? discoverCLI(env),
+        requested.cli ??
+          (requested.identityTokenCommand === undefined ? discoverCLI(env) : undefined),
         requested.profile,
         port,
         home,
@@ -249,7 +251,7 @@ export async function enable(
       config = loadConfig(home)!;
     }
     const effective = next ?? config;
-    if (validateCLI(effective.cli) !== effective.cli)
+    if (effective.cli !== undefined && validateCLI(effective.cli) !== effective.cli)
       fail("Pinned CLI path changed; resolve privately before retrying.");
     let configSnapshot = snapshot(p.config, true);
     if (switching) {

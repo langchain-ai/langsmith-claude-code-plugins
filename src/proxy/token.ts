@@ -23,7 +23,7 @@ export function cliToken(
   signal?: AbortSignal,
 ): Promise<string> {
   return spawnToken(
-    config.cli,
+    config.cli!,
     [
       ...(config.profile === undefined ? [] : ["--profile", config.profile]),
       "--api-url",
