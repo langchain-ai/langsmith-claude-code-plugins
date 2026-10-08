@@ -36,7 +36,7 @@ If you pay Anthropic through a Claude subscription rather than an API key, add `
 
 Model requests are routed through the LangSmith LLM gateway from here on.
 
-To stop, run `/langsmith-gateway:disable --scope global` and restart your sessions, though that does not put your earlier settings back.
+To stop, run `/langsmith-gateway:disable --scope global` and restart your sessions.
 
 ## Check it is working
 
