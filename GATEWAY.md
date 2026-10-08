@@ -51,7 +51,7 @@ It tells you whether routing is on, whether the helper is up and whether your cr
 This is for orgs that have a custom OIDC provider configured in LangSmith. It maps the token used for gateway authentication to a command you provide, similar to [Anthropic's apiKeyHelper](https://code.claude.com/docs/en/settings-reference):
 
 ```text
-/langsmith-gateway:setup --scope global --identity-token-command "cat ~/.oidc/profile.jwt" --workspace-id 11111111-2222-3333-4444-555555555555
+/langsmith-gateway:setup --scope global --use-claude-subscription --identity-token-command "cat ~/.oidc/profile.jwt" --workspace-id <your workspace id>
 ```
 
 - Quote the command so you can keep writing flags after it.
