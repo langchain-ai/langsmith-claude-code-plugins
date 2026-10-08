@@ -12,7 +12,6 @@ export interface ProxyConfig extends CredentialIdentity {
   profile?: string;
   port: number;
   secret: string;
-  // Optional discovery index only; never credentials, previous values or authorization.
   settingsTargets?: string[];
   apiUrl?: string;
   gatewayUrl?: string;
@@ -20,7 +19,6 @@ export interface ProxyConfig extends CredentialIdentity {
 
 export interface SetupOptions extends CredentialIdentity {
   scope: "global" | "project";
-  // Explicit setup only: omission selects OAuth-only, never the saved mode.
   useClaudeSubscription: boolean;
   cli?: string;
   profile?: string;

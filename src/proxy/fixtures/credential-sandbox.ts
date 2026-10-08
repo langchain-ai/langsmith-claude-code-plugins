@@ -84,7 +84,6 @@ export function savedConfig(extra: Record<string, unknown>) {
 }
 export const setup = (args: string) => parseSetupArgs(["--scope", "global", ...args.split(" ")]);
 export const SAVED_COMMAND = "cat /tmp/t.jwt";
-// A listener answering health lets enable() finish without waiting on a real daemon.
 export async function existingInstall(extra: Record<string, unknown> = {}) {
   let config = base;
   const health = http.createServer((_req, res) => res.end(identity(config)));

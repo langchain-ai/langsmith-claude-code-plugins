@@ -44,8 +44,6 @@ export function privatePath(path: string, directory = false): void {
     throw new Error("Unsafe proxy configuration");
 }
 
-// Never consult cwd, tracing configuration, or environment overrides.
-// Validate the full schema even when disabled; preserve its saved enabled state.
 export function loadConfig(home = userHome(), includeDisabled = false): ProxyConfig | undefined {
   let saved;
   try {

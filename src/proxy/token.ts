@@ -98,7 +98,6 @@ function spawnToken(
   });
 }
 
-// JWT parsing only bounds cache lifetime; the gateway verifies the signature.
 export class TokenCache {
   private cached?: { token: string; until: number };
   private pending?: Promise<string>;

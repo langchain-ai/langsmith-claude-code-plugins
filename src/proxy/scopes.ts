@@ -29,8 +29,6 @@ export const BASE = "ANTHROPIC_BASE_URL";
 export const HEADERS = "ANTHROPIC_CUSTOM_HEADERS";
 export const proxyKeyLine = (config: ProxyConfig) => `X-LangSmith-Proxy-Key: ${config.secret}`;
 
-// These snapshots are routing observations, not authorization or restoration records.
-// Never follow linked parent directories, including optional registered project paths.
 export function routingSnapshot(path: string) {
   try {
     const root = dirname(dirname(path));

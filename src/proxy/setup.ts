@@ -23,7 +23,6 @@ export function validateCLI(cli: string): string {
   return cli;
 }
 
-// Internal config creation for consented enable; not a runtime subcommand.
 export function createConfig(
   cli: string,
   profile: string | undefined,

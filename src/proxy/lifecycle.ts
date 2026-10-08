@@ -38,7 +38,6 @@ export function control(
         );
       },
     );
-    // Wall-clock timeout, not a socket-inactivity timer.
     const timer = setTimeout(() => req.destroy(new Error("Local proxy unavailable")), timeoutMs);
     req.on("close", () => clearTimeout(timer));
     req.on("error", () => reject(new Error("Local proxy unavailable")));

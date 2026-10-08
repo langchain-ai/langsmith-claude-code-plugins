@@ -743,7 +743,7 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     await expect(cache.get()).rejects.toThrow("LangSmith token unavailable");
     expect(load).toHaveBeenCalledTimes(1);
     now += 1;
-    expect(load).toHaveBeenCalledTimes(1); // No automatic retry of failed work.
+    expect(load).toHaveBeenCalledTimes(1);
     await expect(cache.get()).resolves.toBe(token);
     expect(load).toHaveBeenCalledTimes(2);
   });
@@ -893,8 +893,6 @@ describe("shared lifecycle and explicit configuration", () => {
               });
         if (routing !== "absent")
           for (const target of paths) writeFileSync(target, text, { mode: 0o600 });
-        // The absent case represents managed-only routing. No managed policy fixture
-        // or parser is needed: hooks only consume the enabled private config.
         const daemon = createProxy(f.config, { token: f.token });
         cleanup.push(() => daemon.drain());
         const unref = vi.fn();
@@ -957,7 +955,6 @@ describe("shared lifecycle and explicit configuration", () => {
     const home = temporary();
     mkdirSync(configDir(home), { recursive: true, mode: 0o700 });
     writeFileSync(join(configDir(home), "config.json"), JSON.stringify(config), { mode: 0o600 });
-    // End still releases a lease after routing settings have been removed.
     await gatewayHook("SessionEnd", "one", "/must-not-spawn", home);
     expect(methods).toEqual(["DELETE"]);
   });
@@ -1035,8 +1032,6 @@ describe("shared lifecycle and explicit configuration", () => {
     const server = http.createServer((_req, res) => res.end(oldIdentity()));
     config.port = await listen(server);
     expect(await control(config, "GET", "/_langsmith/health")).not.toBe(identity(config));
-    // Candidate exits without touching real config or credentials; the foreign
-    // listener must remain alive and never count as a compatible daemon.
     const entry = join(temporary(), "candidate.cjs");
     writeFileSync(entry, "process.exit(0)");
     await expect(ensure(config, entry)).rejects.toThrow("Local proxy unavailable");

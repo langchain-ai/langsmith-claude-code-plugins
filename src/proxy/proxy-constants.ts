@@ -111,7 +111,6 @@ export const routing = new Set([
   "x-secret-token",
 ]);
 
-// Matches smith-go/gateway's buffered request limit, including large image contexts.
 export const MAX_REQUEST_BYTES = 60 * 1024 * 1024;
 
 export const AUTH = [

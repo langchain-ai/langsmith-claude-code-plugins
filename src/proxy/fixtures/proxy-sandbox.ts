@@ -9,7 +9,6 @@ import { KEY_HEADER } from "../proxy-constants.js";
 import type { ProxyConfig } from "../proxy-models.js";
 import { cleanup, listen } from "./server-sandbox.js";
 
-// Synthetic native token; never read actual Claude or CLI credentials in tests.
 export const native = `sk-ant-oat01-${"test_native-".repeat(8)}`;
 export const nativeAuthorization = `Bearer ${native}`;
 export const jwt = (exp = Date.now() / 1000 + 300) =>

@@ -72,7 +72,6 @@ describe("packaged read-only status", () => {
         apiUrl: "https://API.preview.test:443/",
         gatewayUrl: "https://gateway.preview.test:8443/",
       });
-      // identity includes normalized endpoint origins.
       config.apiUrl = "https://api.preview.test";
       config.gatewayUrl = "https://gateway.preview.test:8443";
       const global = provision("global");

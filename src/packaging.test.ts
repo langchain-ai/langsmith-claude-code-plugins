@@ -133,7 +133,6 @@ describe("separate marketplace packages", () => {
             : `argument-hint: "--scope global|project"`,
         "disable-model-invocation: true",
       ]);
-      // Like tracing mute/unmute: no model instructions or fallback prose.
       expect(body.trim()).toBe(`/langsmith-gateway:${name} $ARGUMENTS`);
       for (const scope of ["global", "project"]) {
         const args = ["--scope", scope];
@@ -189,8 +188,6 @@ describe("separate marketplace packages", () => {
         const beforeSettings = '{"env":{"ANTHROPIC_CUSTOM_HEADERS":"X-Private: synthetic"}}';
         writeFileSync(settings, beforeSettings, { mode: 0o600 });
         const guard = join(sandbox, "guard.cjs");
-        // Redirect OS home, not just HOME. Exit immediately on any forbidden
-        // attempt so the runtime cannot swallow a denial and hide a regression.
         writeFileSync(
           guard,
           `
@@ -351,7 +348,6 @@ const deny = () => { throw new Error("No subprocess/CLI permitted"); };
 const cp = require("node:child_process");
 const originalSpawnSync = cp.spawnSync;
 for (const name of ["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "fork"]) cp[name] = deny;
-// Only repository metadata checks are allowed; never a CLI/token subprocess.
 cp.spawnSync = (file, args, options) => file === "git" ? originalSpawnSync("/usr/bin/git", args, options) : deny();
 globalThis.fetch = deny;
 require("node:module").syncBuiltinESMExports();
@@ -429,7 +425,6 @@ require("node:module").syncBuiltinESMExports();
         enabled: false,
         settingsTargets: [],
       });
-      // Fresh and repeated hook setup, then hook disable, against the same local double.
       writeFileSync(join(dir, "config.json"), JSON.stringify(config));
       await setupScope("global");
       const disabled = await invokeHook("/langsmith-gateway:disable --scope global");
@@ -456,8 +451,6 @@ require("node:module").syncBuiltinESMExports();
       const installed = join(sandbox, "plugin");
       cpSync(gatewayRoot, installed, { recursive: true });
       const artifact = join(installed, "bundle/gateway.js");
-      // Analyze the actual distributable, not source-text pins. Any remaining
-      // package import is forbidden; relative imports must resolve in the copy.
       const result = await build({
         entryPoints: [artifact],
         bundle: true,
@@ -575,8 +568,6 @@ require("node:module").syncBuiltinESMExports();
       expect(delayed).toEqual({ stdout: "", stderr: "" });
       expect(readdirSync(configDir)).toEqual(["config.json"]);
       expect(json(join(configDir, "config.json"))).toEqual(retained);
-      // Invalid disabled data must not silently short-circuit validation. Hook
-      // failures stay safe and sanitized; daemon errors exit nonzero.
       for (const invalid of [
         { enabled: false },
         { ...retained, useClaudeSubscription: undefined },

@@ -110,7 +110,7 @@ for (const name of ["writeFile", "appendFile", "mkdir", "mkdtemp", "unlink", "rm
 fs.createWriteStream = deny;
 function allowed(path) {
  const s = String(path);
- if (!s.startsWith(home) && !s.startsWith(project)) return true; // module loader
+ if (!s.startsWith(home) && !s.startsWith(project)) return true;
  return s.endsWith("/config.json") || s.endsWith("/settings.json") || s.endsWith("/settings.local.json");
 }
 for (const target of [fs, fs.promises]) for (const name of ["open", "openSync"]) {

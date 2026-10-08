@@ -65,8 +65,6 @@ export function nativeToken(req: IncomingMessage): string | undefined {
   if (count !== 1 || typeof value !== "string") return;
   if (!/^Bearer /i.test(value)) return;
   const token = value.slice(7);
-  // No subtype/suffix grammar. Reject whitespace, controls and comma ambiguity
-  // without trimming or changing the raw credential, and ensure Node can send it.
   // eslint-disable-next-line no-control-regex
   if (!token.startsWith("sk-ant-") || token.length <= 7 || /[\s\x00-\x1f\x7f-\x9f,]/.test(token))
     return;
@@ -104,7 +102,6 @@ export function cleanHeaders(headers: IncomingHttpHeaders, request = true): Inco
 // Never resolve an untrusted URL against the upstream. Restrict the raw origin-form
 // path first, then append it to the fixed prefix. No escapes, traversal, or authority.
 export function upstreamPath(method: string, raw: string): string | undefined {
-  // Reject control bytes deliberately at the raw request-target boundary.
   // eslint-disable-next-line no-control-regex
   if (raw.length > 4096 || /[\\#\x00-\x20\x7f]/.test(raw)) return;
   const [path, query] = raw.split("?", 2);
@@ -115,7 +112,6 @@ export function upstreamPath(method: string, raw: string): string | undefined {
     )
   )
     return;
-  // Query values are data, never used to select an upstream. Limit SDK query keys.
   if (query !== undefined) {
     if (raw.indexOf("?", raw.indexOf("?") + 1) !== -1) return;
     const allowed = method === "POST" ? ["beta"] : ["beta", "limit", "before_id", "after_id"];
@@ -136,8 +132,6 @@ class RequestError extends Error {
   }
 }
 
-// Reject a malformed value here, since the gateway answers an unrecognised workspace
-// with a bare unauthorized that is indistinguishable from a rejected token.
 export function callerWorkspace(req: IncomingMessage): string | undefined {
   const values = req.rawHeaders.filter(
     (_, i) => i % 2 === 1 && req.rawHeaders[i - 1].toLowerCase() === TENANT_HEADER,
@@ -202,7 +196,6 @@ async function prepareBody(req: IncomingMessage, path: string) {
   const model = body.model;
   if (typeof model !== "string" || !model.trim())
     throw new RequestError(400, "model must be a non-empty string");
-  // Only the first slash separates provider and model; no provider-name inference.
   const slash = model.indexOf("/");
   if (slash === 0 || slash === model.length - 1)
     throw new RequestError(400, "model must be a bare ID or provider/model");
@@ -282,8 +275,6 @@ function reply(res: ServerResponse, status: number, message: string): void {
   res.end(message);
 }
 
-// Inject only the transport/token source in tests; production always uses HTTPS,
-// the configured origin/allowlisted paths, system TLS validation, and never follows redirects.
 export function createProxy(
   config: ProxyConfig,
   options: {
@@ -358,7 +349,6 @@ export function createProxy(
       );
       return;
     }
-    // Strip client credentials/routing before adding trusted gateway credentials.
     const headers = cleanHeaders(req.headers);
     if (sessions.active >= 64) {
       reply(res, 503, "Local proxy busy");

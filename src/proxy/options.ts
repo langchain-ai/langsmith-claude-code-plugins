@@ -107,8 +107,6 @@ export function parseStatusArgs(args: string[]): { scope?: SetupOptions["scope"]
   throw new SetupError(STATUS_GUIDANCE);
 }
 
-// No shell, expansion, quoting interpretation or command-markup parsing. Only
-// exact standalone slash commands are authorized; malformed arguments still block.
 export function parseGatewayCommand(
   prompt: unknown,
 ): { command: "setup" | "disable" | "status"; args: string[] } | undefined {
@@ -116,7 +114,6 @@ export function parseGatewayCommand(
   const match = /^\/langsmith-gateway:(setup|disable|status)(?=\s|$)/.exec(prompt);
   if (!match) return;
   const rest = prompt.slice(match[0].length);
-  // Control bytes must never be normalized into an authorized invocation.
   // eslint-disable-next-line no-control-regex
   if (/[\r\n\x00-\x1f'"`$;&|<>\\]/.test(rest))
     throw new SetupError(match[1] === "status" ? STATUS_GUIDANCE : COMMAND_GUIDANCE);
