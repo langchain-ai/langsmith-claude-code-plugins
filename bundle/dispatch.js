@@ -904,6 +904,7 @@ var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
 var QUEUE_DIR_NAME = "langsmith_queue";
 var QUEUE_FILE_SUFFIX = ".queue.json";
 var QUEUE_TEMP_SUFFIX = ".queue.tmp";
+var STATE_TEMP_SUFFIX = ".state.tmp";
 var QUEUE_ID_TIME_WIDTH = 16;
 var QUEUE_MAX_ENTRIES = 500;
 var QUEUE_MAX_ATTEMPTS = 5;
@@ -14156,8 +14157,9 @@ function runIsTooOldToUpload(entry, now = Date.now()) {
 }
 
 // dist/src/state.js
-import { readFileSync as readFileSync7, writeFileSync as writeFileSync5, writeSync, mkdirSync as mkdirSync6, openSync, closeSync, unlinkSync as unlinkSync4 } from "node:fs";
+import { readFileSync as readFileSync7, writeSync, mkdirSync as mkdirSync6, openSync, closeSync, renameSync as renameSync6, unlinkSync as unlinkSync4 } from "node:fs";
 import { dirname as dirname4 } from "node:path";
+import { randomUUID as randomUUID2 } from "node:crypto";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
 function lockPath(stateFilePath) {
@@ -14245,10 +14247,20 @@ async function withFileLock(filePath, fn) {
     releaseLock(filePath);
   }
 }
+function publishState(stateFilePath, state) {
+  const temp = `${stateFilePath}.${randomUUID2()}${STATE_TEMP_SUFFIX}`;
+  const fd = openSync(temp, "wx");
+  try {
+    writeSync(fd, JSON.stringify(state, null, 2));
+  } finally {
+    closeSync(fd);
+  }
+  renameSync6(temp, stateFilePath);
+}
 async function atomicUpdateState(stateFilePath, fn) {
   await withFileLock(stateFilePath, () => {
     const state = loadState(stateFilePath);
-    writeFileSync5(stateFilePath, JSON.stringify(fn(state), null, 2));
+    publishState(stateFilePath, fn(state));
   });
 }
 function loadState(stateFilePath) {
@@ -14391,7 +14403,7 @@ async function main(cwd) {
 }
 
 // dist/src/tracing-policy.js
-import { randomUUID as randomUUID2 } from "node:crypto";
+import { randomUUID as randomUUID3 } from "node:crypto";
 import { lstatSync as lstatSync2, readFileSync as readFileSync8 } from "node:fs";
 import { mkdir as mkdir3, open, rename as rename2, rmdir, unlink as unlink2 } from "node:fs/promises";
 import { dirname as dirname5 } from "node:path";
@@ -14489,7 +14501,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
       throw new Error(`Cannot read tracing preferences at ${path3}. Refusing to overwrite them; repair the file or its permissions before retrying. No preferences were changed.`, { cause: error2 });
     }
     policy.threads = { ...policy.threads, [sessionId]: mode };
-    tempPath = `${path3}.${process.pid}.${randomUUID2()}.tmp`;
+    tempPath = `${path3}.${process.pid}.${randomUUID3()}.tmp`;
     const temp = await open(tempPath, "wx", 384);
     try {
       await temp.writeFile(`${JSON.stringify(policy)}

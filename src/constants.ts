@@ -62,6 +62,9 @@ const QUEUE_FILE_SUFFIX = ".queue.json";
 /** A half-written entry carries this instead, so a reader never sees it. */
 const QUEUE_TEMP_SUFFIX = ".queue.tmp";
 
+/** The same guard for the state file, which readers load without taking the lock. */
+const STATE_TEMP_SUFFIX = ".state.tmp";
+
 /** Zero-padding that keeps entry names sorting by time well past the year 9999. */
 const QUEUE_ID_TIME_WIDTH = 16;
 
@@ -120,6 +123,7 @@ export {
   QUEUE_DIR_NAME,
   QUEUE_FILE_SUFFIX,
   QUEUE_TEMP_SUFFIX,
+  STATE_TEMP_SUFFIX,
   QUEUE_ID_TIME_WIDTH,
   QUEUE_MAX_ENTRIES,
   QUEUE_MAX_ATTEMPTS,

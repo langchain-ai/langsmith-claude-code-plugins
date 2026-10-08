@@ -5,14 +5,16 @@
 
 import {
   readFileSync,
-  writeFileSync,
   writeSync,
   mkdirSync,
   openSync,
   closeSync,
+  renameSync,
   unlinkSync,
 } from "node:fs";
 import { dirname } from "node:path";
+import { randomUUID } from "node:crypto";
+import { STATE_TEMP_SUFFIX } from "./constants.js";
 import type { TracingState, SessionState } from "./types.js";
 
 // ─── Atomic read-modify-write ────────────────────────────────────────────────
@@ -117,6 +119,19 @@ export async function withFileLock<T>(filePath: string, fn: () => T | Promise<T>
   }
 }
 
+/** Published by rename, since readers load state without the lock and must never see a half-written file. */
+function publishState(stateFilePath: string, state: TracingState): void {
+  const temp = `${stateFilePath}.${randomUUID()}${STATE_TEMP_SUFFIX}`;
+  // "wx" refuses an existing path, so a planted symlink cannot redirect this write.
+  const fd = openSync(temp, "wx");
+  try {
+    writeSync(fd, JSON.stringify(state, null, 2));
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(temp, stateFilePath);
+}
+
 /**
  * Atomically read state, apply `fn`, and write the result back.
  * A file lock prevents concurrent PostToolUse hooks from clobbering each other.
@@ -127,7 +142,7 @@ export async function atomicUpdateState(
 ): Promise<void> {
   await withFileLock(stateFilePath, () => {
     const state = loadState(stateFilePath);
-    writeFileSync(stateFilePath, JSON.stringify(fn(state), null, 2));
+    publishState(stateFilePath, fn(state));
   });
 }
 
@@ -144,7 +159,7 @@ export function loadState(stateFilePath: string): TracingState {
 
 export function saveState(stateFilePath: string, state: TracingState): void {
   mkdirSync(dirname(stateFilePath), { recursive: true });
-  writeFileSync(stateFilePath, JSON.stringify(state, null, 2));
+  publishState(stateFilePath, state);
 }
 
 export function getSessionState(state: TracingState, sessionId: string): SessionState {
