@@ -30,6 +30,7 @@ export interface SetupOptions extends CredentialIdentity {
 export interface CredentialState {
   sinceSuccessMs?: number;
   sinceFailureMs?: number;
+  sinceRefusalMs?: number;
 }
 
 export interface Endpoints {

@@ -155,7 +155,8 @@ var SECONDS_AGO = (ms) => `${Math.max(0, Math.round(ms / 1e3))} seconds ago`;
 var CREDENTIAL_NEVER_OBTAINED = (failed) => `broken, and every attempt so far has failed, the most recent ${failed}`;
 var CREDENTIAL_WORKING = (obtained) => `working, and was last obtained ${obtained}`;
 var CREDENTIAL_COMMAND_FAILING = (failed, obtained) => `broken, because the last attempt failed ${failed} and the last good one was ${obtained}`;
-var CREDENTIAL_STATE_KEYS = ["sinceSuccessMs", "sinceFailureMs"];
+var CREDENTIAL_REFUSED = (refused, obtained) => `broken, because the gateway refused it ${refused} and it was last obtained ${obtained}`;
+var CREDENTIAL_STATE_KEYS = ["sinceSuccessMs", "sinceFailureMs", "sinceRefusalMs"];
 var BEARER_TOKEN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 var WORKSPACE_ID = /^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/;
 var PROFILE_NAME = /^[a-zA-Z0-9_.-]{1,128}$/;
@@ -181,6 +182,8 @@ var MAX_TOKEN_BYTES = 16384;
 var EXPIRY_SKEW_MS = 5e3;
 var EXPIRY_MARGIN_MS = 6e4;
 var RETRY_AFTER_MS = 2e3;
+var REJECTION_RECHECK_MS = 5e3;
+var UPSTREAM_REJECTED_STATUS = 401;
 var MAX_IDENTITY_TOKEN_COMMAND = 4096;
 var CREDENTIAL_TIMEOUT_MS = 1e4;
 var CLI_TOKEN_TTL_MS = 6e4;
@@ -414,6 +417,8 @@ var TokenCache = class {
   retryAt = 0;
   succeededAt;
   failedAt;
+  refusedAt;
+  rejectedAt = 0;
   constructor(load, now = Date.now, ttlMs = CLI_TOKEN_TTL_MS) {
     this.load = load;
     this.now = now;
@@ -427,8 +432,18 @@ var TokenCache = class {
     const since = (at) => at === void 0 ? void 0 : now - at;
     return {
       sinceSuccessMs: since(this.succeededAt),
-      sinceFailureMs: since(this.failedAt)
+      sinceFailureMs: since(this.failedAt),
+      sinceRefusalMs: since(this.refusedAt)
     };
+  }
+  reject(token) {
+    this.refusedAt = this.now();
+    if (this.cached?.token !== token)
+      return;
+    if (this.now() < this.rejectedAt + REJECTION_RECHECK_MS)
+      return;
+    this.cached = void 0;
+    this.rejectedAt = this.now();
   }
   get() {
     if (this.cached && this.now() < this.cached.until)
@@ -809,6 +824,8 @@ function createProxy(config, options = {}) {
         rejectUnauthorized: true
       }, (upstream) => {
         clearTimeout(headerTimer);
+        if (upstream.statusCode === UPSTREAM_REJECTED_STATUS)
+          tokens.reject(token);
         incoming = upstream;
         if (ended) {
           upstream.destroy();
@@ -1522,15 +1539,17 @@ function signInSummary(config) {
 function workspaceSummary(config) {
   return config.workspaceId === void 0 ? WORKSPACE_UNSET : JSON.stringify(config.workspaceId);
 }
+var sooner = (a, b) => a === void 0 ? b : b === void 0 ? a : Math.min(a, b);
 function credentialSummary(state) {
-  const { sinceSuccessMs, sinceFailureMs } = state;
-  if (sinceSuccessMs === void 0 && sinceFailureMs === void 0)
+  const { sinceSuccessMs, sinceFailureMs, sinceRefusalMs } = state;
+  const sinceBadMs = sooner(sinceFailureMs, sinceRefusalMs);
+  if (sinceSuccessMs === void 0 && sinceBadMs === void 0)
     return CREDENTIAL_UNTRIED;
   if (sinceSuccessMs === void 0)
-    return CREDENTIAL_NEVER_OBTAINED(SECONDS_AGO(sinceFailureMs));
-  if (sinceFailureMs === void 0 || sinceFailureMs > sinceSuccessMs)
+    return CREDENTIAL_NEVER_OBTAINED(SECONDS_AGO(sinceBadMs));
+  if (sinceBadMs === void 0 || sinceBadMs > sinceSuccessMs)
     return CREDENTIAL_WORKING(SECONDS_AGO(sinceSuccessMs));
-  return CREDENTIAL_COMMAND_FAILING(SECONDS_AGO(sinceFailureMs), SECONDS_AGO(sinceSuccessMs));
+  return sinceBadMs === sinceRefusalMs ? CREDENTIAL_REFUSED(SECONDS_AGO(sinceRefusalMs), SECONDS_AGO(sinceSuccessMs)) : CREDENTIAL_COMMAND_FAILING(SECONDS_AGO(sinceFailureMs), SECONDS_AGO(sinceSuccessMs));
 }
 async function credentialStatus(config, reachable) {
   if (!reachable)

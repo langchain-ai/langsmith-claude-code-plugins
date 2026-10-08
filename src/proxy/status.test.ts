@@ -158,6 +158,10 @@ describe("packaged read-only status", () => {
       { sinceSuccessMs: 90_000, sinceFailureMs: 3000 },
       "broken, because the last attempt failed 3 seconds ago and the last good one was 90 seconds ago",
     ],
+    [
+      { sinceSuccessMs: 4000, sinceRefusalMs: 2000 },
+      "broken, because the gateway refused it 2 seconds ago and it was last obtained 4 seconds ago",
+    ],
   ])("summarises %j", (state, expected) => expect(credentialSummary(state)).toBe(expected));
   it.each([["not json"], [5], [{ sinceSuccessMs: "5" }], [{ sinceSuccessMs: -5 }], [[1, 2]]])(
     "refuses to read %j as a credential report",

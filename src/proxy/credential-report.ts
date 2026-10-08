@@ -5,6 +5,7 @@ import {
   CREDENTIAL_NEVER_OBTAINED,
   CREDENTIAL_NO_ANSWER,
   CREDENTIAL_NO_DAEMON,
+  CREDENTIAL_REFUSED,
   CREDENTIAL_STATE_PATH,
   CREDENTIAL_UNTRIED,
   CREDENTIAL_WORKING,
@@ -25,13 +26,19 @@ export function workspaceSummary(config: ProxyConfig): string {
   return config.workspaceId === undefined ? WORKSPACE_UNSET : JSON.stringify(config.workspaceId);
 }
 
+const sooner = (a?: number, b?: number) =>
+  a === undefined ? b : b === undefined ? a : Math.min(a, b);
+
 export function credentialSummary(state: CredentialState): string {
-  const { sinceSuccessMs, sinceFailureMs } = state;
-  if (sinceSuccessMs === undefined && sinceFailureMs === undefined) return CREDENTIAL_UNTRIED;
-  if (sinceSuccessMs === undefined) return CREDENTIAL_NEVER_OBTAINED(SECONDS_AGO(sinceFailureMs!));
-  if (sinceFailureMs === undefined || sinceFailureMs > sinceSuccessMs)
+  const { sinceSuccessMs, sinceFailureMs, sinceRefusalMs } = state;
+  const sinceBadMs = sooner(sinceFailureMs, sinceRefusalMs);
+  if (sinceSuccessMs === undefined && sinceBadMs === undefined) return CREDENTIAL_UNTRIED;
+  if (sinceSuccessMs === undefined) return CREDENTIAL_NEVER_OBTAINED(SECONDS_AGO(sinceBadMs!));
+  if (sinceBadMs === undefined || sinceBadMs > sinceSuccessMs)
     return CREDENTIAL_WORKING(SECONDS_AGO(sinceSuccessMs));
-  return CREDENTIAL_COMMAND_FAILING(SECONDS_AGO(sinceFailureMs), SECONDS_AGO(sinceSuccessMs));
+  return sinceBadMs === sinceRefusalMs
+    ? CREDENTIAL_REFUSED(SECONDS_AGO(sinceRefusalMs), SECONDS_AGO(sinceSuccessMs))
+    : CREDENTIAL_COMMAND_FAILING(SECONDS_AGO(sinceFailureMs!), SECONDS_AGO(sinceSuccessMs));
 }
 
 export async function credentialStatus(config: ProxyConfig, reachable: boolean): Promise<string> {

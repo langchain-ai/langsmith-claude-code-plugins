@@ -32,11 +32,14 @@ export function tokenFile(contents: string) {
   writeFileSync(path, contents, { mode: 0o600 });
   return path;
 }
-export async function fixture(extra: Partial<ProxyConfig> = {}) {
+export async function fixture(
+  extra: Partial<ProxyConfig> = {},
+  respond: (res: http.ServerResponse, count: number) => void = (res) => res.end("ok"),
+) {
   const seen: http.IncomingHttpHeaders[] = [];
   const upstream = http.createServer((req, res) => {
     seen.push(req.headers);
-    res.end("ok");
+    respond(res, seen.length - 1);
   });
   const upstreamPort = await listen(upstream);
   const transport = ((options: https.RequestOptions, cb: (r: http.IncomingMessage) => void) =>
@@ -76,6 +79,20 @@ export async function credentialReport(c: ProxyConfig): Promise<CredentialState>
   if (status !== 200) throw new Error(`Credential report unavailable: ${status}`);
   return JSON.parse(body) as CredentialState;
 }
+export function countingCommand(...tokens: string[]) {
+  const counter = join(temporary(), "runs");
+  const source = tokenFile(tokens.join("\n"));
+  writeFileSync(counter, "", { mode: 0o600 });
+  return {
+    counter,
+    command: `printf x >> ${counter}; head -n $(wc -c < ${counter}) ${source} | tail -n 1`,
+  };
+}
+export const refuse =
+  (status: number | ((count: number) => number)) => (res: http.ServerResponse, count: number) => {
+    res.statusCode = typeof status === "number" ? status : status(count);
+    res.end("refused");
+  };
 export function savedConfig(extra: Record<string, unknown>) {
   const dir = temporary();
   const directory = join(dir, ".claude", "langsmith-proxy");

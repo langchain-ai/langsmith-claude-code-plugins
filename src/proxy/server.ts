@@ -17,6 +17,7 @@ import {
   PROTOCOL_VERSION,
   TENANT_HEADER,
   TENANT_HEADER_GUIDANCE,
+  UPSTREAM_REJECTED_STATUS,
   hop,
   routing,
 } from "./proxy-constants.js";
@@ -419,6 +420,7 @@ export function createProxy(
         },
         (upstream) => {
           clearTimeout(headerTimer);
+          if (upstream.statusCode === UPSTREAM_REJECTED_STATUS) tokens.reject(token);
           incoming = upstream;
           if (ended) {
             upstream.destroy();

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { credentialSummary } from "./credential-report.js";
 import { identity } from "./server.js";
 import { configDir, loadConfig } from "./config.js";
 import { enable } from "./settings.js";
@@ -9,9 +10,11 @@ import { cleanup } from "./fixtures/server-sandbox.js";
 import {
   base,
   CALLER_WORKSPACE,
+  countingCommand,
   credentialReport,
   existingInstall,
   fixture,
+  refuse,
   savedConfig,
   SAVED_COMMAND,
   send,
@@ -72,6 +75,15 @@ describe("identity token command", () => {
     expect(JSON.stringify(report)).not.toContain(token.split(".")[1]);
   });
 
+  it("records a credential the gateway refused, so status cannot still call it working", async () => {
+    const { command } = countingCommand(unexpiredToken("good"));
+    const { config } = await fixture({ identityTokenCommand: command }, refuse(401));
+    expect((await send(config)).status).toBe(401);
+    const report = await credentialReport(config);
+    expect(report.sinceSuccessMs).toBeGreaterThanOrEqual(0);
+    expect(credentialSummary(report)).toContain("broken, because the gateway refused it");
+  });
+
   it("runs the command without the caller's environment", async () => {
     const { config, seen } = await fixture({
       identityTokenCommand: `test -z "$ANTHROPIC_API_KEY" && cat ${tokenFile(unexpiredToken("clean"))}`,
@@ -80,6 +92,42 @@ describe("identity token command", () => {
     cleanup.push(() => delete process.env.ANTHROPIC_API_KEY);
     expect((await send(config)).status).toBe(200);
     expect(seen[0].authorization).toBe(`Bearer ${unexpiredToken("clean")}`);
+  });
+});
+
+describe("a credential the gateway refuses", () => {
+  it("stops resending a refused token and carries the rotated one instead", async () => {
+    const path = tokenFile(unexpiredToken("revoked"));
+    const { config, seen } = await fixture(
+      { identityTokenCommand: `cat ${path}` },
+      refuse((count) => (count === 0 ? 401 : 200)),
+    );
+    expect((await send(config)).status).toBe(401);
+    expect(seen[0].authorization).toBe(`Bearer ${unexpiredToken("revoked")}`);
+    writeFileSync(path, unexpiredToken("rotated"), { mode: 0o600 });
+    expect((await send(config)).status).toBe(200);
+    expect(seen[1].authorization).toBe(`Bearer ${unexpiredToken("rotated")}`);
+  });
+
+  it.each([
+    [401, 2],
+    [403, 1],
+  ])("re-runs the command at most once while the gateway answers %i", async (status, expected) => {
+    const { counter, command } = countingCommand(unexpiredToken("good"));
+    const { config, seen } = await fixture({ identityTokenCommand: command }, refuse(status));
+    for (let i = 0; i < 6; i++) expect((await send(config)).status).toBe(status);
+    expect(readFileSync(counter, "utf8")).toHaveLength(expected);
+    for (const headers of seen)
+      expect(headers.authorization).toBe(`Bearer ${unexpiredToken("good")}`);
+  });
+
+  it("does not re-run a command that mints a different token every time", async () => {
+    const minted = Array.from({ length: 6 }, (_, i) => unexpiredToken(`minted-${i}`));
+    const { counter, command } = countingCommand(...minted);
+    const { config, seen } = await fixture({ identityTokenCommand: command }, refuse(401));
+    for (let i = 0; i < 6; i++) expect((await send(config)).status).toBe(401);
+    expect(readFileSync(counter, "utf8")).toHaveLength(2);
+    expect(seen[0].authorization).toBe(`Bearer ${minted[0]}`);
   });
 });
 

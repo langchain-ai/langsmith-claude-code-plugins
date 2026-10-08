@@ -72,7 +72,9 @@ export const CREDENTIAL_WORKING = (obtained: string) =>
   `working, and was last obtained ${obtained}`;
 export const CREDENTIAL_COMMAND_FAILING = (failed: string, obtained: string) =>
   `broken, because the last attempt failed ${failed} and the last good one was ${obtained}`;
-export const CREDENTIAL_STATE_KEYS = ["sinceSuccessMs", "sinceFailureMs"];
+export const CREDENTIAL_REFUSED = (refused: string, obtained: string) =>
+  `broken, because the gateway refused it ${refused} and it was last obtained ${obtained}`;
+export const CREDENTIAL_STATE_KEYS = ["sinceSuccessMs", "sinceFailureMs", "sinceRefusalMs"];
 
 export const BEARER_TOKEN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 export const WORKSPACE_ID = /^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/;
@@ -102,6 +104,8 @@ export const MAX_TOKEN_BYTES = 16384;
 export const EXPIRY_SKEW_MS = 5000;
 export const EXPIRY_MARGIN_MS = 60_000;
 export const RETRY_AFTER_MS = 2000;
+export const REJECTION_RECHECK_MS = 5000;
+export const UPSTREAM_REJECTED_STATUS = 401;
 export const MAX_IDENTITY_TOKEN_COMMAND = 4096;
 export const CREDENTIAL_TIMEOUT_MS = 10_000;
 export const CLI_TOKEN_TTL_MS = 60_000;

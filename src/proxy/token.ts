@@ -8,6 +8,7 @@ import {
   EXPIRY_MARGIN_MS,
   EXPIRY_SKEW_MS,
   MAX_TOKEN_BYTES,
+  REJECTION_RECHECK_MS,
   RETRY_AFTER_MS,
   SHELL,
 } from "./proxy-constants.js";
@@ -104,6 +105,8 @@ export class TokenCache {
   private retryAt = 0;
   private succeededAt?: number;
   private failedAt?: number;
+  private refusedAt?: number;
+  private rejectedAt = 0;
   constructor(
     private readonly load: () => Promise<string>,
     private readonly now = Date.now,
@@ -118,7 +121,15 @@ export class TokenCache {
     return {
       sinceSuccessMs: since(this.succeededAt),
       sinceFailureMs: since(this.failedAt),
+      sinceRefusalMs: since(this.refusedAt),
     };
+  }
+  reject(token: string): void {
+    this.refusedAt = this.now();
+    if (this.cached?.token !== token) return;
+    if (this.now() < this.rejectedAt + REJECTION_RECHECK_MS) return;
+    this.cached = undefined;
+    this.rejectedAt = this.now();
   }
   get(): Promise<string> {
     if (this.cached && this.now() < this.cached.until) return Promise.resolve(this.cached.token);
