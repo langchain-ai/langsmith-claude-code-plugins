@@ -30,12 +30,9 @@ nested under an `Agent` tool run and workflow stages under a `Workflow` tool run
 
 ## Two plugins in one repository
 
-`langsmith-tracing` is this repository root and `langsmith-gateway` is a separate experimental
-package under `plugins/langsmith-gateway` with its own manifest, hooks and bundle. It has to run on
-Node 20 without the repository root or `node_modules`, so pass that nested directory as
-`--plugin-dir` when you work on it since the root loads tracing only.
-[GATEWAY.md](./GATEWAY.md) covers installing and using it, and `src/proxy/proxy-models.ts` is the
-saved configuration it validates against.
+`langsmith-tracing` is this repository root and `langsmith-gateway` is its own package under
+`plugins/langsmith-gateway`. Point `--plugin-dir` at that nested directory to work on it, since the
+root loads tracing only, and [GATEWAY.md](./GATEWAY.md) covers the rest.
 
 ## The bundles are what actually run
 

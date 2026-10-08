@@ -2,9 +2,9 @@
 
 Sends Claude Code's model requests through [LangSmith](https://smith.langchain.com) instead of straight to the company that runs the model.
 
-A small helper program runs on your own machine and Claude Code talks to that instead. The helper proves the request is yours and passes it on to LangSmith, which holds the keys to the models, pays for the call and can record it. You keep using Claude Code exactly as before, so nothing about how you work changes.
+A small helper program runs on your own machine and Claude Code talks to that instead. The helper proves the request is yours and passes it on to LangSmith, which holds the keys to the models, pays for the call and can record it. You keep using Claude Code exactly as before.
 
-This is experimental. It is a different plugin from LangSmith tracing, neither one needs the other, and turning this on does not start tracing your conversations.
+This is a different plugin from LangSmith tracing. Neither needs the other, and turning this on does not start tracing your conversations.
 
 ## What you need
 
@@ -19,7 +19,7 @@ curl -fsSL https://cli.langsmith.com/install.sh | sh
 langsmith auth login
 ```
 
-Finish the sign-in in the browser that opens. Skip all of that if you use a company identity token instead, since setup then never looks for the tool.
+Finish the sign-in in the browser that opens. Skip all of that if you use a company identity token instead.
 
 ## Install
 
@@ -39,7 +39,7 @@ Installing changes nothing by itself, since routing stays off until you turn it 
 /langsmith-gateway:setup --scope project
 ```
 
-Choose `project` to route only the project you are in, or `global` to route every project. Setup points Claude Code at the helper, saves a secret that proves a request came from you, starts the helper and leaves your other settings alone. That secret lands in a settings file inside the project, at `.claude/settings.local.json`, so do not commit that file to git.
+Choose `project` to route only the project you are in, or `global` to route every project. Setup points Claude Code at the helper, starts it and leaves your other settings alone. It also saves a secret proving a request came from you, in the project's `.claude/settings.local.json`, so do not commit that file to git.
 
 Your sign-in is checked on your first message, not during setup, so a missing login shows up then.
 
@@ -49,7 +49,7 @@ Your sign-in is checked on your first message, not during setup, so a missing lo
 /langsmith-gateway:status
 ```
 
-It says whether your settings point at the helper and whether the helper answers. It changes nothing and it does not check your LangSmith sign-in, so send a message to prove the whole path works.
+It says whether your settings point at the helper and whether the helper answers. It changes nothing and does not check your sign-in, so send a message to prove the whole path works.
 
 ## Sign in with your company identity token
 
@@ -87,7 +87,7 @@ Other things that go wrong:
 
 ## Change your setup later
 
-Setup will not change your workspace, your token command or any of the other choices you made while routing is still on, because every project shares one helper and it is still running with the old ones. Change them like this:
+Setup will not change your workspace, your token command or the other choices you made while routing is on, because every project shares one helper that still holds the old ones. Change them like this:
 
 1. Turn routing off for every scope you turned on, so both `--scope project` and `--scope global` if you used both.
 2. Run setup again with the new options. If it says the local address is still busy, wait about 35 seconds and run it again.
