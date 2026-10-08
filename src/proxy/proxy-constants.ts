@@ -5,7 +5,7 @@ export const COMMAND_GUIDANCE =
   "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and put --identity-token-command last, followed by a command that prints one token on standard output. The daemon runs that command with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs quotes, pipes or anything else your shell sets up. Add --identity-token-ttl SECONDS to change how long each result is reused from the default 300.";
 
 export const CREDENTIAL_SOURCE_GUIDANCE =
-  "Setup needs one of two ways to sign in and found neither. Either install the LangSmith CLI using the README and complete terminal login with your selected profile and API URL (review the saved OAuth issuer), or add --workspace-id UUID and --identity-token-command with a command that prints your identity token. Then retry /langsmith-gateway:setup.";
+  "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI using the README and complete terminal login with your selected profile and API URL (review the saved OAuth issuer), or add --workspace-id UUID and --identity-token-command with a command that prints your identity token. Then retry /langsmith-gateway:setup.";
 
 export const STATUS_GUIDANCE =
   "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";

@@ -13,7 +13,7 @@ import {
   unchanged,
   type Snapshot,
 } from "./files.js";
-import { createConfig, validateCLI } from "./setup.js";
+import { createConfig, usableCLI, validateCLI } from "./setup.js";
 import { ensure, waitForStopped } from "./lifecycle.js";
 import { parseSetupArgs, parseDisableArgs, SetupError } from "./options.js";
 import {
@@ -170,7 +170,10 @@ export async function enable(
           enabled: true,
           ...selected,
           useClaudeSubscription,
-          cli: requested.cli === undefined ? config.cli : validateCLI(requested.cli),
+          cli:
+            requested.cli === undefined
+              ? usableCLI(config.cli, requested.identityTokenCommand ?? config.identityTokenCommand)
+              : validateCLI(requested.cli),
           profile: requested.profile ?? config.profile,
           port,
           identityTokenCommand: requested.identityTokenCommand ?? config.identityTokenCommand,

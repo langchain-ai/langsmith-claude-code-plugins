@@ -1,13 +1,5 @@
 import { afterEach, beforeEach, vi } from "vitest";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as os from "node:os";
@@ -47,10 +39,11 @@ export const tokenArgs = (cli?: string) => [
   TOKEN_COMMAND,
 ];
 export const noCliEnv = { PATH: "relative:/does-not-exist" };
+export const cliPath = () => join(home, "bin", "langsmith");
 export function installCli(): { PATH: string } {
   const dir = join(home, "bin");
   mkdirSync(dir, { mode: 0o700 });
-  symlinkSync(process.execPath, join(dir, "langsmith"));
+  writeFileSync(cliPath(), "#!/bin/sh\nexit 1\n", { mode: 0o700 });
   return { PATH: `relative:${dir}` };
 }
 beforeEach(() => {

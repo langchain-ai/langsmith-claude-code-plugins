@@ -114,7 +114,7 @@ function transaction(writes) {
 // dist/src/proxy/proxy-constants.js
 var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
 var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and put --identity-token-command last, followed by a command that prints one token on standard output. The daemon runs that command with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs quotes, pipes or anything else your shell sets up. Add --identity-token-ttl SECONDS to change how long each result is reused from the default 300.";
-var CREDENTIAL_SOURCE_GUIDANCE = "Setup needs one of two ways to sign in and found neither. Either install the LangSmith CLI using the README and complete terminal login with your selected profile and API URL (review the saved OAuth issuer), or add --workspace-id UUID and --identity-token-command with a command that prints your identity token. Then retry /langsmith-gateway:setup.";
+var CREDENTIAL_SOURCE_GUIDANCE = "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI using the README and complete terminal login with your selected profile and API URL (review the saved OAuth issuer), or add --workspace-id UUID and --identity-token-command with a command that prints your identity token. Then retry /langsmith-gateway:setup.";
 var STATUS_GUIDANCE = "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
 var TTL_RANGE_GUIDANCE = "Identity token cache seconds must be between 1 and 3600";
 var TENANT_HEADER_GUIDANCE = "Send x-tenant-id at most once and as a workspace UUID. Drop the header to use the workspace saved in your gateway configuration.";
@@ -312,8 +312,6 @@ function cliEnvironment() {
   return { HOME: userHome(), PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
 }
 function cliToken(config, timeoutMs = CREDENTIAL_TIMEOUT_MS, signal) {
-  if (config.cli === void 0)
-    return Promise.reject(new Error("LangSmith token unavailable"));
   return spawnToken(config.cli, [
     ...config.profile === void 0 ? [] : ["--profile", config.profile],
     "--api-url",
@@ -960,8 +958,17 @@ function validateCLI(cli) {
   accessSync(cli, constants2.X_OK);
   return cli;
 }
+function usableCLI(cli, command) {
+  if (cli === void 0 || command === void 0)
+    return cli;
+  try {
+    return validateCLI(cli) === cli ? cli : void 0;
+  } catch {
+    return void 0;
+  }
+}
 function createConfig(cli, profile, port, home = userHome(), urls = {}, useClaudeSubscription = false, credentials = {}) {
-  const valid = typeof useClaudeSubscription === "boolean" && (cli === void 0 ? credentials.identityTokenCommand !== void 0 : isAbsolute2(cli)) && absent(profile, isProfile) && isPort(port) && absent(credentials.identityTokenCommand, isIdentityTokenCommand) && absent(credentials.identityTokenTtlMs, isIdentityTokenTtlMs) && absent(credentials.workspaceId, isWorkspaceId);
+  const valid = typeof useClaudeSubscription === "boolean" && (cli === void 0 || isAbsolute2(cli)) && absent(profile, isProfile) && isPort(port) && absent(credentials.identityTokenCommand, isIdentityTokenCommand) && absent(credentials.identityTokenTtlMs, isIdentityTokenTtlMs) && absent(credentials.workspaceId, isWorkspaceId);
   if (!valid)
     throw new Error("Invalid setup arguments");
   const selected = endpoints(urls);
@@ -1258,7 +1265,7 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       enabled: true,
       ...selected,
       useClaudeSubscription,
-      cli: requested.cli === void 0 ? config.cli : validateCLI(requested.cli),
+      cli: requested.cli === void 0 ? usableCLI(config.cli, requested.identityTokenCommand ?? config.identityTokenCommand) : validateCLI(requested.cli),
       profile: requested.profile ?? config.profile,
       port,
       identityTokenCommand: requested.identityTokenCommand ?? config.identityTokenCommand,

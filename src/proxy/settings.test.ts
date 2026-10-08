@@ -14,7 +14,7 @@ import {
 import { join } from "node:path";
 import { enable, disable, routingStatus, SetupError } from "./settings.js";
 import { configDir, loadConfig } from "./config.js";
-import { API_URL, CREDENTIAL_SOURCE_GUIDANCE, UPSTREAM } from "./proxy-constants.js";
+import { API_URL, UPSTREAM } from "./proxy-constants.js";
 import { atomic, snapshot, transaction } from "./files.js";
 import { control, ensure, waitForStopped } from "./lifecycle.js";
 import { targetPaths, routingEnv, matchesRouting, BASE, HEADERS } from "./scopes.js";
@@ -24,6 +24,7 @@ import * as setupModule from "./setup.js";
 import { cliToken } from "./token.js";
 import {
   args,
+  cliPath,
   home,
   installCli,
   json,
@@ -34,6 +35,7 @@ import {
   TOKEN_COMMAND,
   tokenArgs,
   transport,
+  WORKSPACE,
 } from "./fixtures/settings-sandbox.js";
 
 vi.mock("node:os", async (original) => ({
@@ -552,11 +554,12 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
     expect(ensure).not.toHaveBeenCalled();
   });
   it("names both sign-in options when neither is available", async () => {
-    await expect(enable("/fake", ["--scope", "global"], noCliEnv)).rejects.toThrow(
-      CREDENTIAL_SOURCE_GUIDANCE,
+    const error = await enable("/fake", ["--scope", "global"], noCliEnv).catch(
+      (reason: unknown) => reason,
     );
-    expect(CREDENTIAL_SOURCE_GUIDANCE).toContain("LangSmith CLI");
-    expect(CREDENTIAL_SOURCE_GUIDANCE).toContain("--identity-token-command");
+    expect(error).toBeInstanceOf(SetupError);
+    expect(String(error)).toContain("LangSmith CLI");
+    expect(String(error)).toContain("--identity-token-command");
     expect(ensure).not.toHaveBeenCalled();
   });
   it("sets up with an identity token command and no CLI installed", async () => {
@@ -570,19 +573,37 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
   it("still discovers an installed CLI when no identity token command is given", async () => {
     await enable("/fake", ["--scope", "global"], installCli());
     const config = loadConfig()!;
-    expect(config.cli).toBe(realpathSync(process.execPath));
+    expect(config.cli).toBe(cliPath());
     expect(config.identityTokenCommand).toBeUndefined();
   });
-  it("switches between an identity token command and a pinned CLI", async () => {
+  it("adds a pinned CLI on top of an identity token command", async () => {
     await enable("/fake", tokenArgs(), noCliEnv);
     disable(["--scope", "global"], noCliEnv);
     await enable("/fake", ["--scope", "global", "--cli", process.execPath], noCliEnv);
-    expect(loadConfig()!.cli).toBe(realpathSync(process.execPath));
-    disable(["--scope", "global"], noCliEnv);
-    await enable("/fake", tokenArgs(process.execPath), noCliEnv);
     const both = loadConfig()!;
     expect(both.cli).toBe(realpathSync(process.execPath));
     expect(both.identityTokenCommand).toBe(TOKEN_COMMAND);
+  });
+  it("adds an identity token command on top of an installed CLI", async () => {
+    const env = installCli();
+    await enable("/fake", ["--scope", "global"], env);
+    disable(["--scope", "global"], env);
+    await enable("/fake", tokenArgs(), env);
+    const both = loadConfig()!;
+    expect(both.cli).toBe(cliPath());
+    expect(both.identityTokenCommand).toBe(TOKEN_COMMAND);
+    expect(both.workspaceId).toBe(WORKSPACE);
+  });
+  it("drops a saved CLI path that no longer exists when a token command is added", async () => {
+    const env = installCli();
+    await enable("/fake", ["--scope", "global"], env);
+    disable(["--scope", "global"], env);
+    rmSync(cliPath());
+    await enable("/fake", tokenArgs(), noCliEnv);
+    const config = loadConfig()!;
+    expect(config.cli).toBeUndefined();
+    expect(config.identityTokenCommand).toBe(TOKEN_COMMAND);
+    expect(Object.hasOwn(json(join(configDir(home), "config.json")), "cli")).toBe(false);
   });
   it("refuses malformed settings and changed pinned arguments", async () => {
     writeFileSync(settings, "not-json", { mode: 0o600 });

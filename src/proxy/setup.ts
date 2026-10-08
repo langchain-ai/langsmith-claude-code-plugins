@@ -23,6 +23,18 @@ export function validateCLI(cli: string): string {
   return cli;
 }
 
+export function usableCLI(
+  cli: string | undefined,
+  command: string | undefined,
+): string | undefined {
+  if (cli === undefined || command === undefined) return cli;
+  try {
+    return validateCLI(cli) === cli ? cli : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function createConfig(
   cli: string | undefined,
   profile: string | undefined,
@@ -34,7 +46,7 @@ export function createConfig(
 ): void {
   const valid =
     typeof useClaudeSubscription === "boolean" &&
-    (cli === undefined ? credentials.identityTokenCommand !== undefined : isAbsolute(cli)) &&
+    (cli === undefined || isAbsolute(cli)) &&
     absent(profile, isProfile) &&
     isPort(port) &&
     absent(credentials.identityTokenCommand, isIdentityTokenCommand) &&
