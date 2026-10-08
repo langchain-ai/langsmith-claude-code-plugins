@@ -14557,17 +14557,9 @@ import { isAbsolute, resolve as resolve3 } from "node:path";
 
 // dist/src/repo-attribution-paths.js
 import { statSync as statSync5 } from "node:fs";
-import { dirname as dirname5, join as join3, resolve as resolve2, sep } from "node:path";
-function outsideGitDirectory(path3) {
-  const marker = `${sep}${GIT_DIRECTORY_NAME}`;
-  const nestedAt = path3.indexOf(`${marker}${sep}`);
-  if (nestedAt > 0)
-    return path3.slice(0, nestedAt);
-  const endsAtTheMarker = path3.endsWith(marker) && path3.length > marker.length;
-  return endsAtTheMarker ? path3.slice(0, -marker.length) : path3;
-}
+import { dirname as dirname5, join as join3, resolve as resolve2 } from "node:path";
 function nearestExistingDirectory(path3) {
-  let current = outsideGitDirectory(path3);
+  let current = path3;
   for (; ; ) {
     const parent = dirname5(current);
     const reachedFilesystemRoot = parent === current;

@@ -1,18 +1,10 @@
 import { statSync } from "node:fs";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { GIT_DIRECTORY_NAME } from "./constants.js";
 import type { GitMarker } from "./types.js";
 
-function outsideGitDirectory(path: string): string {
-  const marker = `${sep}${GIT_DIRECTORY_NAME}`;
-  const nestedAt = path.indexOf(`${marker}${sep}`);
-  if (nestedAt > 0) return path.slice(0, nestedAt);
-  const endsAtTheMarker = path.endsWith(marker) && path.length > marker.length;
-  return endsAtTheMarker ? path.slice(0, -marker.length) : path;
-}
-
 export function nearestExistingDirectory(path: string): string | undefined {
-  let current = outsideGitDirectory(path);
+  let current = path;
   for (;;) {
     const parent = dirname(current);
     const reachedFilesystemRoot = parent === current;
