@@ -36,8 +36,6 @@ If you pay Anthropic through a Claude subscription rather than an API key, add `
 
 Everything in the conversation reaches the gateway with nothing removed, which means your prompts, your tool inputs and outputs and the replies, so only turn this on for a gateway you trust with that content.
 
-Claude Code's own model selection still decides which provider you reach, so `/model openai/gpt-4.1` works and the gateway supplies that key.
-
 To stop, run `/langsmith-gateway:disable --scope global` and restart your sessions, though that does not put your earlier settings back.
 
 ## Check it is working
