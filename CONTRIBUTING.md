@@ -34,8 +34,8 @@ nested under an `Agent` tool run and workflow stages under a `Workflow` tool run
 package under `plugins/langsmith-gateway` with its own manifest, hooks and bundle. It has to run on
 Node 20 without the repository root or `node_modules`, so pass that nested directory as
 `--plugin-dir` when you work on it since the root loads tracing only.
-[LOCAL_PROXY.md](./LOCAL_PROXY.md) covers its setup, its config schema and how to recover from a
-bad one.
+[GATEWAY.md](./GATEWAY.md) covers installing and using it, and `src/proxy/proxy-models.ts` is the
+saved configuration it validates against.
 
 ## The bundles are what actually run
 
