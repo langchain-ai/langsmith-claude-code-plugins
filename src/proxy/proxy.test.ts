@@ -747,6 +747,22 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     await expect(cache.get()).resolves.toBe(token);
     expect(load).toHaveBeenCalledTimes(2);
   });
+  it("ignores a late refusal of a token it has already replaced", async () => {
+    let now = 100_000;
+    const [first, second] = [jwt(400), jwt(500)];
+    const load = vi
+      .fn<() => Promise<string>>()
+      .mockResolvedValueOnce(first)
+      .mockResolvedValue(second);
+    const cache = new TokenCache(load, () => now);
+    expect(await cache.get()).toBe(first);
+    cache.reject(first);
+    expect(await cache.get()).toBe(second);
+    now += 6000;
+    cache.reject(first);
+    expect(await cache.get()).toBe(second);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
   it("pins executable/arguments and sanitizes environment and stdout", async () => {
     const dir = temporary(),
       cli = join(dir, "fake-cli"),

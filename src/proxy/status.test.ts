@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { configDir, configStatus, loadConfig } from "./config.js";
 import { API_URL, CONFIG_UPDATE_GUIDANCE, STATUS_GUIDANCE, UPSTREAM } from "./proxy-constants.js";
 import { targetPaths } from "./scopes.js";
+import { credentialSummary } from "./credential-report.js";
 import { STATUS_ERROR } from "./status.js";
 import { parseGatewayCommand } from "./options.js";
 import {
@@ -29,7 +30,10 @@ describe("packaged read-only status", () => {
         `  global ${JSON.stringify(join(home, ".claude/settings.json"))}: settings missing; proxy setup is missing.`,
         `  project ${JSON.stringify(join(project, ".claude/settings.local.json"))}: settings missing; proxy setup is missing.`,
         "Shared proxy configuration (applies to enabled scopes): not configured.",
+        "How you sign in: not configured.",
+        "Workspace sent with your requests: not configured.",
         "Shared daemon: not checked (proxy setup is missing).",
+        "Your credential is unchecked, because proxy setup is missing.",
         disclaimer,
       ].join("\n"),
     );
@@ -44,10 +48,10 @@ describe("packaged read-only status", () => {
       saveConfig();
       expect(loadConfig(home, true)?.profile).toBeUndefined();
       const result = await invoke();
-      expect(result).toContain("profile CLI default/current profile;");
+      expect(result).toContain("the LangSmith CLI with its default/current profile.");
       expect(result).not.toContain("undefined");
       expect(result).toContain("matching listener reachable");
-      expect(requests).toEqual(["GET /_langsmith/health"]);
+      expect(requests).toEqual(["GET /_langsmith/health", "GET /_langsmith/credential"]);
     },
   );
   it.each([{ enabled: false }, { useClaudeSubscription: undefined }])(
@@ -86,12 +90,15 @@ describe("packaged read-only status", () => {
           "Selected routing targets: global + current project",
           `  global ${JSON.stringify(global.settings)}: settings present; configured to use the local gateway proxy.`,
           `  project ${JSON.stringify(local.settings)}: settings present; configured to use the local gateway proxy.`,
-          `Shared proxy configuration (applies to enabled scopes): enabled; useClaudeSubscription ${mode === false ? "off" : "on"}; profile "preview"; API https://api.preview.test; gateway https://gateway.preview.test:8443.`,
+          `Shared proxy configuration (applies to enabled scopes): enabled; useClaudeSubscription ${mode === false ? "off" : "on"}; API https://api.preview.test; gateway https://gateway.preview.test:8443.`,
+          'How you sign in: the LangSmith CLI with profile "preview".',
+          "Workspace sent with your requests: none saved, so only a workspace sent with the request is forwarded.",
           "Shared daemon: matching listener reachable.",
+          "Your credential is untried, because the daemon has not needed it yet.",
           disclaimer,
         ].join("\n"),
       );
-      expect(requests).toEqual(["GET /_langsmith/health"]);
+      expect(requests).toEqual(["GET /_langsmith/health", "GET /_langsmith/credential"]);
     },
   );
   it.each(["mismatch", "offline", "timeout", "draining"] as const)(
@@ -104,6 +111,7 @@ describe("packaged read-only status", () => {
       const result = await invoke();
       expect(performance.now() - start).toBeLessThan(2000);
       expect(result).toContain("Shared daemon: not reachable or incompatible.");
+      expect(result).toContain("unchecked, because no matching daemon is running to ask.");
       expect(result).not.toContain("stopped");
       expect(requests).toEqual(kind === "offline" ? [] : ["GET /_langsmith/health"]);
     },
@@ -115,13 +123,56 @@ describe("packaged read-only status", () => {
     expect(loadConfig(home, true)?.enabled).toBe(false);
     const result = await invoke();
     expect(result).toContain(
-      `disabled; useClaudeSubscription off; profile "preview"; API ${API_URL}; gateway ${UPSTREAM}.`,
+      `disabled; useClaudeSubscription off; API ${API_URL}; gateway ${UPSTREAM}.`,
     );
     expect(result).toContain(
       "matching listener reachable (saved config disabled; may be awaiting drain)",
     );
-    expect(requests).toEqual(["GET /_langsmith/health"]);
+    expect(requests).toEqual(["GET /_langsmith/health", "GET /_langsmith/credential"]);
   });
+  it("shows a reachable daemon whose credential is broken, and names the command and workspace", async () => {
+    await probe("match", { sinceFailureMs: 4000 });
+    config.identityTokenCommand = "cat /var/run/acme/token.jwt";
+    config.workspaceId = "f4c7e130-165b-471d-bdd3-5f0fc7a6a012";
+    saveConfig();
+    const result = await invoke();
+    expect(result).toContain("Shared daemon: matching listener reachable.");
+    expect(result).toContain(
+      "Your credential is broken, and every attempt so far has failed, the most recent 4 seconds ago.",
+    );
+    expect(result).toContain(
+      "the identity token command you configured; the LangSmith CLI is not used.",
+    );
+    expect(result).toContain(
+      'Workspace sent with your requests: "f4c7e130-165b-471d-bdd3-5f0fc7a6a012".',
+    );
+    expect(result).not.toContain("profile");
+  });
+  it.each([
+    [{ sinceSuccessMs: 2000 }, "working, and was last obtained 2 seconds ago"],
+    [
+      { sinceSuccessMs: 1000, sinceFailureMs: 60_000 },
+      "working, and was last obtained 1 seconds ago",
+    ],
+    [
+      { sinceSuccessMs: 90_000, sinceFailureMs: 3000 },
+      "broken, because the last attempt failed 3 seconds ago and the last good one was 90 seconds ago",
+    ],
+    [
+      { sinceSuccessMs: 4000, sinceRefusalMs: 2000 },
+      "broken, because the gateway refused it 2 seconds ago and it was last obtained 4 seconds ago",
+    ],
+  ])("summarises %j", (state, expected) => expect(credentialSummary(state)).toBe(expected));
+  it.each([["not json"], [5], [{ sinceSuccessMs: "5" }], [{ sinceSuccessMs: -5 }], [[1, 2]]])(
+    "refuses to read %j as a credential report",
+    async (reported) => {
+      await probe("match", reported);
+      saveConfig();
+      expect(await invoke()).toContain(
+        "Your credential is unchecked, because the daemon did not answer.",
+      );
+    },
+  );
   it.each([
     ["missing", "gateway routing is not configured in this settings file"],
     ["env", "gateway routing is not configured in this settings file"],

@@ -1,7 +1,9 @@
 import { join } from "node:path";
 import { ConfigError, configStatus } from "./config.js";
+import { credentialStatus, signInSummary, workspaceSummary } from "./credential-report.js";
 import { healthy } from "./lifecycle.js";
 import { parseStatusArgs, SetupError } from "./options.js";
+import { CREDENTIAL_UNCONFIGURED } from "./proxy-constants.js";
 import { targetPaths } from "./scopes.js";
 import { routingStatus } from "./settings.js";
 
@@ -30,21 +32,27 @@ export async function gatewayStatus(
         `  ${selected} ${JSON.stringify(paths.settings)}: ${routingStatus(paths, config)}.`,
     );
     const shared = config
-      ? `${state}; useClaudeSubscription ${config.useClaudeSubscription ? "on" : "off"}; profile ${config.profile === undefined ? "CLI default/current profile" : JSON.stringify(config.profile)}; API ${config.apiUrl}; gateway ${config.gatewayUrl}.`
+      ? `${state}; useClaudeSubscription ${config.useClaudeSubscription ? "on" : "off"}; API ${config.apiUrl}; gateway ${config.gatewayUrl}.`
       : "not configured.";
-    // Only the existing authenticated, identity-matching loopback health probe
-    // (500 ms wall-clock). No startup, leases, CLI, auth checks or token refresh.
+    // Two authenticated, identity-matching loopback reads (500 ms wall-clock each):
+    // the health probe and the daemon's own credential record. No startup, leases,
+    // CLI, auth checks or token refresh, and the credential itself is never read.
+    const reachable = config !== undefined && (await healthy(config));
     const daemon = !config
       ? "not checked (proxy setup is missing)"
-      : (await healthy(config))
+      : reachable
         ? `matching listener reachable${state === "disabled" ? " (saved config disabled; may be awaiting drain)" : ""}`
         : "not reachable or incompatible";
+    const credential = config ? await credentialStatus(config, reachable) : CREDENTIAL_UNCONFIGURED;
     return [
       "Gateway status (read-only)",
       `Selected routing targets: ${scope ?? "global + current project"}`,
       ...routes,
       `Shared proxy configuration (applies to enabled scopes): ${shared}`,
+      `How you sign in: ${config ? signInSummary(config) : "not configured"}.`,
+      `Workspace sent with your requests: ${config ? workspaceSummary(config) : "not configured"}.`,
       `Shared daemon: ${daemon}.`,
+      `Your credential is ${credential}.`,
       "This shows saved settings. Your current Claude session may still be using earlier settings. Configured forwarding mode does not verify actual Anthropic usage, authentication or subscription validity. Other projects may use the shared daemon.",
     ].join("\n");
   } catch (error) {

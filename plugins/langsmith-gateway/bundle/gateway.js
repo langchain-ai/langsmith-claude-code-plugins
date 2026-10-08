@@ -140,9 +140,25 @@ var ORIGIN_SHAPE_GUIDANCE = "Endpoints must be HTTPS DNS origins without credent
 var ORIGIN_DNS_GUIDANCE = "Endpoints must use public DNS names and HTTPS ports 1-65535";
 var API_URL = "https://api.smith.langchain.com";
 var UPSTREAM = "https://gateway.smith.langchain.com";
-var PROTOCOL_VERSION = 10;
+var PROTOCOL_VERSION = 11;
 var KEY_HEADER = "x-langsmith-proxy-key";
 var TENANT_HEADER = "x-tenant-id";
+var HEALTH_PATH = "/_langsmith/health";
+var CREDENTIAL_STATE_PATH = "/_langsmith/credential";
+var SIGN_IN_COMMAND = "the identity token command you configured; the LangSmith CLI is not used";
+var SIGN_IN_CLI_DEFAULT = "the LangSmith CLI with its default/current profile";
+var SIGN_IN_CLI_PROFILE = (profile) => `the LangSmith CLI with profile ${JSON.stringify(profile)}`;
+var WORKSPACE_UNSET = "none saved, so only a workspace sent with the request is forwarded";
+var CREDENTIAL_UNCONFIGURED = "unchecked, because proxy setup is missing";
+var CREDENTIAL_NO_DAEMON = "unchecked, because no matching daemon is running to ask";
+var CREDENTIAL_NO_ANSWER = "unchecked, because the daemon did not answer";
+var CREDENTIAL_UNTRIED = "untried, because the daemon has not needed it yet";
+var SECONDS_AGO = (ms) => `${Math.max(0, Math.round(ms / 1e3))} seconds ago`;
+var CREDENTIAL_NEVER_OBTAINED = (failed) => `broken, and every attempt so far has failed, the most recent ${failed}`;
+var CREDENTIAL_WORKING = (obtained) => `working, and was last obtained ${obtained}`;
+var CREDENTIAL_COMMAND_FAILING = (failed, obtained) => `broken, because the last attempt failed ${failed} and the last good one was ${obtained}`;
+var CREDENTIAL_REFUSED = (refused, obtained) => `broken, because the gateway refused it ${refused} and it was last obtained ${obtained}`;
+var CREDENTIAL_STATE_KEYS = ["sinceSuccessMs", "sinceFailureMs", "sinceRefusalMs"];
 var BEARER_TOKEN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 var WORKSPACE_ID = /^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/;
 var PROFILE_NAME = /^[a-zA-Z0-9_.-]{1,128}$/;
@@ -168,6 +184,8 @@ var MAX_TOKEN_BYTES = 16384;
 var EXPIRY_SKEW_MS = 5e3;
 var EXPIRY_MARGIN_MS = 6e4;
 var RETRY_AFTER_MS = 2e3;
+var REJECTION_RECHECK_MS = 5e3;
+var UPSTREAM_REJECTED_STATUS = 401;
 var MAX_IDENTITY_TOKEN_COMMAND = 4096;
 var CREDENTIAL_TIMEOUT_MS = 1e4;
 var CLI_TOKEN_TTL_MS = 6e4;
@@ -255,6 +273,7 @@ var isSecret = (value) => typeof value === "string" && SECRET.test(value);
 var isSettingsTarget = (value) => typeof value === "string" && value.length <= MAX_PATH_LENGTH && isAbsolute(value) && normalize(value) === value && !value.includes("\0") && SETTINGS_TARGET.test(value);
 var isSettingsTargets = (value) => Array.isArray(value) && value.length <= MAX_SETTINGS_TARGETS && value.every((target) => isSettingsTarget(target));
 var onlyKnownKeys = (value) => Object.keys(value).every((key) => CONFIG_KEYS.includes(key));
+var isCredentialState = (value) => !!value && typeof value === "object" && Object.entries(value).every(([key, elapsed]) => CREDENTIAL_STATE_KEYS.includes(key) && typeof elapsed === "number" && elapsed >= 0);
 var isSavedConfig = (c) => typeof c.enabled === "boolean" && typeof c.useClaudeSubscription === "boolean" && (c.identityTokenCommand === void 0 ? isCliPath(c.cli) : absent(c.cli, isCliPath)) && absent(c.profile, isProfile) && isPort(c.port) && isSecret(c.secret) && absent(c.settingsTargets, isSettingsTargets) && absent(c.identityTokenCommand, isIdentityTokenCommand) && absent(c.identityTokenTtlMs, isIdentityTokenTtlMs) && absent(c.workspaceId, isWorkspaceId) && onlyKnownKeys(c);
 
 // dist/src/proxy/config.js
@@ -398,6 +417,10 @@ var TokenCache = class {
   cached;
   pending;
   retryAt = 0;
+  succeededAt;
+  failedAt;
+  refusedAt;
+  rejectedAt = 0;
   constructor(load, now = Date.now, ttlMs = CLI_TOKEN_TTL_MS) {
     this.load = load;
     this.now = now;
@@ -405,6 +428,24 @@ var TokenCache = class {
   }
   get loading() {
     return this.pending !== void 0;
+  }
+  state() {
+    const now = this.now();
+    const since = (at) => at === void 0 ? void 0 : now - at;
+    return {
+      sinceSuccessMs: since(this.succeededAt),
+      sinceFailureMs: since(this.failedAt),
+      sinceRefusalMs: since(this.refusedAt)
+    };
+  }
+  reject(token) {
+    this.refusedAt = this.now();
+    if (this.cached?.token !== token)
+      return;
+    if (this.now() < this.rejectedAt + REJECTION_RECHECK_MS)
+      return;
+    this.cached = void 0;
+    this.rejectedAt = this.now();
   }
   get() {
     if (this.cached && this.now() < this.cached.until)
@@ -417,6 +458,7 @@ var TokenCache = class {
       const exp = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).exp;
       if (typeof exp !== "number" || !Number.isFinite(exp) || exp * 1e3 < this.now() + EXPIRY_SKEW_MS)
         throw new Error("Expired token");
+      this.succeededAt = this.now();
       this.cached = {
         token,
         until: Math.min(this.now() + this.ttlMs, exp * 1e3 - EXPIRY_MARGIN_MS)
@@ -424,6 +466,7 @@ var TokenCache = class {
       return token;
     }).catch(() => {
       this.cached = void 0;
+      this.failedAt = this.now();
       this.retryAt = this.now() + RETRY_AFTER_MS;
       throw new Error("LangSmith token unavailable");
     }).finally(() => {
@@ -683,8 +726,12 @@ function createProxy(config, options = {}) {
       reply(res, 503, "Local proxy draining");
       return;
     }
-    if (req.method === "GET" && req.url === "/_langsmith/health") {
+    if (req.method === "GET" && req.url === HEALTH_PATH) {
       reply(res, 200, identity(config));
+      return;
+    }
+    if (req.method === "GET" && req.url === CREDENTIAL_STATE_PATH) {
+      reply(res, 200, JSON.stringify(tokens.state()));
       return;
     }
     const control2 = /^\/_langsmith\/sessions\/([a-zA-Z0-9_-]{1,128})$/.exec(req.url ?? "");
@@ -779,6 +826,8 @@ function createProxy(config, options = {}) {
         rejectUnauthorized: true
       }, (upstream) => {
         clearTimeout(headerTimer);
+        if (upstream.statusCode === UPSTREAM_REJECTED_STATUS)
+          tokens.reject(token);
         incoming = upstream;
         if (ended) {
           upstream.destroy();
@@ -1063,7 +1112,7 @@ function control(config, method, path, timeoutMs = 500) {
 }
 async function healthy(config) {
   try {
-    return await control(config, "GET", "/_langsmith/health") === identity(config);
+    return await control(config, "GET", HEALTH_PATH) === identity(config);
   } catch {
     return false;
   }
@@ -1496,6 +1545,40 @@ function routingStatus(paths, config) {
 
 // dist/src/proxy/status.js
 import { join as join6 } from "node:path";
+
+// dist/src/proxy/credential-report.js
+function signInSummary(config) {
+  if (config.identityTokenCommand !== void 0)
+    return SIGN_IN_COMMAND;
+  return config.profile === void 0 ? SIGN_IN_CLI_DEFAULT : SIGN_IN_CLI_PROFILE(config.profile);
+}
+function workspaceSummary(config) {
+  return config.workspaceId === void 0 ? WORKSPACE_UNSET : JSON.stringify(config.workspaceId);
+}
+var sooner = (a, b) => a === void 0 ? b : b === void 0 ? a : Math.min(a, b);
+function credentialSummary(state) {
+  const { sinceSuccessMs, sinceFailureMs, sinceRefusalMs } = state;
+  const sinceBadMs = sooner(sinceFailureMs, sinceRefusalMs);
+  if (sinceSuccessMs === void 0 && sinceBadMs === void 0)
+    return CREDENTIAL_UNTRIED;
+  if (sinceSuccessMs === void 0)
+    return CREDENTIAL_NEVER_OBTAINED(SECONDS_AGO(sinceBadMs));
+  if (sinceBadMs === void 0 || sinceBadMs > sinceSuccessMs)
+    return CREDENTIAL_WORKING(SECONDS_AGO(sinceSuccessMs));
+  return sinceBadMs === sinceRefusalMs ? CREDENTIAL_REFUSED(SECONDS_AGO(sinceRefusalMs), SECONDS_AGO(sinceSuccessMs)) : CREDENTIAL_COMMAND_FAILING(SECONDS_AGO(sinceFailureMs), SECONDS_AGO(sinceSuccessMs));
+}
+async function credentialStatus(config, reachable) {
+  if (!reachable)
+    return CREDENTIAL_NO_DAEMON;
+  try {
+    const reported = JSON.parse(await control(config, "GET", CREDENTIAL_STATE_PATH));
+    return isCredentialState(reported) ? credentialSummary(reported) : CREDENTIAL_NO_ANSWER;
+  } catch {
+    return CREDENTIAL_NO_ANSWER;
+  }
+}
+
+// dist/src/proxy/status.js
 var STATUS_ERROR = "Gateway status unavailable; review config, settings, permissions and canonical project path privately. No changes made.";
 async function gatewayStatus(args, env, home, cwd) {
   const { scope } = parseStatusArgs(args);
@@ -1509,14 +1592,19 @@ async function gatewayStatus(args, env, home, cwd) {
     }));
     const { state, config } = configStatus(home);
     const routes = targets.map(({ selected, paths }) => `  ${selected} ${JSON.stringify(paths.settings)}: ${routingStatus(paths, config)}.`);
-    const shared = config ? `${state}; useClaudeSubscription ${config.useClaudeSubscription ? "on" : "off"}; profile ${config.profile === void 0 ? "CLI default/current profile" : JSON.stringify(config.profile)}; API ${config.apiUrl}; gateway ${config.gatewayUrl}.` : "not configured.";
-    const daemon = !config ? "not checked (proxy setup is missing)" : await healthy(config) ? `matching listener reachable${state === "disabled" ? " (saved config disabled; may be awaiting drain)" : ""}` : "not reachable or incompatible";
+    const shared = config ? `${state}; useClaudeSubscription ${config.useClaudeSubscription ? "on" : "off"}; API ${config.apiUrl}; gateway ${config.gatewayUrl}.` : "not configured.";
+    const reachable = config !== void 0 && await healthy(config);
+    const daemon = !config ? "not checked (proxy setup is missing)" : reachable ? `matching listener reachable${state === "disabled" ? " (saved config disabled; may be awaiting drain)" : ""}` : "not reachable or incompatible";
+    const credential = config ? await credentialStatus(config, reachable) : CREDENTIAL_UNCONFIGURED;
     return [
       "Gateway status (read-only)",
       `Selected routing targets: ${scope ?? "global + current project"}`,
       ...routes,
       `Shared proxy configuration (applies to enabled scopes): ${shared}`,
+      `How you sign in: ${config ? signInSummary(config) : "not configured"}.`,
+      `Workspace sent with your requests: ${config ? workspaceSummary(config) : "not configured"}.`,
       `Shared daemon: ${daemon}.`,
+      `Your credential is ${credential}.`,
       "This shows saved settings. Your current Claude session may still be using earlier settings. Configured forwarding mode does not verify actual Anthropic usage, authentication or subscription validity. Other projects may use the shared daemon."
     ].join("\n");
   } catch (error) {

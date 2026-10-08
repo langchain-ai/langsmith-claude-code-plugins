@@ -8,13 +8,16 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { endpoints } from "./config.js";
 import {
   CLI_TOKEN_TTL_MS,
+  CREDENTIAL_STATE_PATH,
   CREDENTIAL_TIMEOUT_MS,
   DEFAULT_IDENTITY_TOKEN_TTL_MS,
+  HEALTH_PATH,
   KEY_HEADER,
   MAX_REQUEST_BYTES,
   PROTOCOL_VERSION,
   TENANT_HEADER,
   TENANT_HEADER_GUIDANCE,
+  UPSTREAM_REJECTED_STATUS,
   hop,
   routing,
 } from "./proxy-constants.js";
@@ -314,8 +317,12 @@ export function createProxy(
       reply(res, 503, "Local proxy draining");
       return;
     }
-    if (req.method === "GET" && req.url === "/_langsmith/health") {
+    if (req.method === "GET" && req.url === HEALTH_PATH) {
       reply(res, 200, identity(config));
+      return;
+    }
+    if (req.method === "GET" && req.url === CREDENTIAL_STATE_PATH) {
+      reply(res, 200, JSON.stringify(tokens.state()));
       return;
     }
     const control = /^\/_langsmith\/sessions\/([a-zA-Z0-9_-]{1,128})$/.exec(req.url ?? "");
@@ -413,6 +420,7 @@ export function createProxy(
         },
         (upstream) => {
           clearTimeout(headerTimer);
+          if (upstream.statusCode === UPSTREAM_REJECTED_STATUS) tokens.reject(token);
           incoming = upstream;
           if (ended) {
             upstream.destroy();

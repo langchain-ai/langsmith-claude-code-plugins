@@ -54,9 +54,32 @@ export const ORIGIN_DNS_GUIDANCE = "Endpoints must use public DNS names and HTTP
 
 export const API_URL = "https://api.smith.langchain.com";
 export const UPSTREAM = "https://gateway.smith.langchain.com";
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 export const KEY_HEADER = "x-langsmith-proxy-key";
 export const TENANT_HEADER = "x-tenant-id";
+export const HEALTH_PATH = "/_langsmith/health";
+export const CREDENTIAL_STATE_PATH = "/_langsmith/credential";
+
+export const SIGN_IN_COMMAND =
+  "the identity token command you configured; the LangSmith CLI is not used";
+export const SIGN_IN_CLI_DEFAULT = "the LangSmith CLI with its default/current profile";
+export const SIGN_IN_CLI_PROFILE = (profile: string) =>
+  `the LangSmith CLI with profile ${JSON.stringify(profile)}`;
+export const WORKSPACE_UNSET = "none saved, so only a workspace sent with the request is forwarded";
+export const CREDENTIAL_UNCONFIGURED = "unchecked, because proxy setup is missing";
+export const CREDENTIAL_NO_DAEMON = "unchecked, because no matching daemon is running to ask";
+export const CREDENTIAL_NO_ANSWER = "unchecked, because the daemon did not answer";
+export const CREDENTIAL_UNTRIED = "untried, because the daemon has not needed it yet";
+export const SECONDS_AGO = (ms: number) => `${Math.max(0, Math.round(ms / 1000))} seconds ago`;
+export const CREDENTIAL_NEVER_OBTAINED = (failed: string) =>
+  `broken, and every attempt so far has failed, the most recent ${failed}`;
+export const CREDENTIAL_WORKING = (obtained: string) =>
+  `working, and was last obtained ${obtained}`;
+export const CREDENTIAL_COMMAND_FAILING = (failed: string, obtained: string) =>
+  `broken, because the last attempt failed ${failed} and the last good one was ${obtained}`;
+export const CREDENTIAL_REFUSED = (refused: string, obtained: string) =>
+  `broken, because the gateway refused it ${refused} and it was last obtained ${obtained}`;
+export const CREDENTIAL_STATE_KEYS = ["sinceSuccessMs", "sinceFailureMs", "sinceRefusalMs"];
 
 export const BEARER_TOKEN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 export const WORKSPACE_ID = /^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/;
@@ -86,6 +109,8 @@ export const MAX_TOKEN_BYTES = 16384;
 export const EXPIRY_SKEW_MS = 5000;
 export const EXPIRY_MARGIN_MS = 60_000;
 export const RETRY_AFTER_MS = 2000;
+export const REJECTION_RECHECK_MS = 5000;
+export const UPSTREAM_REJECTED_STATUS = 401;
 export const MAX_IDENTITY_TOKEN_COMMAND = 4096;
 export const CREDENTIAL_TIMEOUT_MS = 10_000;
 export const CLI_TOKEN_TTL_MS = 60_000;

@@ -2,6 +2,7 @@ import { isAbsolute, normalize } from "node:path";
 import {
   CONFIG_KEYS,
   CONTROL,
+  CREDENTIAL_STATE_KEYS,
   DNS_LABEL,
   MAX_HOSTNAME_LENGTH,
   MAX_IDENTITY_TOKEN_COMMAND,
@@ -23,7 +24,7 @@ import {
   WHITESPACE,
   WORKSPACE_ID,
 } from "./proxy-constants.js";
-import type { ProxyConfig } from "./proxy-models.js";
+import type { CredentialState, ProxyConfig } from "./proxy-models.js";
 
 export const wellFormedOrigin = (value: unknown): value is string =>
   typeof value === "string" &&
@@ -88,6 +89,14 @@ export const isSettingsTargets = (value: unknown): boolean =>
 
 export const onlyKnownKeys = (value: object): boolean =>
   Object.keys(value).every((key) => CONFIG_KEYS.includes(key));
+
+export const isCredentialState = (value: unknown): value is CredentialState =>
+  !!value &&
+  typeof value === "object" &&
+  Object.entries(value).every(
+    ([key, elapsed]) =>
+      CREDENTIAL_STATE_KEYS.includes(key) && typeof elapsed === "number" && elapsed >= 0,
+  );
 
 export const isSavedConfig = (c: ProxyConfig): boolean =>
   typeof c.enabled === "boolean" &&

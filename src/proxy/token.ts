@@ -8,10 +8,11 @@ import {
   EXPIRY_MARGIN_MS,
   EXPIRY_SKEW_MS,
   MAX_TOKEN_BYTES,
+  REJECTION_RECHECK_MS,
   RETRY_AFTER_MS,
   SHELL,
 } from "./proxy-constants.js";
-import type { ProxyConfig } from "./proxy-models.js";
+import type { CredentialState, ProxyConfig } from "./proxy-models.js";
 
 // No inherited project-controlled endpoint, credential, proxy, or runtime variables.
 export function cliEnvironment(): NodeJS.ProcessEnv {
@@ -102,6 +103,10 @@ export class TokenCache {
   private cached?: { token: string; until: number };
   private pending?: Promise<string>;
   private retryAt = 0;
+  private succeededAt?: number;
+  private failedAt?: number;
+  private refusedAt?: number;
+  private rejectedAt = 0;
   constructor(
     private readonly load: () => Promise<string>,
     private readonly now = Date.now,
@@ -109,6 +114,22 @@ export class TokenCache {
   ) {}
   get loading(): boolean {
     return this.pending !== undefined;
+  }
+  state(): CredentialState {
+    const now = this.now();
+    const since = (at?: number) => (at === undefined ? undefined : now - at);
+    return {
+      sinceSuccessMs: since(this.succeededAt),
+      sinceFailureMs: since(this.failedAt),
+      sinceRefusalMs: since(this.refusedAt),
+    };
+  }
+  reject(token: string): void {
+    this.refusedAt = this.now();
+    if (this.cached?.token !== token) return;
+    if (this.now() < this.rejectedAt + REJECTION_RECHECK_MS) return;
+    this.cached = undefined;
+    this.rejectedAt = this.now();
   }
   get(): Promise<string> {
     if (this.cached && this.now() < this.cached.until) return Promise.resolve(this.cached.token);
@@ -123,6 +144,7 @@ export class TokenCache {
           exp * 1000 < this.now() + EXPIRY_SKEW_MS
         )
           throw new Error("Expired token");
+        this.succeededAt = this.now();
         this.cached = {
           token,
           until: Math.min(this.now() + this.ttlMs, exp * 1000 - EXPIRY_MARGIN_MS),
@@ -131,6 +153,7 @@ export class TokenCache {
       })
       .catch(() => {
         this.cached = undefined;
+        this.failedAt = this.now();
         this.retryAt = this.now() + RETRY_AFTER_MS;
         throw new Error("LangSmith token unavailable");
       })
