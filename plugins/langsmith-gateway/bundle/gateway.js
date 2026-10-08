@@ -113,7 +113,7 @@ function transaction(writes) {
 
 // dist/src/proxy/proxy-constants.js
 var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
-var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and put --identity-token-command last, followed by a command that prints one token on standard output. The daemon runs that command with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs quotes, pipes or anything else your shell sets up. Add --identity-token-ttl SECONDS to change how long each result is reused from the default 300.";
+var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and --identity-token-command, followed by a command that prints one token on standard output. Quote that command to write more flags after it, or leave it unquoted and put it last, where everything after it becomes the command. The daemon runs it with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs pipes or anything else your shell sets up. Add --identity-token-ttl SECONDS to change how long each result is reused from the default 300.";
 var CREDENTIAL_SOURCE_GUIDANCE = "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI using the README and complete terminal login with your selected profile and API URL (review the saved OAuth issuer), or add --workspace-id UUID and --identity-token-command with a command that prints your identity token. Then retry /langsmith-gateway:setup.";
 var CONFLICTING_AUTH_GUIDANCE = "Conflicting provider/auth setting; client auth overrides are not supported by this setup.";
 var CONFLICTING_BASE_GUIDANCE = "Conflicting Claude API address setting; it will not be overwritten.";
@@ -133,6 +133,8 @@ var PINNED_FIELD_LABELS = {
 };
 var STATUS_GUIDANCE = "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
 var TTL_RANGE_GUIDANCE = "Identity token cache seconds must be between 1 and 3600";
+var QUOTE_GUIDANCE = "Unterminated quote after --identity-token-command. Close the quote around your command, or write the command unquoted and last.";
+var QUOTES = ["'", '"'];
 var TENANT_HEADER_GUIDANCE = "Send x-tenant-id at most once and as a workspace UUID. Drop the header to use the workspace saved in your gateway configuration.";
 var ORIGIN_SHAPE_GUIDANCE = "Endpoints must be HTTPS DNS origins without credentials, path, query or fragment";
 var ORIGIN_DNS_GUIDANCE = "Endpoints must use public DNS names and HTTPS ports 1-65535";
@@ -880,11 +882,25 @@ function parseSetupArgs(rest) {
       continue;
     }
     if (arg === "--identity-token-command") {
-      const tail = rest.slice(i + 1).join(" ");
-      if (!isIdentityTokenCommand(tail))
+      if (command !== void 0)
         throw new SetupError(usage);
-      command = tail;
-      break;
+      const tail = rest.slice(i + 1);
+      const quote = tail.length && QUOTES.includes(tail[0][0]) ? tail[0][0] : void 0;
+      if (quote === void 0) {
+        const joined = tail.join(" ");
+        if (!isIdentityTokenCommand(joined))
+          throw new SetupError(usage);
+        command = joined;
+        break;
+      }
+      const end = tail.findIndex((part, index) => part.endsWith(quote) && (index > 0 || part.length > 1));
+      if (end === -1)
+        throw new SetupError(QUOTE_GUIDANCE);
+      command = tail.slice(0, end + 1).join(" ").slice(1, -1);
+      if (!isIdentityTokenCommand(command))
+        throw new SetupError(usage);
+      i += end + 1;
+      continue;
     }
     if (!SETUP_FLAGS.includes(arg) || flags.has(arg) || !rest[i + 1] || rest[i + 1].startsWith("--"))
       throw new SetupError(usage);
@@ -943,7 +959,7 @@ function parseGatewayCommand(prompt) {
   if (!match)
     return;
   const rest = prompt.slice(match[0].length);
-  if (/[\r\n\x00-\x1f'"`$;&|<>\\]/.test(rest))
+  if (/[\r\n\x00-\x1f`$;&|<>\\]/.test(rest))
     throw new SetupError(match[1] === "status" ? STATUS_GUIDANCE : COMMAND_GUIDANCE);
   const args = rest.trim() ? rest.trim().split(/ +/) : [];
   const command = match[1];
