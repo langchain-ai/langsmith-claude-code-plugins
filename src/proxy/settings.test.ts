@@ -29,6 +29,7 @@ import {
   installCli,
   json,
   noCliEnv,
+  refusal,
   run,
   save,
   settings,
@@ -543,6 +544,70 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
     expect(loadConfig()).toBeUndefined();
     expect(ensure).not.toHaveBeenCalled();
   });
+  it("names only the pinned setting that actually changed", async () => {
+    await enable("/fake", tokenArgs(), noCliEnv);
+    const error = await enable(
+      "/fake",
+      [
+        "--scope",
+        "global",
+        "--workspace-id",
+        WORKSPACE,
+        "--identity-token-command",
+        "printf other",
+      ],
+      noCliEnv,
+    ).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(SetupError);
+    expect(String(error)).toContain("identity token command");
+    expect(String(error)).not.toContain("printf other");
+    for (const label of ["profile", "port", "workspace id", "API address", "CLI path"])
+      expect(String(error)).not.toContain(label);
+  });
+  it("names the shell setting that blocks setup and how to clear it", async () => {
+    const error = await refusal({ ANTHROPIC_AUTH_TOKEN: "secret" });
+    expect(error).toBeInstanceOf(SetupError);
+    expect(String(error)).toContain("Found in your environment: ANTHROPIC_AUTH_TOKEN.");
+    expect(String(error)).toContain("Unset in your shell and restart Claude Code");
+    expect(String(error)).not.toContain("settings file");
+  });
+  it("names the saved setting that blocks setup and the file holding it", async () => {
+    const error = await refusal({}, { env: { CLAUDE_CODE_USE_BEDROCK: "1" } });
+    expect(error).toBeInstanceOf(SetupError);
+    expect(String(error)).toContain(
+      `Found in your settings file ${settings}: CLAUDE_CODE_USE_BEDROCK.`,
+    );
+    expect(String(error)).toContain("Remove from that file");
+    expect(String(error)).not.toContain("Found in your environment");
+  });
+  it("names every blocking setting rather than only the first", async () => {
+    const error = await refusal(
+      { ANTHROPIC_API_KEY: "shell-secret", CLAUDE_CODE_USE_VERTEX: "1" },
+      { env: { ANTHROPIC_AUTH_TOKEN: "saved-secret" } },
+    );
+    expect(String(error)).toContain(
+      "Found in your environment: ANTHROPIC_API_KEY, CLAUDE_CODE_USE_VERTEX.",
+    );
+    expect(String(error)).toContain(
+      `Found in your settings file ${settings}: ANTHROPIC_AUTH_TOKEN.`,
+    );
+  });
+  it("says where a conflicting API address was found", async () => {
+    const shell = await refusal({ ANTHROPIC_BASE_URL: "https://elsewhere.invalid" });
+    expect(String(shell)).toContain("Found in your environment: ANTHROPIC_BASE_URL.");
+    expect(String(shell)).toContain("Unset in your shell and restart Claude Code");
+    const saved = await refusal({}, { env: { ANTHROPIC_BASE_URL: "https://elsewhere.invalid" } });
+    expect(String(saved)).toContain(`Found in your settings file ${settings}: ANTHROPIC_BASE_URL.`);
+  });
+  it.each([
+    { env: { ANTHROPIC_API_KEY: "secret-value" }, saved: undefined },
+    { env: { ANTHROPIC_BASE_URL: "https://secret-value.invalid" }, saved: undefined },
+    { env: {}, saved: { env: { ANTHROPIC_BASE_URL: "https://secret-value.invalid" } } },
+  ])("never prints the value of a blocking setting: %j", async ({ env, saved }) => {
+    const error = await refusal(env, saved);
+    expect(error).toBeInstanceOf(SetupError);
+    expect(String(error)).not.toContain("secret-value");
+  });
   it.each([
     { ANTHROPIC_API_KEY: "secret" },
     { ANTHROPIC_BASE_URL: "https://elsewhere.invalid" },
@@ -634,7 +699,7 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
         ["--scope", "global", "--cli", process.execPath, "--profile", "other", "--port", "52507"],
         {},
       ),
-    ).rejects.toThrow("Existing pinned");
+    ).rejects.toThrow("already using: profile.");
   });
   it.each(["settings", "claude", "config-dir", "config"])(
     "refuses %s symlinks without changing targets",
@@ -788,7 +853,7 @@ describe("explicit scoped deterministic setup", () => {
     const bytes = snapshot(targetPaths(home, "project", b).settings);
     await expect(
       enable("/fake", [...scoped("project"), "--profile", "different"], {}, home, b),
-    ).rejects.toThrow("Existing pinned");
+    ).rejects.toThrow("already using: profile.");
     expect(snapshot(targetPaths(home, "project", b).settings)).toEqual(bytes);
     expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
     disable(scoped("global"), {}, home);

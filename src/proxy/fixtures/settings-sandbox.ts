@@ -38,6 +38,10 @@ export const tokenArgs = (cli?: string) => [
   "--identity-token-command",
   TOKEN_COMMAND,
 ];
+export const refusal = (env: NodeJS.ProcessEnv, before?: unknown): Promise<unknown> => {
+  if (before !== undefined) save(before);
+  return enable("/fake/gateway.js", args(), env).catch((reason: unknown) => reason);
+};
 export const noCliEnv = { PATH: "relative:/does-not-exist" };
 export const cliPath = () => join(home, "bin", "langsmith");
 export function installCli(): { PATH: string } {
