@@ -112,15 +112,15 @@ function transaction(writes) {
 }
 
 // dist/src/proxy/proxy-constants.js
-var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
+var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required, so keep your existing key, CLI, profile, port and addresses, and set enabled and useClaudeSubscription explicitly even when disabled. Do not paste secrets.";
 var COMMAND_GUIDANCE = 'Run /langsmith-gateway:setup --scope global|project within Claude Code, or /langsmith-gateway:disable to turn it off. To sign in with your own identity token, add --workspace-id UUID and --identity-token-command "your command", where the command prints one token. See GATEWAY.md for the other flags.';
-var CREDENTIAL_SOURCE_GUIDANCE = "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI using the README and complete terminal login with your selected profile and API URL (review the saved OAuth issuer), or add --workspace-id UUID and --identity-token-command with a command that prints your identity token. Then retry /langsmith-gateway:setup.";
+var CREDENTIAL_SOURCE_GUIDANCE = "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI and sign in, or add --workspace-id UUID and --identity-token-command. Then retry setup.";
 var CONFLICTING_AUTH_GUIDANCE = "Conflicting provider/auth setting; client auth overrides are not supported by this setup.";
 var CONFLICTING_BASE_GUIDANCE = "Conflicting Claude API address setting; it will not be overwritten.";
 var CONFLICT_ENVIRONMENT_GUIDANCE = "Unset in your shell and restart Claude Code, since it reads these at startup.";
 var CONFLICT_SETTINGS_GUIDANCE = "Remove from that file.";
 var CONFLICT_RETRY_GUIDANCE = "Then retry setup.";
-var PINNED_CHANGE_GUIDANCE = "Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit the shared config while other scopes are active.";
+var PINNED_CHANGE_GUIDANCE = "The running daemon holds the old values, so disable first for every active scope with /langsmith-gateway:disable --scope global|project. Stop other gateway sessions, then retry setup.";
 var PINNED_FIELD_LABELS = {
   cli: "CLI path",
   profile: "profile",
