@@ -1,6 +1,6 @@
 # LangSmith Gateway Plugin
 
-The [LangSmith](https://smith.langchain.com) gateway routes model requests for many providers while holding the keys and paying for the calls. This plugin points Claude Code at it so a small helper on your machine passes each request on and you keep using Claude Code exactly as before.
+The [LangSmith](https://smith.langchain.com) gateway routes model requests for many providers using the keys your workspace holds. This plugin points Claude Code at it so a small helper on your machine passes each request on and you keep using Claude Code exactly as before.
 
 This is a different plugin from LangSmith tracing since neither needs the other and turning this on does not start tracing your conversations.
 
