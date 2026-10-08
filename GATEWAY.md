@@ -61,7 +61,7 @@ Instead of signing into LangSmith, you can hand over a token your employer alrea
 Say your company's tooling refreshes a token into a file every hour. Point the plugin at that file:
 
 ```text
-/langsmith-gateway:setup --scope project --workspace-id 11111111-2222-3333-4444-555555555555 --credential-command cat /var/run/acme/langsmith.jwt
+/langsmith-gateway:setup --scope project --workspace-id 11111111-2222-3333-4444-555555555555 --identity-token-command cat /var/run/acme/langsmith.jwt
 ```
 
 What to know before you use it:
@@ -70,7 +70,7 @@ What to know before you use it:
 - Put the command last, because everything after it is treated as the command.
 - The command runs through `/bin/sh` from your home directory and gets only your home directory and a plain search path. Nothing your shell profile or virtual environment normally sets up is there, so use absolute paths, and write a small script if you need quotes, pipes or anything else.
 - It has to print the token and nothing else, and it has to finish within ten seconds.
-- A good result is reused for five minutes, or for less time when the token runs out sooner. Change that window with `--credential-ttl` and a number of seconds between 1 and 3600.
+- A good result is reused for five minutes, or for less time when the token runs out sooner. Change that window with `--identity-token-ttl` and a number of seconds between 1 and 3600.
 - A failure is remembered for two seconds, and the request that failed is not retried for you.
 
 ## When it does not work
