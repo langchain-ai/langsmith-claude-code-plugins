@@ -94,7 +94,7 @@ With tracing on, a full turn uploads your messages, tool inputs and outputs, met
 ## More
 
 - [Running in CI, nesting under another run, sending to a second project, and where settings can live](./ADVANCED.md)
-- [The separate `langsmith-gateway` plugin](./LOCAL_PROXY.md), which routes model requests through LangSmith and is unrelated to tracing
+- [The separate `langsmith-gateway` plugin](./GATEWAY.md), which routes model requests through LangSmith and is unrelated to tracing
 
 ## Development
 
