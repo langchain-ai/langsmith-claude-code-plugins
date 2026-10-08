@@ -107,7 +107,7 @@ describe("separate marketplace packages", () => {
         );
         expect(existsSync(join(pluginRoot, "bundle/gateway.js"))).toBe(false);
       } else {
-        expect(manifest.version).toBe("0.1.1");
+        expect(manifest.version).toBe("0.1.2");
         expect(manifest.description).toMatch(/experimental/i);
         expect(entry.description).toMatch(/experimental/i);
         expect(Object.keys(json(join(pluginRoot, "hooks/hooks.json")).hooks).sort()).toEqual(
