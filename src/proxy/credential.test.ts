@@ -8,6 +8,7 @@ import { createConfig } from "./setup.js";
 import { cleanup } from "./fixtures/server-sandbox.js";
 import {
   base,
+  CALLER_WORKSPACE,
   existingInstall,
   fixture,
   savedConfig,
@@ -65,6 +66,48 @@ describe("credential command", () => {
     cleanup.push(() => delete process.env.ANTHROPIC_API_KEY);
     expect((await send(config)).status).toBe(200);
     expect(seen[0].authorization).toBe(`Bearer ${unexpiredToken("clean")}`);
+  });
+});
+
+describe("caller supplied workspace", () => {
+  it("routes to the workspace the caller sends when none is configured", async () => {
+    const { config, seen } = await fixture({
+      credentialCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
+    });
+    expect((await send(config, { "x-tenant-id": CALLER_WORKSPACE })).status).toBe(200);
+    expect(seen[0]["x-tenant-id"]).toBe(CALLER_WORKSPACE);
+  });
+
+  it("prefers the workspace the caller sends over the configured one", async () => {
+    const { config, seen } = await fixture({
+      credentialCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
+      workspaceId: WORKSPACE,
+    });
+    expect((await send(config, { "x-tenant-id": CALLER_WORKSPACE })).status).toBe(200);
+    expect(seen[0]["x-tenant-id"]).toBe(CALLER_WORKSPACE);
+  });
+
+  it("sends no workspace when neither the caller nor the configuration names one", async () => {
+    const { config, seen } = await fixture({
+      credentialCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
+    });
+    expect((await send(config)).status).toBe(200);
+    expect(seen[0]["x-tenant-id"]).toBeUndefined();
+  });
+
+  it.each([
+    ["empty", ""],
+    ["not a UUID", "acme-production"],
+    ["sent twice", [CALLER_WORKSPACE, WORKSPACE]],
+  ])("refuses a workspace header that is %s", async (_name, value) => {
+    const { config, seen } = await fixture({
+      credentialCommand: `cat ${tokenFile(unexpiredToken("x"))}`,
+      workspaceId: WORKSPACE,
+    });
+    const { status, body } = await send(config, { "x-tenant-id": value });
+    expect(status).toBe(400);
+    expect(body).toContain("at most once and as a workspace UUID");
+    expect(seen).toHaveLength(0);
   });
 });
 

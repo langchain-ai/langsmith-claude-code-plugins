@@ -29,7 +29,6 @@ import {
 } from "./scopes.js";
 export { SetupError } from "./options.js";
 
-// Only fixed, non-sensitive diagnostics may reach the command's output.
 const fail = (message: string): never => {
   throw new SetupError(message);
 };
@@ -353,7 +352,6 @@ export function disable(
 ): void {
   const requested = parseDisableArgs(args);
   supportedHome(home, env);
-  // Missing installation is a true no-op.
   if (!loadConfig(home, true)) return;
   const unlock = lock(home);
   try {

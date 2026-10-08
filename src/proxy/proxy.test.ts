@@ -300,7 +300,6 @@ describe("local boundary and upstream targeting", () => {
         "gateway-key": "evil",
         "x-langsmith-auth-mode": "malicious",
         "x-langsmith-project": "evil",
-        "x-tenant-id": "evil",
         "proxy-authorization": "secret",
         connection: "x-remove, authorization, x-langsmith-anthropic-passthrough",
         "x-remove": "secret",
@@ -319,7 +318,6 @@ describe("local boundary and upstream targeting", () => {
       "gateway-key",
       "x-langsmith-auth-mode",
       "x-langsmith-project",
-      "x-tenant-id",
       "proxy-authorization",
       "x-remove",
     ])

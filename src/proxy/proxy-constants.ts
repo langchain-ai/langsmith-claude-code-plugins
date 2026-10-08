@@ -9,6 +9,9 @@ export const STATUS_GUIDANCE =
 
 export const TTL_RANGE_GUIDANCE = "Credential cache seconds must be between 1 and 3600";
 
+export const TENANT_HEADER_GUIDANCE =
+  "Send x-tenant-id at most once and as a workspace UUID. Drop the header to use the workspace saved in your gateway configuration.";
+
 export const ORIGIN_SHAPE_GUIDANCE =
   "Endpoints must be HTTPS DNS origins without credentials, path, query or fragment";
 
@@ -16,7 +19,7 @@ export const ORIGIN_DNS_GUIDANCE = "Endpoints must use public DNS names and HTTP
 
 export const API_URL = "https://api.smith.langchain.com";
 export const UPSTREAM = "https://gateway.smith.langchain.com";
-export const PROTOCOL_VERSION = 9;
+export const PROTOCOL_VERSION = 10;
 export const KEY_HEADER = "x-langsmith-proxy-key";
 export const TENANT_HEADER = "x-tenant-id";
 
@@ -108,6 +111,7 @@ export const routing = new Set([
   "x-secret-token",
 ]);
 
+// Matches smith-go/gateway's buffered request limit, including large image contexts.
 export const MAX_REQUEST_BYTES = 60 * 1024 * 1024;
 
 export const AUTH = [

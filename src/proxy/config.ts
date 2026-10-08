@@ -71,7 +71,6 @@ export function loadConfig(home = userHome(), includeDisabled = false): ProxyCon
   return { ...c, ...selected };
 }
 
-// One validated private disk read, including retained disabled configuration.
 export function configStatus(home = userHome()): {
   state: "not configured" | "enabled" | "disabled";
   config?: ProxyConfig;

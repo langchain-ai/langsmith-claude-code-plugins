@@ -11,6 +11,7 @@ import { enable } from "../settings.js";
 import { cleanup, listen } from "./server-sandbox.js";
 
 export const WORKSPACE = "f4c7e130-165b-471d-bdd3-5f0fc7a6a012";
+export const CALLER_WORKSPACE = "9b2d41c6-7a08-4f35-9c1e-2e6d0b5a7f43";
 const EXPIRY = Math.floor(Date.now() / 1000) + 3600;
 export const unexpiredToken = (suffix: string) =>
   `e30.${Buffer.from(JSON.stringify({ exp: EXPIRY, suffix })).toString("base64url")}.sig`;

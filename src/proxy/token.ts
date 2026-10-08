@@ -98,8 +98,7 @@ function spawnToken(
   });
 }
 
-// One token, one in-flight subprocess, short negative cache. JWT parsing only bounds
-// cache lifetime; signature/authentication verification belongs to the gateway.
+// JWT parsing only bounds cache lifetime; the gateway verifies the signature.
 export class TokenCache {
   private cached?: { token: string; until: number };
   private pending?: Promise<string>;

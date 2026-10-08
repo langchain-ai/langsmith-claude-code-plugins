@@ -116,11 +116,12 @@ var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private co
 var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and put --credential-command last, followed by a command that prints one token on standard output. The daemon runs that command with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs quotes, pipes or anything else your shell sets up. Add --credential-ttl SECONDS to change how long each result is reused from the default 300.";
 var STATUS_GUIDANCE = "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
 var TTL_RANGE_GUIDANCE = "Credential cache seconds must be between 1 and 3600";
+var TENANT_HEADER_GUIDANCE = "Send x-tenant-id at most once and as a workspace UUID. Drop the header to use the workspace saved in your gateway configuration.";
 var ORIGIN_SHAPE_GUIDANCE = "Endpoints must be HTTPS DNS origins without credentials, path, query or fragment";
 var ORIGIN_DNS_GUIDANCE = "Endpoints must use public DNS names and HTTPS ports 1-65535";
 var API_URL = "https://api.smith.langchain.com";
 var UPSTREAM = "https://gateway.smith.langchain.com";
-var PROTOCOL_VERSION = 9;
+var PROTOCOL_VERSION = 10;
 var KEY_HEADER = "x-langsmith-proxy-key";
 var TENANT_HEADER = "x-tenant-id";
 var BEARER_TOKEN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
@@ -498,6 +499,14 @@ var RequestError = class extends Error {
     this.status = status;
   }
 };
+function callerWorkspace(req) {
+  const values = req.rawHeaders.filter((_, i) => i % 2 === 1 && req.rawHeaders[i - 1].toLowerCase() === TENANT_HEADER);
+  if (values.length === 0)
+    return void 0;
+  if (values.length !== 1 || !isWorkspaceId(values[0]))
+    throw new RequestError(400, TENANT_HEADER_GUIDANCE);
+  return values[0];
+}
 function readBody(req) {
   return new Promise((resolve2, reject) => {
     const chunks = [];
@@ -716,6 +725,7 @@ function createProxy(config, options = {}) {
       end();
     };
     void (async () => {
+      const workspace = callerWorkspace(req) ?? config.workspaceId;
       const prepared = req.method === "POST" ? await prepareBody(req, path) : void 0;
       if (ended || res.destroyed)
         return;
@@ -735,8 +745,8 @@ function createProxy(config, options = {}) {
       if (draining)
         throw new RequestError(503, "Local proxy draining");
       headers.authorization = `Bearer ${token}`;
-      if (config.workspaceId)
-        headers[TENANT_HEADER] = config.workspaceId;
+      if (workspace)
+        headers[TENANT_HEADER] = workspace;
       if (native)
         headers["x-langsmith-anthropic-passthrough"] = native;
       outgoing = transport({

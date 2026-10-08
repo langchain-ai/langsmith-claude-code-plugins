@@ -14,9 +14,11 @@ import {
   MAX_REQUEST_BYTES,
   PROTOCOL_VERSION,
   TENANT_HEADER,
+  TENANT_HEADER_GUIDANCE,
   hop,
   routing,
 } from "./proxy-constants.js";
+import { isWorkspaceId } from "./config-validation.js";
 import type { ProxyConfig } from "./proxy-models.js";
 import { TokenCache, cliToken, commandToken, commandGuidance, loginGuidance } from "./token.js";
 
@@ -125,9 +127,6 @@ export function upstreamPath(method: string, raw: string): string | undefined {
   return method === "GET" && path.startsWith("/v1/models/") ? "/anthropic" + raw : raw;
 }
 
-// Match smith-go/gateway's buffered request limit, including large image/context
-// payloads. Enforce it on both the uploaded and rewritten UTF-8 bytes.
-
 class RequestError extends Error {
   constructor(
     readonly status: number,
@@ -135,6 +134,18 @@ class RequestError extends Error {
   ) {
     super(message);
   }
+}
+
+// Reject a malformed value here, since the gateway answers an unrecognised workspace
+// with a bare unauthorized that is indistinguishable from a rejected token.
+export function callerWorkspace(req: IncomingMessage): string | undefined {
+  const values = req.rawHeaders.filter(
+    (_, i) => i % 2 === 1 && req.rawHeaders[i - 1].toLowerCase() === TENANT_HEADER,
+  );
+  if (values.length === 0) return undefined;
+  if (values.length !== 1 || !isWorkspaceId(values[0]))
+    throw new RequestError(400, TENANT_HEADER_GUIDANCE);
+  return values[0];
 }
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -378,6 +389,7 @@ export function createProxy(
     // Validate/transform before CLI acquisition: rejected JSON must not refresh
     // credentials. GET bodies retain their existing streaming behavior.
     void (async () => {
+      const workspace = callerWorkspace(req) ?? config.workspaceId;
       const prepared = req.method === "POST" ? await prepareBody(req, path) : undefined;
       if (ended || res.destroyed) return;
       if (prepared) {
@@ -396,7 +408,7 @@ export function createProxy(
       // overridden provider. Gateway selection activates it only for built-in
       // Anthropic (including fallback legs); other destinations ignore it.
       headers.authorization = `Bearer ${token}`;
-      if (config.workspaceId) headers[TENANT_HEADER] = config.workspaceId;
+      if (workspace) headers[TENANT_HEADER] = workspace;
       if (native) headers["x-langsmith-anthropic-passthrough"] = native;
       outgoing = transport(
         {
