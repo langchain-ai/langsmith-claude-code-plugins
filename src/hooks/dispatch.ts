@@ -31,10 +31,11 @@ if (argument === "--help" || argument === "-h") {
   console.log(USAGE);
 } else if (argument === "--version" || argument === "-v") {
   console.log(LS_INTEGRATION_VERSION ?? "development");
+} else if (argument === FLUSH_QUEUE_ARG) {
+  const [cwd, sessionId] = process.argv.slice(3);
+  void runHookEntry(FLUSH_QUEUE_ARG, () => flushQueue(cwd ?? process.cwd(), sessionId));
 } else if (event) {
   void runHookEntry(event, HOOK_HANDLERS[event]);
-} else if (argument === FLUSH_QUEUE_ARG) {
-  void runHookEntry("Stop", () => flushQueue(process.argv[3] ?? process.cwd(), process.argv[4]));
 } else if (argument?.startsWith("-")) {
   console.error(`unknown option: ${argument}`);
   console.error(USAGE);

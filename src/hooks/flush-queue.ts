@@ -19,22 +19,26 @@ import {
   recordFailure,
   runIsTooOldToUpload,
 } from "../queue.js";
-import { releaseLock, tryAcquireLock } from "../state.js";
+import { releaseLock, tryAcquireLock } from "../utils/file-lock.js";
 import { createRunTree } from "../privacy.js";
 import type { Config } from "../config.js";
 
-function flusherClient(config: Config): { client: Client; lastError: () => unknown } {
+function flusherClient(config: Config): Client {
   const anonymizer = config.redact
     ? createSecretAnonymizer(
         config.redactExtraRules ? { extraRules: config.redactExtraRules } : undefined,
       )
     : undefined;
-  const client = new Client({
+  return new Client({
     apiKey: config.apiKey || undefined,
     apiUrl: config.apiBaseUrl,
     anonymizer,
     autoBatchTracing: false,
   });
+}
+
+// postRun reports success either way, so the upload it makes underneath is the only place a failure shows.
+function watchUploadFailures(client: Client): () => unknown {
   let failure: unknown;
   const createRun = client.createRun.bind(client);
   client.createRun = async (...args: Parameters<Client["createRun"]>) => {
@@ -45,13 +49,10 @@ function flusherClient(config: Config): { client: Client; lastError: () => unkno
       throw err;
     }
   };
-  return {
-    client,
-    lastError: () => {
-      const seen = failure;
-      failure = undefined;
-      return seen;
-    },
+  return () => {
+    const seen = failure;
+    failure = undefined;
+    return seen;
   };
 }
 
@@ -61,7 +62,8 @@ async function flushQueue(dir: string, config: Config): Promise<void> {
     debug(`Another flusher already owns ${dir}`);
     return;
   }
-  const { client, lastError } = flusherClient(config);
+  const client = flusherClient(config);
+  const lastUploadError = watchUploadFailures(client);
   try {
     for (;;) {
       const entry = nextQueued(dir);
@@ -76,7 +78,7 @@ async function flushQueue(dir: string, config: Config): Promise<void> {
         entry.tracing,
       );
       await runTree.postRun();
-      const failure = lastError();
+      const failure = lastUploadError();
       if (failure) {
         warn(`Queued run upload failed, leaving it for a later retry: ${failure}`);
         recordFailure(dir, entry.queue_id);

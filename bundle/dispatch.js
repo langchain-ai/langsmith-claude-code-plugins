@@ -903,6 +903,7 @@ var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata 
 var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
 var QUEUE_DIR_NAME = "langsmith_queue";
 var QUEUE_FILE_SUFFIX = ".queue.json";
+var QUEUE_SESSION_UNSAFE_CHARS = /[^\w.-]/g;
 var QUEUE_TEMP_SUFFIX = ".queue.tmp";
 var STATE_TEMP_SUFFIX = ".state.tmp";
 var LOCK_STAGING_SUFFIX = ".lock.staging";
@@ -13854,9 +13855,23 @@ function expandHome(path3) {
 }
 
 // dist/src/queue.js
-import { mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync, renameSync as renameSync5, rmdirSync, statSync as statSync4, unlinkSync as unlinkSync3, writeFileSync as writeFileSync4 } from "node:fs";
+import { mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync, rmdirSync, statSync as statSync4, unlinkSync as unlinkSync3 } from "node:fs";
 import { dirname as dirname3, join as join3 } from "node:path";
+import { randomUUID as randomUUID2 } from "node:crypto";
+
+// dist/src/utils/atomic-file.js
+import { openSync, writeSync, closeSync, renameSync as renameSync5 } from "node:fs";
 import { randomUUID } from "node:crypto";
+function publishByRename(path3, contents, tempSuffix) {
+  const temp = `${path3}.${randomUUID()}${tempSuffix}`;
+  const fd = openSync(temp, "wx");
+  try {
+    writeSync(fd, contents);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync5(temp, path3);
+}
 
 // dist/src/metadata.js
 var TRUSTED_INTEGRATION_VERSION = true ? "0.4.1" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
@@ -14046,11 +14061,12 @@ function queueDir(stateFilePath) {
   return join3(dirname3(stateFilePath), QUEUE_DIR_NAME);
 }
 function queueSessionDir(stateFilePath, sessionId) {
-  return join3(queueDir(stateFilePath), sessionId.replace(/[^\w.-]/g, "_"));
+  return join3(queueDir(stateFilePath), sessionId.replace(QUEUE_SESSION_UNSAFE_CHARS, "_"));
 }
 function listQueues(stateFilePath) {
+  const root = queueDir(stateFilePath);
   try {
-    return readdirSync(queueDir(stateFilePath), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => join3(queueDir(stateFilePath), entry.name)).sort();
+    return readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => join3(root, entry.name)).sort();
   } catch {
     return [];
   }
@@ -14083,9 +14099,7 @@ function nextQueued(dir) {
   return void 0;
 }
 function publish(dir, queueId, entry) {
-  const temp = join3(dir, `${queueId}${QUEUE_TEMP_SUFFIX}`);
-  writeFileSync4(temp, JSON.stringify(entry));
-  renameSync5(temp, entryPath(dir, queueId));
+  publishByRename(entryPath(dir, queueId), JSON.stringify(entry), QUEUE_TEMP_SUFFIX);
 }
 function trim(dir) {
   const ids = entryIds(dir);
@@ -14095,7 +14109,7 @@ function trim(dir) {
 }
 async function enqueueRun(stateFilePath, sessionId, run, tracing) {
   const dir = queueSessionDir(stateFilePath, sessionId);
-  const queueId = `${String(Date.now()).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID()}`;
+  const queueId = `${String(Date.now()).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID2()}`;
   try {
     mkdirSync5(dir, { recursive: true });
     publish(dir, queueId, {
@@ -14165,10 +14179,10 @@ function runIsTooOldToUpload(entry, now = Date.now()) {
   return Number.isFinite(started) && now - started >= QUEUE_RUN_MAX_AGE_MS;
 }
 
-// dist/src/state.js
-import { readFileSync as readFileSync7, writeFileSync as writeFileSync5, writeSync, linkSync, mkdirSync as mkdirSync6, openSync, closeSync, renameSync as renameSync6, unlinkSync as unlinkSync4 } from "node:fs";
+// dist/src/utils/file-lock.js
+import { readFileSync as readFileSync7, writeFileSync as writeFileSync4, linkSync, mkdirSync as mkdirSync6, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync4 } from "node:fs";
 import { dirname as dirname4 } from "node:path";
-import { randomUUID as randomUUID2 } from "node:crypto";
+import { randomUUID as randomUUID3 } from "node:crypto";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
 function lockPath(stateFilePath) {
@@ -14183,8 +14197,8 @@ async function acquireLock(stateFilePath) {
   mkdirSync6(dirname4(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
-      const fd = openSync(lock, "wx");
-      closeSync(fd);
+      const fd = openSync2(lock, "wx");
+      closeSync2(fd);
       return;
     } catch {
       await sleep3(LOCK_RETRY_MS);
@@ -14202,9 +14216,9 @@ function releaseLock(stateFilePath) {
   }
 }
 function claimLock(lock) {
-  const staging = `${lock}.${randomUUID2()}${LOCK_STAGING_SUFFIX}`;
+  const staging = `${lock}.${randomUUID3()}${LOCK_STAGING_SUFFIX}`;
   try {
-    writeFileSync5(staging, String(process.pid));
+    writeFileSync4(staging, String(process.pid));
   } catch {
     return false;
   }
@@ -14262,94 +14276,18 @@ async function withFileLock(filePath, fn) {
     releaseLock(filePath);
   }
 }
-function publishState(stateFilePath, state) {
-  const temp = `${stateFilePath}.${randomUUID2()}${STATE_TEMP_SUFFIX}`;
-  const fd = openSync(temp, "wx");
-  try {
-    writeSync(fd, JSON.stringify(state, null, 2));
-  } finally {
-    closeSync(fd);
-  }
-  renameSync6(temp, stateFilePath);
-}
-async function atomicUpdateState(stateFilePath, fn) {
-  await withFileLock(stateFilePath, () => {
-    const state = loadState(stateFilePath);
-    publishState(stateFilePath, fn(state));
-  });
-}
-function loadState(stateFilePath) {
-  try {
-    const raw = readFileSync7(stateFilePath, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-function getSessionState(state, sessionId) {
-  return state[sessionId] ?? {
-    last_line: -1,
-    turn_count: 0,
-    updated: "",
-    task_run_map: {}
-  };
-}
-function advanceToolTracingProgress(session, ids, phase) {
-  const modes = { ...session.tool_tracing_modes };
-  const progress = { ...session.tool_tracing_progress };
-  for (const id of ids) {
-    if (!Object.hasOwn(modes, id))
-      continue;
-    if (progress[id] && progress[id] !== phase) {
-      delete modes[id];
-      delete progress[id];
-    } else {
-      progress[id] = phase;
-    }
-  }
-  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
-}
-var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
-function pruneOldSessions(state, now = Date.now()) {
-  const cutoff = now - SESSION_MAX_AGE_MS;
-  const pruned = {};
-  for (const [sessionId, session] of Object.entries(state)) {
-    const updatedMs = session.updated ? new Date(session.updated).getTime() : 0;
-    if (updatedMs >= cutoff) {
-      pruned[sessionId] = session;
-    }
-  }
-  return pruned;
-}
-function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, currentTurnRunId) {
-  const existingSession = state[sessionId] ?? {
-    last_line: -1,
-    turn_count: 0,
-    updated: "",
-    task_run_map: {}
-  };
-  return {
-    ...state,
-    [sessionId]: {
-      ...existingSession,
-      last_line: lastLine,
-      turn_count: turnCount,
-      updated: (/* @__PURE__ */ new Date()).toISOString(),
-      task_run_map: taskRunMap ?? existingSession.task_run_map,
-      current_turn_run_id: currentTurnRunId !== void 0 ? currentTurnRunId : existingSession.current_turn_run_id
-    }
-  };
-}
 
 // dist/src/hooks/flush-queue.js
 function flusherClient(config) {
   const anonymizer = config.redact ? createSecretAnonymizer(config.redactExtraRules ? { extraRules: config.redactExtraRules } : void 0) : void 0;
-  const client2 = new Client({
+  return new Client({
     apiKey: config.apiKey || void 0,
     apiUrl: config.apiBaseUrl,
     anonymizer,
     autoBatchTracing: false
   });
+}
+function watchUploadFailures(client2) {
   let failure;
   const createRun = client2.createRun.bind(client2);
   client2.createRun = async (...args) => {
@@ -14360,13 +14298,10 @@ function flusherClient(config) {
       throw err;
     }
   };
-  return {
-    client: client2,
-    lastError: () => {
-      const seen = failure;
-      failure = void 0;
-      return seen;
-    }
+  return () => {
+    const seen = failure;
+    failure = void 0;
+    return seen;
   };
 }
 async function flushQueue(dir, config) {
@@ -14375,7 +14310,8 @@ async function flushQueue(dir, config) {
     debug(`Another flusher already owns ${dir}`);
     return;
   }
-  const { client: client2, lastError } = flusherClient(config);
+  const client2 = flusherClient(config);
+  const lastUploadError = watchUploadFailures(client2);
   try {
     for (; ; ) {
       const entry = nextQueued(dir);
@@ -14388,7 +14324,7 @@ async function flushQueue(dir, config) {
       }
       const runTree = createRunTree({ ...entry.run, client: client2, replicas: config.replicas }, entry.tracing);
       await runTree.postRun();
-      const failure = lastError();
+      const failure = lastUploadError();
       if (failure) {
         warn(`Queued run upload failed, leaving it for a later retry: ${failure}`);
         recordFailure2(dir, entry.queue_id);
@@ -14421,7 +14357,7 @@ async function main(cwd, sessionId) {
 }
 
 // dist/src/tracing-policy.js
-import { randomUUID as randomUUID3 } from "node:crypto";
+import { randomUUID as randomUUID4 } from "node:crypto";
 import { lstatSync as lstatSync2, readFileSync as readFileSync8 } from "node:fs";
 import { mkdir as mkdir3, open, rename as rename2, rmdir, unlink as unlink2 } from "node:fs/promises";
 import { dirname as dirname5 } from "node:path";
@@ -14519,7 +14455,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
       throw new Error(`Cannot read tracing preferences at ${path3}. Refusing to overwrite them; repair the file or its permissions before retrying. No preferences were changed.`, { cause: error2 });
     }
     policy.threads = { ...policy.threads, [sessionId]: mode };
-    tempPath = `${path3}.${process.pid}.${randomUUID3()}.tmp`;
+    tempPath = `${path3}.${process.pid}.${randomUUID4()}.tmp`;
     const temp = await open(tempPath, "wx", 384);
     try {
       await temp.writeFile(`${JSON.stringify(policy)}
@@ -14556,7 +14492,7 @@ function resolveTurnTracingMode(config, sessionId, ...snapshots) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync9, statSync as statSync5, fstatSync, openSync as openSync2, readSync, closeSync as closeSync2 } from "node:fs";
+import { readFileSync as readFileSync9, statSync as statSync5, fstatSync, openSync as openSync3, readSync, closeSync as closeSync3 } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
   let size;
@@ -14581,7 +14517,7 @@ function readTranscript(filePath, afterLine = -1) {
     }
     return { messages, lastLine };
   }
-  const fd = openSync2(filePath, "r");
+  const fd = openSync3(filePath, "r");
   try {
     const chunkSize = 2 * 1024 * 1024;
     const buf = Buffer.alloc(chunkSize);
@@ -14623,7 +14559,7 @@ function readTranscript(filePath, afterLine = -1) {
     }
     return { messages, lastLine };
   } finally {
-    closeSync2(fd);
+    closeSync3(fd);
   }
 }
 function getTranscriptEndLine(filePath) {
@@ -14636,7 +14572,7 @@ function getTranscriptEndLine(filePath) {
       const lines = raw.split("\n").filter((l) => l.trim() !== "");
       return lines.length > 0 ? lines.length - 1 : -1;
     }
-    const fd = openSync2(filePath, "r");
+    const fd = openSync3(filePath, "r");
     try {
       const chunkSize = 1024 * 1024;
       const buf = Buffer.alloc(chunkSize);
@@ -14659,7 +14595,7 @@ function getTranscriptEndLine(filePath) {
         lineCount++;
       return lineCount > 0 ? lineCount - 1 : -1;
     } finally {
-      closeSync2(fd);
+      closeSync3(fd);
     }
   } catch {
     return -1;
@@ -14668,7 +14604,7 @@ function getTranscriptEndLine(filePath) {
 function readRuntimeVersion(filePath) {
   let fd;
   try {
-    fd = openSync2(filePath, "r");
+    fd = openSync3(filePath, "r");
     const size = fstatSync(fd).size;
     if (size === 0)
       return void 0;
@@ -14691,7 +14627,7 @@ function readRuntimeVersion(filePath) {
   } catch {
   } finally {
     if (fd !== void 0)
-      closeSync2(fd);
+      closeSync3(fd);
   }
   return void 0;
 }
@@ -14862,17 +14798,92 @@ function groupIntoTurns(messages) {
   return turns;
 }
 
+// dist/src/state.js
+import { readFileSync as readFileSync10, mkdirSync as mkdirSync7 } from "node:fs";
+import { dirname as dirname6 } from "node:path";
+function publishState(stateFilePath, state) {
+  publishByRename(stateFilePath, JSON.stringify(state, null, 2), STATE_TEMP_SUFFIX);
+}
+async function atomicUpdateState(stateFilePath, fn) {
+  await withFileLock(stateFilePath, () => {
+    const state = loadState(stateFilePath);
+    publishState(stateFilePath, fn(state));
+  });
+}
+function loadState(stateFilePath) {
+  try {
+    const raw = readFileSync10(stateFilePath, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+function getSessionState(state, sessionId) {
+  return state[sessionId] ?? {
+    last_line: -1,
+    turn_count: 0,
+    updated: "",
+    task_run_map: {}
+  };
+}
+function advanceToolTracingProgress(session, ids, phase) {
+  const modes = { ...session.tool_tracing_modes };
+  const progress = { ...session.tool_tracing_progress };
+  for (const id of ids) {
+    if (!Object.hasOwn(modes, id))
+      continue;
+    if (progress[id] && progress[id] !== phase) {
+      delete modes[id];
+      delete progress[id];
+    } else {
+      progress[id] = phase;
+    }
+  }
+  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
+}
+var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
+function pruneOldSessions(state, now = Date.now()) {
+  const cutoff = now - SESSION_MAX_AGE_MS;
+  const pruned = {};
+  for (const [sessionId, session] of Object.entries(state)) {
+    const updatedMs = session.updated ? new Date(session.updated).getTime() : 0;
+    if (updatedMs >= cutoff) {
+      pruned[sessionId] = session;
+    }
+  }
+  return pruned;
+}
+function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, currentTurnRunId) {
+  const existingSession = state[sessionId] ?? {
+    last_line: -1,
+    turn_count: 0,
+    updated: "",
+    task_run_map: {}
+  };
+  return {
+    ...state,
+    [sessionId]: {
+      ...existingSession,
+      last_line: lastLine,
+      turn_count: turnCount,
+      updated: (/* @__PURE__ */ new Date()).toISOString(),
+      task_run_map: taskRunMap ?? existingSession.task_run_map,
+      current_turn_run_id: currentTurnRunId !== void 0 ? currentTurnRunId : existingSession.current_turn_run_id
+    }
+  };
+}
+
 // dist/src/repo-attribution.js
 import { existsSync as existsSync3 } from "node:fs";
 import { isAbsolute, resolve as resolve3 } from "node:path";
 
 // dist/src/repo-attribution-paths.js
 import { statSync as statSync6 } from "node:fs";
-import { dirname as dirname6, join as join4, resolve as resolve2 } from "node:path";
+import { dirname as dirname7, join as join4, resolve as resolve2 } from "node:path";
 function nearestExistingDirectory(path3) {
   let current = path3;
   for (; ; ) {
-    const parent = dirname6(current);
+    const parent = dirname7(current);
     const reachedFilesystemRoot = parent === current;
     if (reachedFilesystemRoot)
       return void 0;
@@ -14899,7 +14910,7 @@ function rootFromGitMarker(directory) {
       return current;
     if (marker === GIT_MARKERS.ONLY_GIT_CAN_SAY)
       return void 0;
-    const parent = dirname6(current);
+    const parent = dirname7(current);
     const reachedFilesystemRoot = parent === current;
     if (reachedFilesystemRoot)
       return null;
@@ -15928,8 +15939,9 @@ async function main3() {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
   } else if (workflow) {
     debug(`Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`);
+    const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
     const runTree = createRunTree({
-      client: initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules),
+      client: client2,
       replicas: config.replicas,
       id: toolRunId,
       name: "Workflow",
@@ -17107,10 +17119,11 @@ if (argument === "--help" || argument === "-h") {
   console.log(USAGE);
 } else if (argument === "--version" || argument === "-v") {
   console.log(LS_INTEGRATION_VERSION ?? "development");
+} else if (argument === FLUSH_QUEUE_ARG) {
+  const [cwd, sessionId] = process.argv.slice(3);
+  void runHookEntry(FLUSH_QUEUE_ARG, () => main(cwd ?? process.cwd(), sessionId));
 } else if (event) {
   void runHookEntry(event, HOOK_HANDLERS[event]);
-} else if (argument === FLUSH_QUEUE_ARG) {
-  void runHookEntry("Stop", () => main(process.argv[3] ?? process.cwd(), process.argv[4]));
 } else if (argument?.startsWith("-")) {
   console.error(`unknown option: ${argument}`);
   console.error(USAGE);

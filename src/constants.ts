@@ -59,6 +59,9 @@ const NO_PINNED_KEYS: ReadonlySet<string> = new Set();
 const QUEUE_DIR_NAME = "langsmith_queue";
 const QUEUE_FILE_SUFFIX = ".queue.json";
 
+/** Anything outside this set is replaced, so a session id can never escape its own folder. */
+const QUEUE_SESSION_UNSAFE_CHARS = /[^\w.-]/g;
+
 /** A half-written entry carries this instead, so a reader never sees it. */
 const QUEUE_TEMP_SUFFIX = ".queue.tmp";
 
@@ -128,6 +131,7 @@ export {
   GH_LOGIN_RETRY_AFTER_MS,
   QUEUE_DIR_NAME,
   QUEUE_FILE_SUFFIX,
+  QUEUE_SESSION_UNSAFE_CHARS,
   QUEUE_TEMP_SUFFIX,
   STATE_TEMP_SUFFIX,
   LOCK_STAGING_SUFFIX,

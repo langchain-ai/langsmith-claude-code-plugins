@@ -111,15 +111,16 @@ export async function main(): Promise<void> {
     debug(
       `Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`,
     );
+    const client = initTracing(
+      config.apiKey,
+      config.apiBaseUrl,
+      config.replicas,
+      config.redact,
+      config.redactExtraRules,
+    );
     const runTree = createRunTree(
       {
-        client: initTracing(
-          config.apiKey,
-          config.apiBaseUrl,
-          config.replicas,
-          config.redact,
-          config.redactExtraRules,
-        ),
+        client,
         replicas: config.replicas,
         id: toolRunId,
         name: "Workflow",

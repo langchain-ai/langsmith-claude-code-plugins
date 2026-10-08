@@ -14,5 +14,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*", "binary.config.json"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "src/fixtures/git-sandbox.ts"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "src/fixtures/git-sandbox.ts", "src/fixtures/queue-sandbox.ts"]
 }

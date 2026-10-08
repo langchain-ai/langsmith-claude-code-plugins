@@ -9,16 +9,7 @@
  * read-modify-write the same file and no lock guards the append.
  */
 
-import {
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  rmdirSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, rmdirSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
@@ -28,10 +19,12 @@ import {
   QUEUE_MAX_ATTEMPTS,
   QUEUE_MAX_ENTRIES,
   QUEUE_RUN_MAX_AGE_MS,
+  QUEUE_SESSION_UNSAFE_CHARS,
   FOREIGN_QUEUE_MIN_RECORD_AGE_MS,
   EMPTY_QUEUE_MIN_IDLE_MS,
   QUEUE_TEMP_SUFFIX,
 } from "./constants.js";
+import { publishByRename } from "./utils/atomic-file.js";
 import { runConfigForMode } from "./privacy.js";
 import { debug, warn } from "./logger.js";
 import type { QueuedRun, TracingMode } from "./types.js";
@@ -41,14 +34,15 @@ export function queueDir(stateFilePath: string): string {
 }
 
 export function queueSessionDir(stateFilePath: string, sessionId: string): string {
-  return join(queueDir(stateFilePath), sessionId.replace(/[^\w.-]/g, "_"));
+  return join(queueDir(stateFilePath), sessionId.replace(QUEUE_SESSION_UNSAFE_CHARS, "_"));
 }
 
 export function listQueues(stateFilePath: string): string[] {
+  const root = queueDir(stateFilePath);
   try {
-    return readdirSync(queueDir(stateFilePath), { withFileTypes: true })
+    return readdirSync(root, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
-      .map((entry) => join(queueDir(stateFilePath), entry.name))
+      .map((entry) => join(root, entry.name))
       .sort();
   } catch {
     return [];
@@ -95,9 +89,7 @@ export function nextQueued(dir: string): QueuedRun | undefined {
 }
 
 function publish(dir: string, queueId: string, entry: Omit<QueuedRun, "queue_id">): void {
-  const temp = join(dir, `${queueId}${QUEUE_TEMP_SUFFIX}`);
-  writeFileSync(temp, JSON.stringify(entry));
-  renameSync(temp, entryPath(dir, queueId));
+  publishByRename(entryPath(dir, queueId), JSON.stringify(entry), QUEUE_TEMP_SUFFIX);
 }
 
 function trim(dir: string): void {
