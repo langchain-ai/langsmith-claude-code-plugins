@@ -211,6 +211,22 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     expect(await waitFor(() => !existsSync(queueDirFor()))).toBe(true);
   });
 
+  // Catches a folder a dead session drained being left on disk for good, since the
+  // session that would have removed it is gone. No other test has a stranger remove one.
+  it("removes an abandoned folder another session drained hours ago", async () => {
+    writeTranscript();
+    await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
+    await toolCall(0);
+    await hook("Stop", { hook_event_name: "Stop", stop_hook_active: false });
+    expect(await waitFor(() => queued().length === 0)).toBe(true);
+
+    const aged = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    utimesSync(queueDirFor("s1"), aged, aged);
+
+    await hook("Stop", { session_id: "s2", hook_event_name: "Stop", stop_hook_active: false });
+    expect(await waitFor(() => !existsSync(queueDirFor("s1")))).toBe(true);
+  });
+
   // Catches an empty folder removed in the gap between a session creating it and
   // writing its first record, which loses that record to a vanished directory.
   it("leaves an empty folder created moments ago alone", async () => {

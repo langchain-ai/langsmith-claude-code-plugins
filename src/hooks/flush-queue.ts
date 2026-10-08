@@ -99,6 +99,7 @@ export async function main(cwd: string, sessionId?: string): Promise<void> {
   for (const dir of listQueues(config.stateFilePath)) {
     const mine = dir === own;
     if (!mine && !foreignQueueIsFlushable(dir)) {
+      discardEmptyQueue(dir);
       debug(`Leaving ${dir} to the session that still owns it`);
       continue;
     }
