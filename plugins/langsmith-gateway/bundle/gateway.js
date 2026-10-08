@@ -115,6 +115,22 @@ function transaction(writes) {
 var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required: use the full current schema with explicit enabled and useClaudeSubscription booleans, including when disabled. Retain your existing local key, CLI, profile, port and endpoints. Do not paste secrets or delete/reset configuration.";
 var COMMAND_GUIDANCE = "Use /langsmith-gateway:setup --scope global|project or /langsmith-gateway:disable --scope global|project within Claude Code. Add a --use-claude-subscription flag to pass Claude subscription auth directly to Anthropic. To sign in with your company identity token instead of the LangSmith CLI, add --workspace-id UUID and put --identity-token-command last, followed by a command that prints one token on standard output. The daemon runs that command with /bin/sh from your home directory and gives it only HOME and a standard PATH, so name a script if it needs quotes, pipes or anything else your shell sets up. Add --identity-token-ttl SECONDS to change how long each result is reused from the default 300.";
 var CREDENTIAL_SOURCE_GUIDANCE = "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI using the README and complete terminal login with your selected profile and API URL (review the saved OAuth issuer), or add --workspace-id UUID and --identity-token-command with a command that prints your identity token. Then retry /langsmith-gateway:setup.";
+var CONFLICTING_AUTH_GUIDANCE = "Conflicting provider/auth setting; client auth overrides are not supported by this setup.";
+var CONFLICTING_BASE_GUIDANCE = "Conflicting Claude API address setting; it will not be overwritten.";
+var CONFLICT_ENVIRONMENT_GUIDANCE = "Unset in your shell and restart Claude Code, since it reads these at startup.";
+var CONFLICT_SETTINGS_GUIDANCE = "Remove from that file.";
+var CONFLICT_RETRY_GUIDANCE = "Then retry setup.";
+var PINNED_CHANGE_GUIDANCE = "Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit the shared config while other scopes are active.";
+var PINNED_FIELD_LABELS = {
+  cli: "CLI path",
+  profile: "profile",
+  port: "port",
+  identityTokenCommand: "identity token command",
+  identityTokenTtlMs: "identity token reuse seconds",
+  workspaceId: "workspace id",
+  apiUrl: "API address",
+  gatewayUrl: "gateway address"
+};
 var STATUS_GUIDANCE = "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
 var TTL_RANGE_GUIDANCE = "Identity token cache seconds must be between 1 and 3600";
 var TENANT_HEADER_GUIDANCE = "Send x-tenant-id at most once and as a workspace UUID. Drop the header to use the workspace saved in your gateway configuration.";
@@ -1189,6 +1205,21 @@ function validateHeaders(value) {
       fail("Custom Host headers are unsupported by persistent setup. Remove the Host header explicitly so the client uses the loopback target; review headers privately.");
   }
 }
+function conflicting(guidance, path, inEnvironment, inSettings) {
+  const parts = [guidance];
+  if (inEnvironment.length)
+    parts.push(`Found in your environment: ${inEnvironment.join(", ")}.`, CONFLICT_ENVIRONMENT_GUIDANCE);
+  if (inSettings.length)
+    parts.push(`Found in your settings file ${path}: ${inSettings.join(", ")}.`, CONFLICT_SETTINGS_GUIDANCE);
+  parts.push(CONFLICT_RETRY_GUIDANCE);
+  return fail(parts.join(" "));
+}
+function changedFields(config, next, pinningCLI) {
+  const before = { ...config, ...endpoints(config) };
+  const after = { ...next, ...endpoints(next) };
+  const keys = Object.keys(PINNED_FIELD_LABELS);
+  return keys.filter((key) => (key !== "cli" || pinningCLI) && before[key] !== after[key]).map((key) => PINNED_FIELD_LABELS[key]);
+}
 function settings(s) {
   const value = s ? object(JSON.parse(s.text)) : {};
   const env = value.env === void 0 ? {} : object(value.env);
@@ -1241,10 +1272,10 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
     const { value, env: savedEnv } = settings(beforeSettings);
     if (value.disableAllHooks === true)
       fail("Persistent setup requires hooks to restart the daemon. Set disableAllHooks to false or remove it explicitly from user settings before retrying; it will not be overwritten.");
-    for (const key of AUTH) {
-      if (savedEnv[key] !== void 0 || env[key] !== void 0)
-        fail("Conflicting provider/auth environment setting. Remove it explicitly before setup; client auth overrides are not supported by this setup.");
-    }
+    const authInEnvironment = AUTH.filter((key) => env[key] !== void 0);
+    const authInSettings = AUTH.filter((key) => savedEnv[key] !== void 0);
+    if (authInEnvironment.length || authInSettings.length)
+      conflicting(CONFLICTING_AUTH_GUIDANCE, p.settings, authInEnvironment, authInSettings);
     if (value.apiKeyHelper !== void 0)
       fail("Conflicting apiKeyHelper. Remove it explicitly before setup; it will not be overwritten.");
     const base = text(savedEnv[BASE]), headers = text(savedEnv[HEADERS]);
@@ -1272,9 +1303,9 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       identityTokenTtlMs: requested.identityTokenTtlMs ?? config.identityTokenTtlMs,
       workspaceId: requested.workspaceId ?? config.workspaceId
     } : void 0;
-    const changing = config && next && (requested.cli !== void 0 && config.cli !== next.cli || config.profile !== next.profile || config.port !== next.port || config.identityTokenCommand !== next.identityTokenCommand || config.identityTokenTtlMs !== next.identityTokenTtlMs || config.workspaceId !== next.workspaceId || endpoints(config).apiUrl !== next.apiUrl || endpoints(config).gatewayUrl !== next.gatewayUrl);
-    if (changing && (initiallyEnabled || active.length))
-      fail("Existing pinned CLI/profile/port or endpoints differ. Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit the shared config while other scopes are active.");
+    const changed = config && next ? changedFields(config, next, requested.cli !== void 0) : [];
+    if (changed.length && (initiallyEnabled || active.length))
+      fail(`Setup would change settings an active scope is already using: ${changed.join(", ")}. ${PINNED_CHANGE_GUIDANCE}`);
     const modeChanged = !!config && config.useClaudeSubscription !== useClaudeSubscription;
     const switching = initiallyEnabled && modeChanged;
     if (modeChanged && active.some((item) => item.path !== p.settings))
@@ -1282,8 +1313,10 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
     if (switching && !prior)
       fail("Only the sole active configured target can switch subscription forwarding in place. Disable existing routing first, then retry setup.");
     const target = `http://127.0.0.1:${port}`;
-    if (base !== void 0 && base !== target || env[BASE] !== void 0 && env[BASE] !== target)
-      fail("Conflicting ANTHROPIC_BASE_URL. Remove it explicitly before setup; it will not be overwritten.");
+    const baseInEnvironment = env[BASE] !== void 0 && env[BASE] !== target ? [BASE] : [];
+    const baseInSettings = base !== void 0 && base !== target ? [BASE] : [];
+    if (baseInEnvironment.length || baseInSettings.length)
+      conflicting(CONFLICTING_BASE_GUIDANCE, p.settings, baseInEnvironment, baseInSettings);
     const retainedHeaders = !!config && !prior && env[HEADERS] === withProxyKey(headers, config);
     if (env[HEADERS] !== void 0 && env[HEADERS] !== headers && !retainedHeaders && !(config && active.some(({ saved }) => routingEnv(saved)[HEADERS] === env[HEADERS])))
       fail("Inherited custom headers differ from the selected scope settings and do not match trusted local transport. Resolve the override privately before setup; it will not be copied into settings.");

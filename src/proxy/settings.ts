@@ -1,7 +1,17 @@
 import { accessSync, constants, mkdirSync, rmdirSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { configDir, endpoints, loadConfig, privatePath, userHome } from "./config.js";
-import { AUTH, CREDENTIAL_SOURCE_GUIDANCE } from "./proxy-constants.js";
+import {
+  AUTH,
+  CONFLICT_ENVIRONMENT_GUIDANCE,
+  CONFLICT_RETRY_GUIDANCE,
+  CONFLICT_SETTINGS_GUIDANCE,
+  CONFLICTING_AUTH_GUIDANCE,
+  CONFLICTING_BASE_GUIDANCE,
+  CREDENTIAL_SOURCE_GUIDANCE,
+  PINNED_CHANGE_GUIDANCE,
+  PINNED_FIELD_LABELS,
+} from "./proxy-constants.js";
 import type { ObjectValue, ProxyConfig } from "./proxy-models.js";
 import {
   atomic,
@@ -68,6 +78,34 @@ function validateHeaders(value: string | undefined): void {
         "Custom Host headers are unsupported by persistent setup. Remove the Host header explicitly so the client uses the loopback target; review headers privately.",
       );
   }
+}
+function conflicting(
+  guidance: string,
+  path: string,
+  inEnvironment: string[],
+  inSettings: string[],
+): never {
+  const parts = [guidance];
+  if (inEnvironment.length)
+    parts.push(
+      `Found in your environment: ${inEnvironment.join(", ")}.`,
+      CONFLICT_ENVIRONMENT_GUIDANCE,
+    );
+  if (inSettings.length)
+    parts.push(
+      `Found in your settings file ${path}: ${inSettings.join(", ")}.`,
+      CONFLICT_SETTINGS_GUIDANCE,
+    );
+  parts.push(CONFLICT_RETRY_GUIDANCE);
+  return fail(parts.join(" "));
+}
+function changedFields(config: ProxyConfig, next: ProxyConfig, pinningCLI: boolean): string[] {
+  const before = { ...config, ...endpoints(config) };
+  const after = { ...next, ...endpoints(next) };
+  const keys = Object.keys(PINNED_FIELD_LABELS) as (keyof typeof PINNED_FIELD_LABELS)[];
+  return keys
+    .filter((key) => (key !== "cli" || pinningCLI) && before[key] !== after[key])
+    .map((key) => PINNED_FIELD_LABELS[key]);
 }
 function settings(s: Snapshot | undefined): { value: ObjectValue; env: ObjectValue } {
   const value = s ? object(JSON.parse(s.text)) : {};
@@ -137,12 +175,10 @@ export async function enable(
       fail(
         "Persistent setup requires hooks to restart the daemon. Set disableAllHooks to false or remove it explicitly from user settings before retrying; it will not be overwritten.",
       );
-    for (const key of AUTH) {
-      if (savedEnv[key] !== undefined || env[key] !== undefined)
-        fail(
-          "Conflicting provider/auth environment setting. Remove it explicitly before setup; client auth overrides are not supported by this setup.",
-        );
-    }
+    const authInEnvironment = AUTH.filter((key) => env[key] !== undefined);
+    const authInSettings = AUTH.filter((key) => savedEnv[key] !== undefined);
+    if (authInEnvironment.length || authInSettings.length)
+      conflicting(CONFLICTING_AUTH_GUIDANCE, p.settings, authInEnvironment, authInSettings);
     if (value.apiKeyHelper !== undefined)
       fail(
         "Conflicting apiKeyHelper. Remove it explicitly before setup; it will not be overwritten.",
@@ -181,20 +217,10 @@ export async function enable(
           workspaceId: requested.workspaceId ?? config.workspaceId,
         }
       : undefined;
-    const changing =
-      config &&
-      next &&
-      ((requested.cli !== undefined && config.cli !== next.cli) ||
-        config.profile !== next.profile ||
-        config.port !== next.port ||
-        config.identityTokenCommand !== next.identityTokenCommand ||
-        config.identityTokenTtlMs !== next.identityTokenTtlMs ||
-        config.workspaceId !== next.workspaceId ||
-        endpoints(config).apiUrl !== next.apiUrl ||
-        endpoints(config).gatewayUrl !== next.gatewayUrl);
-    if (changing && (initiallyEnabled || active.length))
+    const changed = config && next ? changedFields(config, next, requested.cli !== undefined) : [];
+    if (changed.length && (initiallyEnabled || active.length))
       fail(
-        "Existing pinned CLI/profile/port or endpoints differ. Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit the shared config while other scopes are active.",
+        `Setup would change settings an active scope is already using: ${changed.join(", ")}. ${PINNED_CHANGE_GUIDANCE}`,
       );
     const modeChanged = !!config && config.useClaudeSubscription !== useClaudeSubscription;
     const switching = initiallyEnabled && modeChanged;
@@ -207,13 +233,10 @@ export async function enable(
         "Only the sole active configured target can switch subscription forwarding in place. Disable existing routing first, then retry setup.",
       );
     const target = `http://127.0.0.1:${port}`;
-    if (
-      (base !== undefined && base !== target) ||
-      (env[BASE] !== undefined && env[BASE] !== target)
-    )
-      fail(
-        "Conflicting ANTHROPIC_BASE_URL. Remove it explicitly before setup; it will not be overwritten.",
-      );
+    const baseInEnvironment = env[BASE] !== undefined && env[BASE] !== target ? [BASE] : [];
+    const baseInSettings = base !== undefined && base !== target ? [BASE] : [];
+    if (baseInEnvironment.length || baseInSettings.length)
+      conflicting(CONFLICTING_BASE_GUIDANCE, p.settings, baseInEnvironment, baseInSettings);
     const retainedHeaders = !!config && !prior && env[HEADERS] === withProxyKey(headers, config);
     // Do not copy shell/project headers (potential secrets) into user settings.
     if (

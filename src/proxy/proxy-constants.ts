@@ -7,6 +7,33 @@ export const COMMAND_GUIDANCE =
 export const CREDENTIAL_SOURCE_GUIDANCE =
   "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI using the README and complete terminal login with your selected profile and API URL (review the saved OAuth issuer), or add --workspace-id UUID and --identity-token-command with a command that prints your identity token. Then retry /langsmith-gateway:setup.";
 
+export const CONFLICTING_AUTH_GUIDANCE =
+  "Conflicting provider/auth setting; client auth overrides are not supported by this setup.";
+
+export const CONFLICTING_BASE_GUIDANCE =
+  "Conflicting Claude API address setting; it will not be overwritten.";
+
+export const CONFLICT_ENVIRONMENT_GUIDANCE =
+  "Unset in your shell and restart Claude Code, since it reads these at startup.";
+
+export const CONFLICT_SETTINGS_GUIDANCE = "Remove from that file.";
+
+export const CONFLICT_RETRY_GUIDANCE = "Then retry setup.";
+
+export const PINNED_CHANGE_GUIDANCE =
+  "Run /langsmith-gateway:disable first for every active scope (use --scope global|project), stop all gateway sessions and CLI writers, then retry /langsmith-gateway:setup with the explicit options. Do not edit the shared config while other scopes are active.";
+
+export const PINNED_FIELD_LABELS = {
+  cli: "CLI path",
+  profile: "profile",
+  port: "port",
+  identityTokenCommand: "identity token command",
+  identityTokenTtlMs: "identity token reuse seconds",
+  workspaceId: "workspace id",
+  apiUrl: "API address",
+  gatewayUrl: "gateway address",
+};
+
 export const STATUS_GUIDANCE =
   "Use /langsmith-gateway:status [--scope global|project] within Claude Code.";
 
