@@ -1,7 +1,7 @@
 {
   "name": "langsmith-gateway",
   "description": "Experimental opt-in local subscription gateway proxy, managed through Claude Code setup/disable commands and independent of tracing.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": {
     "name": "LangChain"
   },
