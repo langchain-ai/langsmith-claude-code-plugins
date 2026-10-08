@@ -166,6 +166,7 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
       settingsChanged: true,
       useClaudeSubscription: false,
       modeChanged: false,
+      baseOverwritten: false,
     });
     const config = loadConfig()!;
     expect(config.profile).toBe("fake-profile");
@@ -192,6 +193,7 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
       settingsChanged: false,
       useClaudeSubscription: false,
       modeChanged: false,
+      baseOverwritten: false,
     });
     expect(readFileSync(settings, "utf8")).toBe(bytes);
     for (const file of [settings, join(configDir(home), "config.json")])
@@ -206,6 +208,7 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
       settingsChanged: true,
       useClaudeSubscription: false,
       modeChanged: false,
+      baseOverwritten: false,
     });
     expect(loadConfig()).toEqual({ ...config, settingsTargets: expect.any(Array) });
     disable(["--scope", "global"], {});
@@ -520,8 +523,6 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
   });
   it.each([
     { apiKeyHelper: "secret-command" },
-    { env: { ANTHROPIC_API_KEY: "secret" } },
-    { env: { ANTHROPIC_AUTH_TOKEN: "secret" } },
     { env: { CLAUDE_CODE_USE_VERTEX: "1" } },
     { env: { ANTHROPIC_BASE_URL: "https://other.invalid" } },
     { env: { ANTHROPIC_CUSTOM_HEADERS: "x-langsmith-proxy-key: secret" } },
@@ -565,9 +566,9 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
       expect(String(error)).not.toContain(label);
   });
   it("names the shell setting that blocks setup and how to clear it", async () => {
-    const error = await refusal({ ANTHROPIC_AUTH_TOKEN: "secret" });
+    const error = await refusal({ CLAUDE_CODE_USE_VERTEX: "1" });
     expect(error).toBeInstanceOf(SetupError);
-    expect(String(error)).toContain("Found in your environment: ANTHROPIC_AUTH_TOKEN.");
+    expect(String(error)).toContain("Found in your environment: CLAUDE_CODE_USE_VERTEX.");
     expect(String(error)).toContain("Unset in your shell and restart Claude Code");
     expect(String(error)).not.toContain("settings file");
   });
@@ -582,15 +583,61 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
   });
   it("names every blocking setting rather than only the first", async () => {
     const error = await refusal(
-      { ANTHROPIC_API_KEY: "shell-secret", CLAUDE_CODE_USE_VERTEX: "1" },
-      { env: { ANTHROPIC_AUTH_TOKEN: "saved-secret" } },
+      { CLAUDE_CODE_USE_BEDROCK: "1", CLAUDE_CODE_USE_VERTEX: "1" },
+      { env: { CLAUDE_CODE_USE_FOUNDRY: "1" } },
     );
     expect(String(error)).toContain(
-      "Found in your environment: ANTHROPIC_API_KEY, CLAUDE_CODE_USE_VERTEX.",
+      "Found in your environment: CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX.",
     );
     expect(String(error)).toContain(
-      `Found in your settings file ${settings}: ANTHROPIC_AUTH_TOKEN.`,
+      `Found in your settings file ${settings}: CLAUDE_CODE_USE_FOUNDRY.`,
     );
+  });
+  it.each([
+    { ANTHROPIC_API_KEY: "stray-key" },
+    { ANTHROPIC_AUTH_TOKEN: "stray-token" },
+    { CLAUDE_CODE_API_KEY_HELPER: "print-a-key" },
+  ])("sets up with a stray credential the proxy can now carry: %j", async (env) => {
+    await expect(enable("/fake/gateway.js", args(), env)).resolves.toMatchObject({
+      settingsChanged: true,
+    });
+    expect(json(settings).env.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:52507");
+  });
+  it.each([
+    { ANTHROPIC_AUTH_TOKEN: "saved-token" },
+    { ANTHROPIC_API_KEY: "saved-key" },
+  ])("sets up with a stray credential saved in the settings file: %j", async (env) => {
+    save({ env });
+    await expect(run()).resolves.toMatchObject({ settingsChanged: true });
+    expect(json(settings).env).toMatchObject(env);
+  });
+  it.each([
+    "https://gateway.smith.langchain.com",
+    "https://gateway.smith.langchain.com/",
+    "https://gateway.smith.langchain.com/v1/messages",
+    "https://GATEWAY.smith.langchain.com",
+  ])("overwrites an address already pointing at our gateway: %s", async (base) => {
+    save({ env: { ANTHROPIC_BASE_URL: base } });
+    await expect(run()).resolves.toMatchObject({ baseOverwritten: true });
+    expect(json(settings).env.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:52507");
+  });
+  it("overwrites an inherited address already pointing at our gateway", async () => {
+    await expect(
+      enable("/fake/gateway.js", args(), { ANTHROPIC_BASE_URL: UPSTREAM }),
+    ).resolves.toMatchObject({ baseOverwritten: true });
+    expect(json(settings).env.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:52507");
+  });
+  it.each([
+    "https://gateway.smith.langchain.com.evil.test",
+    "https://evilgateway.smith.langchain.com",
+    "https://evil.test/https://gateway.smith.langchain.com",
+    "https://gateway.smith.langchain.com@evil.test",
+    "http://gateway.smith.langchain.com",
+  ])("refuses a lookalike gateway address rather than overwriting it: %s", async (base) => {
+    const error = await refusal({}, { env: { ANTHROPIC_BASE_URL: base } });
+    expect(error).toBeInstanceOf(SetupError);
+    expect(String(error)).toContain(`Found in your settings file ${settings}: ANTHROPIC_BASE_URL.`);
+    expect(loadConfig()).toBeUndefined();
   });
   it("says where a conflicting API address was found", async () => {
     const shell = await refusal({ ANTHROPIC_BASE_URL: "https://elsewhere.invalid" });
@@ -600,7 +647,6 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
     expect(String(saved)).toContain(`Found in your settings file ${settings}: ANTHROPIC_BASE_URL.`);
   });
   it.each([
-    { env: { ANTHROPIC_API_KEY: "secret-value" }, saved: undefined },
     { env: { ANTHROPIC_BASE_URL: "https://secret-value.invalid" }, saved: undefined },
     { env: {}, saved: { env: { ANTHROPIC_BASE_URL: "https://secret-value.invalid" } } },
   ])("never prints the value of a blocking setting: %j", async ({ env, saved }) => {
@@ -609,7 +655,6 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
     expect(String(error)).not.toContain("secret-value");
   });
   it.each([
-    { ANTHROPIC_API_KEY: "secret" },
     { ANTHROPIC_BASE_URL: "https://elsewhere.invalid" },
     { ANTHROPIC_CUSTOM_HEADERS: "X-Shell: secret" },
     { CLAUDE_CONFIG_DIR: "/other" },
@@ -1080,6 +1125,7 @@ it.each(["global", "project"] as const)(
       });
       const flags = choice ? ["--use-claude-subscription"] : [];
       await expect(invoke(...flags)).resolves.toEqual({
+        baseOverwritten: false,
         settingsChanged: false,
         useClaudeSubscription: choice,
         modeChanged: true,

@@ -115,8 +115,9 @@ function transaction(writes) {
 var CONFIG_UPDATE_GUIDANCE = "Invalid proxy configuration. A one-time private config update is required, so keep your existing key, CLI, profile, port and addresses, and set enabled and useClaudeSubscription explicitly even when disabled. Do not paste secrets.";
 var COMMAND_GUIDANCE = 'Run /langsmith-gateway:setup --scope global|project within Claude Code, or /langsmith-gateway:disable to turn it off. To sign in with your own identity token, add --workspace-id UUID and --identity-token-command "your command", where the command prints one token. See GATEWAY.md for the other flags.';
 var CREDENTIAL_SOURCE_GUIDANCE = "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI and sign in, or add --workspace-id UUID and --identity-token-command. Then retry setup.";
-var CONFLICTING_AUTH_GUIDANCE = "Conflicting provider/auth setting; client auth overrides are not supported by this setup.";
+var CONFLICTING_AUTH_GUIDANCE = "Conflicting provider setting; it would send requests to another provider instead of the local proxy.";
 var CONFLICTING_BASE_GUIDANCE = "Conflicting Claude API address setting; it will not be overwritten.";
+var BASE_OVERWRITE_NOTICE = "Your Claude API address already pointed at the LangSmith gateway, so setup replaced it with the local proxy address; ";
 var CONFLICT_ENVIRONMENT_GUIDANCE = "Unset in your shell and restart Claude Code, since it reads these at startup.";
 var CONFLICT_SETTINGS_GUIDANCE = "Remove from that file.";
 var CONFLICT_RETRY_GUIDANCE = "Then retry setup.";
@@ -142,6 +143,12 @@ var API_URL = "https://api.smith.langchain.com";
 var UPSTREAM = "https://gateway.smith.langchain.com";
 var PROTOCOL_VERSION = 11;
 var KEY_HEADER = "x-langsmith-proxy-key";
+var BEARER_SLOT = "authorization";
+var API_KEY_SLOT = "x-api-key";
+var PASSTHROUGH_HEADER = "x-langsmith-anthropic-passthrough";
+var CREDENTIAL_PREFIX = "sk-ant-";
+var BEARER_PREFIX = /^Bearer /i;
+var CREDENTIAL_SLOT_GUIDANCE = "Exactly one sk-ant-... credential with a nonempty, header-safe suffix required, sent once as either Authorization: Bearer or x-api-key";
 var TENANT_HEADER = "x-tenant-id";
 var HEALTH_PATH = "/_langsmith/health";
 var CREDENTIAL_STATE_PATH = "/_langsmith/credential";
@@ -243,15 +250,10 @@ var routing = /* @__PURE__ */ new Set([
   "x-secret-token"
 ]);
 var MAX_REQUEST_BYTES = 60 * 1024 * 1024;
-var AUTH = [
-  "ANTHROPIC_AUTH_TOKEN",
-  "ANTHROPIC_API_KEY",
+var PROVIDER_ROUTING = [
   "CLAUDE_CODE_USE_BEDROCK",
   "CLAUDE_CODE_USE_VERTEX",
-  "CLAUDE_CODE_USE_FOUNDRY",
-  "ANTHROPIC_FOUNDRY_API_KEY",
-  "ANTHROPIC_FOUNDRY_BASE_URL",
-  "CLAUDE_CODE_API_KEY_HELPER"
+  "CLAUDE_CODE_USE_FOUNDRY"
 ];
 
 // dist/src/proxy/config-validation.js
@@ -261,6 +263,17 @@ var publicDnsOrigin = (url) => {
   const labels = url.hostname.split(".");
   const port = url.port === "" ? void 0 : Number(url.port);
   return url.hostname.length <= MAX_HOSTNAME_LENGTH && labels.length >= 2 && labels.every((label) => DNS_LABEL.test(label)) && TOP_LEVEL_LABEL.test(labels.at(-1)) && !PRIVATE_HOST.test(url.hostname) && (port === void 0 || port >= MIN_URL_PORT && port <= MAX_URL_PORT);
+};
+var sameHost = (value, origin) => {
+  if (typeof value !== "string" || value.length > MAX_ORIGIN_LENGTH || WHITESPACE.test(value))
+    return false;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  return url.protocol === "https:" && url.hostname.toLowerCase() === new URL(origin).hostname.toLowerCase();
 };
 var absent = (value, valid) => value === void 0 || valid(value);
 var isIdentityTokenCommand = (value) => typeof value === "string" && value.trim().length > 0 && value.length <= MAX_IDENTITY_TOKEN_COMMAND && !CONTROL.test(value);
@@ -342,6 +355,21 @@ function configStatus(home = userHome()) {
 import http from "node:http";
 import https from "node:https";
 import { createHash, timingSafeEqual } from "node:crypto";
+
+// dist/src/proxy/header-slots.js
+var slotPresent = (req, name) => req.rawHeaders.some((header, i) => i % 2 === 0 && header.toLowerCase() === name);
+function slotValue(req, name) {
+  const count = req.rawHeaders.filter((header, i) => i % 2 === 0 && header.toLowerCase() === name).length;
+  const value = req.headers[name];
+  if (count !== 1 || typeof value !== "string")
+    return;
+  return value;
+}
+function bearerCredential(value) {
+  if (value === void 0 || !BEARER_PREFIX.test(value))
+    return;
+  return value.slice("Bearer ".length);
+}
 
 // dist/src/proxy/token.js
 import { spawn } from "node:child_process";
@@ -508,17 +536,13 @@ function authenticated(req, secret) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 function nativeToken(req) {
-  const count = req.rawHeaders.filter((name, i) => i % 2 === 0 && name.toLowerCase() === "authorization").length;
-  const value = req.headers.authorization;
-  if (count !== 1 || typeof value !== "string")
+  const token = slotPresent(req, BEARER_SLOT) ? bearerCredential(slotValue(req, BEARER_SLOT)) : slotValue(req, API_KEY_SLOT);
+  if (token === void 0)
     return;
-  if (!/^Bearer /i.test(value))
-    return;
-  const token = value.slice(7);
-  if (!token.startsWith("sk-ant-") || token.length <= 7 || /[\s\x00-\x1f\x7f-\x9f,]/.test(token))
+  if (!token.startsWith(CREDENTIAL_PREFIX) || token.length <= 7 || /[\s\x00-\x1f\x7f-\x9f,]/.test(token))
     return;
   try {
-    http.validateHeaderValue("x-langsmith-anthropic-passthrough", token);
+    http.validateHeaderValue(PASSTHROUGH_HEADER, token);
   } catch {
     return;
   }
@@ -756,7 +780,7 @@ function createProxy(config, options = {}) {
     }
     const native = config.useClaudeSubscription ? nativeToken(req) : void 0;
     if (config.useClaudeSubscription && !native) {
-      reply(res, 401, "Exactly one Authorization: Bearer sk-ant-... with a nonempty, header-safe suffix required");
+      reply(res, 401, CREDENTIAL_SLOT_GUIDANCE);
       return;
     }
     const headers = cleanHeaders(req.headers);
@@ -814,7 +838,7 @@ function createProxy(config, options = {}) {
       if (workspace)
         headers[TENANT_HEADER] = workspace;
       if (native)
-        headers["x-langsmith-anthropic-passthrough"] = native;
+        headers[PASSTHROUGH_HEADER] = native;
       outgoing = transport({
         protocol: "https:",
         hostname: upstreamOrigin.hostname,
@@ -1337,8 +1361,8 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
     const { value, env: savedEnv } = settings(beforeSettings);
     if (value.disableAllHooks === true)
       fail("Persistent setup requires hooks to restart the daemon. Set disableAllHooks to false or remove it explicitly from user settings before retrying; it will not be overwritten.");
-    const authInEnvironment = AUTH.filter((key) => env[key] !== void 0);
-    const authInSettings = AUTH.filter((key) => savedEnv[key] !== void 0);
+    const authInEnvironment = PROVIDER_ROUTING.filter((key) => env[key] !== void 0);
+    const authInSettings = PROVIDER_ROUTING.filter((key) => savedEnv[key] !== void 0);
     if (authInEnvironment.length || authInSettings.length)
       conflicting(CONFLICTING_AUTH_GUIDANCE, p.settings, authInEnvironment, authInSettings);
     if (value.apiKeyHelper !== void 0)
@@ -1378,8 +1402,10 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
     if (switching && !prior)
       fail("Only the sole active configured target can switch subscription forwarding in place. Disable existing routing first, then retry setup.");
     const target = `http://127.0.0.1:${port}`;
-    const baseInEnvironment = env[BASE] !== void 0 && env[BASE] !== target ? [BASE] : [];
-    const baseInSettings = base !== void 0 && base !== target ? [BASE] : [];
+    const ours = (value2) => value2 !== void 0 && value2 !== target && (sameHost(value2, selected.gatewayUrl) || sameHost(value2, UPSTREAM));
+    const baseOverwritten = ours(env[BASE]) || ours(base);
+    const baseInEnvironment = env[BASE] !== void 0 && env[BASE] !== target && !ours(env[BASE]) ? [BASE] : [];
+    const baseInSettings = base !== void 0 && base !== target && !ours(base) ? [BASE] : [];
     if (baseInEnvironment.length || baseInSettings.length)
       conflicting(CONFLICTING_BASE_GUIDANCE, p.settings, baseInEnvironment, baseInSettings);
     const retainedHeaders = !!config && !prior && env[HEADERS] === withProxyKey(headers, config);
@@ -1449,7 +1475,8 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       return {
         settingsChanged,
         useClaudeSubscription: config.useClaudeSubscription,
-        modeChanged
+        modeChanged,
+        baseOverwritten
       };
     } catch (error) {
       if (!initiallyEnabled || switching) {
@@ -1621,8 +1648,8 @@ async function handleGatewayInput(input, entry2, env = process.env, home = userH
       if (!command)
         return;
       if (command.command === "setup") {
-        const { settingsChanged, useClaudeSubscription, modeChanged } = await enable(entry2, command.args, env, home, input.cwd ?? "");
-        reason = (settingsChanged ? "Gateway settings saved for the selected scope; " : "Gateway settings already configured for the selected scope; ") + modeSummary(useClaudeSubscription, modeChanged) + "local daemon healthy. Authentication is checked on the first model request, not setup.";
+        const { settingsChanged, useClaudeSubscription, modeChanged, baseOverwritten } = await enable(entry2, command.args, env, home, input.cwd ?? "");
+        reason = (baseOverwritten ? BASE_OVERWRITE_NOTICE : "") + (settingsChanged ? "Gateway settings saved for the selected scope; " : "Gateway settings already configured for the selected scope; ") + modeSummary(useClaudeSubscription, modeChanged) + "local daemon healthy. Authentication is checked on the first model request, not setup.";
       } else if (command.command === "status") {
         reason = await gatewayStatus(command.args, env, home, input.cwd ?? "");
       } else {

@@ -1,5 +1,5 @@
 import { parseGatewayCommand, SetupError } from "./options.js";
-import { COMMAND_GUIDANCE } from "./proxy-constants.js";
+import { BASE_OVERWRITE_NOTICE, COMMAND_GUIDANCE } from "./proxy-constants.js";
 import { enable, disable, modeSummary } from "./settings.js";
 import { gatewayHook } from "./lifecycle.js";
 import { gatewayStatus } from "./status.js";
@@ -24,7 +24,7 @@ export async function handleGatewayInput(
       const command = parseGatewayCommand(input.prompt);
       if (!command) return;
       if (command.command === "setup") {
-        const { settingsChanged, useClaudeSubscription, modeChanged } = await enable(
+        const { settingsChanged, useClaudeSubscription, modeChanged, baseOverwritten } = await enable(
           entry,
           command.args,
           env,
@@ -32,6 +32,7 @@ export async function handleGatewayInput(
           input.cwd ?? "",
         );
         reason =
+          (baseOverwritten ? BASE_OVERWRITE_NOTICE : "") +
           (settingsChanged
             ? "Gateway settings saved for the selected scope; "
             : "Gateway settings already configured for the selected scope; ") +

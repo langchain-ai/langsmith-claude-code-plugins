@@ -2,7 +2,6 @@ import { accessSync, constants, mkdirSync, rmdirSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { configDir, endpoints, loadConfig, privatePath, userHome } from "./config.js";
 import {
-  AUTH,
   CONFLICT_ENVIRONMENT_GUIDANCE,
   CONFLICT_RETRY_GUIDANCE,
   CONFLICT_SETTINGS_GUIDANCE,
@@ -11,8 +10,11 @@ import {
   CREDENTIAL_SOURCE_GUIDANCE,
   PINNED_CHANGE_GUIDANCE,
   PINNED_FIELD_LABELS,
+  PROVIDER_ROUTING,
+  UPSTREAM,
 } from "./proxy-constants.js";
-import type { ObjectValue, ProxyConfig } from "./proxy-models.js";
+import { sameHost } from "./config-validation.js";
+import type { ObjectValue, ProxyConfig, SetupResult } from "./proxy-models.js";
 import {
   atomic,
   transaction,
@@ -156,11 +158,7 @@ export async function enable(
   env = process.env,
   home = userHome(),
   cwd = process.cwd(),
-): Promise<{
-  settingsChanged: boolean;
-  useClaudeSubscription: boolean;
-  modeChanged: boolean;
-}> {
+): Promise<SetupResult> {
   const requested = parseSetupArgs(args);
   supportedHome(home, env);
   // Reject unsupported config before creating directories or a settings lock.
@@ -175,8 +173,8 @@ export async function enable(
       fail(
         "Persistent setup requires hooks to restart the daemon. Set disableAllHooks to false or remove it explicitly from user settings before retrying; it will not be overwritten.",
       );
-    const authInEnvironment = AUTH.filter((key) => env[key] !== undefined);
-    const authInSettings = AUTH.filter((key) => savedEnv[key] !== undefined);
+    const authInEnvironment = PROVIDER_ROUTING.filter((key) => env[key] !== undefined);
+    const authInSettings = PROVIDER_ROUTING.filter((key) => savedEnv[key] !== undefined);
     if (authInEnvironment.length || authInSettings.length)
       conflicting(CONFLICTING_AUTH_GUIDANCE, p.settings, authInEnvironment, authInSettings);
     if (value.apiKeyHelper !== undefined)
@@ -233,8 +231,14 @@ export async function enable(
         "Only the sole active configured target can switch subscription forwarding in place. Disable existing routing first, then retry setup.",
       );
     const target = `http://127.0.0.1:${port}`;
-    const baseInEnvironment = env[BASE] !== undefined && env[BASE] !== target ? [BASE] : [];
-    const baseInSettings = base !== undefined && base !== target ? [BASE] : [];
+    const ours = (value: string | undefined) =>
+      value !== undefined &&
+      value !== target &&
+      (sameHost(value, selected.gatewayUrl) || sameHost(value, UPSTREAM));
+    const baseOverwritten = ours(env[BASE]) || ours(base);
+    const baseInEnvironment =
+      env[BASE] !== undefined && env[BASE] !== target && !ours(env[BASE]) ? [BASE] : [];
+    const baseInSettings = base !== undefined && base !== target && !ours(base) ? [BASE] : [];
     if (baseInEnvironment.length || baseInSettings.length)
       conflicting(CONFLICTING_BASE_GUIDANCE, p.settings, baseInEnvironment, baseInSettings);
     const retainedHeaders = !!config && !prior && env[HEADERS] === withProxyKey(headers, config);
@@ -331,6 +335,7 @@ export async function enable(
         settingsChanged,
         useClaudeSubscription: config.useClaudeSubscription,
         modeChanged,
+        baseOverwritten,
       };
     } catch (error) {
       // Leave settings untouched on readiness failure; a newly created/re-enabled

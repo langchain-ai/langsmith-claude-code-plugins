@@ -38,4 +38,11 @@ export interface Endpoints {
   gatewayUrl: string;
 }
 
+export interface SetupResult {
+  settingsChanged: boolean;
+  useClaudeSubscription: boolean;
+  modeChanged: boolean;
+  baseOverwritten: boolean;
+}
+
 export type ObjectValue = Record<string, unknown>;

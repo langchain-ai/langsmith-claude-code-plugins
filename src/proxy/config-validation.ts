@@ -45,6 +45,21 @@ export const publicDnsOrigin = (url: URL): boolean => {
   );
 };
 
+export const sameHost = (value: unknown, origin: string): boolean => {
+  if (typeof value !== "string" || value.length > MAX_ORIGIN_LENGTH || WHITESPACE.test(value))
+    return false;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  return (
+    url.protocol === "https:" &&
+    url.hostname.toLowerCase() === new URL(origin).hostname.toLowerCase()
+  );
+};
+
 export const absent = (value: unknown, valid: (v: unknown) => boolean): boolean =>
   value === undefined || valid(value);
 
