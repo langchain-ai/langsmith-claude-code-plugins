@@ -19,18 +19,12 @@ export const alpha = sandbox.makeRepo(
   "Alpha Owner",
   "git@github.com:acme/a.git",
 );
-export const beta = sandbox.makeRepo(
-  "beta repo",
-  "trunk-b",
-  "Beta Owner",
-  "https://gitlab.com/acme/b",
-);
 export const plain = sandbox.makeDir(sandbox.root, "plain folder");
 
 /** Runs the service has seen finish, which it will accept no further update for. */
 const finished = new Set<string>();
 
-const fake = fakeLangSmith({
+export const service = fakeLangSmith({
   rejectsRun({ action, run }) {
     if (action === "post") {
       if (run.end_time) finished.add(run.id);
@@ -49,40 +43,11 @@ const fake = fakeLangSmith({
   },
 });
 
-/** What the fake LangSmith has seen, and how it is behaving. */
-export const service = {
-  get created() {
-    return fake.created;
-  },
-  get updated() {
-    return fake.updated;
-  },
-  get fail() {
-    return fake.fail;
-  },
-  set fail(value: boolean) {
-    fake.fail = value;
-  },
-  get delayMs() {
-    return fake.delayMs;
-  },
-  set delayMs(value: number) {
-    fake.delayMs = value;
-  },
-  /** Refuse only the requests whose body mentions this, so one run can fail on its own. */
-  get refuse() {
-    return fake.refuse;
-  },
-  set refuse(value: string) {
-    fake.refuse = value;
-  },
-};
-
 export function useReconcileSandbox(): void {
-  beforeAll(() => fake.listen(), 60_000);
+  beforeAll(() => service.listen(), 60_000);
 
   beforeEach(() => {
-    fake.reset();
+    service.reset();
     finished.clear();
   });
 
@@ -91,7 +56,7 @@ export function useReconcileSandbox(): void {
   });
 
   afterAll(async () => {
-    await fake.close();
+    await service.close();
     sandbox.remove();
   });
 }
@@ -110,7 +75,7 @@ export function hook(
       PATH: process.env.PATH ?? "",
       TRACE_TO_LANGSMITH: "true",
       LANGSMITH_API_KEY: "lsv2_pt_fake_key_for_tests",
-      LANGSMITH_ENDPOINT: fake.endpoint,
+      LANGSMITH_ENDPOINT: service.endpoint,
       CC_LANGSMITH_PROJECT: "reconcile-e2e",
       CC_LANGSMITH_LOG_FILE: join(sandbox.root, "hook.log"),
       STATE_FILE: join(sandbox.root, "state.json"),

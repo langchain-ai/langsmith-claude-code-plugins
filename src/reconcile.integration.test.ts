@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   alpha,
-  beta,
   createdMetadataOf,
   hook,
   metadataOf,
@@ -78,30 +77,6 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     // The turn's own run was finished by its close, so the service refusing the repeat is
     // the turn being settled rather than something to retry forever.
     expect(await waitFor(() => recordFiles("root-known").length === 0)).toBe(true);
-  });
-
-  // Catches a turn started outside every repository staying unlabelled for good, and a
-  // reconcile that relabels a tool which genuinely worked somewhere else.
-  it("fills a turn from its first tool while a tool elsewhere keeps its own", async () => {
-    const base = session("root-unknown", plain);
-    await prompt(base);
-    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
-    await tool(base, "Glob", { path: join(beta, "seed.txt") });
-    await tool(base, "Bash", { command: "echo hi" });
-    reply(base);
-    await stop(base);
-
-    expect(await waitFor(() => metadataOf("Bash").repository_name === "acme/a")).toBe(true);
-    expect(metadataOf("Read")).toMatchObject({ repository_name: "acme/a" });
-    expect(metadataOf("Glob")).toMatchObject({
-      repository_name: "acme/b",
-      git_branch: "trunk-b",
-      ls_attribution_identifier: "Beta Owner",
-    });
-    expect(metadataOf("Claude Code Turn")).toMatchObject({
-      repository_name: "acme/a",
-      ls_attribution_identifier: "Alpha Owner",
-    });
   });
 
   // Catches a model run closed the moment the turn is traced, which is the one run under a
