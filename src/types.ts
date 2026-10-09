@@ -378,6 +378,11 @@ export type TurnRecordLine =
   | { k: typeof TURN_RECORD_LINE.delivered; id: string }
   | { k: typeof TURN_RECORD_LINE.reconciled; id: string };
 
+export interface TurnRecordTarget {
+  path: string;
+  origin: string;
+}
+
 export interface TurnRecord {
   path: string;
   origin: string;

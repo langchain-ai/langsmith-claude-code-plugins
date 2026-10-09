@@ -14395,6 +14395,7 @@ function attributionOf(metadata) {
   return carried;
 }
 var namesARepository = (carried) => carried[REPOSITORY_NAME_KEY] !== void 0;
+var awaitsTheTurn = (metadata) => !metadata?.[REPOSITORY_NAME_KEY] || !metadata?.[ATTRIBUTION_IDENTIFIER_KEY];
 function turnAttribution(record) {
   const root = attributionOf(record.root?.metadata);
   const inToolCallOrder = [...record.children].sort((left, right) => left.dotted_order < right.dotted_order ? -1 : 1).map((child) => attributionOf(child.metadata));
@@ -15478,7 +15479,7 @@ function buildUsageMetadata(usage) {
   };
 }
 async function traceTurn(options) {
-  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, agentType = "root", tracing = "full", toolTracingModes } = options;
+  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, agentType = "root", tracing = "full", toolTracingModes, record } = options;
   const sessionCwd = typeof customMetadata?.cwd === "string" ? customMetadata.cwd : void 0;
   const turnId = turn.promptId;
   let traceId = providedTraceId;
@@ -15619,9 +15620,29 @@ async function traceTurn(options) {
       lastEndTime = toolEndTime;
     }
     const assistantEndTime = llmCall.toolCalls.length > 0 ? lastEndTime : llmCall.endTime;
-    const runTree = createRunTree({
-      client,
-      replicas,
+    const assistantMetadata = codingAgentMetadata({
+      sessionId,
+      base: customMetadata,
+      turnId,
+      turnNumber: turnNum,
+      runtimeVersion,
+      agentType,
+      modelName: llmCall.model,
+      usageMetadata: buildUsageMetadata(llmCall.usage),
+      runSpecific: {
+        ls_provider: resolveProvider(llmCall.model),
+        ls_model_name: llmCall.model,
+        ls_invocation_params: {
+          model: llmCall.model,
+          ...llmCall.effort ? { effort: llmCall.effort } : {},
+          ...llmCall.usage.service_tier ? { service_tier: llmCall.usage.service_tier } : {}
+        },
+        usage_metadata: buildUsageMetadata(llmCall.usage),
+        ...llmCall.synthetic ? { synthetic: true } : {}
+      }
+    });
+    const settlesLater = record !== void 0 && awaitsTheTurn(assistantMetadata);
+    const assistantClose = {
       id: assistantRunId,
       run_type: "llm",
       trace_id: traceId,
@@ -15630,35 +15651,24 @@ async function traceTurn(options) {
       name: ASSISTANT_RUN_NAME,
       project_name: project,
       start_time: llmCall.startTime,
-      end_time: assistantEndTime,
+      ...settlesLater ? {} : { end_time: assistantEndTime },
       outputs: {
         messages: [{ role: "assistant", content: assistantContent }]
       },
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId,
-          base: customMetadata,
-          turnId,
-          turnNumber: turnNum,
-          runtimeVersion,
-          agentType,
-          modelName: llmCall.model,
-          usageMetadata: buildUsageMetadata(llmCall.usage),
-          runSpecific: {
-            ls_provider: resolveProvider(llmCall.model),
-            ls_model_name: llmCall.model,
-            ls_invocation_params: {
-              model: llmCall.model,
-              ...llmCall.effort ? { effort: llmCall.effort } : {},
-              ...llmCall.usage.service_tier ? { service_tier: llmCall.usage.service_tier } : {}
-            },
-            usage_metadata: buildUsageMetadata(llmCall.usage),
-            ...llmCall.synthetic ? { synthetic: true } : {}
-          }
-        })
-      }
-    }, tracing);
+      extra: { metadata: assistantMetadata }
+    };
+    const runTree = createRunTree({ ...assistantClose, client, replicas }, tracing);
     await runTree.patchRun({ excludeInputs: true });
+    if (settlesLater && record) {
+      recordRun({
+        path: record.path,
+        run: assistantClose,
+        tracing,
+        origin: record.origin,
+        closesAt: assistantEndTime
+      });
+      recordDelivered(record.path, assistantRunId);
+    }
     accumulatedMessages.push({ role: "assistant", content: assistantContent });
     for (const tc of llmCall.toolCalls) {
       accumulatedMessages.push({
@@ -16371,7 +16381,7 @@ async function main3() {
       runName: input.tool_name,
       skillName: skillNameFromTool(input.tool_name, input.tool_input)
     });
-    const awaitsTheTurn = !toolMetadata[REPOSITORY_NAME_KEY] || !toolMetadata[ATTRIBUTION_IDENTIFIER_KEY];
+    const settlesLater = awaitsTheTurn(toolMetadata);
     const toolRun = {
       id: toolRunId,
       name: input.tool_name,
@@ -16380,7 +16390,7 @@ async function main3() {
       outputs: { output: input.tool_response },
       project_name: config.project,
       start_time: startTimeIso,
-      ...awaitsTheTurn ? {} : { end_time: toolEndTimeIso },
+      ...settlesLater ? {} : { end_time: toolEndTimeIso },
       parent_run_id: parentRunId,
       trace_id: traceId,
       dotted_order: toolDottedOrder,
@@ -16392,7 +16402,7 @@ async function main3() {
       run: toolRun,
       tracing,
       origin,
-      closesAt: awaitsTheTurn ? toolEndTimeIso : void 0
+      closesAt: settlesLater ? toolEndTimeIso : void 0
     });
     await enqueueRun(config.stateFilePath, input.session_id, toolRun, tracing, origin, turnRecord);
     startQueueFlusher(input.cwd, input.session_id);
@@ -16831,6 +16841,10 @@ async function main7() {
     const dottedOrder = isLastTurn ? currentDottedOrder : void 0;
     const existingTaskRunMap = isLastTurn ? sessionState.task_run_map : void 0;
     const tracedToolUseIds = isLastTurn ? new Set(sessionState.traced_tool_use_ids ?? []) : void 0;
+    const record = isLastTurn && currentRunId ? {
+      path: turnRecordPath(config.stateFilePath, input.session_id, currentRunId),
+      origin: queueOrigin(config)
+    } : void 0;
     try {
       const taskRunMap = await traceTurn({
         // Earlier transcript turns have no original snapshot; never backfill them as full.
@@ -16847,7 +16861,8 @@ async function main7() {
         existingTaskRunMap,
         tracedToolUseIds,
         traceId,
-        parentDottedOrder: dottedOrder
+        parentDottedOrder: dottedOrder,
+        record
       });
       allTaskRunMaps = { ...allTaskRunMaps, ...taskRunMap };
       tracedTurns++;

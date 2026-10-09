@@ -103,6 +103,40 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     });
   });
 
+  // Catches a model run closed the moment the turn is traced, which is the one run under a
+  // turn that can never be told who was working once the turn has settled.
+  it("gives the session's own author to the model runs under the turn", async () => {
+    const base = session("model-in-repo", alpha);
+    await prompt(base);
+    reply(base);
+    await stop(base);
+
+    expect(
+      await waitFor(() => metadataOf("Claude").ls_attribution_identifier === "Alpha Owner"),
+    ).toBe(true);
+    expect(metadataOf("Claude")).toMatchObject({
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+    });
+  });
+
+  // Catches a settle that reaches the turn and its tool calls but stops short of the model
+  // runs, which leaves them the only runs in the trace with no repository at all.
+  it("fills the model runs of a turn that started outside every repository", async () => {
+    const base = session("model-outside", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    reply(base);
+    await stop(base);
+
+    expect(await waitFor(() => metadataOf("Claude").repository_name === "acme/a")).toBe(true);
+    expect(metadataOf("Claude")).toMatchObject({
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    });
+    expect(await waitFor(() => recordFiles("model-outside").length === 0)).toBe(true);
+  });
+
   // Catches a reconcile that runs before a tool handler finishing late has uploaded,
   // which leaves that one call unlabelled with nothing left to come back for it.
   it("settles a tool call that only lands after the turn has closed", async () => {

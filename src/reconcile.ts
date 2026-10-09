@@ -35,6 +35,9 @@ function attributionOf(metadata: Record<string, unknown> | undefined): Attributi
 const namesARepository = (carried: Attribution): boolean =>
   carried[REPOSITORY_NAME_KEY] !== undefined;
 
+export const awaitsTheTurn = (metadata: Record<string, unknown> | undefined): boolean =>
+  !metadata?.[REPOSITORY_NAME_KEY] || !metadata?.[ATTRIBUTION_IDENTIFIER_KEY];
+
 export function turnAttribution(record: TurnRecord): Attribution | undefined {
   const root = attributionOf(record.root?.metadata);
   const inToolCallOrder = [...record.children]

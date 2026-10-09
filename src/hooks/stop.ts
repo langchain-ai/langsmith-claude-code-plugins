@@ -185,6 +185,13 @@ export async function main(): Promise<void> {
     const tracedToolUseIds = isLastTurn
       ? new Set(sessionState.traced_tool_use_ids ?? [])
       : undefined;
+    const record =
+      isLastTurn && currentRunId
+        ? {
+            path: turnRecordPath(config.stateFilePath, input.session_id, currentRunId),
+            origin: queueOrigin(config),
+          }
+        : undefined;
 
     try {
       const taskRunMap = await traceTurn({
@@ -204,6 +211,7 @@ export async function main(): Promise<void> {
         tracedToolUseIds,
         traceId,
         parentDottedOrder: dottedOrder,
+        record,
       });
       allTaskRunMaps = { ...allTaskRunMaps, ...taskRunMap };
       tracedTurns++;

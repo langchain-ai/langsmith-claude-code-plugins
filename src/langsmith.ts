@@ -24,6 +24,9 @@ import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import { createRunTree } from "./privacy.js";
 import { repoScopedMetadata, turnScopedMetadata } from "./repo-attribution.js";
+import { awaitsTheTurn } from "./reconcile.js";
+import { recordDelivered, recordRun } from "./turn-record.js";
+import type { TurnRecordTarget } from "./types.js";
 import type { LSAgentType } from "./metadata.js";
 
 // ─── Client setup ───────────────────────────────────────────────────────────
@@ -181,6 +184,7 @@ export interface TraceTurnOptions {
   approvalPolicy?: string;
   /** Role stamped on this turn and each of its child runs. */
   agentType?: LSAgentType;
+  record?: TurnRecordTarget;
 }
 
 /**
@@ -204,6 +208,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     agentType = "root",
     tracing = "full",
     toolTracingModes,
+    record,
   } = options;
 
   const sessionCwd = typeof customMetadata?.cwd === "string" ? customMetadata.cwd : undefined;
@@ -411,50 +416,57 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
 
     // Complete the assistant run.
     const assistantEndTime = llmCall.toolCalls.length > 0 ? lastEndTime : llmCall.endTime;
-    const runTree = createRunTree(
-      {
-        client,
-        replicas,
-        id: assistantRunId,
-        run_type: "llm",
-        trace_id: traceId,
-        dotted_order: assistantDottedOrder,
-        parent_run_id: turnRunId,
-        name: ASSISTANT_RUN_NAME,
-        project_name: project,
-        start_time: llmCall.startTime,
-        end_time: assistantEndTime,
-        outputs: {
-          messages: [{ role: "assistant", content: assistantContent }],
+    const assistantMetadata = codingAgentMetadata({
+      sessionId,
+      base: customMetadata,
+      turnId,
+      turnNumber: turnNum,
+      runtimeVersion,
+      agentType,
+      modelName: llmCall.model,
+      usageMetadata: buildUsageMetadata(llmCall.usage),
+      runSpecific: {
+        ls_provider: resolveProvider(llmCall.model),
+        ls_model_name: llmCall.model,
+        ls_invocation_params: {
+          model: llmCall.model,
+          ...(llmCall.effort ? { effort: llmCall.effort } : {}),
+          ...(llmCall.usage.service_tier ? { service_tier: llmCall.usage.service_tier } : {}),
         },
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId,
-            base: customMetadata,
-            turnId,
-            turnNumber: turnNum,
-            runtimeVersion,
-            agentType,
-            modelName: llmCall.model,
-            usageMetadata: buildUsageMetadata(llmCall.usage),
-            runSpecific: {
-              ls_provider: resolveProvider(llmCall.model),
-              ls_model_name: llmCall.model,
-              ls_invocation_params: {
-                model: llmCall.model,
-                ...(llmCall.effort ? { effort: llmCall.effort } : {}),
-                ...(llmCall.usage.service_tier ? { service_tier: llmCall.usage.service_tier } : {}),
-              },
-              usage_metadata: buildUsageMetadata(llmCall.usage),
-              ...(llmCall.synthetic ? { synthetic: true } : {}),
-            },
-          }),
-        },
+        usage_metadata: buildUsageMetadata(llmCall.usage),
+        ...(llmCall.synthetic ? { synthetic: true } : {}),
       },
-      tracing,
-    );
+    });
+    const settlesLater = record !== undefined && awaitsTheTurn(assistantMetadata);
+    const assistantClose = {
+      id: assistantRunId,
+      run_type: "llm",
+      trace_id: traceId,
+      dotted_order: assistantDottedOrder,
+      parent_run_id: turnRunId,
+      name: ASSISTANT_RUN_NAME,
+      project_name: project,
+      start_time: llmCall.startTime,
+      ...(settlesLater ? {} : { end_time: assistantEndTime }),
+      outputs: {
+        messages: [{ role: "assistant", content: assistantContent }],
+      },
+      extra: { metadata: assistantMetadata },
+    };
+    const runTree = createRunTree({ ...assistantClose, client, replicas }, tracing);
 
     await runTree.patchRun({ excludeInputs: true });
+
+    if (settlesLater && record) {
+      recordRun({
+        path: record.path,
+        run: assistantClose,
+        tracing,
+        origin: record.origin,
+        closesAt: assistantEndTime,
+      });
+      recordDelivered(record.path, assistantRunId);
+    }
 
     // Accumulate context for next LLM call.
     accumulatedMessages.push({ role: "assistant", content: assistantContent });
