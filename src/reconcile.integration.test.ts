@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   alpha,
   beta,
+  createdMetadataOf,
   hook,
   metadataOf,
   plain,
@@ -135,6 +136,39 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
       ls_attribution_identifier: "Alpha Owner",
     });
     expect(await waitFor(() => recordFiles("model-outside").length === 0)).toBe(true);
+  });
+
+  it("uploads a model run already knowing the repository and the author", async () => {
+    const base = session("model-born-known", alpha);
+    await prompt(base);
+    reply(base);
+    await stop(base);
+
+    expect(
+      await waitFor(() => Object.keys(createdMetadataOf(base.session_id, "Claude")).length > 0),
+    ).toBe(true);
+    expect(createdMetadataOf(base.session_id, "Claude")).toMatchObject({
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    });
+  });
+
+  it("uploads a model run knowing the repository a call reached into", async () => {
+    const base = session("model-born-outside", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    reply(base);
+    await stop(base);
+
+    expect(
+      await waitFor(() => Object.keys(createdMetadataOf(base.session_id, "Claude")).length > 0),
+    ).toBe(true);
+    expect(createdMetadataOf(base.session_id, "Claude")).toMatchObject({
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    });
   });
 
   // Catches a reconcile that runs before a tool handler finishing late has uploaded,

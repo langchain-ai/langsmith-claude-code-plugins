@@ -15479,8 +15479,9 @@ function buildUsageMetadata(usage) {
   };
 }
 async function traceTurn(options) {
-  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, agentType = "root", tracing = "full", toolTracingModes, record } = options;
+  const { turn, sessionId, turnNum, project, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, agentType = "root", tracing = "full", toolTracingModes, record, hookCwd } = options;
   const sessionCwd = typeof customMetadata?.cwd === "string" ? customMetadata.cwd : void 0;
+  const modelRunBase = sessionScopedMetadata(customMetadata, hookCwd ?? sessionCwd);
   const turnId = turn.promptId;
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
@@ -15535,6 +15536,8 @@ async function traceTurn(options) {
     ...existingTaskRunMap
   };
   let lastEndTime = turn.userTimestamp;
+  const turnSoFar = record ? readTurnRecord(record.path) : void 0;
+  const filledForTheTurn = (metadata) => settledTurnMetadata(metadata, turnSoFar) ?? metadata;
   for (const llmCall of turn.llmCalls) {
     const assistantContent = formatContent(llmCall.content);
     const assistantRunId = uuid7FromTime(llmCall.startTime);
@@ -15553,14 +15556,14 @@ async function traceTurn(options) {
       trace_id: traceId,
       dotted_order: assistantDottedOrder,
       extra: {
-        metadata: codingAgentMetadata({
+        metadata: filledForTheTurn(codingAgentMetadata({
           sessionId,
-          base: customMetadata,
+          base: modelRunBase,
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
           agentType
-        })
+        }))
       }
     }, tracing);
     await assistantRunTree.postRun();
@@ -15620,9 +15623,9 @@ async function traceTurn(options) {
       lastEndTime = toolEndTime;
     }
     const assistantEndTime = llmCall.toolCalls.length > 0 ? lastEndTime : llmCall.endTime;
-    const assistantMetadata = codingAgentMetadata({
+    const assistantMetadata = filledForTheTurn(codingAgentMetadata({
       sessionId,
-      base: customMetadata,
+      base: modelRunBase,
       turnId,
       turnNumber: turnNum,
       runtimeVersion,
@@ -15640,7 +15643,7 @@ async function traceTurn(options) {
         usage_metadata: buildUsageMetadata(llmCall.usage),
         ...llmCall.synthetic ? { synthetic: true } : {}
       }
-    });
+    }));
     const settlesLater = record !== void 0 && awaitsTheTurn(assistantMetadata);
     const assistantClose = {
       id: assistantRunId,
@@ -16855,6 +16858,7 @@ async function main7() {
         turnNum,
         project: config.project,
         customMetadata: config.customMetadata,
+        hookCwd: input.cwd,
         runtimeVersion,
         approvalPolicy,
         parentRunId,

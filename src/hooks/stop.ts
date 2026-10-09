@@ -203,6 +203,7 @@ export async function main(): Promise<void> {
         turnNum,
         project: config.project,
         customMetadata: config.customMetadata,
+        hookCwd: input.cwd,
         runtimeVersion,
         approvalPolicy,
 

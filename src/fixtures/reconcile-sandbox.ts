@@ -209,6 +209,13 @@ export function metadataOf(name: string): Record<string, unknown> {
   return writes.at(-1)?.extra?.metadata ?? {};
 }
 
+export function createdMetadataOf(sessionId: string, name: string): Record<string, unknown> {
+  const run = service.created.find(
+    (candidate) => candidate.name === name && candidate.extra?.metadata?.thread_id === sessionId,
+  );
+  return run?.extra?.metadata ?? {};
+}
+
 export const recordDir = (sessionId: string) => join(sandbox.root, TURN_RECORD_DIR_NAME, sessionId);
 
 export function recordFiles(sessionId: string): string[] {

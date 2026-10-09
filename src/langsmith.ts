@@ -23,9 +23,13 @@ import * as logger from "./logger.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import { createRunTree } from "./privacy.js";
-import { repoScopedMetadata, turnScopedMetadata } from "./repo-attribution.js";
-import { awaitsTheTurn } from "./reconcile.js";
-import { recordDelivered, recordRun } from "./turn-record.js";
+import {
+  repoScopedMetadata,
+  sessionScopedMetadata,
+  turnScopedMetadata,
+} from "./repo-attribution.js";
+import { awaitsTheTurn, settledTurnMetadata } from "./reconcile.js";
+import { readTurnRecord, recordDelivered, recordRun } from "./turn-record.js";
 import type { TurnRecordTarget } from "./types.js";
 import type { LSAgentType } from "./metadata.js";
 
@@ -185,6 +189,7 @@ export interface TraceTurnOptions {
   /** Role stamped on this turn and each of its child runs. */
   agentType?: LSAgentType;
   record?: TurnRecordTarget;
+  hookCwd?: string;
 }
 
 /**
@@ -209,9 +214,11 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     tracing = "full",
     toolTracingModes,
     record,
+    hookCwd,
   } = options;
 
   const sessionCwd = typeof customMetadata?.cwd === "string" ? customMetadata.cwd : undefined;
+  const modelRunBase = sessionScopedMetadata(customMetadata, hookCwd ?? sessionCwd);
 
   // turn_id for every run created for this turn (transcript promptId).
   const turnId = turn.promptId;
@@ -295,6 +302,10 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
 
   let lastEndTime = turn.userTimestamp;
 
+  const turnSoFar = record ? readTurnRecord(record.path) : undefined;
+  const filledForTheTurn = (metadata: Record<string, unknown>): Record<string, unknown> =>
+    settledTurnMetadata(metadata, turnSoFar) ?? metadata;
+
   // 2. Process each LLM call - create as children of the turn run
   for (const llmCall of turn.llmCalls) {
     const assistantContent = formatContent(llmCall.content);
@@ -322,14 +333,16 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
         trace_id: traceId,
         dotted_order: assistantDottedOrder,
         extra: {
-          metadata: codingAgentMetadata({
-            sessionId,
-            base: customMetadata,
-            turnId,
-            turnNumber: turnNum,
-            runtimeVersion,
-            agentType,
-          }),
+          metadata: filledForTheTurn(
+            codingAgentMetadata({
+              sessionId,
+              base: modelRunBase,
+              turnId,
+              turnNumber: turnNum,
+              runtimeVersion,
+              agentType,
+            }),
+          ),
         },
       },
       tracing,
@@ -416,27 +429,29 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
 
     // Complete the assistant run.
     const assistantEndTime = llmCall.toolCalls.length > 0 ? lastEndTime : llmCall.endTime;
-    const assistantMetadata = codingAgentMetadata({
-      sessionId,
-      base: customMetadata,
-      turnId,
-      turnNumber: turnNum,
-      runtimeVersion,
-      agentType,
-      modelName: llmCall.model,
-      usageMetadata: buildUsageMetadata(llmCall.usage),
-      runSpecific: {
-        ls_provider: resolveProvider(llmCall.model),
-        ls_model_name: llmCall.model,
-        ls_invocation_params: {
-          model: llmCall.model,
-          ...(llmCall.effort ? { effort: llmCall.effort } : {}),
-          ...(llmCall.usage.service_tier ? { service_tier: llmCall.usage.service_tier } : {}),
+    const assistantMetadata = filledForTheTurn(
+      codingAgentMetadata({
+        sessionId,
+        base: modelRunBase,
+        turnId,
+        turnNumber: turnNum,
+        runtimeVersion,
+        agentType,
+        modelName: llmCall.model,
+        usageMetadata: buildUsageMetadata(llmCall.usage),
+        runSpecific: {
+          ls_provider: resolveProvider(llmCall.model),
+          ls_model_name: llmCall.model,
+          ls_invocation_params: {
+            model: llmCall.model,
+            ...(llmCall.effort ? { effort: llmCall.effort } : {}),
+            ...(llmCall.usage.service_tier ? { service_tier: llmCall.usage.service_tier } : {}),
+          },
+          usage_metadata: buildUsageMetadata(llmCall.usage),
+          ...(llmCall.synthetic ? { synthetic: true } : {}),
         },
-        usage_metadata: buildUsageMetadata(llmCall.usage),
-        ...(llmCall.synthetic ? { synthetic: true } : {}),
-      },
-    });
+      }),
+    );
     const settlesLater = record !== undefined && awaitsTheTurn(assistantMetadata);
     const assistantClose = {
       id: assistantRunId,
