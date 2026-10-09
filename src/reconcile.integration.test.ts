@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   alpha,
+  appendReply,
   beta,
   createdMetadataAll,
   createdMetadataOf,
   hook,
   metadataOf,
+  notification,
   plain,
   prompt,
   recordFiles,
@@ -162,6 +164,58 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
       true,
     );
     expect(createdMetadataAll(base.session_id, "Claude")[0]).toMatchObject({
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    });
+  });
+
+  // Catches the write that closes a background agent being rebuilt from what the session
+  // knew at startup, which lands on top of the good metadata and clears it for good.
+  it("closes a background agent carrying the repository the turn worked out", async () => {
+    const base = session("background-open", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    expect(await waitFor(() => metadataOf("Read").repository_name === "acme/a")).toBe(true);
+    await task(base, "agent-bg1");
+    reply(base);
+    await stop(base);
+
+    // The agent finishes in the background, so its run is posted open here.
+    await subagent(base, "agent-bg1");
+    await notification(base, "agent-bg1");
+    appendReply(base, 2);
+    await stop(base);
+
+    expect(await waitFor(() => service.updated.some((run) => run.name === "Agent"))).toBe(true);
+    const attributed = {
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    };
+    expect(metadataOf("Agent")).toMatchObject(attributed);
+    expect(metadataOf("Claude Code Turn")).toMatchObject(attributed);
+  });
+
+  // Catches the same gap on the other route: a killed agent's run is never posted open,
+  // so it is created already closed and there is no earlier write to fall back on.
+  it("creates a killed agent's run carrying the repository the turn worked out", async () => {
+    const base = session("background-killed", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    expect(await waitFor(() => metadataOf("Read").repository_name === "acme/a")).toBe(true);
+    await task(base, "agent-bg2");
+    reply(base);
+    await stop(base);
+
+    // No SubagentStop ever fires for a killed agent.
+    await notification(base, "agent-bg2", "killed");
+    appendReply(base, 2);
+    await stop(base);
+
+    expect(await waitFor(() => service.created.some((run) => run.name === "Agent"))).toBe(true);
+    expect(service.updated.some((run) => run.name === "Agent")).toBe(false);
+    expect(metadataOf("Agent")).toMatchObject({
       repository_name: "acme/a",
       git_branch: "trunk-a",
       ls_attribution_identifier: "Alpha Owner",

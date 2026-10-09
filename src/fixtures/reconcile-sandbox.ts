@@ -3,7 +3,7 @@
  * neither, and the hooks that drive the built plugin against them.
  */
 
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach } from "vitest";
 
@@ -101,11 +101,25 @@ export function reply(base: { transcript_path: string }, turn = 1): void {
   );
 }
 
+export function appendReply(base: { transcript_path: string }, turn: number): void {
+  appendFileSync(
+    base.transcript_path,
+    turnLines({ turn, model: "claude-sonnet-4-5-20250929", prompt: "go", reply: "done" }),
+  );
+}
+
 export const prompt = (base: Record<string, unknown>) =>
   hook("UserPromptSubmit", { ...base, hook_event_name: "UserPromptSubmit", prompt: "go" });
 
 export const stop = (base: Record<string, unknown>) =>
   hook("Stop", { ...base, hook_event_name: "Stop", last_assistant_message: "done" });
+
+export const notification = (base: Record<string, unknown>, agentId: string, status?: string) =>
+  hook("UserPromptSubmit", {
+    ...base,
+    hook_event_name: "UserPromptSubmit",
+    prompt: `<task-notification>${agentId}${status ? `<status>${status}</status>` : ""}</task-notification>`,
+  });
 
 export const task = (base: Record<string, unknown>, agentId: string) =>
   hook("PostToolUse", {

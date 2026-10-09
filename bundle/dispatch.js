@@ -16751,6 +16751,8 @@ async function finalizeNotificationChain(opts) {
     const launchingTurnId = taskRunInfo.deferred?.parent_run_id;
     const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : void 0;
     const agentType = taskRunInfo.agent_type ?? "";
+    const record = launchingTurnId ? readTurnRecord(turnRecordPath(stateFilePath, sessionId, launchingTurnId)) : void 0;
+    const settled = record && everyChildLanded(record) ? settledTurnMetadata(customMetadata, record) ?? customMetadata : customMetadata;
     try {
       await closeAgentToolRun({
         tracing: resolveTurnTracingMode(opts, sessionId, taskRunInfo.tracing, launchingTurn?.tracing, launchingTurnId === ss.current_turn_run_id ? ss.current_turn_tracing : void 0),
@@ -16759,7 +16761,7 @@ async function finalizeNotificationChain(opts) {
         agentType,
         taskRunInfo,
         project,
-        customMetadata,
+        customMetadata: settled,
         runtimeVersion,
         turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0,
         wasOpen: Boolean(taskRunInfo.subagent_done),
@@ -16806,7 +16808,7 @@ async function finalizeNotificationChain(opts) {
       });
       try {
         await completeTurnRun({
-          ...turnIdentityFromOpenTurn(toComplete, { sessionId, project, customMetadata }),
+          ...turnIdentityFromOpenTurn(toComplete, { sessionId, project, customMetadata: settled }),
           tracing: resolveTurnTracingMode(opts, sessionId, toComplete.tracing),
           lastAssistantMessage: toComplete.last_assistant_message
         });
