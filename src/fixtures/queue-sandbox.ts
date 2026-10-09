@@ -28,10 +28,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const uploads = {
   /** Names of the tool runs created, in the order the service accepted them. */
   get received(): string[] {
-    return service
-      .runs("post")
-      .map((run) => String(run.name))
-      .filter((name) => /^Tool\d+$/.test(name));
+    return service.created.map((run) => String(run.name)).filter((name) => /^Tool\d+$/.test(name));
   },
   get fail(): boolean {
     return service.fail;
@@ -127,7 +124,6 @@ export function hook(
   });
 }
 
-/** A session's first prompt of a fresh transcript, which is how every test opens. */
 export async function startTurn(): Promise<void> {
   writeTranscript();
   await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
@@ -143,7 +139,6 @@ export const newSession = (sessionId: string) =>
 export const stopTurn = (sessionId = "s1") =>
   hook("Stop", { session_id: sessionId, hook_event_name: "Stop", stop_hook_active: false });
 
-/** Backdates a folder so a sweep reads it as untouched for `ms`. */
 export function ageQueueDir(sessionId: string, ms: number) {
   const aged = new Date(Date.now() - ms);
   utimesSync(queueDirFor(sessionId), aged, aged);

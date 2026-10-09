@@ -1,8 +1,3 @@
-/**
- * What every end-to-end hook test needs: a fake LangSmith over http, the built
- * hook processes run against it, and the transcript Claude Code would leave.
- */
-
 import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { readFileSync } from "node:fs";
@@ -28,10 +23,12 @@ export function fakeLangSmith(rules: FakeLangSmithRules = {}) {
     /** Refuse only the requests whose body mentions this, so one run can fail on its own. */
     refuse: "",
     endpoint: "",
-    /** Every run the service accepted, a create or an update, in the order it saw them. */
-    seen,
-    runs: (action: WireRun["action"]) =>
-      seen.filter((wire) => wire.action === action).map((wire) => wire.run),
+    get created() {
+      return seen.filter((wire) => wire.action === "post").map((wire) => wire.run);
+    },
+    get updated() {
+      return seen.filter((wire) => wire.action === "patch").map((wire) => wire.run);
+    },
     reset() {
       seen.length = 0;
       service.fail = false;
@@ -105,7 +102,6 @@ export function spawnHook(options: {
   });
 }
 
-/** Whatever the hooks and the detached uploader wrote down, or nothing if they wrote nothing. */
 export function readLog(path: string): string {
   try {
     return readFileSync(path, "utf8");
@@ -114,7 +110,6 @@ export function readLog(path: string): string {
   }
 }
 
-/** The prompt and the reply Claude Code writes down for one turn of a session. */
 export function turnLines(options: {
   turn: number;
   model: string;

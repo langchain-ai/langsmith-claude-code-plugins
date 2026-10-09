@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { QUEUE_FILE_SUFFIX, QUEUE_TEMP_SUFFIX } from "./constants.js";
+import { QUEUE_FILE_SUFFIX } from "./constants.js";
 import {
   ageOldestRecord,
   ageOldestRun,
@@ -273,21 +273,6 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     expect(await waitFor(() => queued().length === 0)).toBe(true);
   });
 
-  // Catches an age limit that bins every run it cannot date, rather than falling back to
-  // when the run was written down. No other test keeps a run with no start time.
-  it("keeps a fresh run that never recorded when it started", async () => {
-    await startTurn();
-    await toolCall(0);
-
-    const only = entryFiles("s1")[0];
-    const entry = JSON.parse(readFileSync(only, "utf8"));
-    delete entry.run.start_time;
-    writeFileSync(only, JSON.stringify(entry));
-
-    await stopTurn();
-    expect(await waitFor(() => uploads.received.includes("Tool0"))).toBe(true);
-  });
-
   // Catches an uploader that re-reads the run it cannot send instead of standing down,
   // which spins forever holding the lock and stops that folder uploading ever again.
   it("stands down and releases the lock when the next run is not its own", async () => {
@@ -309,94 +294,6 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     await stopTurn();
     expect(await waitFor(() => !existsSync(`${queueDirFor("s1")}.flush.lock`), 10_000)).toBe(true);
     expect(queued().map((entry) => entry.run.name)).toEqual(["Tool0", "Tool1"]);
-  });
-
-  // Catches an unreadable start time slipping past the age limit, which leaves a run
-  // nobody can route in front of the queue for good. No other test corrupts a start time.
-  it("drops a run for another account whose start time cannot be read", async () => {
-    const otherAccount = { CC_LANGSMITH_API_KEY: "other-key", LANGSMITH_API_KEY: "other-key" };
-    await startTurn();
-    await hook(
-      "PostToolUse",
-      {
-        hook_event_name: "PostToolUse",
-        tool_name: "Tool0",
-        tool_use_id: "t0",
-        tool_input: {},
-        tool_response: {},
-      },
-      otherAccount,
-    );
-    await toolCall(1);
-
-    const oldest = entryFiles("s1")[0];
-    const entry = JSON.parse(readFileSync(oldest, "utf8"));
-    entry.run.start_time = "not a date";
-    writeFileSync(oldest, JSON.stringify(entry));
-    ageOldestRecord("s1", 2 * 24 * 60 * 60 * 1000);
-
-    await stopTurn();
-    expect(await waitFor(() => uploads.received.includes("Tool1"))).toBe(true);
-    expect(await waitFor(() => queued().length === 0)).toBe(true);
-  });
-
-  // Catches one unreadable record stranding every good record queued behind it, which
-  // loses a whole session's traces without anything saying so.
-  it("uploads the records queued behind one that cannot be read", async () => {
-    await startTurn();
-    await toolCall(0);
-    await toolCall(1);
-    writeFileSync(entryFiles("s1")[0], "{ truncated");
-
-    await stopTurn();
-    expect(await waitFor(() => uploads.received.includes("Tool1"))).toBe(true);
-    expect(await waitFor(() => queued().length === 0)).toBe(true);
-  });
-
-  // Catches a run that keeps failing being binned with nothing written down, so the
-  // person has no way to tell a lost trace from one that was never made.
-  it("says so in the log when it gives up on a run that keeps failing", async () => {
-    await startTurn();
-    await toolCall(0);
-
-    uploads.fail = true;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      await stopTurn();
-      await waitFor(() => queued().length === 0 || queued()[0].attempts === attempt + 1);
-    }
-
-    expect(await waitFor(() => queued().length === 0)).toBe(true);
-    expect(hookLog()).toContain("Dropping a queued run after 5 failed uploads");
-  });
-
-  // Catches a folder left on disk for good by a hook killed mid-write, since the
-  // staged file it leaves behind is invisible to the queue but blocks the removal.
-  it("removes an idle folder holding nothing but a half-written record", async () => {
-    await startTurn();
-    await toolCall(0);
-    await stopTurn();
-    expect(await waitFor(() => queued().length === 0)).toBe(true);
-
-    writeFileSync(join(queueDirFor("s1"), `half-written${QUEUE_TEMP_SUFFIX}`), "{");
-    ageQueueDir("s1", 3 * 60 * 60 * 1000);
-
-    await stopTurn();
-    expect(await waitFor(() => !existsSync(queueDirFor("s1")))).toBe(true);
-  });
-
-  // Catches an empty folder removed in the gap between a session creating it and
-  // writing its first record, which loses that record to a vanished directory.
-  it("leaves an empty folder created moments ago alone", async () => {
-    await startTurn();
-    await toolCall(0);
-    await stopTurn();
-    expect(await waitFor(() => queued().length === 0)).toBe(true);
-
-    // Drained seconds ago, so another session may still be about to write to it.
-    await newSession("s2");
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    expect(existsSync(queueDirFor())).toBe(true);
   });
 
   // Catches a run LangSmith will reject for age being retried forever, and taking

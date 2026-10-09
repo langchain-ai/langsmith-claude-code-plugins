@@ -14933,7 +14933,7 @@ import { isAbsolute, resolve as resolve3 } from "node:path";
 
 // dist/src/repo-attribution-paths.js
 import { statSync as statSync6 } from "node:fs";
-import { dirname as dirname7, join as join4, resolve as resolve2 } from "node:path";
+import { dirname as dirname7, join as join6, resolve as resolve2 } from "node:path";
 function nearestExistingDirectory(path3) {
   let current = path3;
   for (; ; ) {
@@ -14951,7 +14951,7 @@ function nearestExistingDirectory(path3) {
 }
 function gitMarkerAt(directory) {
   try {
-    return statSync6(join4(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
+    return statSync6(join6(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
   } catch {
     return GIT_MARKERS.NOTHING_HERE;
   }

@@ -1,7 +1,3 @@
-/**
- * The per-session folders a hook keeps beside its state file.
- */
-
 import { readdirSync, rmdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { QUEUE_SESSION_UNSAFE_CHARS } from "../constants.js";
