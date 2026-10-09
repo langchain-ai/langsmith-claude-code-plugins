@@ -186,6 +186,10 @@ export interface ToolPathLookup {
   namedAPath: boolean;
 }
 
+export interface ToolOrigin extends ToolPathLookup {
+  cwd?: string;
+}
+
 export type GitMarker = (typeof GIT_MARKERS)[keyof typeof GIT_MARKERS];
 
 export interface MetadataWithPins {
@@ -355,6 +359,8 @@ export interface QueuedRun {
   /** A RunTree config without `client` or `replicas`, which the flusher supplies. */
   run: Record<string, unknown>;
   record?: string;
+  /** Where the tool worked, so the flusher can settle the repository without the hook running git. */
+  where?: ToolOrigin;
 }
 
 export interface RecordedRun {

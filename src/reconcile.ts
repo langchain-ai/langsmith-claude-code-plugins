@@ -35,8 +35,8 @@ function attributionOf(metadata: Record<string, unknown> | undefined): Attributi
 const namesARepository = (carried: Attribution): boolean =>
   carried[REPOSITORY_NAME_KEY] !== undefined;
 
-export const awaitsTheTurn = (metadata: Record<string, unknown> | undefined): boolean =>
-  !metadata?.[REPOSITORY_NAME_KEY] || !metadata?.[ATTRIBUTION_IDENTIFIER_KEY];
+export const everyChildLanded = (record: TurnRecord): boolean =>
+  record.children.every((child) => record.delivered.has(child.run_id));
 
 export function turnAttribution(record: TurnRecord): Attribution | undefined {
   const root = attributionOf(record.root?.metadata);
@@ -140,9 +140,12 @@ export async function reconcileTurn(options: {
     return true;
   }
   if (!record.closed) return false;
+  if (!everyChildLanded(record)) {
+    debug(`Waiting for the rest of ${record.path} to land before settling it`);
+    return false;
+  }
 
   const filled = turnAttribution(record) ?? {};
-  const everyChildLanded = record.children.every((child) => record.delivered.has(child.run_id));
 
   const stillOpen = record.children.filter(
     (child) => child.open && record.delivered.has(child.run_id),
@@ -162,7 +165,7 @@ export async function reconcileTurn(options: {
     recordReconciled(record.path, run.run_id);
     debug(`Settled the repository and author on run ${run.run_id}`);
   }
-  return settled && everyChildLanded;
+  return settled;
 }
 
 export async function reconcileAndClear(options: {

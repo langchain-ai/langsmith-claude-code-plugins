@@ -84,6 +84,8 @@ function env() {
   };
 }
 
+export const sandboxHome = () => home;
+
 export const transcript = () => join(home, "transcript.jsonl");
 
 const lines = (turn: number) =>

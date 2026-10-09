@@ -24,11 +24,12 @@ import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import { createRunTree } from "./privacy.js";
 import {
+  awaitsTheTurn,
   repoScopedMetadata,
   sessionScopedMetadata,
   turnScopedMetadata,
 } from "./repo-attribution.js";
-import { attributionFiller, awaitsTheTurn } from "./reconcile.js";
+import { attributionFiller } from "./reconcile.js";
 import { recordDelivered, recordRun } from "./turn-record.js";
 import type { TurnRecordTarget } from "./types.js";
 import type { LSAgentType } from "./metadata.js";
@@ -569,6 +570,7 @@ export interface TurnRunIdentity {
 async function patchTurnRun(
   id: TurnRunIdentity,
   result: { lastAssistantMessage?: string } | { error: string },
+  leaveOpen = false,
 ): Promise<Record<string, unknown>> {
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized — call initTracing() first");
@@ -584,7 +586,7 @@ async function patchTurnRun(
     dotted_order: id.dottedOrder,
     parent_run_id: id.parentRunId,
     start_time: id.startTime,
-    end_time: new Date().toISOString(),
+    ...(leaveOpen ? {} : { end_time: new Date().toISOString() }),
     ...("error" in result
       ? { error: result.error }
       : { outputs: { messages: [{ role: "assistant", content: result.lastAssistantMessage }] } }),
@@ -649,8 +651,14 @@ export async function completeTurnRun(options: {
   turnNumber?: number;
   runtimeVersion?: string;
   approvalPolicy?: string;
+  /** Nothing can say yet where the turn worked, so the settle fills and closes it. */
+  leaveOpen?: boolean;
 }): Promise<Record<string, unknown>> {
-  return patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
+  return patchTurnRun(
+    options,
+    { lastAssistantMessage: options.lastAssistantMessage },
+    options.leaveOpen,
+  );
 }
 
 /** Force-close a turn's root run with an error/status (e.g. session ended). */

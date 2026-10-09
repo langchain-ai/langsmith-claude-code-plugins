@@ -66,12 +66,14 @@ export function recordsIdleMs(dir: string, now: number = Date.now()): number {
   return newest === 0 ? Number.POSITIVE_INFINITY : now - newest;
 }
 
-function append(path: string, line: TurnRecordLine): void {
+function append(path: string, line: TurnRecordLine): boolean {
   try {
     mkdirSync(dirname(path), { recursive: true, mode: PRIVATE_DIR_MODE });
     appendFileSync(path, `${JSON.stringify(line)}\n`, { mode: PRIVATE_FILE_MODE });
+    return true;
   } catch (err) {
     warn(`Could not add to the turn record: ${err}`);
+    return false;
   }
 }
 
@@ -101,14 +103,14 @@ export function recordRun(options: {
   origin: string;
   root?: boolean;
   closesAt?: string;
-}): void {
+}): boolean {
   const run = recordedRun(options.run, options.tracing);
-  if (!run) return;
+  if (!run) return false;
   if (options.closesAt) {
     run.open = true;
     run.end_time = options.closesAt;
   }
-  append(options.path, {
+  return append(options.path, {
     k: TURN_RECORD_LINE.run,
     root: options.root,
     origin: options.origin,
@@ -131,8 +133,8 @@ export function closeTurnRecord(options: {
   recordTurnClosed(path, options.turnId);
 }
 
-export function recordDelivered(path: string, runId: string): void {
-  append(path, { k: TURN_RECORD_LINE.delivered, id: runId });
+export function recordDelivered(path: string, runId: string): boolean {
+  return append(path, { k: TURN_RECORD_LINE.delivered, id: runId });
 }
 
 export function recordReconciled(path: string, runId: string): void {

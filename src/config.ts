@@ -245,7 +245,7 @@ function envBoolean(field: BooleanSetting): boolean | undefined {
   return setting.restrictive;
 }
 
-export function loadConfig(options?: { cwd?: string }): Config {
+export function loadConfig(options?: { cwd?: string; deferGit?: boolean }): Config {
   const cwd = options?.cwd ?? process.cwd();
   const homeDir = homedir();
   const stateFilePath = process.env.STATE_FILE ?? join(homeDir, ...STATE_FILE_DEFAULT);
@@ -386,16 +386,18 @@ export function loadConfig(options?: { cwd?: string }): Config {
 
   // Attach git repo metadata if available, to attribute runs to a specific codebase.
   const repoMetadata: Record<string, unknown> = {};
-  const repoName = getRepoName(cwd);
-  if (repoName != null) {
-    repoMetadata.repository_name = repoName.name;
-    repoMetadata.repository_provider = repoName.provider;
-    const url = getRepoUrl(repoName.provider, repoName.name);
-    if (url) repoMetadata.repository_url = url;
+  if (!options?.deferGit) {
+    const repoName = getRepoName(cwd);
+    if (repoName != null) {
+      repoMetadata.repository_name = repoName.name;
+      repoMetadata.repository_provider = repoName.provider;
+      const url = getRepoUrl(repoName.provider, repoName.name);
+      if (url) repoMetadata.repository_url = url;
+    }
+    const gitInfo = getGitInfo(cwd);
+    if (gitInfo.branch) repoMetadata.git_branch = gitInfo.branch;
+    if (gitInfo.commit) repoMetadata.git_commit_sha = gitInfo.commit;
   }
-  const gitInfo = getGitInfo(cwd);
-  if (gitInfo.branch) repoMetadata.git_branch = gitInfo.branch;
-  if (gitInfo.commit) repoMetadata.git_commit_sha = gitInfo.commit;
 
   const pinned = REPOSITORY_METADATA_KEYS.filter((key) => customMetadata?.[key] !== undefined);
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };

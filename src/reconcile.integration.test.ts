@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   alpha,
+  beta,
   createdMetadataAll,
   createdMetadataOf,
   hook,
@@ -151,6 +152,9 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     const base = session("interrupted-fill", plain);
     await prompt(base);
     await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    // The uploader works the repository out, so wait for that call to land before the
+    // interrupted turn asks the record where it worked.
+    expect(await waitFor(() => service.created.some((run) => run.name === "Read"))).toBe(true);
     reply(base);
     await prompt(base);
 
@@ -164,29 +168,37 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     });
   });
 
-  // Catches a reconcile that runs before a tool handler finishing late has uploaded,
-  // which leaves that one call unlabelled with nothing left to come back for it.
-  it("settles a tool call that only lands after the turn has closed", async () => {
+  // Catches a turn settled on half its calls, and a turn's own run closed before the
+  // answer is in. Either one is permanent, since a closed run takes no correction.
+  it("settles a turn whose answer only lands after it closed", async () => {
     const base = session("late-handler", plain);
     await prompt(base);
-    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
-
-    // Only this one call is refused, so the turn closes and settles without it.
-    service.refuse = "Bash";
+    // Nothing here says where the turn worked.
     await tool(base, "Bash", { command: "echo hi" });
+    expect(await waitFor(() => service.created.some((run) => run.name === "Bash"))).toBe(true);
+
+    // The one call that does is refused, and the call behind it waits its turn.
+    service.refuse = "alpha repo";
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    await tool(base, "Edit", { file_path: join(beta, "seed.txt") });
     reply(base);
     await stop(base);
-    // Wait for the settling to have run, so the record is kept on purpose rather than by timing.
-    expect(
-      await waitFor(() => recordLines("late-handler").some((line) => line.k === "fixed")),
-    ).toBe(true);
-    expect(metadataOf("Read").repository_name).toBe("acme/a");
-    expect(recordFiles("late-handler")).toHaveLength(1);
+    expect(await waitFor(() => hookLog().includes("Queued run upload failed"))).toBe(true);
 
     service.refuse = "";
     await stop(base);
-    expect(await waitFor(() => metadataOf("Bash").repository_name === "acme/a")).toBe(true);
     expect(await waitFor(() => recordFiles("late-handler").length === 0)).toBe(true);
+
+    const turn = metadataOf("Claude Code Turn");
+    expect(turn.repository_name).toBe("acme/a");
+    expect(turn.ls_attribution_identifier).toBe("Alpha Owner");
+    expect(metadataOf("Read").repository_name).toBe("acme/a");
+    expect(metadataOf("Bash").repository_name).toBe("acme/a");
+    // A call that reached into the other checkout keeps it.
+    expect(metadataOf("Edit")).toMatchObject({
+      repository_name: "acme/b",
+      ls_attribution_identifier: "Beta Owner",
+    });
   });
 
   // Catches a reconcile that records success before the service accepted the change, so
@@ -196,7 +208,9 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     await prompt(base);
     await tool(base, "Bash", { command: "echo hi" });
     await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
-    await waitFor(() => service.created.some((run) => run.name === "Bash"));
+    await waitFor(() =>
+      ["Bash", "Read"].every((name) => service.created.some((run) => run.name === name)),
+    );
 
     service.fail = true;
     reply(base);

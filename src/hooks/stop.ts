@@ -14,7 +14,7 @@ import {
   completedToolUseIds,
   turnToolInputs,
 } from "../transcript.js";
-import { turnScopedMetadata } from "../repo-attribution.js";
+import { awaitsTheTurn, turnScopedMetadata } from "../repo-attribution.js";
 import { log, warn, debug, error } from "../logger.js";
 import {
   loadState,
@@ -37,7 +37,7 @@ import { readStdin } from "../utils/stdin.js";
 import { startQueueFlusher } from "../utils/detach.js";
 import { readTurnRecord, recordRun, recordTurnClosed, turnRecordPath } from "../turn-record.js";
 import { queueOrigin } from "../queue.js";
-import { settledTurnMetadata } from "../reconcile.js";
+import { everyChildLanded, settledTurnMetadata } from "../reconcile.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { MUTED_TRACE_CONTENT } from "../privacy.js";
 import type { TaskRunEntry } from "../langsmith.js";
@@ -399,12 +399,17 @@ export async function main(): Promise<void> {
   // Complete the Turn run created by UserPromptSubmit (unless deferred above).
   let turnRecord: string | undefined;
   let closedTurnRun: Record<string, unknown> | undefined;
+  let leaveTurnOpen = false;
   if (completeNow && currentRunId) {
     debug(`Completing Turn run ${currentRunId}`);
     turnRecord = turnRecordPath(config.stateFilePath, input.session_id, currentRunId);
-    const settled = settledTurnMetadata(turnMetadata, readTurnRecord(turnRecord));
+    const record = readTurnRecord(turnRecord);
+    const everythingIn = !record || everyChildLanded(record);
+    const settled = everythingIn ? settledTurnMetadata(turnMetadata, record) : turnMetadata;
+    leaveTurnOpen = !everythingIn && awaitsTheTurn(settled);
     try {
       closedTurnRun = await completeTurnRun({
+        leaveOpen: leaveTurnOpen,
         tracing: currentTracing,
         sessionId: input.session_id,
         runId: currentRunId,
@@ -507,6 +512,7 @@ export async function main(): Promise<void> {
         tracing: currentTracing,
         origin: queueOrigin(config),
         root: true,
+        closesAt: leaveTurnOpen ? new Date().toISOString() : undefined,
       });
     }
     recordTurnClosed(turnRecord, lastTurnId);

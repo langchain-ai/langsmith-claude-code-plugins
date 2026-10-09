@@ -54,7 +54,8 @@ vi.mock("../utils/hook-init.js", () => ({
   }),
   expandHome: (path: string) => path,
 }));
-vi.mock("../config.js", () => ({
+vi.mock("../config.js", async (original) => ({
+  ...(await original<typeof import("../config.js")>()),
   loadConfig: () => ({ stateFilePath: "/unused", apiKey: "test", enabled: true }),
 }));
 vi.mock("../tracing-policy.js", async (original) => {

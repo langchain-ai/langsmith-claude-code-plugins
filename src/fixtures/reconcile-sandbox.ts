@@ -19,6 +19,12 @@ export const alpha = sandbox.makeRepo(
   "Alpha Owner",
   "git@github.com:acme/a.git",
 );
+export const beta = sandbox.makeRepo(
+  "beta repo",
+  "trunk-b",
+  "Beta Owner",
+  "https://gitlab.com/acme/b",
+);
 export const plain = sandbox.makeDir(sandbox.root, "plain folder");
 
 /** Runs the service has seen finish, which it will accept no further update for. */

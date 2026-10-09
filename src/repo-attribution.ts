@@ -1,8 +1,7 @@
 // A session started in a central folder works across several repositories, so its working
 // directory says nothing about the repository a given tool call touched.
 
-import { existsSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute } from "node:path";
 import {
   getGitUserName,
   getGitInfo,
@@ -11,31 +10,21 @@ import {
   getRepoUrl,
   pinnedRepositoryKeys,
 } from "./config.js";
-import { REPOSITORY_METADATA_KEYS, TOOL_PATH_INPUT_KEYS } from "./constants.js";
-import { nearestExistingDirectory, rootFromGitMarker } from "./repo-attribution-paths.js";
-import type { RepositoryAttribution, ToolPathLookup } from "./types.js";
+import {
+  ATTRIBUTION_IDENTIFIER_KEY,
+  REPOSITORY_METADATA_KEYS,
+  REPOSITORY_NAME_KEY,
+} from "./constants.js";
+import {
+  nearestExistingDirectory,
+  rootFromGitMarker,
+  toolPathFromInput,
+} from "./repo-attribution-paths.js";
+import type { RepositoryAttribution, ToolOrigin, ToolPathLookup } from "./types.js";
 
 const rootByDirectory = new Map<string, string | null | undefined>();
 const attributionByRoot = new Map<string, RepositoryAttribution>();
 const identifierByRoot = new Map<string, RepositoryAttribution>();
-
-function toolPathFromInput(toolInput: unknown, sessionCwd?: string): ToolPathLookup {
-  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
-    return { namedAPath: false };
-  }
-  const input = toolInput as Record<string, unknown>;
-  let namedAPath = false;
-  for (const key of TOOL_PATH_INPUT_KEYS) {
-    const value = input[key];
-    if (typeof value !== "string" || value.length === 0) continue;
-    namedAPath = true;
-    if (isAbsolute(value)) return { path: value, namedAPath };
-    if (!sessionCwd || !isAbsolute(sessionCwd)) continue;
-    const resolved = resolve(sessionCwd, value);
-    if (existsSync(resolved)) return { path: resolved, namedAPath };
-  }
-  return { namedAPath };
-}
 
 function rootForPath(path: string): string | null | undefined {
   const directory = nearestExistingDirectory(path);
@@ -114,12 +103,13 @@ export function sessionScopedMetadata(
   return typeof sessionRoot === "string" ? withSessionAuthor(base, sessionRoot) : base;
 }
 
-export function repoScopedMetadata(
+function scopedToPath(
   base: Record<string, unknown> | undefined,
-  toolInput: unknown,
-  sessionCwd?: string,
+  lookup: ToolPathLookup,
+  sessionCwd: string | undefined,
+  pinned: ReadonlySet<string>,
 ): Record<string, unknown> | undefined {
-  const { path: toolPath, namedAPath } = toolPathFromInput(toolInput, sessionCwd);
+  const { path: toolPath, namedAPath } = lookup;
   const namedSomewhereNothingSits = namedAPath && !toolPath;
   if (namedSomewhereNothingSits) return base;
 
@@ -130,7 +120,6 @@ export function repoScopedMetadata(
   const gitCouldNotAnswer = root === undefined;
   if (gitCouldNotAnswer) return base;
 
-  const pinned = pinnedRepositoryKeys(base);
   const pathIsInNoRepository = root === null;
   if (pathIsInNoRepository) return withoutRepositoryKeys(base, pinned);
 
@@ -141,6 +130,62 @@ export function repoScopedMetadata(
     ...withoutRepositoryKeys(base, pinned),
     ...withoutPinnedKeys(attributionForRoot(root), pinned),
   };
+}
+
+export function repoScopedMetadata(
+  base: Record<string, unknown> | undefined,
+  toolInput: unknown,
+  sessionCwd?: string,
+): Record<string, unknown> | undefined {
+  return scopedToPath(
+    base,
+    toolPathFromInput(toolInput, sessionCwd),
+    sessionCwd,
+    pinnedRepositoryKeys(base),
+  );
+}
+
+export const awaitsTheTurn = (metadata: Record<string, unknown> | undefined): boolean =>
+  !metadata?.[REPOSITORY_NAME_KEY] || !metadata?.[ATTRIBUTION_IDENTIFIER_KEY];
+
+export function toolOrigin(toolInput: unknown, sessionCwd?: string): ToolOrigin {
+  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd) };
+}
+
+function withSessionRepository(
+  base: Record<string, unknown> | undefined,
+  sessionCwd: string | undefined,
+): Record<string, unknown> | undefined {
+  const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : undefined;
+  if (typeof sessionRoot !== "string") return base;
+  return { ...attributionForRoot(sessionRoot), ...base };
+}
+
+export function settledRepositoryMetadata(
+  base: Record<string, unknown> | undefined,
+  origin: ToolOrigin,
+): Record<string, unknown> | undefined {
+  const pinned = new Set(REPOSITORY_METADATA_KEYS.filter((key) => base?.[key] !== undefined));
+  const sessionScoped = withSessionRepository(base, origin.cwd);
+  return scopedToPath(
+    sessionScoped,
+    { path: origin.path, namedAPath: origin.namedAPath },
+    origin.cwd,
+    pinned,
+  );
+}
+
+/** The settled run to upload, left open when only the turn can say where it worked. */
+export function settledRunConfig(
+  run: Record<string, unknown>,
+  origin: ToolOrigin,
+): { run: Record<string, unknown>; open: boolean } {
+  const extra = run.extra as { metadata?: Record<string, unknown> } | undefined;
+  const metadata = settledRepositoryMetadata(extra?.metadata, origin) ?? extra?.metadata ?? {};
+  const settled: Record<string, unknown> = { ...run, extra: { ...extra, metadata } };
+  const open = awaitsTheTurn(metadata);
+  if (open) delete settled.end_time;
+  return { run: settled, open };
 }
 
 export function turnScopedMetadata(

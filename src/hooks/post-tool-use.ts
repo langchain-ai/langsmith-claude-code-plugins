@@ -20,11 +20,10 @@ import { initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
-import { repoScopedMetadata, sessionScopedMetadata } from "../repo-attribution.js";
+import { settledRepositoryMetadata, toolOrigin } from "../repo-attribution.js";
 import { createRunTree, runConfigForMode } from "../privacy.js";
 import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
-import { awaitsTheTurn } from "../reconcile.js";
 import { enqueueRun, queueOrigin } from "../queue.js";
 import { recordRun, turnRecordPath } from "../turn-record.js";
 import { startQueueFlusher } from "../utils/detach.js";
@@ -47,7 +46,7 @@ export async function main(): Promise<void> {
   const input: PostToolUseHookInput = await readStdin();
   if (!isPayloadForHook(input, "PostToolUse")) return;
 
-  const config = initHook(input.cwd);
+  const config = initHook(input.cwd, { deferGit: true });
   if (!config) return;
 
   // Subagent tool calls are traced by the Stop hook from the transcript.
@@ -100,8 +99,7 @@ export async function main(): Promise<void> {
     ? detectWorkflowLaunch(input.tool_name, input.tool_response)
     : undefined;
 
-  const sessionMetadataBase = sessionScopedMetadata(config.customMetadata, input.cwd);
-  const toolMetadataBase = repoScopedMetadata(sessionMetadataBase, input.tool_input, input.cwd);
+  const origin = toolOrigin(input.tool_input, input.cwd);
   const turnRecord = turnRecordPath(config.stateFilePath, input.session_id, parentRunId);
 
   if (agentId) {
@@ -139,7 +137,7 @@ export async function main(): Promise<void> {
         extra: {
           metadata: codingAgentMetadata({
             sessionId: input.session_id,
-            base: toolMetadataBase,
+            base: settledRepositoryMetadata(config.customMetadata, origin),
             turnNumber: sessionState.current_turn_number,
             runtimeVersion: sessionState.runtime_version,
             agentType: "root",
@@ -155,7 +153,7 @@ export async function main(): Promise<void> {
     // Regular tool: queue the finished run and leave the upload to the flusher.
     const toolMetadata = codingAgentMetadata({
       sessionId: input.session_id,
-      base: toolMetadataBase,
+      base: config.customMetadata,
       turnNumber: sessionState.current_turn_number,
       runtimeVersion: sessionState.runtime_version,
       agentType: "root",
@@ -163,7 +161,7 @@ export async function main(): Promise<void> {
       runName: input.tool_name,
       skillName: skillNameFromTool(input.tool_name, input.tool_input),
     });
-    const settlesLater = awaitsTheTurn(toolMetadata);
+    const settles = tracing === "full" ? origin : undefined;
     const toolRun = {
       id: toolRunId,
       name: input.tool_name,
@@ -172,21 +170,23 @@ export async function main(): Promise<void> {
       outputs: { output: input.tool_response },
       project_name: config.project,
       start_time: startTimeIso,
-      ...(settlesLater ? {} : { end_time: toolEndTimeIso }),
+      end_time: toolEndTimeIso,
       parent_run_id: parentRunId,
       trace_id: traceId,
       dotted_order: toolDottedOrder,
       extra: { metadata: toolMetadata },
     };
-    const origin = queueOrigin(config);
-    recordRun({
-      path: turnRecord,
-      run: toolRun,
+    const queued = queueOrigin(config);
+    recordRun({ path: turnRecord, run: toolRun, tracing, origin: queued });
+    await enqueueRun(
+      config.stateFilePath,
+      input.session_id,
+      toolRun,
       tracing,
-      origin,
-      closesAt: settlesLater ? toolEndTimeIso : undefined,
-    });
-    await enqueueRun(config.stateFilePath, input.session_id, toolRun, tracing, origin, turnRecord);
+      queued,
+      turnRecord,
+      settles,
+    );
     startQueueFlusher(input.cwd, input.session_id);
   }
 

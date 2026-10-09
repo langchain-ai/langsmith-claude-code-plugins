@@ -13,6 +13,7 @@ import { initHook } from "../utils/hook-init.js";
 import { debug, warn } from "../logger.js";
 import { FOREIGN_QUEUE_MIN_RECORD_AGE_MS } from "../constants.js";
 import {
+  abandonQueued,
   discardEmptyQueue,
   listQueues,
   nextQueued,
@@ -28,15 +29,18 @@ import {
   listTurnRecords,
   readTurnRecord,
   recordDelivered,
+  recordRun,
   recordsIdleMs,
   turnRecordRoot,
 } from "../turn-record.js";
 import { reconcileAndClear } from "../reconcile.js";
+import { settledRunConfig } from "../repo-attribution.js";
 import { discardDirIfEmpty, safeName } from "../utils/session-store.js";
 import { watchUploads, type UploadWatch } from "../upload-confirm.js";
 import { releaseLock, tryAcquireLock } from "../utils/file-lock.js";
 import { createRunTree } from "../privacy.js";
 import type { Config } from "../config.js";
+import type { QueuedRun } from "../types.js";
 
 function flusherClient(config: Config): Client {
   const anonymizer = config.redact
@@ -52,6 +56,23 @@ function flusherClient(config: Config): Client {
   });
 }
 
+function writeBack(
+  entry: QueuedRun,
+  settled: { run: Record<string, unknown>; open: boolean },
+): boolean {
+  if (!entry.record || typeof entry.run.id !== "string") return true;
+  const wrote = entry.where
+    ? recordRun({
+        path: entry.record,
+        run: settled.run,
+        tracing: entry.tracing,
+        origin: entry.origin,
+        closesAt: settled.open ? (entry.run.end_time as string | undefined) : undefined,
+      })
+    : true;
+  return wrote && recordDelivered(entry.record, entry.run.id);
+}
+
 async function uploadQueued(
   dir: string,
   config: Config,
@@ -64,6 +85,7 @@ async function uploadQueued(
     if (!entry) break;
     if (runIsTooOldToUpload(entry)) {
       warn(`Dropping a queued run LangSmith will no longer accept: ${entry.queue_id}`);
+      abandonQueued(entry);
       removeQueued(dir, entry.queue_id);
       continue;
     }
@@ -71,8 +93,11 @@ async function uploadQueued(
       warn(`Leaving ${dir} alone: its next run was queued for a different LangSmith account`);
       return false;
     }
+    const settled = entry.where
+      ? settledRunConfig(entry.run, entry.where)
+      : { run: entry.run, open: false };
     const runTree = createRunTree(
-      { ...entry.run, client, replicas: config.replicas } as never,
+      { ...settled.run, client, replicas: config.replicas } as never,
       entry.tracing,
     );
     await runTree.postRun();
@@ -82,8 +107,10 @@ async function uploadQueued(
       recordFailure(dir, entry.queue_id);
       return false;
     }
-    if (entry.record && typeof entry.run.id === "string") {
-      recordDelivered(entry.record, entry.run.id);
+    if (!writeBack(entry, settled)) {
+      warn(`Could not write ${String(entry.run.id)} back to its turn record`);
+      recordFailure(dir, entry.queue_id);
+      return false;
     }
     removeQueued(dir, entry.queue_id);
   }

@@ -198,11 +198,11 @@ var require_p_finally = __commonJS({
       onFinally = onFinally || (() => {
       });
       return promise.then(
-        (val) => new Promise((resolve4) => {
-          resolve4(onFinally());
+        (val) => new Promise((resolve3) => {
+          resolve3(onFinally());
         }).then(() => val),
-        (err) => new Promise((resolve4) => {
-          resolve4(onFinally());
+        (err) => new Promise((resolve3) => {
+          resolve3(onFinally());
         }).then(() => {
           throw err;
         })
@@ -222,18 +222,18 @@ var require_p_timeout = __commonJS({
         this.name = "TimeoutError";
       }
     };
-    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve4, reject) => {
+    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve3, reject) => {
       if (typeof milliseconds !== "number" || milliseconds < 0) {
         throw new TypeError("Expected `milliseconds` to be a positive number");
       }
       if (milliseconds === Infinity) {
-        resolve4(promise);
+        resolve3(promise);
         return;
       }
       const timer = setTimeout(() => {
         if (typeof fallback === "function") {
           try {
-            resolve4(fallback());
+            resolve3(fallback());
           } catch (error2) {
             reject(error2);
           }
@@ -248,7 +248,7 @@ var require_p_timeout = __commonJS({
       }, milliseconds);
       pFinally(
         // eslint-disable-next-line promise/prefer-await-to-then
-        promise.then(resolve4, reject),
+        promise.then(resolve3, reject),
         () => {
           clearTimeout(timer);
         }
@@ -466,7 +466,7 @@ var require_dist = __commonJS({
       Adds a sync or async task to the queue. Always returns a promise.
       */
       async add(fn, options = {}) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve3, reject) => {
           const run = async () => {
             this._pendingCount++;
             this._intervalCount++;
@@ -477,7 +477,7 @@ var require_dist = __commonJS({
                 }
                 return void 0;
               });
-              resolve4(await operation);
+              resolve3(await operation);
             } catch (error2) {
               reject(error2);
             }
@@ -528,11 +528,11 @@ var require_dist = __commonJS({
         if (this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve4) => {
+        return new Promise((resolve3) => {
           const existingResolve = this._resolveEmpty;
           this._resolveEmpty = () => {
             existingResolve();
-            resolve4();
+            resolve3();
           };
         });
       }
@@ -545,11 +545,11 @@ var require_dist = __commonJS({
         if (this._pendingCount === 0 && this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve4) => {
+        return new Promise((resolve3) => {
           const existingResolve = this._resolveIdle;
           this._resolveIdle = () => {
             existingResolve();
-            resolve4();
+            resolve3();
           };
         });
       }
@@ -1241,19 +1241,21 @@ function loadConfig(options) {
     contractMetadata.ls_integration_version = LS_INTEGRATION_VERSION;
   }
   const repoMetadata = {};
-  const repoName = getRepoName(cwd);
-  if (repoName != null) {
-    repoMetadata.repository_name = repoName.name;
-    repoMetadata.repository_provider = repoName.provider;
-    const url = getRepoUrl(repoName.provider, repoName.name);
-    if (url)
-      repoMetadata.repository_url = url;
+  if (!options?.deferGit) {
+    const repoName = getRepoName(cwd);
+    if (repoName != null) {
+      repoMetadata.repository_name = repoName.name;
+      repoMetadata.repository_provider = repoName.provider;
+      const url = getRepoUrl(repoName.provider, repoName.name);
+      if (url)
+        repoMetadata.repository_url = url;
+    }
+    const gitInfo = getGitInfo(cwd);
+    if (gitInfo.branch)
+      repoMetadata.git_branch = gitInfo.branch;
+    if (gitInfo.commit)
+      repoMetadata.git_commit_sha = gitInfo.commit;
   }
-  const gitInfo = getGitInfo(cwd);
-  if (gitInfo.branch)
-    repoMetadata.git_branch = gitInfo.branch;
-  if (gitInfo.commit)
-    repoMetadata.git_commit_sha = gitInfo.commit;
   const pinned = REPOSITORY_METADATA_KEYS.filter((key) => customMetadata?.[key] !== void 0);
   customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
   Object.defineProperty(customMetadata, PINNED_REPOSITORY_KEYS, { value: new Set(pinned) });
@@ -2344,7 +2346,7 @@ async function onAttemptFailure({ error: error2, attemptNumber, retriesConsumed,
   const delayTime = calculateDelay(retriesConsumed, options);
   const finalDelay = Math.min(delayTime, remainingTime);
   if (finalDelay > 0) {
-    await new Promise((resolve4, reject) => {
+    await new Promise((resolve3, reject) => {
       const onAbort = () => {
         clearTimeout(timeoutToken);
         options.signal?.removeEventListener("abort", onAbort);
@@ -2352,7 +2354,7 @@ async function onAttemptFailure({ error: error2, attemptNumber, retriesConsumed,
       };
       const timeoutToken = setTimeout(() => {
         options.signal?.removeEventListener("abort", onAbort);
-        resolve4();
+        resolve3();
       }, finalDelay);
       if (options.unref) {
         timeoutToken.unref?.();
@@ -2762,7 +2764,7 @@ var safeJSON = (text) => {
 };
 
 // node_modules/.pnpm/langsmith@0.10.5/node_modules/langsmith/dist/_openapi_client/internal/utils/sleep.js
-var sleep = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
+var sleep = (ms) => new Promise((resolve3) => setTimeout(resolve3, ms));
 
 // node_modules/.pnpm/langsmith@0.10.5/node_modules/langsmith/dist/_openapi_client/version.js
 var VERSION = "0.0.1";
@@ -3441,8 +3443,8 @@ var __classPrivateFieldGet = function(receiver, state, kind, f2) {
 var _APIPromise_client;
 var APIPromise = class _APIPromise extends Promise {
   constructor(client2, responsePromise, parseResponse = defaultParseResponse) {
-    super((resolve4) => {
-      resolve4(null);
+    super((resolve3) => {
+      resolve3(null);
     });
     Object.defineProperty(this, "responsePromise", {
       enumerable: true,
@@ -6390,7 +6392,7 @@ var LOCK_POLL_INTERVAL_MS = 10;
 var LOCK_STALE_AFTER_MS = 1e4;
 var LOCK_METADATA_FILE = "created_at";
 function sleep2(ms) {
-  return new Promise((resolve4) => setTimeout(resolve4, ms));
+  return new Promise((resolve3) => setTimeout(resolve3, ms));
 }
 function isEEXIST(err) {
   return typeof err === "object" && err !== null && err.code === "EEXIST";
@@ -7326,8 +7328,8 @@ var SerializeWorker = class {
     if (!ok)
       return null;
     const id = this.nextId++;
-    return new Promise((resolve4, reject) => {
-      this.pending.set(id, { resolve: resolve4, reject });
+    return new Promise((resolve3, reject) => {
+      this.pending.set(id, { resolve: resolve3, reject });
       try {
         this.worker.postMessage({ id, op: "serialize", payload });
       } catch (e) {
@@ -7484,7 +7486,7 @@ var handle429 = async (response) => {
   if (response?.status === 429) {
     const retryAfter = parseInt(response.headers.get("retry-after") ?? "10", 10) * 1e3;
     if (retryAfter > 0) {
-      await new Promise((resolve4) => setTimeout(resolve4, retryAfter));
+      await new Promise((resolve3) => setTimeout(resolve3, retryAfter));
       return true;
     }
   }
@@ -7583,8 +7585,8 @@ var AutoBatchQueue = class {
   }
   push(item) {
     let itemPromiseResolve;
-    const itemPromise = new Promise((resolve4) => {
-      itemPromiseResolve = resolve4;
+    const itemPromise = new Promise((resolve3) => {
+      itemPromiseResolve = resolve3;
     });
     const size = estimateSerializedSize(item.item).size;
     if (this.sizeBytes + size > this.maxSizeBytes && this.items.length > 0) {
@@ -12588,7 +12590,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       console.warn("[WARNING]: When tracing in manual flush mode, you must call `await client.flush()` manually to submit trace batches.");
       return Promise.resolve();
     }
-    await new Promise((resolve4) => setTimeout(resolve4, 1));
+    await new Promise((resolve3) => setTimeout(resolve3, 1));
     while (this._pendingDrains.size > 0) {
       await Promise.all([...this._pendingDrains]);
     }
@@ -13854,11 +13856,11 @@ function createSecretAnonymizer(options) {
 }
 
 // dist/src/hooks/flush-queue.js
-import { join as join6 } from "node:path";
+import { join as join7 } from "node:path";
 
 // dist/src/utils/hook-init.js
-function initHook(cwd) {
-  const config = loadConfig({ cwd });
+function initHook(cwd, options) {
+  const config = loadConfig({ cwd, deferGit: options?.deferGit });
   initLogger(config.debug);
   if (!config.enabled) {
     return null;
@@ -13874,8 +13876,8 @@ function expandHome(path3) {
 }
 
 // dist/src/queue.js
-import { mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync as readdirSync2, statSync as statSync4, unlinkSync as unlinkSync3 } from "node:fs";
-import { join as join4 } from "node:path";
+import { mkdirSync as mkdirSync6, readFileSync as readFileSync7, readdirSync as readdirSync3, statSync as statSync5, unlinkSync as unlinkSync4 } from "node:fs";
+import { join as join5 } from "node:path";
 import { createHmac, randomUUID as randomUUID2 } from "node:crypto";
 
 // dist/src/utils/atomic-file.js
@@ -14098,161 +14100,17 @@ function createRunTree(config, mode = "full") {
   return run;
 }
 
-// dist/src/queue.js
-function queueOrigin(destination) {
-  const identity = JSON.stringify([
-    destination.apiBaseUrl,
-    destination.replicas ?? null,
-    destination.redact ?? false,
-    destination.redactExtraRules ?? null
-  ]);
-  return createHmac("sha256", destination.apiKey).update(identity).digest("hex").slice(0, QUEUE_ORIGIN_LENGTH);
-}
-var queueDir = (stateFilePath) => storeRoot(stateFilePath, QUEUE_DIR_NAME);
-var queueSessionDir = (stateFilePath, sessionId) => storeDir(stateFilePath, QUEUE_DIR_NAME, sessionId);
-var listQueues = (stateFilePath) => listStoredSessions(stateFilePath, QUEUE_DIR_NAME);
-function names(dir) {
-  try {
-    return readdirSync2(dir);
-  } catch {
-    return [];
-  }
-}
-function entryIds(dir) {
-  try {
-    return readdirSync2(dir).filter((name) => name.endsWith(QUEUE_FILE_SUFFIX)).sort().map((name) => name.slice(0, -QUEUE_FILE_SUFFIX.length));
-  } catch {
-    return [];
-  }
-}
-function entryPath(dir, queueId) {
-  return join4(dir, `${queueId}${QUEUE_FILE_SUFFIX}`);
-}
-function readEntry(dir, queueId) {
-  try {
-    const parsed = JSON.parse(readFileSync6(entryPath(dir, queueId), "utf-8"));
-    return parsed && parsed.run ? { ...parsed, queue_id: queueId } : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function nextQueued(dir) {
-  for (const queueId of entryIds(dir)) {
-    const entry = readEntry(dir, queueId);
-    if (entry)
-      return entry;
-    removeQueued(dir, queueId);
-  }
-  return void 0;
-}
-function publish(dir, queueId, entry) {
-  publishByRename(entryPath(dir, queueId), JSON.stringify(entry), QUEUE_TEMP_SUFFIX, PRIVATE_FILE_MODE);
-}
-function trim(dir) {
-  const ids = entryIds(dir);
-  for (const queueId of ids.slice(0, Math.max(0, ids.length - QUEUE_MAX_ENTRIES))) {
-    removeQueued(dir, queueId);
-  }
-}
-async function enqueueRun(stateFilePath, sessionId, run, tracing, origin, record) {
-  const dir = queueSessionDir(stateFilePath, sessionId);
-  const queueId = `${String(Date.now()).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID2()}`;
-  try {
-    mkdirSync5(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
-    publish(dir, queueId, {
-      tracing,
-      attempts: 0,
-      origin,
-      record,
-      run: runConfigForMode(run, tracing)
-    });
-    trim(dir);
-    debug(`Queued run for upload in ${entryPath(dir, queueId)}`);
-  } catch (err) {
-    warn(`Could not queue run for upload: ${err}`);
-  }
-}
-function removeQueued(dir, queueId) {
-  try {
-    unlinkSync3(entryPath(dir, queueId));
-  } catch {
-  }
-}
-function recordFailure2(dir, queueId) {
-  const entry = readEntry(dir, queueId);
-  if (!entry)
-    return;
-  const attempts = (entry.attempts ?? 0) + 1;
-  if (attempts >= QUEUE_MAX_ATTEMPTS) {
-    warn(`Dropping a queued run after ${attempts} failed uploads: ${queueId}`);
-    removeQueued(dir, queueId);
-    return;
-  }
-  try {
-    publish(dir, queueId, {
-      tracing: entry.tracing,
-      attempts,
-      origin: entry.origin,
-      record: entry.record,
-      run: entry.run
-    });
-  } catch (err) {
-    warn(`Could not record a failed upload: ${err}`);
-  }
-}
-function discardEmptyQueue(dir, now = Date.now()) {
-  if (entryIds(dir).length > 0)
-    return;
-  if (queueIdleMs(dir, now) < EMPTY_QUEUE_MIN_IDLE_MS)
-    return;
-  for (const name of names(dir).filter((entry) => entry.endsWith(QUEUE_TEMP_SUFFIX))) {
-    try {
-      unlinkSync3(join4(dir, name));
-    } catch {
-    }
-  }
-  discardDirIfEmpty(dir);
-}
-function queueIdleMs(dir, now = Date.now()) {
-  try {
-    return now - statSync4(dir).mtimeMs;
-  } catch {
-    return 0;
-  }
-}
-function queuedAtMs(queueId) {
-  const queuedAt = Number(queueId.slice(0, QUEUE_ID_TIME_WIDTH));
-  return Number.isFinite(queuedAt) && queuedAt > 0 ? queuedAt : void 0;
-}
-function oldestQueuedAtMs(dir) {
-  const [oldest] = entryIds(dir);
-  return oldest === void 0 ? void 0 : queuedAtMs(oldest);
-}
-function foreignQueueLooksAbandoned(dir, now = Date.now()) {
-  const queuedAt = oldestQueuedAtMs(dir);
-  if (queuedAt === void 0)
-    return false;
-  return now - queuedAt >= FOREIGN_QUEUE_MIN_RECORD_AGE_MS;
-}
-function runIsTooOldToUpload(entry, now = Date.now()) {
-  const started = new Date(entry.run.start_time).getTime();
-  if (Number.isFinite(started))
-    return now - started >= QUEUE_RUN_MAX_AGE_MS;
-  const queuedAt = queuedAtMs(entry.queue_id);
-  return queuedAt === void 0 || now - queuedAt >= QUEUE_RUN_MAX_AGE_MS;
-}
-
 // dist/src/turn-record.js
-import { appendFileSync as appendFileSync2, existsSync as existsSync3, mkdirSync as mkdirSync6, readFileSync as readFileSync7, readdirSync as readdirSync3, statSync as statSync5, unlinkSync as unlinkSync4 } from "node:fs";
-import { dirname as dirname4, join as join5 } from "node:path";
+import { appendFileSync as appendFileSync2, existsSync as existsSync3, mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync as readdirSync2, statSync as statSync4, unlinkSync as unlinkSync3 } from "node:fs";
+import { dirname as dirname4, join as join4 } from "node:path";
 var turnRecordRoot = (stateFilePath) => storeRoot(stateFilePath, TURN_RECORD_DIR_NAME);
 var turnRecordDir = (stateFilePath, sessionId) => storeDir(stateFilePath, TURN_RECORD_DIR_NAME, sessionId);
 function turnRecordPath(stateFilePath, sessionId, turnKey) {
-  return join5(turnRecordDir(stateFilePath, sessionId), `${safeName(turnKey)}${TURN_RECORD_SUFFIX}`);
+  return join4(turnRecordDir(stateFilePath, sessionId), `${safeName(turnKey)}${TURN_RECORD_SUFFIX}`);
 }
 function entriesIn(dir, suffix) {
   try {
-    return readdirSync3(dir).filter((name) => name.endsWith(suffix)).sort().map((name) => join5(dir, name));
+    return readdirSync2(dir).filter((name) => name.endsWith(suffix)).sort().map((name) => join4(dir, name));
   } catch {
     return [];
   }
@@ -14263,7 +14121,7 @@ function recordsIdleMs(dir, now = Date.now()) {
   let newest = 0;
   for (const path3 of listTurnRecords(dir)) {
     try {
-      newest = Math.max(newest, statSync5(path3).mtimeMs);
+      newest = Math.max(newest, statSync4(path3).mtimeMs);
     } catch {
     }
   }
@@ -14271,11 +14129,13 @@ function recordsIdleMs(dir, now = Date.now()) {
 }
 function append(path3, line) {
   try {
-    mkdirSync6(dirname4(path3), { recursive: true, mode: PRIVATE_DIR_MODE });
+    mkdirSync5(dirname4(path3), { recursive: true, mode: PRIVATE_DIR_MODE });
     appendFileSync2(path3, `${JSON.stringify(line)}
 `, { mode: PRIVATE_FILE_MODE });
+    return true;
   } catch (err) {
     warn(`Could not add to the turn record: ${err}`);
+    return false;
   }
 }
 function recordedRun(run, tracing) {
@@ -14300,12 +14160,12 @@ function recordedRun(run, tracing) {
 function recordRun(options) {
   const run = recordedRun(options.run, options.tracing);
   if (!run)
-    return;
+    return false;
   if (options.closesAt) {
     run.open = true;
     run.end_time = options.closesAt;
   }
-  append(options.path, {
+  return append(options.path, {
     k: TURN_RECORD_LINE.run,
     root: options.root,
     origin: options.origin,
@@ -14322,7 +14182,7 @@ function closeTurnRecord(options) {
   recordTurnClosed(path3, options.turnId);
 }
 function recordDelivered(path3, runId) {
-  append(path3, { k: TURN_RECORD_LINE.delivered, id: runId });
+  return append(path3, { k: TURN_RECORD_LINE.delivered, id: runId });
 }
 function recordReconciled(path3, runId) {
   append(path3, { k: TURN_RECORD_LINE.reconciled, id: runId });
@@ -14330,12 +14190,12 @@ function recordReconciled(path3, runId) {
 function readTurnRecord(path3) {
   let contents;
   try {
-    if (statSync5(path3).size > TURN_RECORD_MAX_BYTES) {
+    if (statSync4(path3).size > TURN_RECORD_MAX_BYTES) {
       warn(`Dropping a turn record too large to be real: ${path3}`);
       discardTurnRecord(path3);
       return void 0;
     }
-    contents = readFileSync7(path3, "utf-8");
+    contents = readFileSync6(path3, "utf-8");
   } catch {
     return void 0;
   }
@@ -14378,10 +14238,161 @@ function readTurnRecord(path3) {
 }
 function discardTurnRecord(path3) {
   try {
-    unlinkSync4(path3);
+    unlinkSync3(path3);
     debug(`Removed the turn record ${path3}`);
   } catch {
   }
+}
+
+// dist/src/queue.js
+function queueOrigin(destination) {
+  const identity = JSON.stringify([
+    destination.apiBaseUrl,
+    destination.replicas ?? null,
+    destination.redact ?? false,
+    destination.redactExtraRules ?? null
+  ]);
+  return createHmac("sha256", destination.apiKey).update(identity).digest("hex").slice(0, QUEUE_ORIGIN_LENGTH);
+}
+var queueDir = (stateFilePath) => storeRoot(stateFilePath, QUEUE_DIR_NAME);
+var queueSessionDir = (stateFilePath, sessionId) => storeDir(stateFilePath, QUEUE_DIR_NAME, sessionId);
+var listQueues = (stateFilePath) => listStoredSessions(stateFilePath, QUEUE_DIR_NAME);
+function names(dir) {
+  try {
+    return readdirSync3(dir);
+  } catch {
+    return [];
+  }
+}
+function entryIds(dir) {
+  try {
+    return readdirSync3(dir).filter((name) => name.endsWith(QUEUE_FILE_SUFFIX)).sort().map((name) => name.slice(0, -QUEUE_FILE_SUFFIX.length));
+  } catch {
+    return [];
+  }
+}
+function entryPath(dir, queueId) {
+  return join5(dir, `${queueId}${QUEUE_FILE_SUFFIX}`);
+}
+function readEntry(dir, queueId) {
+  try {
+    const parsed = JSON.parse(readFileSync7(entryPath(dir, queueId), "utf-8"));
+    return parsed && parsed.run ? { ...parsed, queue_id: queueId } : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function nextQueued(dir) {
+  for (const queueId of entryIds(dir)) {
+    const entry = readEntry(dir, queueId);
+    if (entry)
+      return entry;
+    removeQueued(dir, queueId);
+  }
+  return void 0;
+}
+function publish(dir, queueId, entry) {
+  publishByRename(entryPath(dir, queueId), JSON.stringify(entry), QUEUE_TEMP_SUFFIX, PRIVATE_FILE_MODE);
+}
+function trim(dir) {
+  const ids = entryIds(dir);
+  for (const queueId of ids.slice(0, Math.max(0, ids.length - QUEUE_MAX_ENTRIES))) {
+    removeQueued(dir, queueId);
+  }
+}
+async function enqueueRun(stateFilePath, sessionId, run, tracing, origin, record, where) {
+  const dir = queueSessionDir(stateFilePath, sessionId);
+  const queueId = `${String(Date.now()).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID2()}`;
+  try {
+    mkdirSync6(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
+    publish(dir, queueId, {
+      tracing,
+      attempts: 0,
+      origin,
+      record,
+      where,
+      run: runConfigForMode(run, tracing)
+    });
+    trim(dir);
+    debug(`Queued run for upload in ${entryPath(dir, queueId)}`);
+  } catch (err) {
+    warn(`Could not queue run for upload: ${err}`);
+  }
+}
+function abandonQueued(entry) {
+  if (entry.record && typeof entry.run.id === "string")
+    recordDelivered(entry.record, entry.run.id);
+}
+function removeQueued(dir, queueId) {
+  try {
+    unlinkSync4(entryPath(dir, queueId));
+  } catch {
+  }
+}
+function recordFailure2(dir, queueId) {
+  const entry = readEntry(dir, queueId);
+  if (!entry)
+    return;
+  const attempts = (entry.attempts ?? 0) + 1;
+  if (attempts >= QUEUE_MAX_ATTEMPTS) {
+    warn(`Dropping a queued run after ${attempts} failed uploads: ${queueId}`);
+    abandonQueued(entry);
+    removeQueued(dir, queueId);
+    return;
+  }
+  try {
+    publish(dir, queueId, {
+      tracing: entry.tracing,
+      attempts,
+      origin: entry.origin,
+      record: entry.record,
+      where: entry.where,
+      run: entry.run
+    });
+  } catch (err) {
+    warn(`Could not record a failed upload: ${err}`);
+  }
+}
+function discardEmptyQueue(dir, now = Date.now()) {
+  if (entryIds(dir).length > 0)
+    return;
+  if (queueIdleMs(dir, now) < EMPTY_QUEUE_MIN_IDLE_MS)
+    return;
+  for (const name of names(dir).filter((entry) => entry.endsWith(QUEUE_TEMP_SUFFIX))) {
+    try {
+      unlinkSync4(join5(dir, name));
+    } catch {
+    }
+  }
+  discardDirIfEmpty(dir);
+}
+function queueIdleMs(dir, now = Date.now()) {
+  try {
+    return now - statSync5(dir).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+function queuedAtMs(queueId) {
+  const queuedAt = Number(queueId.slice(0, QUEUE_ID_TIME_WIDTH));
+  return Number.isFinite(queuedAt) && queuedAt > 0 ? queuedAt : void 0;
+}
+function oldestQueuedAtMs(dir) {
+  const [oldest] = entryIds(dir);
+  return oldest === void 0 ? void 0 : queuedAtMs(oldest);
+}
+function foreignQueueLooksAbandoned(dir, now = Date.now()) {
+  const queuedAt = oldestQueuedAtMs(dir);
+  if (queuedAt === void 0)
+    return false;
+  return now - queuedAt >= FOREIGN_QUEUE_MIN_RECORD_AGE_MS;
+}
+function runIsTooOldToUpload(entry, now = Date.now()) {
+  const started = new Date(entry.run.start_time).getTime();
+  if (Number.isFinite(started))
+    return now - started >= QUEUE_RUN_MAX_AGE_MS;
+  const queuedAt = queuedAtMs(entry.queue_id);
+  return queuedAt === void 0 || now - queuedAt >= QUEUE_RUN_MAX_AGE_MS;
 }
 
 // dist/src/reconcile.js
@@ -14395,7 +14406,7 @@ function attributionOf(metadata) {
   return carried;
 }
 var namesARepository = (carried) => carried[REPOSITORY_NAME_KEY] !== void 0;
-var awaitsTheTurn = (metadata) => !metadata?.[REPOSITORY_NAME_KEY] || !metadata?.[ATTRIBUTION_IDENTIFIER_KEY];
+var everyChildLanded = (record) => record.children.every((child) => record.delivered.has(child.run_id));
 function turnAttribution(record) {
   const root = attributionOf(record.root?.metadata);
   const inToolCallOrder = [...record.children].sort((left, right) => left.dotted_order < right.dotted_order ? -1 : 1).map((child) => attributionOf(child.metadata));
@@ -14465,8 +14476,11 @@ async function reconcileTurn(options) {
   }
   if (!record.closed)
     return false;
+  if (!everyChildLanded(record)) {
+    debug(`Waiting for the rest of ${record.path} to land before settling it`);
+    return false;
+  }
   const filled = turnAttribution(record) ?? {};
-  const everyChildLanded = record.children.every((child) => record.delivered.has(child.run_id));
   const stillOpen = record.children.filter((child) => child.open && record.delivered.has(child.run_id));
   let settled = true;
   for (const run of [record.root, ...stillOpen]) {
@@ -14484,11 +14498,212 @@ async function reconcileTurn(options) {
     recordReconciled(record.path, run.run_id);
     debug(`Settled the repository and author on run ${run.run_id}`);
   }
-  return settled && everyChildLanded;
+  return settled;
 }
 async function reconcileAndClear(options) {
   if (await reconcileTurn(options))
     discardTurnRecord(options.record.path);
+}
+
+// dist/src/repo-attribution.js
+import { isAbsolute as isAbsolute2 } from "node:path";
+
+// dist/src/repo-attribution-paths.js
+import { existsSync as existsSync4, statSync as statSync6 } from "node:fs";
+import { dirname as dirname5, isAbsolute, join as join6, resolve as resolve2 } from "node:path";
+function toolPathFromInput(toolInput, sessionCwd) {
+  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
+    return { namedAPath: false };
+  }
+  const input = toolInput;
+  let namedAPath = false;
+  for (const key of TOOL_PATH_INPUT_KEYS) {
+    const value = input[key];
+    if (typeof value !== "string" || value.length === 0)
+      continue;
+    namedAPath = true;
+    if (isAbsolute(value))
+      return { path: value, namedAPath };
+    if (!sessionCwd || !isAbsolute(sessionCwd))
+      continue;
+    const resolved = resolve2(sessionCwd, value);
+    if (existsSync4(resolved))
+      return { path: resolved, namedAPath };
+  }
+  return { namedAPath };
+}
+function nearestExistingDirectory(path3) {
+  let current = path3;
+  for (; ; ) {
+    const parent = dirname5(current);
+    const reachedFilesystemRoot = parent === current;
+    if (reachedFilesystemRoot)
+      return void 0;
+    try {
+      if (statSync6(current).isDirectory())
+        return current;
+    } catch {
+    }
+    current = parent;
+  }
+}
+function gitMarkerAt(directory) {
+  try {
+    return statSync6(join6(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
+  } catch {
+    return GIT_MARKERS.NOTHING_HERE;
+  }
+}
+function rootFromGitMarker(directory) {
+  let current = resolve2(directory);
+  for (; ; ) {
+    const marker = gitMarkerAt(current);
+    if (marker === GIT_MARKERS.REPOSITORY_ROOT)
+      return current;
+    if (marker === GIT_MARKERS.ONLY_GIT_CAN_SAY)
+      return void 0;
+    const parent = dirname5(current);
+    const reachedFilesystemRoot = parent === current;
+    if (reachedFilesystemRoot)
+      return null;
+    current = parent;
+  }
+}
+
+// dist/src/repo-attribution.js
+var rootByDirectory = /* @__PURE__ */ new Map();
+var attributionByRoot = /* @__PURE__ */ new Map();
+var identifierByRoot = /* @__PURE__ */ new Map();
+function rootForPath(path3) {
+  const directory = nearestExistingDirectory(path3);
+  if (!directory)
+    return void 0;
+  if (rootByDirectory.has(directory))
+    return rootByDirectory.get(directory);
+  const walked = rootFromGitMarker(directory);
+  const onlyGitCanSay = walked === void 0;
+  const root = onlyGitCanSay ? getRepoRoot(directory) : walked;
+  rootByDirectory.set(directory, root);
+  return root;
+}
+function isSessionsOwnRepository(sessionCwd, root) {
+  return sessionCwd ? rootForPath(sessionCwd) === root : false;
+}
+function withoutPinnedKeys(attribution, pinned) {
+  if (pinned.size === 0)
+    return { ...attribution };
+  return Object.fromEntries(Object.entries(attribution).filter(([key]) => !pinned.has(key)));
+}
+function withoutRepositoryKeys(base, pinned) {
+  const stripped = { ...base };
+  for (const key of REPOSITORY_METADATA_KEYS) {
+    if (!pinned.has(key))
+      delete stripped[key];
+  }
+  return stripped;
+}
+function identifierForRoot(root) {
+  const cached = identifierByRoot.get(root);
+  if (cached)
+    return cached;
+  const userName = getGitUserName(root);
+  const identifier = userName ? { ls_attribution_identifier: userName } : {};
+  identifierByRoot.set(root, identifier);
+  return identifier;
+}
+function attributionForRoot(root) {
+  const cached = attributionByRoot.get(root);
+  if (cached)
+    return cached;
+  const attribution = { ...identifierForRoot(root) };
+  const repoName = getRepoName(root);
+  if (repoName) {
+    attribution.repository_name = repoName.name;
+    attribution.repository_provider = repoName.provider;
+    const url = getRepoUrl(repoName.provider, repoName.name);
+    if (url)
+      attribution.repository_url = url;
+  }
+  const gitInfo = getGitInfo(root);
+  if (gitInfo.branch)
+    attribution.git_branch = gitInfo.branch;
+  if (gitInfo.commit)
+    attribution.git_commit_sha = gitInfo.commit;
+  attributionByRoot.set(root, attribution);
+  return attribution;
+}
+function withSessionAuthor(base, sessionRoot) {
+  if (base?.ls_attribution_identifier !== void 0)
+    return base;
+  return { ...base, ...identifierForRoot(sessionRoot) };
+}
+function sessionScopedMetadata(base, sessionCwd) {
+  const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : void 0;
+  return typeof sessionRoot === "string" ? withSessionAuthor(base, sessionRoot) : base;
+}
+function scopedToPath(base, lookup, sessionCwd, pinned) {
+  const { path: toolPath, namedAPath } = lookup;
+  const namedSomewhereNothingSits = namedAPath && !toolPath;
+  if (namedSomewhereNothingSits)
+    return base;
+  const path3 = toolPath ?? sessionCwd;
+  if (!path3 || !isAbsolute2(path3))
+    return base;
+  const root = rootForPath(path3);
+  const gitCouldNotAnswer = root === void 0;
+  if (gitCouldNotAnswer)
+    return base;
+  const pathIsInNoRepository = root === null;
+  if (pathIsInNoRepository)
+    return withoutRepositoryKeys(base, pinned);
+  if (isSessionsOwnRepository(sessionCwd, root)) {
+    return { ...base, ...withoutPinnedKeys(identifierForRoot(root), pinned) };
+  }
+  return {
+    ...withoutRepositoryKeys(base, pinned),
+    ...withoutPinnedKeys(attributionForRoot(root), pinned)
+  };
+}
+function repoScopedMetadata(base, toolInput, sessionCwd) {
+  return scopedToPath(base, toolPathFromInput(toolInput, sessionCwd), sessionCwd, pinnedRepositoryKeys(base));
+}
+var awaitsTheTurn = (metadata) => !metadata?.[REPOSITORY_NAME_KEY] || !metadata?.[ATTRIBUTION_IDENTIFIER_KEY];
+function toolOrigin(toolInput, sessionCwd) {
+  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd) };
+}
+function withSessionRepository(base, sessionCwd) {
+  const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : void 0;
+  if (typeof sessionRoot !== "string")
+    return base;
+  return { ...attributionForRoot(sessionRoot), ...base };
+}
+function settledRepositoryMetadata(base, origin) {
+  const pinned = new Set(REPOSITORY_METADATA_KEYS.filter((key) => base?.[key] !== void 0));
+  const sessionScoped = withSessionRepository(base, origin.cwd);
+  return scopedToPath(sessionScoped, { path: origin.path, namedAPath: origin.namedAPath }, origin.cwd, pinned);
+}
+function settledRunConfig(run, origin) {
+  const extra = run.extra;
+  const metadata = settledRepositoryMetadata(extra?.metadata, origin) ?? extra?.metadata ?? {};
+  const settled = { ...run, extra: { ...extra, metadata } };
+  const open2 = awaitsTheTurn(metadata);
+  if (open2)
+    delete settled.end_time;
+  return { run: settled, open: open2 };
+}
+function turnScopedMetadata(base, toolInputs, sessionCwd) {
+  const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : void 0;
+  if (typeof sessionRoot === "string")
+    return withSessionAuthor(base, sessionRoot);
+  for (const toolInput of toolInputs) {
+    const { path: path3 } = toolPathFromInput(toolInput, sessionCwd);
+    if (!path3)
+      continue;
+    const landedInRepository = typeof rootForPath(path3) === "string";
+    if (landedInRepository)
+      return repoScopedMetadata(base, toolInput, sessionCwd);
+  }
+  return base;
 }
 
 // dist/src/upload-confirm.js
@@ -14523,7 +14738,7 @@ function watchUploads(client2) {
 
 // dist/src/utils/file-lock.js
 import { readFileSync as readFileSync8, writeFileSync as writeFileSync4, linkSync, mkdirSync as mkdirSync7, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync5 } from "node:fs";
-import { dirname as dirname5 } from "node:path";
+import { dirname as dirname6 } from "node:path";
 import { randomUUID as randomUUID3 } from "node:crypto";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
@@ -14531,12 +14746,12 @@ function lockPath(stateFilePath) {
   return `${stateFilePath}.lock`;
 }
 function sleep3(ms) {
-  return new Promise((resolve4) => setTimeout(resolve4, ms));
+  return new Promise((resolve3) => setTimeout(resolve3, ms));
 }
 async function acquireLock(stateFilePath) {
   const lock = lockPath(stateFilePath);
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync7(dirname5(stateFilePath), { recursive: true });
+  mkdirSync7(dirname6(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
       const fd = openSync2(lock, "wx", PRIVATE_FILE_MODE);
@@ -14595,7 +14810,7 @@ function holderIsGone(lock) {
 function tryAcquireLock(filePath) {
   const lock = lockPath(filePath);
   try {
-    mkdirSync7(dirname5(filePath), { recursive: true });
+    mkdirSync7(dirname6(filePath), { recursive: true });
   } catch {
     return false;
   }
@@ -14629,6 +14844,18 @@ function flusherClient(config) {
     autoBatchTracing: false
   });
 }
+function writeBack(entry, settled) {
+  if (!entry.record || typeof entry.run.id !== "string")
+    return true;
+  const wrote = entry.where ? recordRun({
+    path: entry.record,
+    run: settled.run,
+    tracing: entry.tracing,
+    origin: entry.origin,
+    closesAt: settled.open ? entry.run.end_time : void 0
+  }) : true;
+  return wrote && recordDelivered(entry.record, entry.run.id);
+}
 async function uploadQueued(dir, config, origin, client2, watch) {
   for (; ; ) {
     const entry = nextQueued(dir);
@@ -14636,6 +14863,7 @@ async function uploadQueued(dir, config, origin, client2, watch) {
       break;
     if (runIsTooOldToUpload(entry)) {
       warn(`Dropping a queued run LangSmith will no longer accept: ${entry.queue_id}`);
+      abandonQueued(entry);
       removeQueued(dir, entry.queue_id);
       continue;
     }
@@ -14643,7 +14871,8 @@ async function uploadQueued(dir, config, origin, client2, watch) {
       warn(`Leaving ${dir} alone: its next run was queued for a different LangSmith account`);
       return false;
     }
-    const runTree = createRunTree({ ...entry.run, client: client2, replicas: config.replicas }, entry.tracing);
+    const settled = entry.where ? settledRunConfig(entry.run, entry.where) : { run: entry.run, open: false };
+    const runTree = createRunTree({ ...settled.run, client: client2, replicas: config.replicas }, entry.tracing);
     await runTree.postRun();
     const failure = watch.failure();
     if (failure) {
@@ -14651,8 +14880,10 @@ async function uploadQueued(dir, config, origin, client2, watch) {
       recordFailure2(dir, entry.queue_id);
       return false;
     }
-    if (entry.record && typeof entry.run.id === "string") {
-      recordDelivered(entry.record, entry.run.id);
+    if (!writeBack(entry, settled)) {
+      warn(`Could not write ${String(entry.run.id)} back to its turn record`);
+      recordFailure2(dir, entry.queue_id);
+      return false;
     }
     removeQueued(dir, entry.queue_id);
   }
@@ -14677,7 +14908,7 @@ async function settleTurns(recordDir, config, origin, client2, watch) {
   discardDirIfEmpty(recordDir);
 }
 async function drainSession(session, config, origin) {
-  const dir = join6(queueDir(config.stateFilePath), session);
+  const dir = join7(queueDir(config.stateFilePath), session);
   const flushTarget = `${dir}.flush`;
   if (!tryAcquireLock(flushTarget)) {
     debug(`Another flusher already owns ${dir}`);
@@ -14685,7 +14916,7 @@ async function drainSession(session, config, origin) {
   }
   const client2 = flusherClient(config);
   const watch = watchUploads(client2);
-  const records = join6(turnRecordRoot(config.stateFilePath), session);
+  const records = join7(turnRecordRoot(config.stateFilePath), session);
   try {
     await uploadQueued(dir, config, origin, client2, watch);
     await settleTurns(records, config, origin, client2, watch);
@@ -14694,10 +14925,10 @@ async function drainSession(session, config, origin) {
   }
 }
 function looksAbandoned(session, stateFilePath) {
-  const queued = join6(queueDir(stateFilePath), session);
+  const queued = join7(queueDir(stateFilePath), session);
   if (foreignQueueLooksAbandoned(queued))
     return true;
-  return recordsIdleMs(join6(turnRecordRoot(stateFilePath), session)) >= FOREIGN_QUEUE_MIN_RECORD_AGE_MS;
+  return recordsIdleMs(join7(turnRecordRoot(stateFilePath), session)) >= FOREIGN_QUEUE_MIN_RECORD_AGE_MS;
 }
 async function main(cwd, sessionId) {
   const config = initHook(cwd);
@@ -14714,7 +14945,7 @@ async function main(cwd, sessionId) {
   for (const session of [...sessions].sort()) {
     if (session !== own && !looksAbandoned(session, config.stateFilePath)) {
       debug(`Not flushing ${session}, which another session may still be writing to`);
-      discardEmptyQueue(join6(queueDir(config.stateFilePath), session));
+      discardEmptyQueue(join7(queueDir(config.stateFilePath), session));
       continue;
     }
     try {
@@ -14729,7 +14960,7 @@ async function main(cwd, sessionId) {
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { lstatSync as lstatSync2, readFileSync as readFileSync9 } from "node:fs";
 import { mkdir as mkdir3, open, rename as rename2, rmdir, unlink as unlink2 } from "node:fs/promises";
-import { dirname as dirname6 } from "node:path";
+import { dirname as dirname7 } from "node:path";
 import { performance as performance2 } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 function isMode(value) {
@@ -14791,7 +15022,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
   }
   const path3 = tracingPolicyPath(stateFilePath);
   const lockPath2 = `${path3}.lock`;
-  await mkdir3(dirname6(path3), { recursive: true });
+  await mkdir3(dirname7(path3), { recursive: true });
   const deadline = performance2.now() + 2e3;
   let locked = false;
   while (!locked) {
@@ -14838,7 +15069,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     await rename2(tempPath, path3);
     tempPath = void 0;
     await bestEffort(async () => {
-      const directory = await open(dirname6(path3), "r");
+      const directory = await open(dirname7(path3), "r");
       try {
         await directory.sync();
       } finally {
@@ -14861,12 +15092,12 @@ function resolveTurnTracingMode(config, sessionId, ...snapshots) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync10, statSync as statSync6, fstatSync, openSync as openSync3, readSync, closeSync as closeSync3 } from "node:fs";
+import { readFileSync as readFileSync10, statSync as statSync7, fstatSync, openSync as openSync3, readSync, closeSync as closeSync3 } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
   let size;
   try {
-    size = statSync6(filePath).size;
+    size = statSync7(filePath).size;
   } catch {
     return { messages: [], lastLine: afterLine };
   }
@@ -14933,7 +15164,7 @@ function readTranscript(filePath, afterLine = -1) {
 }
 function getTranscriptEndLine(filePath) {
   try {
-    const size = statSync6(filePath).size;
+    const size = statSync7(filePath).size;
     if (size === 0)
       return -1;
     if (size <= MAX_FULL_READ_BYTES) {
@@ -15169,7 +15400,7 @@ function groupIntoTurns(messages) {
 
 // dist/src/state.js
 import { readFileSync as readFileSync11, mkdirSync as mkdirSync8 } from "node:fs";
-import { dirname as dirname7 } from "node:path";
+import { dirname as dirname8 } from "node:path";
 function publishState(stateFilePath, state) {
   publishByRename(stateFilePath, JSON.stringify(state, null, 2), STATE_TEMP_SUFFIX, PRIVATE_FILE_MODE);
 }
@@ -15240,182 +15471,6 @@ function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, c
       current_turn_run_id: currentTurnRunId !== void 0 ? currentTurnRunId : existingSession.current_turn_run_id
     }
   };
-}
-
-// dist/src/repo-attribution.js
-import { existsSync as existsSync4 } from "node:fs";
-import { isAbsolute, resolve as resolve3 } from "node:path";
-
-// dist/src/repo-attribution-paths.js
-import { statSync as statSync7 } from "node:fs";
-import { dirname as dirname8, join as join7, resolve as resolve2 } from "node:path";
-function nearestExistingDirectory(path3) {
-  let current = path3;
-  for (; ; ) {
-    const parent = dirname8(current);
-    const reachedFilesystemRoot = parent === current;
-    if (reachedFilesystemRoot)
-      return void 0;
-    try {
-      if (statSync7(current).isDirectory())
-        return current;
-    } catch {
-    }
-    current = parent;
-  }
-}
-function gitMarkerAt(directory) {
-  try {
-    return statSync7(join7(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
-  } catch {
-    return GIT_MARKERS.NOTHING_HERE;
-  }
-}
-function rootFromGitMarker(directory) {
-  let current = resolve2(directory);
-  for (; ; ) {
-    const marker = gitMarkerAt(current);
-    if (marker === GIT_MARKERS.REPOSITORY_ROOT)
-      return current;
-    if (marker === GIT_MARKERS.ONLY_GIT_CAN_SAY)
-      return void 0;
-    const parent = dirname8(current);
-    const reachedFilesystemRoot = parent === current;
-    if (reachedFilesystemRoot)
-      return null;
-    current = parent;
-  }
-}
-
-// dist/src/repo-attribution.js
-var rootByDirectory = /* @__PURE__ */ new Map();
-var attributionByRoot = /* @__PURE__ */ new Map();
-var identifierByRoot = /* @__PURE__ */ new Map();
-function toolPathFromInput(toolInput, sessionCwd) {
-  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
-    return { namedAPath: false };
-  }
-  const input = toolInput;
-  let namedAPath = false;
-  for (const key of TOOL_PATH_INPUT_KEYS) {
-    const value = input[key];
-    if (typeof value !== "string" || value.length === 0)
-      continue;
-    namedAPath = true;
-    if (isAbsolute(value))
-      return { path: value, namedAPath };
-    if (!sessionCwd || !isAbsolute(sessionCwd))
-      continue;
-    const resolved = resolve3(sessionCwd, value);
-    if (existsSync4(resolved))
-      return { path: resolved, namedAPath };
-  }
-  return { namedAPath };
-}
-function rootForPath(path3) {
-  const directory = nearestExistingDirectory(path3);
-  if (!directory)
-    return void 0;
-  if (rootByDirectory.has(directory))
-    return rootByDirectory.get(directory);
-  const walked = rootFromGitMarker(directory);
-  const onlyGitCanSay = walked === void 0;
-  const root = onlyGitCanSay ? getRepoRoot(directory) : walked;
-  rootByDirectory.set(directory, root);
-  return root;
-}
-function isSessionsOwnRepository(sessionCwd, root) {
-  return sessionCwd ? rootForPath(sessionCwd) === root : false;
-}
-function withoutPinnedKeys(attribution, pinned) {
-  if (pinned.size === 0)
-    return { ...attribution };
-  return Object.fromEntries(Object.entries(attribution).filter(([key]) => !pinned.has(key)));
-}
-function withoutRepositoryKeys(base, pinned) {
-  const stripped = { ...base };
-  for (const key of REPOSITORY_METADATA_KEYS) {
-    if (!pinned.has(key))
-      delete stripped[key];
-  }
-  return stripped;
-}
-function identifierForRoot(root) {
-  const cached = identifierByRoot.get(root);
-  if (cached)
-    return cached;
-  const userName = getGitUserName(root);
-  const identifier = userName ? { ls_attribution_identifier: userName } : {};
-  identifierByRoot.set(root, identifier);
-  return identifier;
-}
-function attributionForRoot(root) {
-  const cached = attributionByRoot.get(root);
-  if (cached)
-    return cached;
-  const attribution = { ...identifierForRoot(root) };
-  const repoName = getRepoName(root);
-  if (repoName) {
-    attribution.repository_name = repoName.name;
-    attribution.repository_provider = repoName.provider;
-    const url = getRepoUrl(repoName.provider, repoName.name);
-    if (url)
-      attribution.repository_url = url;
-  }
-  const gitInfo = getGitInfo(root);
-  if (gitInfo.branch)
-    attribution.git_branch = gitInfo.branch;
-  if (gitInfo.commit)
-    attribution.git_commit_sha = gitInfo.commit;
-  attributionByRoot.set(root, attribution);
-  return attribution;
-}
-function withSessionAuthor(base, sessionRoot) {
-  if (base?.ls_attribution_identifier !== void 0)
-    return base;
-  return { ...base, ...identifierForRoot(sessionRoot) };
-}
-function sessionScopedMetadata(base, sessionCwd) {
-  const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : void 0;
-  return typeof sessionRoot === "string" ? withSessionAuthor(base, sessionRoot) : base;
-}
-function repoScopedMetadata(base, toolInput, sessionCwd) {
-  const { path: toolPath, namedAPath } = toolPathFromInput(toolInput, sessionCwd);
-  const namedSomewhereNothingSits = namedAPath && !toolPath;
-  if (namedSomewhereNothingSits)
-    return base;
-  const path3 = toolPath ?? sessionCwd;
-  if (!path3 || !isAbsolute(path3))
-    return base;
-  const root = rootForPath(path3);
-  const gitCouldNotAnswer = root === void 0;
-  if (gitCouldNotAnswer)
-    return base;
-  const pinned = pinnedRepositoryKeys(base);
-  const pathIsInNoRepository = root === null;
-  if (pathIsInNoRepository)
-    return withoutRepositoryKeys(base, pinned);
-  if (isSessionsOwnRepository(sessionCwd, root)) {
-    return { ...base, ...withoutPinnedKeys(identifierForRoot(root), pinned) };
-  }
-  return {
-    ...withoutRepositoryKeys(base, pinned),
-    ...withoutPinnedKeys(attributionForRoot(root), pinned)
-  };
-}
-function turnScopedMetadata(base, toolInputs, sessionCwd) {
-  const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : void 0;
-  if (typeof sessionRoot === "string")
-    return withSessionAuthor(base, sessionRoot);
-  for (const toolInput of toolInputs) {
-    const { path: path3 } = toolPathFromInput(toolInput, sessionCwd);
-    if (!path3)
-      continue;
-    const landedInRepository = typeof rootForPath(path3) === "string";
-    if (landedInRepository)
-      return repoScopedMetadata(base, toolInput, sessionCwd);
-  }
-  return base;
 }
 
 // dist/src/langsmith.js
@@ -15719,7 +15774,7 @@ async function traceTurn(options) {
   log(`Traced turn ${turnNum}: ${turnRunId} with ${turn.llmCalls.length} LLM call(s) [${status}]`);
   return taskRunMap;
 }
-async function patchTurnRun(id, result) {
+async function patchTurnRun(id, result, leaveOpen = false) {
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
   const config = {
@@ -15733,7 +15788,7 @@ async function patchTurnRun(id, result) {
     dotted_order: id.dottedOrder,
     parent_run_id: id.parentRunId,
     start_time: id.startTime,
-    end_time: (/* @__PURE__ */ new Date()).toISOString(),
+    ...leaveOpen ? {} : { end_time: (/* @__PURE__ */ new Date()).toISOString() },
     ..."error" in result ? { error: result.error } : { outputs: { messages: [{ role: "assistant", content: result.lastAssistantMessage }] } },
     extra: {
       metadata: codingAgentMetadata({
@@ -15769,7 +15824,7 @@ function turnIdentityFromOpenTurn(turn, ctx) {
   };
 }
 async function completeTurnRun(options) {
-  return patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
+  return patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage }, options.leaveOpen);
 }
 async function closeTurnRun(id, error2) {
   await patchTurnRun(id, { error: error2 });
@@ -16120,13 +16175,13 @@ function isPayloadForHook(input, event2) {
 
 // dist/src/utils/stdin.js
 function readStdin() {
-  return new Promise((resolve4, reject) => {
+  return new Promise((resolve3, reject) => {
     let data = "";
     process.stdin.setEncoding("utf-8");
     process.stdin.on("data", (chunk) => data += chunk);
     process.stdin.on("end", () => {
       try {
-        resolve4(JSON.parse(data));
+        resolve3(JSON.parse(data));
       } catch (err) {
         reject(new Error(`Failed to parse hook input: ${err}`));
       }
@@ -16322,7 +16377,7 @@ async function main3() {
   const input = await readStdin();
   if (!isPayloadForHook(input, "PostToolUse"))
     return;
-  const config = initHook(input.cwd);
+  const config = initHook(input.cwd, { deferGit: true });
   if (!config)
     return;
   if (input.agent_id || input.agent_type) {
@@ -16348,8 +16403,7 @@ async function main3() {
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
   const agentId = input.tool_response.agentId;
   const workflow = !agentId ? detectWorkflowLaunch(input.tool_name, input.tool_response) : void 0;
-  const sessionMetadataBase = sessionScopedMetadata(config.customMetadata, input.cwd);
-  const toolMetadataBase = repoScopedMetadata(sessionMetadataBase, input.tool_input, input.cwd);
+  const origin = toolOrigin(input.tool_input, input.cwd);
   const turnRecord = turnRecordPath(config.stateFilePath, input.session_id, parentRunId);
   if (agentId) {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
@@ -16372,7 +16426,7 @@ async function main3() {
       extra: {
         metadata: codingAgentMetadata({
           sessionId: input.session_id,
-          base: toolMetadataBase,
+          base: settledRepositoryMetadata(config.customMetadata, origin),
           turnNumber: sessionState.current_turn_number,
           runtimeVersion: sessionState.runtime_version,
           agentType: "root",
@@ -16385,7 +16439,7 @@ async function main3() {
   } else {
     const toolMetadata = codingAgentMetadata({
       sessionId: input.session_id,
-      base: toolMetadataBase,
+      base: config.customMetadata,
       turnNumber: sessionState.current_turn_number,
       runtimeVersion: sessionState.runtime_version,
       agentType: "root",
@@ -16393,7 +16447,7 @@ async function main3() {
       runName: input.tool_name,
       skillName: skillNameFromTool(input.tool_name, input.tool_input)
     });
-    const settlesLater = awaitsTheTurn(toolMetadata);
+    const settles = tracing === "full" ? origin : void 0;
     const toolRun = {
       id: toolRunId,
       name: input.tool_name,
@@ -16402,21 +16456,15 @@ async function main3() {
       outputs: { output: input.tool_response },
       project_name: config.project,
       start_time: startTimeIso,
-      ...settlesLater ? {} : { end_time: toolEndTimeIso },
+      end_time: toolEndTimeIso,
       parent_run_id: parentRunId,
       trace_id: traceId,
       dotted_order: toolDottedOrder,
       extra: { metadata: toolMetadata }
     };
-    const origin = queueOrigin(config);
-    recordRun({
-      path: turnRecord,
-      run: toolRun,
-      tracing,
-      origin,
-      closesAt: settlesLater ? toolEndTimeIso : void 0
-    });
-    await enqueueRun(config.stateFilePath, input.session_id, toolRun, tracing, origin, turnRecord);
+    const queued = queueOrigin(config);
+    recordRun({ path: turnRecord, run: toolRun, tracing, origin: queued });
+    await enqueueRun(config.stateFilePath, input.session_id, toolRun, tracing, queued, turnRecord, settles);
     startQueueFlusher(input.cwd, input.session_id);
   }
   await atomicUpdateState(config.stateFilePath, (freshState) => {
@@ -16510,7 +16558,7 @@ async function main5() {
   const input = await readStdin();
   if (!isPayloadForHook(input, "PreToolUse"))
     return;
-  const config = initHook(input.cwd);
+  const config = initHook(input.cwd, { deferGit: true });
   if (!config)
     return;
   const startTime = Date.now();
@@ -16991,12 +17039,17 @@ async function main7() {
   });
   let turnRecord;
   let closedTurnRun;
+  let leaveTurnOpen = false;
   if (completeNow && currentRunId) {
     debug(`Completing Turn run ${currentRunId}`);
     turnRecord = turnRecordPath(config.stateFilePath, input.session_id, currentRunId);
-    const settled = settledTurnMetadata(turnMetadata, readTurnRecord(turnRecord));
+    const record = readTurnRecord(turnRecord);
+    const everythingIn = !record || everyChildLanded(record);
+    const settled = everythingIn ? settledTurnMetadata(turnMetadata, record) : turnMetadata;
+    leaveTurnOpen = !everythingIn && awaitsTheTurn(settled);
     try {
       closedTurnRun = await completeTurnRun({
+        leaveOpen: leaveTurnOpen,
         tracing: currentTracing,
         sessionId: input.session_id,
         runId: currentRunId,
@@ -17079,7 +17132,8 @@ async function main7() {
         run: closedTurnRun,
         tracing: currentTracing,
         origin: queueOrigin(config),
-        root: true
+        root: true,
+        closesAt: leaveTurnOpen ? (/* @__PURE__ */ new Date()).toISOString() : void 0
       });
     }
     recordTurnClosed(turnRecord, lastTurnId);
