@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
-import { LOCK_STAGING_SUFFIX } from "../constants.js";
+import { LOCK_STAGING_SUFFIX, PRIVATE_FILE_MODE } from "../constants.js";
 
 const LOCK_TIMEOUT_MS = 5_000;
 const LOCK_RETRY_MS = 20;
@@ -33,7 +33,7 @@ async function acquireLock(stateFilePath: string): Promise<void> {
   while (Date.now() < deadline) {
     try {
       // O_EXCL | O_CREAT: fails atomically if the file already exists.
-      const fd = openSync(lock, "wx");
+      const fd = openSync(lock, "wx", PRIVATE_FILE_MODE);
       closeSync(fd);
       return;
     } catch {
@@ -61,7 +61,7 @@ function claimLock(lock: string): boolean {
   // lock in that gap sees no pid and takes it for abandoned.
   const staging = `${lock}.${randomUUID()}${LOCK_STAGING_SUFFIX}`;
   try {
-    writeFileSync(staging, String(process.pid));
+    writeFileSync(staging, String(process.pid), { mode: PRIVATE_FILE_MODE });
   } catch {
     return false;
   }

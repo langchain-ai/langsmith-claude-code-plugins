@@ -14233,7 +14233,7 @@ async function acquireLock(stateFilePath) {
   mkdirSync6(dirname4(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
-      const fd = openSync2(lock, "wx");
+      const fd = openSync2(lock, "wx", PRIVATE_FILE_MODE);
       closeSync2(fd);
       return;
     } catch {
@@ -14254,7 +14254,7 @@ function releaseLock(stateFilePath) {
 function claimLock(lock) {
   const staging = `${lock}.${randomUUID3()}${LOCK_STAGING_SUFFIX}`;
   try {
-    writeFileSync4(staging, String(process.pid));
+    writeFileSync4(staging, String(process.pid), { mode: PRIVATE_FILE_MODE });
   } catch {
     return false;
   }
