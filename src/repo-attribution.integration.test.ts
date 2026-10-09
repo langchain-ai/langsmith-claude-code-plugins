@@ -81,11 +81,12 @@ async function hook(
   return stderr;
 }
 
-/** Two calls only the Stop hook traces: one reaching into the other repository, one relative to the session's own. */
-function transcript(reaching: string, editing = "seed.txt"): string {
+/** Calls only the Stop hook traces: one reaching into the other repository, one relative to the session's own. */
+function transcript(reaching: string, editing = "seed.txt", shell = false): string {
   const calls = [
     { type: "tool_use", id: "reaching", name: "Glob", input: { path: reaching } },
     { type: "tool_use", id: "relative", name: "Edit", input: { file_path: editing } },
+    ...(shell ? [{ type: "tool_use", id: "shell", name: "Bash", input: { command: "ls" } }] : []),
   ];
   const results = calls.map((c) => ({ type: "tool_result", tool_use_id: c.id, content: "ok" }));
   const at = (n: number) => `2025-01-01T00:00:0${n}Z`;
@@ -157,7 +158,7 @@ afterAll(async () => {
 });
 
 describe("a turn working across repositories", () => {
-  it("keeps every tool call on the repository the session itself resolved", async () => {
+  it("gives a tool reaching into another repository that repository", async () => {
     const session = "repo-attribution";
     const path = join(sandbox.root, `${session}.jsonl`);
     // The session starts inside the first repository and reaches into the second.
@@ -175,14 +176,27 @@ describe("a turn working across repositories", () => {
     writeFileSync(path, transcript(join(beta, "seed.txt")));
     await stop(base);
 
-    const inAlpha = {
-      repository_name: "acme/a",
-      git_branch: "trunk-a",
-      ls_attribution_identifier: "Alpha Owner",
+    const inBeta = {
+      repository_name: "acme/b",
+      git_branch: "trunk-b",
+      ls_attribution_identifier: "Beta Owner",
     };
-    for (const name of ["Read", "Glob", "Edit"]) expect(toolRun(name)).toMatchObject(inAlpha);
-    expect(JSON.stringify(posted)).not.toContain("acme/b");
-    expect(JSON.stringify(posted)).not.toContain("Beta Owner");
+    for (const name of ["Read", "Glob"]) expect(toolRun(name)).toMatchObject(inBeta);
+    expect(toolRun("Edit")).toMatchObject({ repository_name: "acme/a", git_branch: "trunk-a" });
+  }, 120_000);
+
+  it("keeps the turn's repository off a shell command that ran outside one", async () => {
+    const session = "shell-cwd";
+    const path = join(sandbox.root, `${session}.jsonl`);
+    const base = { session_id: session, transcript_path: path, cwd: sandbox.root };
+
+    await prompt(base);
+    writeFileSync(path, transcript(join(beta, "seed.txt"), join(alpha, "seed.txt"), true));
+    await stop(base);
+
+    expect(toolRun("Glob")).toMatchObject({ repository_name: "acme/b" });
+    expect(toolRun("Bash").repository_name).toBeUndefined();
+    expect(toolRun("Bash").ls_attribution_identifier).toBeUndefined();
   }, 120_000);
 
   it("fills a turn that resolved no repository from its first tool", async () => {
@@ -199,11 +213,13 @@ describe("a turn working across repositories", () => {
     const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
     expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject(inBeta);
     expect(toolRun("Glob")).toMatchObject(inBeta);
-    expect(toolRun("Edit")).toMatchObject(inBeta);
-    expect(JSON.stringify(posted)).not.toContain("acme/a");
+    expect(toolRun("Edit")).toMatchObject({
+      repository_name: "acme/a",
+      ls_attribution_identifier: "Alpha Owner",
+    });
   }, 120_000);
 
-  it("sends nothing from a home folder that is a repository of its own", async () => {
+  it("names the home folder's own repository once a tool reads a file there", async () => {
     const session = "private-home";
     const path = join(sandbox.root, `${session}.jsonl`);
     const base = { session_id: session, transcript_path: path, cwd: alpha };
@@ -221,17 +237,12 @@ describe("a turn working across repositories", () => {
       },
       home,
     );
-    writeFileSync(path, transcript(join(home, "seed.txt")));
-    await stop(base, home);
 
-    const wire = JSON.stringify(posted);
-    expect(posted.length).toBeGreaterThan(0);
-    for (const secret of ["private/dotfiles", "trunk-home", "Private Person"]) {
-      expect(wire).not.toContain(secret);
-    }
-    for (const name of ["Read", "Glob", "Edit"]) {
-      expect(toolRun(name)).toMatchObject({ repository_name: "acme/a", git_branch: "trunk-a" });
-    }
+    expect(toolRun("Read")).toMatchObject({
+      repository_name: "private/dotfiles",
+      git_branch: "trunk-home",
+      ls_attribution_identifier: "Private Person",
+    });
   }, 120_000);
 
   it("labels a turn with the GitHub login when no git name is set", async () => {

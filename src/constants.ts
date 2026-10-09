@@ -33,6 +33,14 @@ const NOT_A_REPOSITORY = /not a git repository \(or any of the parent directorie
 
 const TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"] as const;
 
+const GIT_DIRECTORY_NAME = ".git";
+
+const GIT_MARKERS = {
+  REPOSITORY_ROOT: "repository root",
+  ONLY_GIT_CAN_SAY: "only git can say",
+  NOTHING_HERE: "nothing here",
+} as const;
+
 const TURN_REPOSITORY_KEYS = [
   "repository_name",
   "repository_provider",
@@ -72,7 +80,8 @@ export {
   GIT_LOCATION_ENV_KEYS,
   NOT_A_REPOSITORY,
   TOOL_PATH_INPUT_KEYS,
-  TURN_REPOSITORY_KEYS,
+  GIT_DIRECTORY_NAME,
+  GIT_MARKERS,
   REPOSITORY_METADATA_KEYS,
   PINNED_REPOSITORY_KEYS,
   NO_PINNED_KEYS,

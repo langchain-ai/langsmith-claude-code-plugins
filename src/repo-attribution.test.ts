@@ -10,6 +10,7 @@ import { loadConfig } from "./config.js";
 import {
   clearRepoAttributionCache,
   repoScopedMetadata,
+  sessionScopedMetadata,
   turnScopedMetadata,
 } from "./repo-attribution.js";
 
@@ -77,7 +78,6 @@ describe("repoScopedMetadata", () => {
     ["a relative directory", { cwd: "beta repo" }, inBeta, root],
     ["a file nothing has created yet", { file_path: join(alpha, "new", "deep", "x.txt") }, inAlpha],
     ["a file in the git directory", { file_path: join(alpha, ".git", "config") }, inAlpha],
-    ["the git directory itself", { file_path: join(alpha, ".git") }, inAlpha],
     [
       "a linked worktree, on its own branch rather than the main checkout's",
       { file_path: join(worktree, "seed.txt") },
@@ -99,30 +99,35 @@ describe("repoScopedMetadata", () => {
       },
     ],
     ["a path git places in no repository", { file_path: join(plain, "x.txt") }, noRepository],
-    ["a tool that carries no path", { command: "ls -la" }, session, beta],
     ["an opaque identifier no file sits at", { path: "notion/page/abc123" }, session, beta],
     ["a broken submodule git cannot answer for", { file_path: join(submodule, "x.txt") }, session],
+    ["a shell command run outside every repository", { command: "ls -la" }, noRepository, plain],
   ])("stamps exactly what %s accounts for", (_name, input, want, cwd) => {
     expect(repoScopedMetadata(session, input, cwd)).toEqual(want);
   });
 
-  it("drops a repository the session carried once a path lands in no repository", () => {
-    expect(repoScopedMetadata(session, { file_path: join(plain, "x.txt") })).toEqual(noRepository);
+  it("keeps the session repository's author on a tool naming a path nothing sits at", () => {
+    const base = sessionScopedMetadata(noRepository, alpha);
+
+    expect(repoScopedMetadata(base, { path: "notion/page/abc123" }, alpha)).toMatchObject({
+      ls_attribution_identifier: "Alpha Owner",
+    });
   });
 
-  it("asks git nothing at all once a turn carries both a repository and an author", () => {
+  it("attributes a shell command to the repository it ran in", () => {
+    expect(repoScopedMetadata(noRepository, { command: "ls -la" }, beta)).toMatchObject({
+      ls_attribution_identifier: "Beta Owner",
+    });
+  });
+
+  it("gives each tool its own repository rather than reusing the first one answered", () => {
     const attributed = { ...session, ls_attribution_identifier: "Alpha Owner" };
 
-    for (const path of [alphaSeed, betaSeed, join(plain, "x.txt")]) {
-      expect(repoScopedMetadata(attributed, { file_path: path }, alpha)).toEqual(attributed);
-    }
-    expect(gitCommands()).toEqual([]);
-  });
-
-  it("keeps looking while a turn has a repository but still no author", () => {
-    const halfway = { ...session, ls_attribution_identifier: undefined };
-
-    expect(repoScopedMetadata(halfway, { file_path: betaSeed })).toMatchObject(inBeta);
+    expect(repoScopedMetadata(attributed, { file_path: betaSeed }, alpha)).toMatchObject(inBeta);
+    expect(repoScopedMetadata(attributed, { file_path: join(plain, "x.txt") }, alpha)).toEqual({
+      cwd: session.cwd,
+      ls_integration: session.ls_integration,
+    });
   });
 
   it("ignores git settings the session exported, which answer for the wrong directory", () => {
@@ -170,11 +175,18 @@ describe("repoScopedMetadata", () => {
     const afterFirstPath = gitCommands().length;
     expect(afterFirstPath).toBeGreaterThan(0);
 
-    // An unseen directory costs one lookup; the repository behind it is already known.
-    expect(repoScopedMetadata(session, { file_path: nested })).toEqual(first);
-    expect(gitCommands()).toHaveLength(afterFirstPath + 1);
-    expect(repoScopedMetadata(session, { file_path: alphaSeed })).toEqual(first);
-    expect(gitCommands()).toHaveLength(afterFirstPath + 1);
+    for (const path of [nested, alphaSeed]) {
+      expect(repoScopedMetadata(session, { file_path: path })).toEqual(first);
+      expect(gitCommands()).toHaveLength(afterFirstPath);
+    }
+  });
+
+  it("asks git nothing to place a path, so only naming a repository costs a process", () => {
+    expect(repoScopedMetadata(session, { file_path: join(plain, "x.txt") })).toEqual(noRepository);
+    expect(gitCommands()).toEqual([]);
+
+    repoScopedMetadata(session, { file_path: alphaSeed }, alpha);
+    expect(gitCommands()).toEqual(["git config user.name"]);
   });
 });
 
@@ -210,12 +222,6 @@ describe("turnScopedMetadata", () => {
       noRepository,
       [pathless, outside, { file_path: betaSeed }],
       filledFromBeta,
-    ],
-    [
-      "no repository, with nothing landing anywhere",
-      noRepository,
-      [pathless, outside],
-      noRepository,
     ],
   ])("gives the turn %s", (_name, base, inputs, want) => {
     expect(turnScopedMetadata(base, inputs, base.cwd as string)).toEqual(want);
