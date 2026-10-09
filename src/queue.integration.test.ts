@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 import { QUEUE_FILE_SUFFIX } from "./constants.js";
 import {
   ageOldestRecord,
-  ageOldestRun,
   ageQueueDir,
   appendTurnToTranscript,
   entryFiles,
@@ -16,6 +15,7 @@ import {
   queueDirFor,
   queueRoot,
   queued,
+  queueRunByHand,
   startTurn,
   stopTurn,
   toolCall,
@@ -45,15 +45,10 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // the ordering the old one-hook-at-a-time upload gave for free.
   it("uploads several queued tool calls in the order they ran", async () => {
     await startTurn();
+    // A service that answers slowly makes the later calls queue behind the first upload.
+    uploads.delayMs = 50;
     for (let index = 0; index < 5; index++) await toolCall(index);
-
-    expect(queued().map((entry) => entry.run.name)).toEqual([
-      "Tool0",
-      "Tool1",
-      "Tool2",
-      "Tool3",
-      "Tool4",
-    ]);
+    uploads.delayMs = 0;
 
     await stopTurn();
     expect(await waitFor(() => uploads.received.length >= 5)).toBe(true);
@@ -64,14 +59,12 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // silently because nothing is left to notice a detached failure.
   it("keeps a run whose upload failed and uploads it on the next flush", async () => {
     await startTurn();
-    await toolCall(0);
-
     uploads.fail = true;
-    await stopTurn();
+    await toolCall(0);
     expect(
       await waitFor(() => {
         const entries = queued();
-        return entries.length === 1 && entries[0].attempts === 1;
+        return entries.length === 1 && entries[0].attempts >= 1;
       }),
     ).toBe(true);
     expect(uploads.received).toEqual([]);
@@ -116,7 +109,11 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // session elsewhere, which is how two uploaders end up on one folder.
   it("leaves another session's recent folder completely alone", async () => {
     await startTurn();
+    // The service is briefly down, so this session's own run has to stay on disk.
+    uploads.fail = true;
     await toolCall(0);
+    expect(await waitFor(() => (queued("s1")[0]?.attempts ?? 0) >= 1)).toBe(true);
+    uploads.fail = false;
     await newSession("s2");
     await toolCall(1, "s2");
 
@@ -157,9 +154,17 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // and lets one delete the entry the other is still working on.
   it("lets only one of two flushers drain the same old folder", async () => {
     await startTurn();
-    for (let index = 0; index < 6; index++) await toolCall(index);
-
+    // One real call, for the account fingerprint; the rest go straight to disk so no
+    // uploader of this session's own is ever running while the folder is aged.
+    uploads.fail = true;
+    await toolCall(0);
+    expect(await waitFor(() => (queued("s1")[0]?.attempts ?? 0) >= 1)).toBe(true);
+    const { origin } = queued("s1")[0];
+    for (let index = 1; index < 6; index++) {
+      queueRunByHand(`Tool${index}`, { origin, queuedAgoMs: 60_000 - index });
+    }
     ageOldestRecord("s1", 3 * 60 * 60 * 1000);
+    uploads.fail = false;
 
     await Promise.all([stopTurn("s2"), stopTurn("s3")]);
 
@@ -225,20 +230,12 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches an account check that reads one record and then uploads the rest anyway, which
   // sends a run to the wrong workspace, and a held-back run going unmentioned in the log.
   it("uploads only the records queued for the account doing the flushing", async () => {
-    const otherAccount = { CC_LANGSMITH_API_KEY: "other-key", LANGSMITH_API_KEY: "other-key" };
     await startTurn();
+    uploads.fail = true;
     await toolCall(0);
-    await hook(
-      "PostToolUse",
-      {
-        hook_event_name: "PostToolUse",
-        tool_name: "Tool1",
-        tool_use_id: "t1",
-        tool_input: {},
-        tool_response: {},
-      },
-      otherAccount,
-    );
+    expect(await waitFor(() => (queued()[0]?.attempts ?? 0) >= 1)).toBe(true);
+    uploads.fail = false;
+    queueRunByHand("Tool1");
 
     await stopTurn();
     expect(await waitFor(() => uploads.received.includes("Tool0"))).toBe(true);
@@ -252,21 +249,9 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches a run for an account nobody has sitting in front of the queue for good, which
   // strands every run behind it. No other test puts a run too old to accept out of reach.
   it("drops a run for another account once it is too old to accept", async () => {
-    const otherAccount = { CC_LANGSMITH_API_KEY: "other-key", LANGSMITH_API_KEY: "other-key" };
     await startTurn();
-    await hook(
-      "PostToolUse",
-      {
-        hook_event_name: "PostToolUse",
-        tool_name: "Tool0",
-        tool_use_id: "t0",
-        tool_input: {},
-        tool_response: {},
-      },
-      otherAccount,
-    );
+    queueRunByHand("Tool0", { queuedAgoMs: 1000, startedAgoMs: 2 * 24 * 60 * 60 * 1000 });
     await toolCall(1);
-    ageOldestRun(2 * 24 * 60 * 60 * 1000);
 
     await stopTurn();
     expect(await waitFor(() => uploads.received.includes("Tool1"))).toBe(true);
@@ -276,19 +261,8 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches an uploader that re-reads the run it cannot send instead of standing down,
   // which spins forever holding the lock and stops that folder uploading ever again.
   it("stands down and releases the lock when the next run is not its own", async () => {
-    const otherAccount = { CC_LANGSMITH_API_KEY: "other-key", LANGSMITH_API_KEY: "other-key" };
     await startTurn();
-    await hook(
-      "PostToolUse",
-      {
-        hook_event_name: "PostToolUse",
-        tool_name: "Tool0",
-        tool_use_id: "t0",
-        tool_input: {},
-        tool_response: {},
-      },
-      otherAccount,
-    );
+    queueRunByHand("Tool0", { queuedAgoMs: 1000 });
     await toolCall(1);
 
     await stopTurn();
@@ -300,12 +274,15 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // every run batched with it down too.
   it("drops a run too old to accept and uploads the ones queued around it", async () => {
     await startTurn();
+    uploads.fail = true;
     for (let index = 0; index < 3; index++) await toolCall(index);
+    expect(await waitFor(() => (queued()[0]?.attempts ?? 0) >= 1)).toBe(true);
 
     const middle = entryFiles()[1];
     const entry = JSON.parse(readFileSync(middle, "utf8"));
     entry.run.start_time = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
     writeFileSync(middle, JSON.stringify(entry));
+    uploads.fail = false;
 
     await stopTurn();
     expect(await waitFor(() => uploads.received.length >= 2)).toBe(true);

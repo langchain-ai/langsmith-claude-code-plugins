@@ -544,41 +544,40 @@ export interface TurnRunIdentity {
 async function patchTurnRun(
   id: TurnRunIdentity,
   result: { lastAssistantMessage?: string } | { error: string },
-): Promise<void> {
+): Promise<Record<string, unknown>> {
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized — call initTracing() first");
 
-  const runTree = createRunTree(
-    {
-      client,
-      replicas,
-      name: USER_PROMPT_TURN_NAME,
-      run_type: "chain",
-      project_name: id.project,
-      id: id.runId,
-      trace_id: id.traceId,
-      dotted_order: id.dottedOrder,
-      parent_run_id: id.parentRunId,
-      start_time: id.startTime,
-      end_time: new Date().toISOString(),
-      ...("error" in result
-        ? { error: result.error }
-        : { outputs: { messages: [{ role: "assistant", content: result.lastAssistantMessage }] } }),
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId: id.sessionId,
-          base: id.customMetadata,
-          turnId: id.turnId,
-          turnNumber: id.turnNumber,
-          runtimeVersion: id.runtimeVersion,
-          approvalPolicy: id.approvalPolicy,
-          agentType: "root",
-        }),
-      },
+  const config = {
+    client,
+    replicas,
+    name: USER_PROMPT_TURN_NAME,
+    run_type: "chain",
+    project_name: id.project,
+    id: id.runId,
+    trace_id: id.traceId,
+    dotted_order: id.dottedOrder,
+    parent_run_id: id.parentRunId,
+    start_time: id.startTime,
+    end_time: new Date().toISOString(),
+    ...("error" in result
+      ? { error: result.error }
+      : { outputs: { messages: [{ role: "assistant", content: result.lastAssistantMessage }] } }),
+    extra: {
+      metadata: codingAgentMetadata({
+        sessionId: id.sessionId,
+        base: id.customMetadata,
+        turnId: id.turnId,
+        turnNumber: id.turnNumber,
+        runtimeVersion: id.runtimeVersion,
+        approvalPolicy: id.approvalPolicy,
+        agentType: "root",
+      }),
     },
-    id.tracing,
-  );
+  };
+  const runTree = createRunTree(config, id.tracing);
   await runTree.patchRun({ excludeInputs: true });
+  return config as unknown as Record<string, unknown>;
 }
 
 /** Build a TurnRunIdentity from a stored OpenTurn (deferred / awaiting-subagent turn). */
@@ -625,8 +624,8 @@ export async function completeTurnRun(options: {
   turnNumber?: number;
   runtimeVersion?: string;
   approvalPolicy?: string;
-}): Promise<void> {
-  await patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
+}): Promise<Record<string, unknown>> {
+  return patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
 }
 
 /** Force-close a turn's root run with an error/status (e.g. session ended). */

@@ -114,6 +114,18 @@ const STATE_FILE_DEFAULT = [".claude", "state", "langsmith_state.json"];
 const GH_LOGIN_MARKER_FILE = "langsmith_gh_login.json";
 
 const GH_LOGIN_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
+const TURN_RECORD_DIR_NAME = "langsmith_turns";
+const TURN_RECORD_SUFFIX = ".turn.jsonl";
+
+const TURN_RECORD_MAX_BYTES = 8 * 1024 * 1024;
+
+const RECORDED_RUN_FALLBACK_TYPE = "tool";
+
+const TURN_RECORD_LINE = {
+  run: "run",
+  closed: "closed",
+  delivered: "ok",
+} as const;
 
 export {
   USER_PROMPT_TURN_NAME,
@@ -126,6 +138,11 @@ export {
   GIT_DIRECTORY_NAME,
   GIT_MARKERS,
   REPOSITORY_METADATA_KEYS,
+  TURN_RECORD_DIR_NAME,
+  TURN_RECORD_SUFFIX,
+  TURN_RECORD_MAX_BYTES,
+  TURN_RECORD_LINE,
+  RECORDED_RUN_FALLBACK_TYPE,
   PINNED_REPOSITORY_KEYS,
   NO_PINNED_KEYS,
   GH_LOGIN_COMMAND,

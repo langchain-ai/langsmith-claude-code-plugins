@@ -3,8 +3,10 @@
  * the hook invocations that fill and drain a queue inside them.
  */
 
+import { randomUUID } from "node:crypto";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -35,6 +37,12 @@ export const uploads = {
   },
   set fail(value: boolean) {
     service.fail = value;
+  },
+  get delayMs(): number {
+    return service.delayMs;
+  },
+  set delayMs(value: number) {
+    service.delayMs = value;
   },
 };
 
@@ -103,14 +111,6 @@ export function ageOldestRecord(sessionId: string, ms: number) {
 /** The hook log for the sandbox home, which is where a warning about a dropped run lands. */
 export const hookLog = () => readLog(join(home, "hook.log"));
 
-/** Backdates the oldest record's run so the queue reads it as started `ms` ago. */
-export function ageOldestRun(ms: number, sessionId = "s1") {
-  const oldest = entryFiles(sessionId)[0];
-  const entry = JSON.parse(readFileSync(oldest, "utf8"));
-  entry.run.start_time = new Date(Date.now() - ms).toISOString();
-  writeFileSync(oldest, JSON.stringify(entry));
-}
-
 export function hook(
   event: string,
   payload: Record<string, unknown>,
@@ -168,8 +168,52 @@ export function entryFiles(sessionId = "s1"): string[] {
     .map((name) => join(dir, name));
 }
 
-export function queued(sessionId = "s1"): Array<{ attempts: number; run: { name: string } }> {
+export function queued(
+  sessionId = "s1",
+): Array<{ attempts: number; origin: string; run: { name: string } }> {
   return entryFiles(sessionId).map((path) => JSON.parse(readFileSync(path, "utf8")));
+}
+
+/** A record written straight to disk, so no hook runs and no uploader is started for it. */
+export function queueRunByHand(
+  name: string,
+  options: {
+    sessionId?: string;
+    queuedAgoMs?: number;
+    startedAgoMs?: number;
+    origin?: string;
+  } = {},
+): string {
+  const {
+    sessionId = "s1",
+    queuedAgoMs = 0,
+    startedAgoMs = 0,
+    origin = "another-account",
+  } = options;
+  const dir = queueDirFor(sessionId);
+  mkdirSync(dir, { recursive: true });
+  const queuedAt = Date.now() - queuedAgoMs;
+  const queueId = `${String(queuedAt).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID()}`;
+  const path = join(dir, `${queueId}${QUEUE_FILE_SUFFIX}`);
+  writeFileSync(
+    path,
+    JSON.stringify({
+      tracing: "full",
+      attempts: 0,
+      origin,
+      run: {
+        id: randomUUID(),
+        name,
+        run_type: "tool",
+        project_name: "queue-test",
+        start_time: new Date(Date.now() - startedAgoMs).toISOString(),
+        end_time: new Date().toISOString(),
+        trace_id: randomUUID(),
+        dotted_order: "20250101T000000000000Z00000000-0000-0000-0000-000000000000",
+      },
+    }),
+  );
+  return path;
 }
 
 export { waitFor } from "./wait-for.js";

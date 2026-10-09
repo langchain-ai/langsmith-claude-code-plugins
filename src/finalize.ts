@@ -13,6 +13,7 @@
  */
 
 import { resolveTurnTracingMode } from "./tracing-mode.js";
+import { closeTurnRecord } from "./turn-record.js";
 import {
   closeAgentToolRun,
   completeTurnRun,
@@ -130,6 +131,12 @@ export async function finalizeNotificationChain(opts: {
 
     // 3) Complete the launching turn's root run if it fully drained.
     if (toComplete) {
+      closeTurnRecord({
+        stateFilePath,
+        sessionId,
+        turnRunId: toComplete.run_id,
+        turnId: toComplete.turn_id,
+      });
       try {
         await completeTurnRun({
           ...turnIdentityFromOpenTurn(toComplete, { sessionId, project, customMetadata }),

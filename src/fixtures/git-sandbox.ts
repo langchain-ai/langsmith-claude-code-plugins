@@ -46,6 +46,7 @@ export function createGitSandbox(prefix: string) {
     git,
     makeDir,
     makeRepo,
-    remove: () => rmSync(root, { recursive: true, force: true }),
+    // A detached uploader may still be writing here, so give the removal a few tries.
+    remove: () => rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 150 }),
   };
 }

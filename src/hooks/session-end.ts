@@ -21,6 +21,8 @@ import {
 } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
+import { closeTurnRecord } from "../turn-record.js";
+import { startQueueFlusher } from "../utils/detach.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { readRuntimeVersion } from "../transcript.js";
@@ -86,6 +88,11 @@ export async function main(): Promise<void> {
 
   // Close the active turn if it was interrupted (Stop never fired for it).
   if (sessionState.current_turn_run_id) {
+    closeTurnRecord({
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      turnRunId: sessionState.current_turn_run_id,
+    });
     debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
     try {
       const res = await closeInterruptedTurn({
@@ -148,6 +155,12 @@ export async function main(): Promise<void> {
   // turn was interrupted before completing) is closed with an error.
   for (const [turnRunId, entry] of Object.entries(openTurns)) {
     if (turnRunId === sessionState.current_turn_run_id) continue; // closed above
+    closeTurnRecord({
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      turnRunId,
+      turnId: entry.turn_id,
+    });
     try {
       if (entry.stop_seen) {
         await completeTurnRun({
@@ -184,6 +197,8 @@ export async function main(): Promise<void> {
   // flush themselves) before the hook process exits, or the SDK's batch timer may
   // not fire and the cleanup runs we just closed would never reach LangSmith.
   await flushPendingTraces();
+
+  startQueueFlusher(input.cwd, input.session_id);
 
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);
