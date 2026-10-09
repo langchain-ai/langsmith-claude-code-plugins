@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createGitSandbox } from "./fixtures/git-sandbox.js";
-import { USER_PROMPT_TURN_NAME } from "./constants.js";
+import { QUEUE_DIR_NAME, QUEUE_FILE_SUFFIX, USER_PROMPT_TURN_NAME } from "./constants.js";
 
 // Claude Code runs the built bundle, so drive that, one real process per hook.
 const bundle = fileURLToPath(new URL("../bundle/dispatch.js", import.meta.url));
@@ -111,6 +111,19 @@ function transcript(reaching: string, editing = "seed.txt", shell = false): stri
 
 function toolRun(name: string): Record<string, unknown> {
   const runs = posted.filter((run) => run.name === name);
+  expect(runs, `exactly one ${name} run`).toHaveLength(1);
+  return runs[0].extra?.metadata ?? {};
+}
+
+/** A tool hook saves its run for the uploader, so look wherever that run has got to. */
+function savedToolRun(session: string, name: string): Record<string, unknown> {
+  const dir = join(sandbox.root, QUEUE_DIR_NAME, session);
+  const waiting: Run[] = existsSync(dir)
+    ? readdirSync(dir)
+        .filter((entry) => entry.endsWith(QUEUE_FILE_SUFFIX))
+        .map((entry) => JSON.parse(readFileSync(join(dir, entry), "utf-8")).run as Run)
+    : [];
+  const runs = [...waiting, ...posted].filter((run) => run.name === name);
   expect(runs, `exactly one ${name} run`).toHaveLength(1);
   return runs[0].extra?.metadata ?? {};
 }
@@ -238,7 +251,7 @@ describe("a turn working across repositories", () => {
       home,
     );
 
-    expect(toolRun("Read")).toMatchObject({
+    expect(savedToolRun(session, "Read")).toMatchObject({
       repository_name: "private/dotfiles",
       git_branch: "trunk-home",
       ls_attribution_identifier: "Private Person",

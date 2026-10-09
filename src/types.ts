@@ -334,6 +334,28 @@ export interface TracingState {
   [sessionId: string]: SessionState;
 }
 
+// ─── Upload queue ───────────────────────────────────────────────────────────
+
+/** Everything an upload depends on beyond the run itself, which decides where it may be sent. */
+export interface QueueDestination {
+  apiBaseUrl: string;
+  apiKey: string;
+  replicas?: unknown;
+  redact?: boolean;
+  redactExtraRules?: unknown;
+}
+
+/** One finished run waiting to be uploaded, written by a hook that did not wait. */
+export interface QueuedRun {
+  queue_id: string;
+  tracing: TracingMode;
+  attempts: number;
+  /** Which LangSmith account this was queued for, so no stranger uploads it to their own. */
+  origin: string;
+  /** A RunTree config without `client` or `replicas`, which the flusher supplies. */
+  run: Record<string, unknown>;
+}
+
 // ─── Standalone Binary ──────────────────────────────────────────────────────
 
 export interface HookCommand {
@@ -354,4 +376,13 @@ export interface SettingsFile {
 
 export interface GhLoginMarker {
   failed: string;
+}
+
+// ─── Test Fixtures ──────────────────────────────────────────────────────────
+
+export type FakeRunVerdict = { status: number; body?: string } | "ignore" | undefined;
+
+export interface FakeLangSmithRules {
+  rejects?(body: string): boolean;
+  rejectsRun?(wire: { action: "post" | "patch"; run: Record<string, any> }): FakeRunVerdict;
 }

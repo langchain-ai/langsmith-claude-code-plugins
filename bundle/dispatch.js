@@ -64,15 +64,15 @@ var require_eventemitter3 = __commonJS({
       this._eventsCount = 0;
     }
     EventEmitter.prototype.eventNames = function eventNames() {
-      var names = [], events, name;
-      if (this._eventsCount === 0) return names;
+      var names2 = [], events, name;
+      if (this._eventsCount === 0) return names2;
       for (name in events = this._events) {
-        if (has2.call(events, name)) names.push(prefix ? name.slice(1) : name);
+        if (has2.call(events, name)) names2.push(prefix ? name.slice(1) : name);
       }
       if (Object.getOwnPropertySymbols) {
-        return names.concat(Object.getOwnPropertySymbols(events));
+        return names2.concat(Object.getOwnPropertySymbols(events));
       }
-      return names;
+      return names2;
     };
     EventEmitter.prototype.listeners = function listeners(event2) {
       var evt = prefix ? prefix + event2 : event2, handlers = this._events[evt];
@@ -901,6 +901,22 @@ var TURN_REPOSITORY_KEYS = [
 var REPOSITORY_METADATA_KEYS = [...TURN_REPOSITORY_KEYS, "ls_attribution_identifier"];
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
 var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
+var QUEUE_DIR_NAME = "langsmith_queue";
+var QUEUE_FILE_SUFFIX = ".queue.json";
+var QUEUE_SESSION_UNSAFE_CHARS = /[^\w.-]/g;
+var QUEUE_TEMP_SUFFIX = ".queue.tmp";
+var STATE_TEMP_SUFFIX = ".state.tmp";
+var LOCK_STAGING_SUFFIX = ".lock.staging";
+var PRIVATE_DIR_MODE = 448;
+var PRIVATE_FILE_MODE = 384;
+var QUEUE_ORIGIN_LENGTH = 12;
+var QUEUE_ID_TIME_WIDTH = 16;
+var QUEUE_MAX_ENTRIES = 500;
+var QUEUE_MAX_ATTEMPTS = 5;
+var QUEUE_RUN_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
+var FOREIGN_QUEUE_MIN_RECORD_AGE_MS = 2 * 60 * 60 * 1e3;
+var EMPTY_QUEUE_MIN_IDLE_MS = 2 * 60 * 60 * 1e3;
+var FLUSH_QUEUE_ARG = "--flush-queue";
 var GH_LOGIN_COMMAND = "gh";
 var GH_LOGIN_ARGUMENTS = ["api", "user", "--jq", ".login"];
 var GH_LOGIN_TIMEOUT_MS = 5e3;
@@ -1245,149 +1261,14 @@ function loadConfig(options) {
 }
 
 // dist/src/utils/hook-entry.js
-function runHookEntry(event2, main10) {
-  main10().catch((err) => {
+function runHookEntry(event2, main11) {
+  main11().catch((err) => {
     try {
       error(`${event2} hook fatal error: ${err}`);
     } catch {
     }
     process.exit(0);
   });
-}
-
-// dist/src/tracing-policy.js
-import { randomUUID } from "node:crypto";
-import { lstatSync as lstatSync2, readFileSync as readFileSync4 } from "node:fs";
-import { mkdir, open, rename, rmdir, unlink } from "node:fs/promises";
-import { dirname as dirname3 } from "node:path";
-import { performance as performance2 } from "node:perf_hooks";
-import { setTimeout as delay } from "node:timers/promises";
-function isMode(value) {
-  return value === "full" || value === "metadata";
-}
-function isObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function hasCode(error2, code) {
-  return isObject(error2) && error2.code === code;
-}
-function readPolicy(path3) {
-  let raw;
-  try {
-    raw = readFileSync4(path3, "utf8");
-  } catch (error2) {
-    if (hasCode(error2, "ENOENT")) {
-      try {
-        lstatSync2(path3);
-      } catch (statError) {
-        if (hasCode(statError, "ENOENT"))
-          return { threads: {} };
-        throw statError;
-      }
-    }
-    throw error2;
-  }
-  const value = JSON.parse(raw);
-  if (!isObject(value) || !isObject(value.threads) || Object.values(value.threads).some((mode) => !isMode(mode)) || Object.keys(value).some((key) => key !== "threads")) {
-    throw new Error("Invalid tracing preference format");
-  }
-  return value;
-}
-function tracingPolicyPath(stateFilePath) {
-  return `${stateFilePath.replace(/\.json$/, "")}.privacy.json`;
-}
-function getThreadTracingMode(stateFilePath, sessionId, defaultMuted = false) {
-  try {
-    const policy = readPolicy(tracingPolicyPath(stateFilePath));
-    if (Object.hasOwn(policy.threads, sessionId))
-      return policy.threads[sessionId];
-    return defaultMuted ? "metadata" : "full";
-  } catch {
-    return "metadata";
-  }
-}
-function parseTracingCommand(prompt) {
-  if (prompt === "/langsmith-tracing:mute")
-    return "mute";
-  if (prompt === "/langsmith-tracing:unmute")
-    return "unmute";
-  if (prompt === "/langsmith-tracing:trace")
-    return "trace";
-  return void 0;
-}
-async function setThreadTracingMode(stateFilePath, sessionId, mode) {
-  if (typeof sessionId !== "string" || !sessionId || !isMode(mode)) {
-    throw new Error("A nonempty session ID and a full/metadata tracing mode are required");
-  }
-  const path3 = tracingPolicyPath(stateFilePath);
-  const lockPath2 = `${path3}.lock`;
-  await mkdir(dirname3(path3), { recursive: true });
-  const deadline = performance2.now() + 2e3;
-  let locked = false;
-  while (!locked) {
-    try {
-      await mkdir(lockPath2, { mode: 448 });
-      locked = true;
-    } catch (error2) {
-      if (!hasCode(error2, "EEXIST"))
-        throw error2;
-      if (performance2.now() >= deadline) {
-        throw new Error(`Timed out waiting for tracing preference lock ${lockPath2}. Retry; if it persists, remove the lock only after confirming no preference writer is running.`);
-      }
-      await delay(10 + Math.random() * 20);
-    }
-  }
-  const warnings = [];
-  async function bestEffort(action, message) {
-    try {
-      await action();
-    } catch (error2) {
-      warnings.push(`${message}: ${error2 instanceof Error ? error2.message : String(error2)}`);
-    }
-  }
-  let tempPath;
-  try {
-    let policy;
-    try {
-      policy = readPolicy(path3);
-    } catch (error2) {
-      throw new Error(`Cannot read tracing preferences at ${path3}. Refusing to overwrite them; repair the file or its permissions before retrying. No preferences were changed.`, { cause: error2 });
-    }
-    policy.threads = { ...policy.threads, [sessionId]: mode };
-    tempPath = `${path3}.${process.pid}.${randomUUID()}.tmp`;
-    const temp = await open(tempPath, "wx", 384);
-    try {
-      await temp.writeFile(`${JSON.stringify(policy)}
-`, "utf8");
-      await temp.sync();
-    } catch (error2) {
-      await bestEffort(() => temp.close(), "Temporary file close failed");
-      throw error2;
-    }
-    await temp.close();
-    await rename(tempPath, path3);
-    tempPath = void 0;
-    await bestEffort(async () => {
-      const directory = await open(dirname3(path3), "r");
-      try {
-        await directory.sync();
-      } finally {
-        await bestEffort(() => directory.close(), "Directory close cleanup failed");
-      }
-    }, "Preference is effective, but crash durability could not be confirmed; retry saving");
-  } finally {
-    if (tempPath) {
-      await bestEffort(() => unlink(tempPath), "Temporary file cleanup failed");
-    }
-    await bestEffort(() => rmdir(lockPath2), `Preference lock cleanup failed at ${lockPath2}. Before retrying, remove the lock only after confirming no preference writer is running`);
-  }
-  return warnings.length ? { warning: warnings.join("; ") } : {};
-}
-
-// dist/src/tracing-mode.js
-function resolveTurnTracingMode(config, sessionId, ...snapshots) {
-  const { stateFilePath, defaultMuted } = typeof config === "string" ? { stateFilePath: config } : config;
-  return snapshots.find((mode) => mode !== void 0) ?? getThreadTracingMode(stateFilePath, sessionId, defaultMuted);
 }
 
 // node_modules/.pnpm/langsmith@0.10.5/node_modules/langsmith/dist/utils/uuid/src/regex.js
@@ -6143,7 +6024,7 @@ import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 var path2 = nodePath;
-async function mkdir3(dir) {
+async function mkdir2(dir) {
   await nodeFsPromises.mkdir(dir, { recursive: true });
 }
 async function writeFileAtomic(filePath, content) {
@@ -6175,7 +6056,7 @@ function renameSync4(oldPath, newPath) {
 function unlinkSync2(filePath) {
   nodeFs.unlinkSync(filePath);
 }
-function readFileSync6(filePath) {
+function readFileSync5(filePath) {
   return nodeFs.readFileSync(filePath, "utf-8");
 }
 async function mkdirExclusive(dir) {
@@ -6383,7 +6264,7 @@ var PromptCache = class {
     }
     let entries;
     try {
-      const content = readFileSync6(filePath);
+      const content = readFileSync5(filePath);
       const data = JSON.parse(content);
       entries = data.entries ?? null;
     } catch {
@@ -6503,7 +6384,7 @@ function isEEXIST(err) {
 }
 function lockMetadataLines(lockDir) {
   try {
-    return readFileSync6(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
+    return readFileSync5(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
   } catch {
     return void 0;
   }
@@ -6537,7 +6418,7 @@ async function acquireOAuthRefreshLock(configPath, deadline) {
   const lockDir = `${configPath}.oauth.lock.lock`;
   const parent = path2.dirname(lockDir);
   if (parent) {
-    await mkdir3(parent);
+    await mkdir2(parent);
   }
   const owner = globalThis.crypto.randomUUID();
   for (; ; ) {
@@ -6618,7 +6499,7 @@ function loadProfileState() {
     return void 0;
   }
   try {
-    const config = JSON.parse(readFileSync6(configPath));
+    const config = JSON.parse(readFileSync5(configPath));
     const profileName = resolveProfileName(config);
     const profile = profileName ? config.profiles?.[profileName] : void 0;
     if (!profileName || !profile) {
@@ -6848,7 +6729,7 @@ var ProfileAuth = class {
   }
   reloadProfile() {
     try {
-      const config = JSON.parse(readFileSync6(this.state.configPath));
+      const config = JSON.parse(readFileSync5(this.state.configPath));
       const profile = config.profiles?.[this.state.profileName];
       if (!profile) {
         return void 0;
@@ -8350,19 +8231,19 @@ var Client = class _Client {
    * authenticate (see `hasExplicitAuthHeader`), so those must survive.
    */
   get _sdkControlledHeaders() {
-    const names = /* @__PURE__ */ new Set();
+    const names2 = /* @__PURE__ */ new Set();
     if (this.apiKey !== void 0) {
-      names.add("x-api-key");
+      names2.add("x-api-key");
     } else {
       const profileAuthHeader = this.profileAuth?.currentAuthHeader();
       if (profileAuthHeader) {
-        names.add(profileAuthHeader.name.toLowerCase());
+        names2.add(profileAuthHeader.name.toLowerCase());
       }
     }
     if (this.workspaceId) {
-      names.add("x-tenant-id");
+      names2.add("x-tenant-id");
     }
-    return names;
+    return names2;
   }
   /**
    * Headers supplied by the caller, through either `config.headers` or
@@ -8775,7 +8656,7 @@ var Client = class _Client {
       const filename = `trace_${Date.now()}_${v4_default().slice(0, 8)}.json`;
       const filepath = path2.join(directory, filename);
       if (!_Client._fallbackDirsCreated.has(directory)) {
-        await mkdir3(directory);
+        await mkdir2(directory);
         _Client._fallbackDirsCreated.add(directory);
       }
       if (maxBytes !== void 0 && maxBytes > 0) {
@@ -13959,418 +13840,66 @@ function createSecretAnonymizer(options) {
   return createAnonymizer(rules, { maxDepth: options?.maxDepth ?? 24 });
 }
 
-// dist/src/transcript.js
-import { readFileSync as readFileSync7, statSync as statSync4, fstatSync, openSync, readSync, closeSync } from "node:fs";
-var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
-function readTranscript(filePath, afterLine = -1) {
-  let size;
-  try {
-    size = statSync4(filePath).size;
-  } catch {
-    return { messages: [], lastLine: afterLine };
+// dist/src/hooks/flush-queue.js
+import { join as join5 } from "node:path";
+
+// dist/src/utils/hook-init.js
+function initHook(cwd) {
+  const config = loadConfig({ cwd });
+  initLogger(config.debug);
+  if (!config.enabled) {
+    return null;
   }
-  if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync7(filePath, "utf-8");
-    const lines = raw.split("\n").filter((l) => l.trim() !== "");
-    const messages = [];
-    let lastLine = afterLine;
-    for (let i = 0; i < lines.length; i++) {
-      lastLine = i;
-      if (i <= afterLine)
-        continue;
-      try {
-        messages.push(JSON.parse(lines[i]));
-      } catch {
-      }
-    }
-    return { messages, lastLine };
+  if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
+    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");
+    return null;
   }
-  const fd = openSync(filePath, "r");
+  return config;
+}
+function expandHome(path3) {
+  return path3?.replace(/^~/, process.env.HOME ?? "");
+}
+
+// dist/src/queue.js
+import { mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync as readdirSync2, statSync as statSync4, unlinkSync as unlinkSync3 } from "node:fs";
+import { join as join4 } from "node:path";
+import { createHmac, randomUUID as randomUUID2 } from "node:crypto";
+
+// dist/src/utils/atomic-file.js
+import { openSync, writeSync, closeSync, renameSync as renameSync5 } from "node:fs";
+import { randomUUID } from "node:crypto";
+function publishByRename(path3, contents, tempSuffix, mode) {
+  const temp = `${path3}.${randomUUID()}${tempSuffix}`;
+  const fd = openSync(temp, "wx", mode);
   try {
-    const chunkSize = 2 * 1024 * 1024;
-    const buf = Buffer.alloc(chunkSize);
-    const messages = [];
-    let lastLine = afterLine;
-    let lineIndex = -1;
-    let partial = "";
-    let bytesRead;
-    let pos = 0;
-    while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
-      const chunk = partial + buf.toString("utf-8", 0, bytesRead);
-      partial = "";
-      const lines = chunk.split("\n");
-      partial = lines.pop() ?? "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed === "")
-          continue;
-        lineIndex++;
-        lastLine = lineIndex;
-        if (lineIndex <= afterLine)
-          continue;
-        try {
-          messages.push(JSON.parse(trimmed));
-        } catch {
-        }
-      }
-      pos += bytesRead;
-    }
-    if (partial.trim() !== "") {
-      lineIndex++;
-      lastLine = lineIndex;
-      if (lineIndex > afterLine) {
-        try {
-          messages.push(JSON.parse(partial.trim()));
-        } catch {
-        }
-      }
-    }
-    return { messages, lastLine };
+    writeSync(fd, contents);
   } finally {
     closeSync(fd);
   }
-}
-function getTranscriptEndLine(filePath) {
-  try {
-    const size = statSync4(filePath).size;
-    if (size === 0)
-      return -1;
-    if (size <= MAX_FULL_READ_BYTES) {
-      const raw = readFileSync7(filePath, "utf-8");
-      const lines = raw.split("\n").filter((l) => l.trim() !== "");
-      return lines.length > 0 ? lines.length - 1 : -1;
-    }
-    const fd = openSync(filePath, "r");
-    try {
-      const chunkSize = 1024 * 1024;
-      const buf = Buffer.alloc(chunkSize);
-      let lineCount = 0;
-      let bytesRead;
-      let pos = 0;
-      let partial = "";
-      while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
-        const chunk = partial + buf.toString("utf-8", 0, bytesRead);
-        partial = "";
-        const lines = chunk.split("\n");
-        partial = lines.pop() ?? "";
-        for (const line of lines) {
-          if (line.trim() !== "")
-            lineCount++;
-        }
-        pos += bytesRead;
-      }
-      if (partial.trim() !== "")
-        lineCount++;
-      return lineCount > 0 ? lineCount - 1 : -1;
-    } finally {
-      closeSync(fd);
-    }
-  } catch {
-    return -1;
-  }
-}
-function readRuntimeVersion(filePath) {
-  let fd;
-  try {
-    fd = openSync(filePath, "r");
-    const size = fstatSync(fd).size;
-    if (size === 0)
-      return void 0;
-    const window2 = 64 * 1024;
-    const start = Math.max(0, size - window2);
-    const len = size - start;
-    const buf = Buffer.alloc(len);
-    readSync(fd, buf, 0, len, start);
-    const text = buf.toString("utf-8");
-    const lines = text.split("\n").filter((l) => l.trim() !== "");
-    for (let i = lines.length - 1; i >= 0; i--) {
-      try {
-        const parsed = JSON.parse(lines[i]);
-        if (typeof parsed.version === "string" && parsed.version.length > 0) {
-          return parsed.version;
-        }
-      } catch {
-      }
-    }
-  } catch {
-  } finally {
-    if (fd !== void 0)
-      closeSync(fd);
-  }
-  return void 0;
-}
-function isHumanMessage(msg) {
-  if (msg.type !== "user")
-    return false;
-  if (typeof msg.message.content === "string")
-    return true;
-  if (Array.isArray(msg.message.content)) {
-    return !msg.message.content.some((b) => b.type === "tool_result");
-  }
-  return false;
-}
-function isToolResult(msg) {
-  if (msg.type !== "user" || !Array.isArray(msg.message.content))
-    return false;
-  return msg.message.content.some((b) => b.type === "tool_result");
-}
-function isAssistantMessage(msg) {
-  return msg.type === "assistant";
-}
-function stripModelDateSuffix(model) {
-  return model.replace(/-\d{8}$/, "");
-}
-function resolveProvider(model) {
-  const flag = (name) => ["1", "true"].includes((process.env[name] ?? "").toLowerCase());
-  if (flag("CLAUDE_CODE_USE_BEDROCK"))
-    return "amazon_bedrock";
-  if (flag("CLAUDE_CODE_USE_VERTEX"))
-    return "google_vertex_ai";
-  return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
-}
-function turnToolInputs(turn) {
-  return turn.llmCalls.flatMap((call) => call.toolCalls.map((tool) => tool.tool_use.input));
-}
-function completedToolUseIds(turns) {
-  return turns.flatMap((turn) => turn.llmCalls.flatMap((call) => call.toolCalls.filter((tool) => tool.result !== void 0).map((tool) => tool.tool_use.id)));
-}
-function mergeAssistantChunks(chunks) {
-  if (chunks.length === 0) {
-    throw new Error("Cannot merge zero chunks");
-  }
-  const first = chunks[0];
-  const last = chunks[chunks.length - 1];
-  const allBlocks = chunks.flatMap((c) => c.message.content);
-  const merged = mergeAdjacentTextBlocks(allBlocks);
-  return {
-    content: merged,
-    model: stripModelDateSuffix(first.message.model),
-    usage: last.message.usage,
-    // SSE usage is cumulative; last chunk has final totals.
-    effort: chunks.find((c) => c.effort)?.effort,
-    // Only some chunks carry effort; take the first.
-    startTime: first.timestamp,
-    endTime: last.timestamp
-  };
-}
-function mergeAdjacentTextBlocks(blocks) {
-  const result = [];
-  let textBuffer = null;
-  for (const block of blocks) {
-    if (block.type === "text") {
-      textBuffer = (textBuffer ?? "") + block.text;
-    } else {
-      if (textBuffer !== null) {
-        result.push({ type: "text", text: textBuffer });
-        textBuffer = null;
-      }
-      result.push(block);
-    }
-  }
-  if (textBuffer !== null) {
-    result.push({ type: "text", text: textBuffer });
-  }
-  return result;
-}
-function findToolResult(toolUseId, toolResults) {
-  for (const msg of toolResults) {
-    for (const block of msg.message.content) {
-      if (block.type === "tool_result" && block.tool_use_id === toolUseId) {
-        const content = typeof block.content === "string" ? block.content : block.content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
-        return {
-          content,
-          timestamp: msg.timestamp,
-          agentId: msg.toolUseResult?.agentId
-        };
-      }
-    }
-  }
-  return void 0;
-}
-function groupIntoTurns(messages) {
-  const turns = [];
-  let currentPromptId = null;
-  let currentUser = null;
-  let assistantChunks = /* @__PURE__ */ new Map();
-  let assistantOrder = [];
-  let toolResults = [];
-  let hasStopReasonEndTurn = false;
-  function finalizeTurn(forceIncomplete = false) {
-    if (!currentUser)
-      return;
-    if (assistantChunks.size === 0)
-      return;
-    const assistantMessages = Array.from(assistantChunks.values()).flat();
-    const hasStopReasonField = assistantMessages.some((m) => m.message.stop_reason !== void 0);
-    const isComplete = hasStopReasonEndTurn || !forceIncomplete && !hasStopReasonField;
-    const llmCalls = [];
-    for (const msgId of assistantOrder) {
-      const chunks = assistantChunks.get(msgId);
-      if (!chunks || chunks.length === 0)
-        continue;
-      const merged = mergeAssistantChunks(chunks);
-      const toolUses = merged.content.filter((b) => b.type === "tool_use");
-      const toolCalls = toolUses.map((tu) => {
-        const result = findToolResult(tu.id, toolResults);
-        return {
-          tool_use: tu,
-          result: result ? { content: result.content, timestamp: result.timestamp } : void 0,
-          agentId: result?.agentId
-        };
-      });
-      llmCalls.push({
-        content: merged.content,
-        model: merged.model,
-        usage: merged.usage,
-        effort: merged.effort,
-        startTime: merged.startTime,
-        endTime: merged.endTime,
-        toolCalls
-      });
-    }
-    turns.push({
-      userContent: currentUser.message.content,
-      userTimestamp: currentUser.timestamp,
-      llmCalls,
-      isComplete,
-      promptId: currentUser.promptId
-    });
-  }
-  for (const msg of messages) {
-    if (isHumanMessage(msg)) {
-      const isNewTurn = currentUser === null || msg.promptId !== void 0 && msg.promptId !== currentPromptId || msg.promptId === void 0;
-      if (isNewTurn) {
-        finalizeTurn();
-        currentPromptId = msg.promptId;
-        currentUser = msg;
-        assistantChunks = /* @__PURE__ */ new Map();
-        assistantOrder = [];
-        toolResults = [];
-        hasStopReasonEndTurn = false;
-      }
-    } else if (isToolResult(msg)) {
-      toolResults.push(msg);
-    } else if (isAssistantMessage(msg)) {
-      const id = msg.message.id ?? "__no_id__";
-      if (!assistantChunks.has(id)) {
-        assistantChunks.set(id, []);
-        assistantOrder.push(id);
-      }
-      assistantChunks.get(id).push(msg);
-      if (msg.message.stop_reason === "end_turn") {
-        hasStopReasonEndTurn = true;
-      }
-    }
-  }
-  finalizeTurn(true);
-  return turns;
+  renameSync5(temp, path3);
 }
 
-// dist/src/state.js
-import { readFileSync as readFileSync8, writeFileSync as writeFileSync4, mkdirSync as mkdirSync5, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync3 } from "node:fs";
-import { dirname as dirname4 } from "node:path";
-var LOCK_TIMEOUT_MS = 5e3;
-var LOCK_RETRY_MS = 20;
-function lockPath(stateFilePath) {
-  return `${stateFilePath}.lock`;
-}
-function sleep3(ms) {
-  return new Promise((resolve4) => setTimeout(resolve4, ms));
-}
-async function acquireLock(stateFilePath) {
-  const lock = lockPath(stateFilePath);
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync5(dirname4(stateFilePath), { recursive: true });
-  while (Date.now() < deadline) {
-    try {
-      const fd = openSync2(lock, "wx");
-      closeSync2(fd);
-      return;
-    } catch {
-      await sleep3(LOCK_RETRY_MS);
-    }
-  }
+// dist/src/utils/session-store.js
+import { readdirSync, rmdirSync } from "node:fs";
+import { dirname as dirname3, join as join3 } from "node:path";
+var safeName = (value) => {
+  const safe = value.replace(QUEUE_SESSION_UNSAFE_CHARS, "_");
+  return /[^.]/.test(safe) ? safe : `_${safe}`;
+};
+var storeRoot = (stateFilePath, dirName) => join3(dirname3(stateFilePath), dirName);
+var storeDir = (stateFilePath, dirName, sessionId) => join3(storeRoot(stateFilePath, dirName), safeName(sessionId));
+function listStoredSessions(stateFilePath, dirName) {
   try {
-    unlinkSync3(lock);
+    return readdirSync(storeRoot(stateFilePath, dirName), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  } catch {
+    return [];
+  }
+}
+function discardDirIfEmpty(dir) {
+  try {
+    rmdirSync(dir);
   } catch {
   }
-}
-function releaseLock(stateFilePath) {
-  try {
-    unlinkSync3(lockPath(stateFilePath));
-  } catch {
-  }
-}
-async function atomicUpdateState(stateFilePath, fn) {
-  await acquireLock(stateFilePath);
-  try {
-    const state = loadState(stateFilePath);
-    writeFileSync4(stateFilePath, JSON.stringify(fn(state), null, 2));
-  } finally {
-    releaseLock(stateFilePath);
-  }
-}
-function loadState(stateFilePath) {
-  try {
-    const raw = readFileSync8(stateFilePath, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-function getSessionState(state, sessionId) {
-  return state[sessionId] ?? {
-    last_line: -1,
-    turn_count: 0,
-    updated: "",
-    task_run_map: {}
-  };
-}
-function advanceToolTracingProgress(session, ids, phase) {
-  const modes = { ...session.tool_tracing_modes };
-  const progress = { ...session.tool_tracing_progress };
-  for (const id of ids) {
-    if (!Object.hasOwn(modes, id))
-      continue;
-    if (progress[id] && progress[id] !== phase) {
-      delete modes[id];
-      delete progress[id];
-    } else {
-      progress[id] = phase;
-    }
-  }
-  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
-}
-var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
-function pruneOldSessions(state, now = Date.now()) {
-  const cutoff = now - SESSION_MAX_AGE_MS;
-  const pruned = {};
-  for (const [sessionId, session] of Object.entries(state)) {
-    const updatedMs = session.updated ? new Date(session.updated).getTime() : 0;
-    if (updatedMs >= cutoff) {
-      pruned[sessionId] = session;
-    }
-  }
-  return pruned;
-}
-function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, currentTurnRunId) {
-  const existingSession = state[sessionId] ?? {
-    last_line: -1,
-    turn_count: 0,
-    updated: "",
-    task_run_map: {}
-  };
-  return {
-    ...state,
-    [sessionId]: {
-      ...existingSession,
-      last_line: lastLine,
-      turn_count: turnCount,
-      updated: (/* @__PURE__ */ new Date()).toISOString(),
-      task_run_map: taskRunMap ?? existingSession.task_run_map,
-      current_turn_run_id: currentTurnRunId !== void 0 ? currentTurnRunId : existingSession.current_turn_run_id
-    }
-  };
 }
 
 // dist/src/metadata.js
@@ -14556,22 +14085,864 @@ function createRunTree(config, mode = "full") {
   return run;
 }
 
+// dist/src/queue.js
+function queueOrigin(destination) {
+  const identity = JSON.stringify([
+    destination.apiBaseUrl,
+    destination.replicas ?? null,
+    destination.redact ?? false,
+    destination.redactExtraRules ?? null
+  ]);
+  return createHmac("sha256", destination.apiKey).update(identity).digest("hex").slice(0, QUEUE_ORIGIN_LENGTH);
+}
+var queueDir = (stateFilePath) => storeRoot(stateFilePath, QUEUE_DIR_NAME);
+var queueSessionDir = (stateFilePath, sessionId) => storeDir(stateFilePath, QUEUE_DIR_NAME, sessionId);
+var listQueues = (stateFilePath) => listStoredSessions(stateFilePath, QUEUE_DIR_NAME);
+function names(dir) {
+  try {
+    return readdirSync2(dir);
+  } catch {
+    return [];
+  }
+}
+function entryIds(dir) {
+  try {
+    return readdirSync2(dir).filter((name) => name.endsWith(QUEUE_FILE_SUFFIX)).sort().map((name) => name.slice(0, -QUEUE_FILE_SUFFIX.length));
+  } catch {
+    return [];
+  }
+}
+function entryPath(dir, queueId) {
+  return join4(dir, `${queueId}${QUEUE_FILE_SUFFIX}`);
+}
+function readEntry(dir, queueId) {
+  try {
+    const parsed = JSON.parse(readFileSync6(entryPath(dir, queueId), "utf-8"));
+    return parsed && parsed.run ? { ...parsed, queue_id: queueId } : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function nextQueued(dir) {
+  for (const queueId of entryIds(dir)) {
+    const entry = readEntry(dir, queueId);
+    if (entry)
+      return entry;
+    removeQueued(dir, queueId);
+  }
+  return void 0;
+}
+function publish(dir, queueId, entry) {
+  publishByRename(entryPath(dir, queueId), JSON.stringify(entry), QUEUE_TEMP_SUFFIX, PRIVATE_FILE_MODE);
+}
+function trim(dir) {
+  const ids = entryIds(dir);
+  for (const queueId of ids.slice(0, Math.max(0, ids.length - QUEUE_MAX_ENTRIES))) {
+    removeQueued(dir, queueId);
+  }
+}
+async function enqueueRun(stateFilePath, sessionId, run, tracing, origin) {
+  const dir = queueSessionDir(stateFilePath, sessionId);
+  const queueId = `${String(Date.now()).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID2()}`;
+  try {
+    mkdirSync5(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
+    publish(dir, queueId, {
+      tracing,
+      attempts: 0,
+      origin,
+      run: runConfigForMode(run, tracing)
+    });
+    trim(dir);
+    debug(`Queued run for upload in ${entryPath(dir, queueId)}`);
+  } catch (err) {
+    warn(`Could not queue run for upload: ${err}`);
+  }
+}
+function removeQueued(dir, queueId) {
+  try {
+    unlinkSync3(entryPath(dir, queueId));
+  } catch {
+  }
+}
+function recordFailure2(dir, queueId) {
+  const entry = readEntry(dir, queueId);
+  if (!entry)
+    return;
+  const attempts = (entry.attempts ?? 0) + 1;
+  if (attempts >= QUEUE_MAX_ATTEMPTS) {
+    warn(`Dropping a queued run after ${attempts} failed uploads: ${queueId}`);
+    removeQueued(dir, queueId);
+    return;
+  }
+  try {
+    publish(dir, queueId, {
+      tracing: entry.tracing,
+      attempts,
+      origin: entry.origin,
+      run: entry.run
+    });
+  } catch (err) {
+    warn(`Could not record a failed upload: ${err}`);
+  }
+}
+function discardEmptyQueue(dir, now = Date.now()) {
+  if (entryIds(dir).length > 0)
+    return;
+  if (queueIdleMs(dir, now) < EMPTY_QUEUE_MIN_IDLE_MS)
+    return;
+  for (const name of names(dir).filter((entry) => entry.endsWith(QUEUE_TEMP_SUFFIX))) {
+    try {
+      unlinkSync3(join4(dir, name));
+    } catch {
+    }
+  }
+  discardDirIfEmpty(dir);
+}
+function queueIdleMs(dir, now = Date.now()) {
+  try {
+    return now - statSync4(dir).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+function queuedAtMs(queueId) {
+  const queuedAt = Number(queueId.slice(0, QUEUE_ID_TIME_WIDTH));
+  return Number.isFinite(queuedAt) && queuedAt > 0 ? queuedAt : void 0;
+}
+function oldestQueuedAtMs(dir) {
+  const [oldest] = entryIds(dir);
+  return oldest === void 0 ? void 0 : queuedAtMs(oldest);
+}
+function foreignQueueLooksAbandoned(dir, now = Date.now()) {
+  const queuedAt = oldestQueuedAtMs(dir);
+  if (queuedAt === void 0)
+    return false;
+  return now - queuedAt >= FOREIGN_QUEUE_MIN_RECORD_AGE_MS;
+}
+function runIsTooOldToUpload(entry, now = Date.now()) {
+  const started = new Date(entry.run.start_time).getTime();
+  if (Number.isFinite(started))
+    return now - started >= QUEUE_RUN_MAX_AGE_MS;
+  const queuedAt = queuedAtMs(entry.queue_id);
+  return queuedAt === void 0 || now - queuedAt >= QUEUE_RUN_MAX_AGE_MS;
+}
+
+// dist/src/utils/file-lock.js
+import { readFileSync as readFileSync7, writeFileSync as writeFileSync4, linkSync, mkdirSync as mkdirSync6, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync4 } from "node:fs";
+import { dirname as dirname4 } from "node:path";
+import { randomUUID as randomUUID3 } from "node:crypto";
+var LOCK_TIMEOUT_MS = 5e3;
+var LOCK_RETRY_MS = 20;
+function lockPath(stateFilePath) {
+  return `${stateFilePath}.lock`;
+}
+function sleep3(ms) {
+  return new Promise((resolve4) => setTimeout(resolve4, ms));
+}
+async function acquireLock(stateFilePath) {
+  const lock = lockPath(stateFilePath);
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  mkdirSync6(dirname4(stateFilePath), { recursive: true });
+  while (Date.now() < deadline) {
+    try {
+      const fd = openSync2(lock, "wx", PRIVATE_FILE_MODE);
+      closeSync2(fd);
+      return;
+    } catch {
+      await sleep3(LOCK_RETRY_MS);
+    }
+  }
+  try {
+    unlinkSync4(lock);
+  } catch {
+  }
+}
+function releaseLock(stateFilePath) {
+  try {
+    unlinkSync4(lockPath(stateFilePath));
+  } catch {
+  }
+}
+function claimLock(lock) {
+  const staging = `${lock}.${randomUUID3()}${LOCK_STAGING_SUFFIX}`;
+  try {
+    writeFileSync4(staging, String(process.pid), { mode: PRIVATE_FILE_MODE });
+  } catch {
+    return false;
+  }
+  try {
+    linkSync(staging, lock);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    try {
+      unlinkSync4(staging);
+    } catch {
+    }
+  }
+}
+function holderIsGone(lock) {
+  let pid;
+  try {
+    pid = Number(readFileSync7(lock, "utf-8"));
+  } catch {
+    return false;
+  }
+  if (!Number.isInteger(pid) || pid <= 0)
+    return false;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (err) {
+    return err.code !== "EPERM";
+  }
+}
+function tryAcquireLock(filePath) {
+  const lock = lockPath(filePath);
+  try {
+    mkdirSync6(dirname4(filePath), { recursive: true });
+  } catch {
+    return false;
+  }
+  if (claimLock(lock))
+    return true;
+  if (!holderIsGone(lock))
+    return false;
+  try {
+    unlinkSync4(lock);
+  } catch {
+    return false;
+  }
+  return claimLock(lock);
+}
+async function withFileLock(filePath, fn) {
+  await acquireLock(filePath);
+  try {
+    return await fn();
+  } finally {
+    releaseLock(filePath);
+  }
+}
+
+// dist/src/hooks/flush-queue.js
+function flusherClient(config) {
+  const anonymizer = config.redact ? createSecretAnonymizer(config.redactExtraRules ? { extraRules: config.redactExtraRules } : void 0) : void 0;
+  return new Client({
+    apiKey: config.apiKey || void 0,
+    apiUrl: config.apiBaseUrl,
+    anonymizer,
+    autoBatchTracing: false
+  });
+}
+function watchUploadFailures(client2) {
+  let failure;
+  const createRun = client2.createRun.bind(client2);
+  client2.createRun = async (...args) => {
+    try {
+      return await createRun(...args);
+    } catch (err) {
+      failure = err;
+      throw err;
+    }
+  };
+  return () => {
+    const seen = failure;
+    failure = void 0;
+    return seen;
+  };
+}
+async function flushQueue(dir, config, origin) {
+  const flushTarget = `${dir}.flush`;
+  if (!tryAcquireLock(flushTarget)) {
+    debug(`Another flusher already owns ${dir}`);
+    return;
+  }
+  const client2 = flusherClient(config);
+  const lastUploadError = watchUploadFailures(client2);
+  try {
+    for (; ; ) {
+      const entry = nextQueued(dir);
+      if (!entry)
+        break;
+      if (runIsTooOldToUpload(entry)) {
+        warn(`Dropping a queued run LangSmith will no longer accept: ${entry.queue_id}`);
+        removeQueued(dir, entry.queue_id);
+        continue;
+      }
+      if (entry.origin !== origin) {
+        warn(`Leaving ${dir} alone: its next run was queued for a different LangSmith account`);
+        break;
+      }
+      const runTree = createRunTree({ ...entry.run, client: client2, replicas: config.replicas }, entry.tracing);
+      await runTree.postRun();
+      const failure = lastUploadError();
+      if (failure) {
+        warn(`Queued run upload failed: ${failure}`);
+        recordFailure2(dir, entry.queue_id);
+        return;
+      }
+      removeQueued(dir, entry.queue_id);
+    }
+    discardEmptyQueue(dir);
+  } finally {
+    releaseLock(flushTarget);
+  }
+}
+async function main(cwd, sessionId) {
+  const config = initHook(cwd);
+  if (!config)
+    return;
+  const own = sessionId ? safeName(sessionId) : void 0;
+  const origin = queueOrigin(config);
+  for (const session of listQueues(config.stateFilePath)) {
+    const dir = join5(queueDir(config.stateFilePath), session);
+    if (session !== own && !foreignQueueLooksAbandoned(dir)) {
+      debug(`Not flushing ${dir}, which another session may still be writing to`);
+      discardEmptyQueue(dir);
+      continue;
+    }
+    try {
+      await flushQueue(dir, config, origin);
+    } catch (err) {
+      warn(`Could not flush ${dir}: ${err}`);
+    }
+  }
+}
+
+// dist/src/tracing-policy.js
+import { randomUUID as randomUUID4 } from "node:crypto";
+import { lstatSync as lstatSync2, readFileSync as readFileSync8 } from "node:fs";
+import { mkdir as mkdir3, open, rename as rename2, rmdir, unlink as unlink2 } from "node:fs/promises";
+import { dirname as dirname5 } from "node:path";
+import { performance as performance2 } from "node:perf_hooks";
+import { setTimeout as delay } from "node:timers/promises";
+function isMode(value) {
+  return value === "full" || value === "metadata";
+}
+function isObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hasCode(error2, code) {
+  return isObject(error2) && error2.code === code;
+}
+function readPolicy(path3) {
+  let raw;
+  try {
+    raw = readFileSync8(path3, "utf8");
+  } catch (error2) {
+    if (hasCode(error2, "ENOENT")) {
+      try {
+        lstatSync2(path3);
+      } catch (statError) {
+        if (hasCode(statError, "ENOENT"))
+          return { threads: {} };
+        throw statError;
+      }
+    }
+    throw error2;
+  }
+  const value = JSON.parse(raw);
+  if (!isObject(value) || !isObject(value.threads) || Object.values(value.threads).some((mode) => !isMode(mode)) || Object.keys(value).some((key) => key !== "threads")) {
+    throw new Error("Invalid tracing preference format");
+  }
+  return value;
+}
+function tracingPolicyPath(stateFilePath) {
+  return `${stateFilePath.replace(/\.json$/, "")}.privacy.json`;
+}
+function getThreadTracingMode(stateFilePath, sessionId, defaultMuted = false) {
+  try {
+    const policy = readPolicy(tracingPolicyPath(stateFilePath));
+    if (Object.hasOwn(policy.threads, sessionId))
+      return policy.threads[sessionId];
+    return defaultMuted ? "metadata" : "full";
+  } catch {
+    return "metadata";
+  }
+}
+function parseTracingCommand(prompt) {
+  if (prompt === "/langsmith-tracing:mute")
+    return "mute";
+  if (prompt === "/langsmith-tracing:unmute")
+    return "unmute";
+  if (prompt === "/langsmith-tracing:trace")
+    return "trace";
+  return void 0;
+}
+async function setThreadTracingMode(stateFilePath, sessionId, mode) {
+  if (typeof sessionId !== "string" || !sessionId || !isMode(mode)) {
+    throw new Error("A nonempty session ID and a full/metadata tracing mode are required");
+  }
+  const path3 = tracingPolicyPath(stateFilePath);
+  const lockPath2 = `${path3}.lock`;
+  await mkdir3(dirname5(path3), { recursive: true });
+  const deadline = performance2.now() + 2e3;
+  let locked = false;
+  while (!locked) {
+    try {
+      await mkdir3(lockPath2, { mode: 448 });
+      locked = true;
+    } catch (error2) {
+      if (!hasCode(error2, "EEXIST"))
+        throw error2;
+      if (performance2.now() >= deadline) {
+        throw new Error(`Timed out waiting for tracing preference lock ${lockPath2}. Retry; if it persists, remove the lock only after confirming no preference writer is running.`);
+      }
+      await delay(10 + Math.random() * 20);
+    }
+  }
+  const warnings = [];
+  async function bestEffort(action, message) {
+    try {
+      await action();
+    } catch (error2) {
+      warnings.push(`${message}: ${error2 instanceof Error ? error2.message : String(error2)}`);
+    }
+  }
+  let tempPath;
+  try {
+    let policy;
+    try {
+      policy = readPolicy(path3);
+    } catch (error2) {
+      throw new Error(`Cannot read tracing preferences at ${path3}. Refusing to overwrite them; repair the file or its permissions before retrying. No preferences were changed.`, { cause: error2 });
+    }
+    policy.threads = { ...policy.threads, [sessionId]: mode };
+    tempPath = `${path3}.${process.pid}.${randomUUID4()}.tmp`;
+    const temp = await open(tempPath, "wx", 384);
+    try {
+      await temp.writeFile(`${JSON.stringify(policy)}
+`, "utf8");
+      await temp.sync();
+    } catch (error2) {
+      await bestEffort(() => temp.close(), "Temporary file close failed");
+      throw error2;
+    }
+    await temp.close();
+    await rename2(tempPath, path3);
+    tempPath = void 0;
+    await bestEffort(async () => {
+      const directory = await open(dirname5(path3), "r");
+      try {
+        await directory.sync();
+      } finally {
+        await bestEffort(() => directory.close(), "Directory close cleanup failed");
+      }
+    }, "Preference is effective, but crash durability could not be confirmed; retry saving");
+  } finally {
+    if (tempPath) {
+      await bestEffort(() => unlink2(tempPath), "Temporary file cleanup failed");
+    }
+    await bestEffort(() => rmdir(lockPath2), `Preference lock cleanup failed at ${lockPath2}. Before retrying, remove the lock only after confirming no preference writer is running`);
+  }
+  return warnings.length ? { warning: warnings.join("; ") } : {};
+}
+
+// dist/src/tracing-mode.js
+function resolveTurnTracingMode(config, sessionId, ...snapshots) {
+  const { stateFilePath, defaultMuted } = typeof config === "string" ? { stateFilePath: config } : config;
+  return snapshots.find((mode) => mode !== void 0) ?? getThreadTracingMode(stateFilePath, sessionId, defaultMuted);
+}
+
+// dist/src/transcript.js
+import { readFileSync as readFileSync9, statSync as statSync5, fstatSync, openSync as openSync3, readSync, closeSync as closeSync3 } from "node:fs";
+var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
+function readTranscript(filePath, afterLine = -1) {
+  let size;
+  try {
+    size = statSync5(filePath).size;
+  } catch {
+    return { messages: [], lastLine: afterLine };
+  }
+  if (size <= MAX_FULL_READ_BYTES) {
+    const raw = readFileSync9(filePath, "utf-8");
+    const lines = raw.split("\n").filter((l) => l.trim() !== "");
+    const messages = [];
+    let lastLine = afterLine;
+    for (let i = 0; i < lines.length; i++) {
+      lastLine = i;
+      if (i <= afterLine)
+        continue;
+      try {
+        messages.push(JSON.parse(lines[i]));
+      } catch {
+      }
+    }
+    return { messages, lastLine };
+  }
+  const fd = openSync3(filePath, "r");
+  try {
+    const chunkSize = 2 * 1024 * 1024;
+    const buf = Buffer.alloc(chunkSize);
+    const messages = [];
+    let lastLine = afterLine;
+    let lineIndex = -1;
+    let partial = "";
+    let bytesRead;
+    let pos = 0;
+    while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
+      const chunk = partial + buf.toString("utf-8", 0, bytesRead);
+      partial = "";
+      const lines = chunk.split("\n");
+      partial = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed === "")
+          continue;
+        lineIndex++;
+        lastLine = lineIndex;
+        if (lineIndex <= afterLine)
+          continue;
+        try {
+          messages.push(JSON.parse(trimmed));
+        } catch {
+        }
+      }
+      pos += bytesRead;
+    }
+    if (partial.trim() !== "") {
+      lineIndex++;
+      lastLine = lineIndex;
+      if (lineIndex > afterLine) {
+        try {
+          messages.push(JSON.parse(partial.trim()));
+        } catch {
+        }
+      }
+    }
+    return { messages, lastLine };
+  } finally {
+    closeSync3(fd);
+  }
+}
+function getTranscriptEndLine(filePath) {
+  try {
+    const size = statSync5(filePath).size;
+    if (size === 0)
+      return -1;
+    if (size <= MAX_FULL_READ_BYTES) {
+      const raw = readFileSync9(filePath, "utf-8");
+      const lines = raw.split("\n").filter((l) => l.trim() !== "");
+      return lines.length > 0 ? lines.length - 1 : -1;
+    }
+    const fd = openSync3(filePath, "r");
+    try {
+      const chunkSize = 1024 * 1024;
+      const buf = Buffer.alloc(chunkSize);
+      let lineCount = 0;
+      let bytesRead;
+      let pos = 0;
+      let partial = "";
+      while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
+        const chunk = partial + buf.toString("utf-8", 0, bytesRead);
+        partial = "";
+        const lines = chunk.split("\n");
+        partial = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.trim() !== "")
+            lineCount++;
+        }
+        pos += bytesRead;
+      }
+      if (partial.trim() !== "")
+        lineCount++;
+      return lineCount > 0 ? lineCount - 1 : -1;
+    } finally {
+      closeSync3(fd);
+    }
+  } catch {
+    return -1;
+  }
+}
+function readRuntimeVersion(filePath) {
+  let fd;
+  try {
+    fd = openSync3(filePath, "r");
+    const size = fstatSync(fd).size;
+    if (size === 0)
+      return void 0;
+    const window2 = 64 * 1024;
+    const start = Math.max(0, size - window2);
+    const len = size - start;
+    const buf = Buffer.alloc(len);
+    readSync(fd, buf, 0, len, start);
+    const text = buf.toString("utf-8");
+    const lines = text.split("\n").filter((l) => l.trim() !== "");
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const parsed = JSON.parse(lines[i]);
+        if (typeof parsed.version === "string" && parsed.version.length > 0) {
+          return parsed.version;
+        }
+      } catch {
+      }
+    }
+  } catch {
+  } finally {
+    if (fd !== void 0)
+      closeSync3(fd);
+  }
+  return void 0;
+}
+function isHumanMessage(msg) {
+  if (msg.type !== "user")
+    return false;
+  if (typeof msg.message.content === "string")
+    return true;
+  if (Array.isArray(msg.message.content)) {
+    return !msg.message.content.some((b) => b.type === "tool_result");
+  }
+  return false;
+}
+function isToolResult(msg) {
+  if (msg.type !== "user" || !Array.isArray(msg.message.content))
+    return false;
+  return msg.message.content.some((b) => b.type === "tool_result");
+}
+function isAssistantMessage(msg) {
+  return msg.type === "assistant";
+}
+function stripModelDateSuffix(model) {
+  return model.replace(/-\d{8}$/, "");
+}
+function resolveProvider(model) {
+  const flag = (name) => ["1", "true"].includes((process.env[name] ?? "").toLowerCase());
+  if (flag("CLAUDE_CODE_USE_BEDROCK"))
+    return "amazon_bedrock";
+  if (flag("CLAUDE_CODE_USE_VERTEX"))
+    return "google_vertex_ai";
+  return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
+}
+function turnToolInputs(turn) {
+  return turn.llmCalls.flatMap((call) => call.toolCalls.map((tool) => tool.tool_use.input));
+}
+function completedToolUseIds(turns) {
+  return turns.flatMap((turn) => turn.llmCalls.flatMap((call) => call.toolCalls.filter((tool) => tool.result !== void 0).map((tool) => tool.tool_use.id)));
+}
+function mergeAssistantChunks(chunks) {
+  if (chunks.length === 0) {
+    throw new Error("Cannot merge zero chunks");
+  }
+  const first = chunks[0];
+  const last = chunks[chunks.length - 1];
+  const allBlocks = chunks.flatMap((c) => c.message.content);
+  const merged = mergeAdjacentTextBlocks(allBlocks);
+  return {
+    content: merged,
+    model: stripModelDateSuffix(first.message.model),
+    usage: last.message.usage,
+    // SSE usage is cumulative; last chunk has final totals.
+    effort: chunks.find((c) => c.effort)?.effort,
+    // Only some chunks carry effort; take the first.
+    startTime: first.timestamp,
+    endTime: last.timestamp
+  };
+}
+function mergeAdjacentTextBlocks(blocks) {
+  const result = [];
+  let textBuffer = null;
+  for (const block of blocks) {
+    if (block.type === "text") {
+      textBuffer = (textBuffer ?? "") + block.text;
+    } else {
+      if (textBuffer !== null) {
+        result.push({ type: "text", text: textBuffer });
+        textBuffer = null;
+      }
+      result.push(block);
+    }
+  }
+  if (textBuffer !== null) {
+    result.push({ type: "text", text: textBuffer });
+  }
+  return result;
+}
+function findToolResult(toolUseId, toolResults) {
+  for (const msg of toolResults) {
+    for (const block of msg.message.content) {
+      if (block.type === "tool_result" && block.tool_use_id === toolUseId) {
+        const content = typeof block.content === "string" ? block.content : block.content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
+        return {
+          content,
+          timestamp: msg.timestamp,
+          agentId: msg.toolUseResult?.agentId
+        };
+      }
+    }
+  }
+  return void 0;
+}
+function groupIntoTurns(messages) {
+  const turns = [];
+  let currentPromptId = null;
+  let currentUser = null;
+  let assistantChunks = /* @__PURE__ */ new Map();
+  let assistantOrder = [];
+  let toolResults = [];
+  let hasStopReasonEndTurn = false;
+  function finalizeTurn(forceIncomplete = false) {
+    if (!currentUser)
+      return;
+    if (assistantChunks.size === 0)
+      return;
+    const assistantMessages = Array.from(assistantChunks.values()).flat();
+    const hasStopReasonField = assistantMessages.some((m) => m.message.stop_reason !== void 0);
+    const isComplete = hasStopReasonEndTurn || !forceIncomplete && !hasStopReasonField;
+    const llmCalls = [];
+    for (const msgId of assistantOrder) {
+      const chunks = assistantChunks.get(msgId);
+      if (!chunks || chunks.length === 0)
+        continue;
+      const merged = mergeAssistantChunks(chunks);
+      const toolUses = merged.content.filter((b) => b.type === "tool_use");
+      const toolCalls = toolUses.map((tu) => {
+        const result = findToolResult(tu.id, toolResults);
+        return {
+          tool_use: tu,
+          result: result ? { content: result.content, timestamp: result.timestamp } : void 0,
+          agentId: result?.agentId
+        };
+      });
+      llmCalls.push({
+        content: merged.content,
+        model: merged.model,
+        usage: merged.usage,
+        effort: merged.effort,
+        startTime: merged.startTime,
+        endTime: merged.endTime,
+        toolCalls
+      });
+    }
+    turns.push({
+      userContent: currentUser.message.content,
+      userTimestamp: currentUser.timestamp,
+      llmCalls,
+      isComplete,
+      promptId: currentUser.promptId
+    });
+  }
+  for (const msg of messages) {
+    if (isHumanMessage(msg)) {
+      const isNewTurn = currentUser === null || msg.promptId !== void 0 && msg.promptId !== currentPromptId || msg.promptId === void 0;
+      if (isNewTurn) {
+        finalizeTurn();
+        currentPromptId = msg.promptId;
+        currentUser = msg;
+        assistantChunks = /* @__PURE__ */ new Map();
+        assistantOrder = [];
+        toolResults = [];
+        hasStopReasonEndTurn = false;
+      }
+    } else if (isToolResult(msg)) {
+      toolResults.push(msg);
+    } else if (isAssistantMessage(msg)) {
+      const id = msg.message.id ?? "__no_id__";
+      if (!assistantChunks.has(id)) {
+        assistantChunks.set(id, []);
+        assistantOrder.push(id);
+      }
+      assistantChunks.get(id).push(msg);
+      if (msg.message.stop_reason === "end_turn") {
+        hasStopReasonEndTurn = true;
+      }
+    }
+  }
+  finalizeTurn(true);
+  return turns;
+}
+
+// dist/src/state.js
+import { readFileSync as readFileSync10, mkdirSync as mkdirSync7 } from "node:fs";
+import { dirname as dirname6 } from "node:path";
+function publishState(stateFilePath, state) {
+  publishByRename(stateFilePath, JSON.stringify(state, null, 2), STATE_TEMP_SUFFIX, PRIVATE_FILE_MODE);
+}
+async function atomicUpdateState(stateFilePath, fn) {
+  await withFileLock(stateFilePath, () => {
+    const state = loadState(stateFilePath);
+    publishState(stateFilePath, fn(state));
+  });
+}
+function loadState(stateFilePath) {
+  try {
+    const raw = readFileSync10(stateFilePath, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+function getSessionState(state, sessionId) {
+  return state[sessionId] ?? {
+    last_line: -1,
+    turn_count: 0,
+    updated: "",
+    task_run_map: {}
+  };
+}
+function advanceToolTracingProgress(session, ids, phase) {
+  const modes = { ...session.tool_tracing_modes };
+  const progress = { ...session.tool_tracing_progress };
+  for (const id of ids) {
+    if (!Object.hasOwn(modes, id))
+      continue;
+    if (progress[id] && progress[id] !== phase) {
+      delete modes[id];
+      delete progress[id];
+    } else {
+      progress[id] = phase;
+    }
+  }
+  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
+}
+var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
+function pruneOldSessions(state, now = Date.now()) {
+  const cutoff = now - SESSION_MAX_AGE_MS;
+  const pruned = {};
+  for (const [sessionId, session] of Object.entries(state)) {
+    const updatedMs = session.updated ? new Date(session.updated).getTime() : 0;
+    if (updatedMs >= cutoff) {
+      pruned[sessionId] = session;
+    }
+  }
+  return pruned;
+}
+function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, currentTurnRunId) {
+  const existingSession = state[sessionId] ?? {
+    last_line: -1,
+    turn_count: 0,
+    updated: "",
+    task_run_map: {}
+  };
+  return {
+    ...state,
+    [sessionId]: {
+      ...existingSession,
+      last_line: lastLine,
+      turn_count: turnCount,
+      updated: (/* @__PURE__ */ new Date()).toISOString(),
+      task_run_map: taskRunMap ?? existingSession.task_run_map,
+      current_turn_run_id: currentTurnRunId !== void 0 ? currentTurnRunId : existingSession.current_turn_run_id
+    }
+  };
+}
+
 // dist/src/repo-attribution.js
 import { existsSync as existsSync3 } from "node:fs";
 import { isAbsolute, resolve as resolve3 } from "node:path";
 
 // dist/src/repo-attribution-paths.js
-import { statSync as statSync5 } from "node:fs";
-import { dirname as dirname5, join as join3, resolve as resolve2 } from "node:path";
+import { statSync as statSync6 } from "node:fs";
+import { dirname as dirname7, join as join6, resolve as resolve2 } from "node:path";
 function nearestExistingDirectory(path3) {
   let current = path3;
   for (; ; ) {
-    const parent = dirname5(current);
+    const parent = dirname7(current);
     const reachedFilesystemRoot = parent === current;
     if (reachedFilesystemRoot)
       return void 0;
     try {
-      if (statSync5(current).isDirectory())
+      if (statSync6(current).isDirectory())
         return current;
     } catch {
     }
@@ -14580,7 +14951,7 @@ function nearestExistingDirectory(path3) {
 }
 function gitMarkerAt(directory) {
   try {
-    return statSync5(join3(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
+    return statSync6(join6(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
   } catch {
     return GIT_MARKERS.NOTHING_HERE;
   }
@@ -14593,7 +14964,7 @@ function rootFromGitMarker(directory) {
       return current;
     if (marker === GIT_MARKERS.ONLY_GIT_CAN_SAY)
       return void 0;
-    const parent = dirname5(current);
+    const parent = dirname7(current);
     const reachedFilesystemRoot = parent === current;
     if (reachedFilesystemRoot)
       return null;
@@ -15402,23 +15773,6 @@ async function closeAgentToolRun(options) {
   }
 }
 
-// dist/src/utils/hook-init.js
-function initHook(cwd) {
-  const config = loadConfig({ cwd });
-  initLogger(config.debug);
-  if (!config.enabled) {
-    return null;
-  }
-  if (!config.apiKey && (!config.replicas || config.replicas.length === 0)) {
-    error("No API key set (CC_LANGSMITH_API_KEY or LANGSMITH_API_KEY) and no replicas configured");
-    return null;
-  }
-  return config;
-}
-function expandHome(path3) {
-  return path3?.replace(/^~/, process.env.HOME ?? "");
-}
-
 // dist/src/utils/harness.js
 function isCursorPayload(input) {
   return typeof input === "object" && input !== null && Object.hasOwn(input, CURSOR_VERSION_FIELD);
@@ -15448,7 +15802,7 @@ function readStdin() {
 }
 
 // dist/src/hooks/post-compact.js
-async function main() {
+async function main2() {
   const input = await readStdin();
   if (!isPayloadForHook(input, "PostCompact"))
     return;
@@ -15603,7 +15957,7 @@ async function handleWorkflowSubagentStop(opts) {
 }
 
 // dist/src/hooks/post-tool-use.js
-async function main2() {
+async function main3() {
   const input = await readStdin();
   if (!isPayloadForHook(input, "PostToolUse"))
     return;
@@ -15614,7 +15968,6 @@ async function main2() {
     debug("Skipping PostToolUse for subagent tool \u2014 Stop hook handles tracing");
     return;
   }
-  const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   const tracing = resolveTurnTracingMode(config, input.session_id, sessionState.tool_tracing_modes?.[input.tool_use_id], sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
@@ -15640,6 +15993,7 @@ async function main2() {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
   } else if (workflow) {
     debug(`Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`);
+    const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
     const runTree = createRunTree({
       client: client2,
       replicas: config.replicas,
@@ -15667,9 +16021,7 @@ async function main2() {
     }, tracing);
     await runTree.postRun();
   } else {
-    const runTree = createRunTree({
-      client: client2,
-      replicas: config.replicas,
+    await enqueueRun(config.stateFilePath, input.session_id, {
       id: toolRunId,
       name: input.tool_name,
       run_type: "tool",
@@ -15695,8 +16047,7 @@ async function main2() {
           skillName: skillNameFromTool(input.tool_name, input.tool_input)
         })
       }
-    }, tracing);
-    await runTree.postRun();
+    }, tracing, queueOrigin(config));
   }
   await atomicUpdateState(config.stateFilePath, (freshState) => {
     const freshSession = getSessionState(freshState, input.session_id);
@@ -15756,13 +16107,13 @@ async function main2() {
       }
     };
   });
-  if (!agentId) {
+  if (workflow) {
     await flushPendingTraces();
   }
 }
 
 // dist/src/hooks/pre-compact.js
-async function main3() {
+async function main4() {
   const input = await readStdin();
   if (!isPayloadForHook(input, "PreCompact"))
     return;
@@ -15785,7 +16136,7 @@ async function main3() {
 }
 
 // dist/src/hooks/pre-tool-use.js
-async function main4() {
+async function main5() {
   const input = await readStdin();
   if (!isPayloadForHook(input, "PreToolUse"))
     return;
@@ -15814,7 +16165,7 @@ async function main4() {
 }
 
 // dist/src/hooks/session-end.js
-async function main5() {
+async function main6() {
   const input = await readStdin();
   if (!isPayloadForHook(input, "SessionEnd"))
     return;
@@ -15951,6 +16302,33 @@ async function main5() {
   debug(`Session end cleanup complete (reason=${input.reason})`);
 }
 
+// dist/src/utils/detach.js
+import { spawn } from "node:child_process";
+
+// dist/src/utils/binary-runtime.js
+var COMPILED_ROOT = "/$bunfs/";
+function runningCompiledBinary() {
+  const main11 = globalThis.Bun?.main;
+  return typeof main11 === "string" && main11.startsWith(COMPILED_ROOT);
+}
+
+// dist/src/utils/detach.js
+function startQueueFlusher(cwd, sessionId) {
+  try {
+    const self = runningCompiledBinary() ? [] : [process.argv[1]];
+    const child = spawn(process.execPath, [...self, FLUSH_QUEUE_ARG, cwd, sessionId], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true
+    });
+    child.on("error", (err) => warn(`The queue flusher could not start: ${err}`));
+    child.unref();
+    debug(`Started detached queue flusher (pid ${child.pid})`);
+  } catch (err) {
+    warn(`Could not start the queue flusher: ${err}`);
+  }
+}
+
 // dist/src/finalize.js
 async function finalizeNotificationChain(opts) {
   const { stateFilePath, sessionId, project, customMetadata, runtimeVersion } = opts;
@@ -16031,7 +16409,7 @@ async function finalizeNotificationChain(opts) {
 }
 
 // dist/src/hooks/stop.js
-async function main6() {
+async function main7() {
   const startTime = Date.now();
   const input = await readStdin();
   if (!isPayloadForHook(input, "Stop"))
@@ -16040,6 +16418,7 @@ async function main6() {
   if (!config)
     return;
   debug(`Stop hook started, session=${input.session_id}`);
+  startQueueFlusher(input.cwd, input.session_id);
   if (input.stop_hook_active) {
     debug("stop_hook_active=true, skipping");
     return;
@@ -16324,7 +16703,7 @@ async function main6() {
 }
 
 // dist/src/hooks/stop-failure.js
-async function main7() {
+async function main8() {
   const input = await readStdin();
   if (!isPayloadForHook(input, "StopFailure"))
     return;
@@ -16388,7 +16767,7 @@ async function main7() {
 }
 
 // dist/src/hooks/subagent-stop.js
-async function main8() {
+async function main9() {
   const input = await readStdin();
   if (!isPayloadForHook(input, "SubagentStop"))
     return;
@@ -16569,7 +16948,7 @@ async function describeThreadLinks(config, sessionId) {
 
 // dist/src/hooks/user-prompt-submit.js
 var KILLED_NOTIFICATION_STATUS = "killed";
-async function main9() {
+async function main10() {
   const hookStartTime = Date.now();
   const input = await readStdin();
   if (!isPayloadForHook(input, "UserPromptSubmit"))
@@ -16613,6 +16992,8 @@ async function main9() {
   }
   const client2 = initTracing(config.apiKey, config.apiBaseUrl, config.replicas, config.redact, config.redactExtraRules);
   const state = loadState(config.stateFilePath);
+  if (state[input.session_id] === void 0)
+    startQueueFlusher(input.cwd, input.session_id);
   const sessionState = getSessionState(state, input.session_id);
   const turnMode = getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
   const expandedTranscript = expandHome(input.transcript_path);
@@ -16767,15 +17148,15 @@ async function main9() {
 
 // dist/src/hooks/registry.js
 var HOOK_HANDLERS = {
-  UserPromptSubmit: main9,
-  PreToolUse: main4,
-  PostToolUse: main2,
-  Stop: main6,
-  StopFailure: main7,
-  SubagentStop: main8,
-  PreCompact: main3,
-  PostCompact: main,
-  SessionEnd: main5
+  UserPromptSubmit: main10,
+  PreToolUse: main5,
+  PostToolUse: main3,
+  Stop: main7,
+  StopFailure: main8,
+  SubagentStop: main9,
+  PreCompact: main4,
+  PostCompact: main2,
+  SessionEnd: main6
 };
 
 // dist/src/hooks/dispatch.js
@@ -16793,6 +17174,9 @@ if (argument === "--help" || argument === "-h") {
   console.log(USAGE);
 } else if (argument === "--version" || argument === "-v") {
   console.log(LS_INTEGRATION_VERSION ?? "development");
+} else if (argument === FLUSH_QUEUE_ARG) {
+  const [cwd, sessionId] = process.argv.slice(3);
+  void runHookEntry(FLUSH_QUEUE_ARG, () => main(cwd ?? process.cwd(), sessionId));
 } else if (event) {
   void runHookEntry(event, HOOK_HANDLERS[event]);
 } else if (argument?.startsWith("-")) {

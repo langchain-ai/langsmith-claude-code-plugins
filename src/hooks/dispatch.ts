@@ -8,9 +8,10 @@
 
 import { binary } from "../binary-target.js";
 import { LS_INTEGRATION_VERSION } from "../config.js";
-import { HOOK_EVENT_NAMES } from "../constants.js";
+import { FLUSH_QUEUE_ARG, HOOK_EVENT_NAMES } from "../constants.js";
 import { error, initLogger } from "../logger.js";
 import { runHookEntry } from "../utils/hook-entry.js";
+import { main as flushQueue } from "./flush-queue.js";
 import { HOOK_HANDLERS } from "./registry.js";
 
 const EXECUTABLE_NAME = binary.target.executableName;
@@ -30,6 +31,9 @@ if (argument === "--help" || argument === "-h") {
   console.log(USAGE);
 } else if (argument === "--version" || argument === "-v") {
   console.log(LS_INTEGRATION_VERSION ?? "development");
+} else if (argument === FLUSH_QUEUE_ARG) {
+  const [cwd, sessionId] = process.argv.slice(3);
+  void runHookEntry(FLUSH_QUEUE_ARG, () => flushQueue(cwd ?? process.cwd(), sessionId));
 } else if (event) {
   void runHookEntry(event, HOOK_HANDLERS[event]);
 } else if (argument?.startsWith("-")) {

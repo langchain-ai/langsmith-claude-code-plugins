@@ -19,7 +19,9 @@ const h = vi.hoisted(() => ({
   operations: [] as Array<{ action: string; config: Record<string, any> }>,
   ids: 0,
   beforePost: undefined as undefined | (() => void | Promise<void>),
+  event: "" as string,
   errors: [] as unknown[],
+  queueState: "",
 }));
 vi.mock("langsmith", () => ({
   Client: class {
@@ -45,7 +47,7 @@ vi.mock("../utils/hook-init.js", () => ({
   initHook: () => ({
     apiKey: "test",
     project: "test",
-    stateFilePath: "/unused",
+    stateFilePath: h.queueState,
     defaultMuted: h.defaultMuted,
     redact: false,
     customMetadata: { custom: "PRIVATE_MARKER", ls_model_name: "PRIVATE_MARKER" },
@@ -72,14 +74,19 @@ vi.mock("../logger.js", () => ({
   warn: () => {},
   error: (...args: unknown[]) => h.errors.push(args),
 }));
-vi.mock("../state.js", async (original) => ({
-  ...(await original<typeof import("../state.js")>()),
-  loadState: () => structuredClone(h.state),
-  atomicUpdateState: async (_: string, update: (state: TracingState) => TracingState) => {
-    // Match persistence: no symbols/functions or shared references survive.
-    h.state = JSON.parse(JSON.stringify(update(structuredClone(h.state))));
-  },
-}));
+vi.mock("../state.js", async (original) => {
+  const state = await original<typeof import("../state.js")>();
+  return {
+    ...state,
+    loadState: () => structuredClone(h.state),
+    atomicUpdateState: async (_: string, update: (state: TracingState) => TracingState) => {
+      // PostToolUse commits here, the await boundary where the network used to be.
+      if (h.event === "PostToolUse") await h.beforePost?.();
+      // Match persistence: no symbols/functions or shared references survive.
+      h.state = JSON.parse(JSON.stringify(update(structuredClone(h.state))));
+    },
+  };
+});
 vi.mock("../transcript.js", async (original) => ({
   ...(await original<typeof import("../transcript.js")>()),
   readTranscript: (path: string) => ({
@@ -175,12 +182,23 @@ async function hook(name: keyof typeof HOOK_EVENT_BY_NAME, extra: Record<string,
     tool_response: { content: privateText },
     ...extra,
   };
+  h.event = HOOK_EVENT_BY_NAME[name];
   vi.resetModules();
   const { HOOK_HANDLERS } = await import("./registry.js");
+  const { queueSessionDir, readQueue, removeQueued } = await import("../queue.js");
+  const queued = queueSessionDir(h.queueState, String(h.input.session_id));
+  // A nested hook must leave its caller's entry for the caller to drain in order.
+  const inherited = new Set(readQueue(queued).map((entry) => entry.queue_id));
   await HOOK_HANDLERS[HOOK_EVENT_BY_NAME[name]]();
   // Awaiting the handler covers Stop's 200ms transcript flush, so this settle
   // only has to let the SDK's unawaited posts land.
   await new Promise((resolve) => setTimeout(resolve, 15));
+  // A tool run is queued rather than posted now, so read what the real queue wrote.
+  for (const entry of readQueue(queued)) {
+    if (inherited.has(entry.queue_id)) continue;
+    h.operations.push({ action: "post", config: entry.run as Record<string, any> });
+    removeQueued(queued, entry.queue_id);
+  }
 }
 function topology() {
   return h.operations.map(({ action, config: c }) => ({
@@ -200,7 +218,12 @@ function expectPrivate(operations = h.operations) {
   for (const { config } of operations)
     expect(config.extra.metadata.ls_tracing_mode).toBe("metadata");
 }
-beforeEach(() => {
+const queueSandbox = join(mkdtempSync(join(tmpdir(), "queue-sandbox-")), "state.json");
+beforeEach(async () => {
+  h.queueState = queueSandbox;
+  const { queueSessionDir, readQueue, removeQueued } = await import("../queue.js");
+  const previous = queueSessionDir(queueSandbox, "session");
+  for (const entry of readQueue(previous)) removeQueued(previous, entry.queue_id);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(now));
 });

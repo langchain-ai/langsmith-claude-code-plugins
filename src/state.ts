@@ -3,51 +3,21 @@
  * transcript so the Stop hook only processes new messages.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, openSync, closeSync, unlinkSync } from "node:fs";
+import { readFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { PRIVATE_FILE_MODE, STATE_TEMP_SUFFIX } from "./constants.js";
+import { publishByRename } from "./utils/atomic-file.js";
+import { withFileLock } from "./utils/file-lock.js";
 import type { TracingState, SessionState } from "./types.js";
 
-// ─── Atomic read-modify-write ────────────────────────────────────────────────
-
-const LOCK_TIMEOUT_MS = 5_000;
-const LOCK_RETRY_MS = 20;
-
-function lockPath(stateFilePath: string): string {
-  return `${stateFilePath}.lock`;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function acquireLock(stateFilePath: string): Promise<void> {
-  const lock = lockPath(stateFilePath);
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync(dirname(stateFilePath), { recursive: true });
-  while (Date.now() < deadline) {
-    try {
-      // O_EXCL | O_CREAT: fails atomically if the file already exists.
-      const fd = openSync(lock, "wx");
-      closeSync(fd);
-      return;
-    } catch {
-      await sleep(LOCK_RETRY_MS);
-    }
-  }
-  // Stale lock — remove it and proceed rather than deadlocking.
-  try {
-    unlinkSync(lock);
-  } catch {
-    /* ignore */
-  }
-}
-
-function releaseLock(stateFilePath: string): void {
-  try {
-    unlinkSync(lockPath(stateFilePath));
-  } catch {
-    /* ignore */
-  }
+/** Published by rename, since readers load state without the lock and must never see a half-written file. */
+function publishState(stateFilePath: string, state: TracingState): void {
+  publishByRename(
+    stateFilePath,
+    JSON.stringify(state, null, 2),
+    STATE_TEMP_SUFFIX,
+    PRIVATE_FILE_MODE,
+  );
 }
 
 /**
@@ -58,13 +28,10 @@ export async function atomicUpdateState(
   stateFilePath: string,
   fn: (state: TracingState) => TracingState,
 ): Promise<void> {
-  await acquireLock(stateFilePath);
-  try {
+  await withFileLock(stateFilePath, () => {
     const state = loadState(stateFilePath);
-    writeFileSync(stateFilePath, JSON.stringify(fn(state), null, 2));
-  } finally {
-    releaseLock(stateFilePath);
-  }
+    publishState(stateFilePath, fn(state));
+  });
 }
 
 // ─── State helpers ──────────────────────────────────────────────────────────
@@ -80,7 +47,7 @@ export function loadState(stateFilePath: string): TracingState {
 
 export function saveState(stateFilePath: string, state: TracingState): void {
   mkdirSync(dirname(stateFilePath), { recursive: true });
-  writeFileSync(stateFilePath, JSON.stringify(state, null, 2));
+  publishState(stateFilePath, state);
 }
 
 export function getSessionState(state: TracingState, sessionId: string): SessionState {

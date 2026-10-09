@@ -55,6 +55,49 @@ const REPOSITORY_METADATA_KEYS = [...TURN_REPOSITORY_KEYS, "ls_attribution_ident
 const PINNED_REPOSITORY_KEYS = Symbol("pinned repository metadata keys");
 
 const NO_PINNED_KEYS: ReadonlySet<string> = new Set();
+/** Directory of per-session upload queues, kept beside the state file. */
+const QUEUE_DIR_NAME = "langsmith_queue";
+const QUEUE_FILE_SUFFIX = ".queue.json";
+
+/** Anything outside this set is replaced, so a session id can never escape its own folder. */
+const QUEUE_SESSION_UNSAFE_CHARS = /[^\w.-]/g;
+
+/** A half-written entry carries this instead, so a reader never sees it. */
+const QUEUE_TEMP_SUFFIX = ".queue.tmp";
+
+/** The same guard for the state file, which readers load without taking the lock. */
+const STATE_TEMP_SUFFIX = ".state.tmp";
+
+/** A lock is staged under this and linked into place, so it never exists without its owner's pid. */
+const LOCK_STAGING_SUFFIX = ".lock.staging";
+
+/** Owner-only, since what the plugin keeps beside the state file holds the same tool input and output the trace does. */
+const PRIVATE_DIR_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
+
+/** Enough of the hashed destination to tell two LangSmith accounts apart on disk. */
+const QUEUE_ORIGIN_LENGTH = 12;
+
+/** Zero-padding that keeps entry names sorting by time well past the year 9999. */
+const QUEUE_ID_TIME_WIDTH = 16;
+
+/** Oldest entries are dropped past this, so a never-flushed queue cannot grow forever. */
+const QUEUE_MAX_ENTRIES = 500;
+
+/** An entry that fails this many uploads is dropped rather than retried forever. */
+const QUEUE_MAX_ATTEMPTS = 5;
+
+/** LangSmith rejects a run that started before this, and the whole batch with it. */
+const QUEUE_RUN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** Another session's folder is only flushed once its oldest record is this old, which proves no live turn is still writing to it. */
+const FOREIGN_QUEUE_MIN_RECORD_AGE_MS = 2 * 60 * 60 * 1000;
+
+/** An empty folder is only removed once untouched this long, so a session that just created one keeps it. */
+const EMPTY_QUEUE_MIN_IDLE_MS = 2 * 60 * 60 * 1000;
+
+/** Argument that runs the detached queue flusher instead of a hook handler. */
+const FLUSH_QUEUE_ARG = "--flush-queue";
 
 const GH_LOGIN_COMMAND = "gh";
 
@@ -93,5 +136,21 @@ export {
   STATE_FILE_DEFAULT,
   GH_LOGIN_MARKER_FILE,
   GH_LOGIN_RETRY_AFTER_MS,
+  QUEUE_DIR_NAME,
+  QUEUE_FILE_SUFFIX,
+  QUEUE_SESSION_UNSAFE_CHARS,
+  QUEUE_TEMP_SUFFIX,
+  STATE_TEMP_SUFFIX,
+  LOCK_STAGING_SUFFIX,
+  QUEUE_ID_TIME_WIDTH,
+  PRIVATE_DIR_MODE,
+  PRIVATE_FILE_MODE,
+  QUEUE_ORIGIN_LENGTH,
+  QUEUE_MAX_ENTRIES,
+  QUEUE_MAX_ATTEMPTS,
+  QUEUE_RUN_MAX_AGE_MS,
+  FOREIGN_QUEUE_MIN_RECORD_AGE_MS,
+  EMPTY_QUEUE_MIN_IDLE_MS,
+  FLUSH_QUEUE_ARG,
 };
 export type { HookEventName };

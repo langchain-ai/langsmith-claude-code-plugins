@@ -29,6 +29,7 @@ import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
+import { startQueueFlusher } from "../utils/detach.js";
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
 import { codingAgentMetadata } from "../metadata.js";
 import { createRunTree } from "../privacy.js";
@@ -129,6 +130,8 @@ export async function main(): Promise<void> {
   );
 
   const state = loadState(config.stateFilePath);
+  // Sweep once at the start, for folders other sessions left behind long enough ago to be safe.
+  if (state[input.session_id] === undefined) startQueueFlusher(input.cwd, input.session_id);
   const sessionState = getSessionState(state, input.session_id);
   const turnMode = getThreadTracingMode(
     config.stateFilePath,
