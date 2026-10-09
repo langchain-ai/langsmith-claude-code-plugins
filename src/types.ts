@@ -375,7 +375,13 @@ export interface RecordedRun {
 export type TurnRecordLine =
   | { k: typeof TURN_RECORD_LINE.run; root?: boolean; origin?: string; run: RecordedRun }
   | { k: typeof TURN_RECORD_LINE.closed; turn_id?: string }
-  | { k: typeof TURN_RECORD_LINE.delivered; id: string };
+  | { k: typeof TURN_RECORD_LINE.delivered; id: string }
+  | { k: typeof TURN_RECORD_LINE.reconciled; id: string };
+
+export interface TurnRecordTarget {
+  path: string;
+  origin: string;
+}
 
 export interface TurnRecord {
   path: string;
@@ -385,6 +391,7 @@ export interface TurnRecord {
   turnId?: string;
   closed: boolean;
   delivered: Set<string>;
+  fixed: Set<string>;
 }
 
 // ─── Standalone Binary ──────────────────────────────────────────────────────
