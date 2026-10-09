@@ -101,6 +101,31 @@ export const prompt = (base: Record<string, unknown>) =>
 export const stop = (base: Record<string, unknown>) =>
   hook("Stop", { ...base, hook_event_name: "Stop", last_assistant_message: "done" });
 
+export const task = (base: Record<string, unknown>, agentId: string) =>
+  hook("PostToolUse", {
+    ...base,
+    hook_event_name: "PostToolUse",
+    tool_name: "Task",
+    tool_use_id: `use-${agentId}`,
+    tool_input: { prompt: "go and look" },
+    tool_response: { agentId },
+  });
+
+export function subagent(base: Record<string, unknown>, agentId: string): Promise<void> {
+  const path = join(plain, `${agentId}.jsonl`);
+  writeFileSync(
+    path,
+    turnLines({ turn: 1, model: "claude-sonnet-4-5-20250929", prompt: "look", reply: "looked" }),
+  );
+  return hook("SubagentStop", {
+    ...base,
+    hook_event_name: "SubagentStop",
+    agent_id: agentId,
+    agent_type: "Explore",
+    agent_transcript_path: path,
+  });
+}
+
 export const tool = (base: Record<string, unknown>, name: string, input: Record<string, unknown>) =>
   hook("PostToolUse", {
     ...base,
@@ -117,11 +142,18 @@ export function metadataOf(name: string): Record<string, unknown> {
   return writes.at(-1)?.extra?.metadata ?? {};
 }
 
+export function createdMetadataAll(
+  sessionId: string,
+  name: string,
+): Array<Record<string, unknown>> {
+  return service.created
+    .filter((candidate) => candidate.name === name)
+    .map((candidate) => candidate.extra?.metadata ?? {})
+    .filter((metadata) => metadata.thread_id === sessionId);
+}
+
 export function createdMetadataOf(sessionId: string, name: string): Record<string, unknown> {
-  const run = service.created.find(
-    (candidate) => candidate.name === name && candidate.extra?.metadata?.thread_id === sessionId,
-  );
-  return run?.extra?.metadata ?? {};
+  return createdMetadataAll(sessionId, name)[0] ?? {};
 }
 
 export const recordDir = (sessionId: string) => join(sandbox.root, TURN_RECORD_DIR_NAME, sessionId);

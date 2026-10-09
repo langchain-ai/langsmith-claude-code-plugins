@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   alpha,
+  createdMetadataAll,
   createdMetadataOf,
   hook,
   metadataOf,
@@ -13,6 +14,8 @@ import {
   recordLines,
   service,
   stop,
+  subagent,
+  task,
   tool,
   reply,
   useReconcileSandbox,
@@ -110,6 +113,51 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
       await waitFor(() => Object.keys(createdMetadataOf(base.session_id, "Claude")).length > 0),
     ).toBe(true);
     expect(createdMetadataOf(base.session_id, "Claude")).toMatchObject({
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    });
+  });
+
+  // Catches a sub-task and everything under it being built from what the session knew
+  // at the start, so the Task, the subagent and its model calls arrive with no author.
+  it("gives a sub-task and the runs beneath it the repository and the author", async () => {
+    const base = session("subagent-born-known", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    await subagent(base, "agent-7");
+    await task(base, "agent-7");
+    reply(base);
+    await stop(base);
+
+    const attributed = {
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    };
+    expect(await waitFor(() => service.created.some((run) => run.name === "Agent"))).toBe(true);
+    expect(createdMetadataOf(base.session_id, "Agent")).toMatchObject(attributed);
+    expect(createdMetadataOf(base.session_id, "Explore Subagent")).toMatchObject(attributed);
+    const beneath = createdMetadataAll(base.session_id, "Claude").filter(
+      (metadata) => metadata.ls_agent_type === "subagent",
+    );
+    expect(beneath).toHaveLength(1);
+    expect(beneath[0]).toMatchObject(attributed);
+  });
+
+  // Catches an interrupted turn's model calls being backfilled from what the session knew
+  // at the start, so a turn nobody stopped is the one turn that loses its author.
+  it("gives an interrupted turn's model calls the repository and the author", async () => {
+    const base = session("interrupted-fill", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    reply(base);
+    await prompt(base);
+
+    expect(await waitFor(() => createdMetadataAll(base.session_id, "Claude").length > 0)).toBe(
+      true,
+    );
+    expect(createdMetadataAll(base.session_id, "Claude")[0]).toMatchObject({
       repository_name: "acme/a",
       git_branch: "trunk-a",
       ls_attribution_identifier: "Alpha Owner",

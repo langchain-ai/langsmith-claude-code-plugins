@@ -14426,6 +14426,10 @@ function settledTurnMetadata(base, record) {
   const missing = Object.entries(filled).filter(([key]) => base?.[key] === void 0);
   return missing.length === 0 ? base : { ...base, ...Object.fromEntries(missing) };
 }
+function attributionFiller(target) {
+  const record = target ? readTurnRecord(target.path) : void 0;
+  return (metadata) => settledTurnMetadata(metadata, record) ?? metadata;
+}
 function runConfig(run, metadata, client2, replicas2) {
   return {
     client: client2,
@@ -15536,8 +15540,7 @@ async function traceTurn(options) {
     ...existingTaskRunMap
   };
   let lastEndTime = turn.userTimestamp;
-  const turnSoFar = record ? readTurnRecord(record.path) : void 0;
-  const filledForTheTurn = (metadata) => settledTurnMetadata(metadata, turnSoFar) ?? metadata;
+  const filledForTheTurn = attributionFiller(record);
   for (const llmCall of turn.llmCalls) {
     const assistantContent = formatContent(llmCall.content);
     const assistantRunId = uuid7FromTime(llmCall.startTime);
@@ -15772,7 +15775,7 @@ async function closeTurnRun(id, error2) {
   await patchTurnRun(id, { error: error2 });
 }
 async function closeInterruptedTurn(options) {
-  const { sessionId, sessionState, transcriptPath, project, stateFilePath, customMetadata, runtimeVersion, approvalPolicy, turn, error: errorMessage = "User interrupt" } = options;
+  const { sessionId, sessionState, transcriptPath, project, stateFilePath, customMetadata, runtimeVersion, approvalPolicy, turn, record, error: errorMessage = "User interrupt" } = options;
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
   if (turn) {
@@ -15813,7 +15816,8 @@ async function closeInterruptedTurn(options) {
             parentDottedOrder: sessionState.current_dotted_order,
             customMetadata,
             runtimeVersion,
-            approvalPolicy
+            approvalPolicy,
+            record
           });
           lastLine = newLastLine;
           turnsTraced = 1;
@@ -15839,7 +15843,8 @@ async function closeInterruptedTurn(options) {
         customMetadata,
         runtimeVersion,
         turnId,
-        turnNumber
+        turnNumber,
+        record
       });
     } catch (err) {
       error(`Failed to trace pending subagents on interrupt: ${err}`);
@@ -15863,7 +15868,8 @@ async function closeInterruptedTurn(options) {
   return { lastLine, turnsTraced, consumedToolUseIds };
 }
 async function tracePendingSubagents(options) {
-  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen } = options;
+  const { sessionId, pendingSubagents, taskRunMap, parentTraceId, project, customMetadata, runtimeVersion, turnId, turnNumber, keepAgentToolRunOpen, record } = options;
+  const filledForTheTurn = attributionFiller(record);
   const openedAgentRunIds = [];
   if (!client && !replicas) {
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
@@ -15912,7 +15918,7 @@ async function tracePendingSubagents(options) {
           trace_id: deferred.trace_id,
           dotted_order: agentToolDottedOrder,
           extra: {
-            metadata: codingAgentMetadata({
+            metadata: filledForTheTurn(codingAgentMetadata({
               sessionId,
               base: customMetadata,
               runtimeVersion,
@@ -15928,7 +15934,7 @@ async function tracePendingSubagents(options) {
                 agent_id: subagent.agent_id
                 // DEPRECATED compat alias.
               }
-            })
+            }))
           }
         }, tracing);
         await runTree.postRun();
@@ -15954,7 +15960,8 @@ async function tracePendingSubagents(options) {
           customMetadata,
           runtimeVersion,
           turnId,
-          turnNumber
+          turnNumber,
+          record
         });
       }
     } catch (err) {
@@ -15964,6 +15971,7 @@ async function tracePendingSubagents(options) {
   return openedAgentRunIds;
 }
 async function traceSubagentChain(opts) {
+  const filledForTheTurn = attributionFiller(opts.record);
   const subagentChainId = uuid7FromTime(opts.startTime);
   const subagentChainDottedOrder = `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, subagentChainId)}`;
   const runTree = createRunTree({
@@ -15981,7 +15989,7 @@ async function traceSubagentChain(opts) {
     trace_id: opts.parentTraceId,
     dotted_order: subagentChainDottedOrder,
     extra: {
-      metadata: codingAgentMetadata({
+      metadata: filledForTheTurn(codingAgentMetadata({
         sessionId: opts.sessionId,
         base: opts.customMetadata,
         runtimeVersion: opts.runtimeVersion,
@@ -15992,7 +16000,7 @@ async function traceSubagentChain(opts) {
         // → ls_subagent_id (+ agent_id alias).
         subagentType: opts.subagentType
         // → ls_subagent_type (+ agent_type alias).
-      })
+      }))
     }
   }, opts.tracing);
   await runTree.postRun();
@@ -16009,7 +16017,8 @@ async function traceSubagentChain(opts) {
       parentDottedOrder: subagentChainDottedOrder,
       customMetadata: opts.customMetadata,
       runtimeVersion: opts.runtimeVersion,
-      agentType: "subagent"
+      agentType: "subagent",
+      record: opts.record
     });
   }
   log(`Traced subagent ${opts.subagentType} (${opts.subagentId}): ${opts.subagentTurns.length} turn(s)`);
@@ -16575,7 +16584,11 @@ async function main6() {
         stateFilePath: config.stateFilePath,
         customMetadata: config.customMetadata,
         runtimeVersion,
-        approvalPolicy: sessionState.approval_policy
+        approvalPolicy: sessionState.approval_policy,
+        record: {
+          path: turnRecordPath(config.stateFilePath, input.session_id, sessionState.current_turn_run_id),
+          origin: queueOrigin(config)
+        }
       });
       lastLine = res.lastLine;
       turnsTraced = res.turnsTraced;
@@ -16835,6 +16848,10 @@ async function main7() {
   const currentTraceId = sessionState.current_trace_id;
   const currentDottedOrder = sessionState.current_dotted_order;
   const currentParentRunId = sessionState.current_parent_run_id;
+  const currentTurnRecord = currentRunId ? {
+    path: turnRecordPath(config.stateFilePath, input.session_id, currentRunId),
+    origin: queueOrigin(config)
+  } : void 0;
   for (let i = 0; i < turns.length; i++) {
     const turn = turns[i];
     const isLastTurn = i === turns.length - 1;
@@ -16844,10 +16861,7 @@ async function main7() {
     const dottedOrder = isLastTurn ? currentDottedOrder : void 0;
     const existingTaskRunMap = isLastTurn ? sessionState.task_run_map : void 0;
     const tracedToolUseIds = isLastTurn ? new Set(sessionState.traced_tool_use_ids ?? []) : void 0;
-    const record = isLastTurn && currentRunId ? {
-      path: turnRecordPath(config.stateFilePath, input.session_id, currentRunId),
-      origin: queueOrigin(config)
-    } : void 0;
+    const record = isLastTurn ? currentTurnRecord : void 0;
     try {
       const taskRunMap = await traceTurn({
         // Earlier transcript turns have no original snapshot; never backfill them as full.
@@ -16895,7 +16909,8 @@ async function main7() {
       customMetadata: config.customMetadata,
       runtimeVersion,
       turnId: lastTurnId,
-      turnNumber: sessionState.current_turn_number
+      turnNumber: sessionState.current_turn_number,
+      record: currentTurnRecord
     });
     for (const sa of pendingSubagents)
       processedAgentIds.add(sa.agent_id);
@@ -17222,7 +17237,11 @@ async function main9() {
       turnId: launchingTurn?.turn_id,
       turnNumber: launchingTurn?.turn_number ?? sessionState.current_turn_number,
       // Leave the Agent tool run open — the task-notification turn nests under it.
-      keepAgentToolRunOpen: true
+      keepAgentToolRunOpen: true,
+      record: turnRunId ? {
+        path: turnRecordPath(config.stateFilePath, input.session_id, turnRunId),
+        origin: queueOrigin(config)
+      } : void 0
     });
     debug(`Traced background subagent ${input.agent_type} (${input.agent_id})`);
   } catch (err) {
@@ -17399,6 +17418,10 @@ async function main10() {
         customMetadata: config.customMetadata,
         runtimeVersion,
         approvalPolicy,
+        record: {
+          path: turnRecordPath(config.stateFilePath, input.session_id, sessionState.current_turn_run_id),
+          origin: queueOrigin(config)
+        },
         error: supersededNotificationAgentId ? "Superseded by a newer task-notification" : "User interrupt"
       });
       interruptedLastLine = lastLine;

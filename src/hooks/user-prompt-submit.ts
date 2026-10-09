@@ -194,6 +194,14 @@ export async function main(): Promise<void> {
         customMetadata: config.customMetadata,
         runtimeVersion,
         approvalPolicy,
+        record: {
+          path: turnRecordPath(
+            config.stateFilePath,
+            input.session_id,
+            sessionState.current_turn_run_id,
+          ),
+          origin: queueOrigin(config),
+        },
         error: supersededNotificationAgentId
           ? "Superseded by a newer task-notification"
           : "User interrupt",

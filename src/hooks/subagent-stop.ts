@@ -34,6 +34,8 @@ import { atomicUpdateState, getSessionState, loadState } from "../state.js";
 import { initTracing, tracePendingSubagents, flushPendingTraces } from "../langsmith.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { WORKFLOW_SUBAGENT_TYPE, handleWorkflowSubagentStop } from "../workflows.js";
+import { turnRecordPath } from "../turn-record.js";
+import { queueOrigin } from "../queue.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
@@ -153,6 +155,12 @@ export async function main(): Promise<void> {
       turnNumber: launchingTurn?.turn_number ?? sessionState.current_turn_number,
       // Leave the Agent tool run open — the task-notification turn nests under it.
       keepAgentToolRunOpen: true,
+      record: turnRunId
+        ? {
+            path: turnRecordPath(config.stateFilePath, input.session_id, turnRunId),
+            origin: queueOrigin(config),
+          }
+        : undefined,
     });
     debug(`Traced background subagent ${input.agent_type} (${input.agent_id})`);
   } catch (err) {

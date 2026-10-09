@@ -168,6 +168,12 @@ export async function main(): Promise<void> {
   const currentTraceId = sessionState.current_trace_id;
   const currentDottedOrder = sessionState.current_dotted_order;
   const currentParentRunId = sessionState.current_parent_run_id;
+  const currentTurnRecord = currentRunId
+    ? {
+        path: turnRecordPath(config.stateFilePath, input.session_id, currentRunId),
+        origin: queueOrigin(config),
+      }
+    : undefined;
 
   for (let i = 0; i < turns.length; i++) {
     const turn = turns[i];
@@ -185,13 +191,7 @@ export async function main(): Promise<void> {
     const tracedToolUseIds = isLastTurn
       ? new Set(sessionState.traced_tool_use_ids ?? [])
       : undefined;
-    const record =
-      isLastTurn && currentRunId
-        ? {
-            path: turnRecordPath(config.stateFilePath, input.session_id, currentRunId),
-            origin: queueOrigin(config),
-          }
-        : undefined;
+    const record = isLastTurn ? currentTurnRecord : undefined;
 
     try {
       const taskRunMap = await traceTurn({
@@ -252,6 +252,7 @@ export async function main(): Promise<void> {
       runtimeVersion,
       turnId: lastTurnId,
       turnNumber: sessionState.current_turn_number,
+      record: currentTurnRecord,
     });
     for (const sa of pendingSubagents) processedAgentIds.add(sa.agent_id);
   }
