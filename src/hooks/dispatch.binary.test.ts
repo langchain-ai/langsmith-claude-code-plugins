@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { binary as tracing } from "../binary-target.js";
-import { HOOK_EVENT_NAMES } from "../constants.js";
+import { FLUSH_QUEUE_ARG, HOOK_EVENT_NAMES } from "../constants.js";
 
 const EXECUTABLE_NAME = tracing.target.executableName;
 const root = new URL("../../", import.meta.url);
@@ -92,6 +92,16 @@ describe.skipIf(!built)("the standalone binary, bin/langsmith-claude-code-tracin
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("unknown option: --instal");
     expect(existsSync(logDir())).toBe(false);
+  });
+
+  // Catches the binary turning the uploader's own argument away as an unknown option,
+  // which loses every tool trace for a binary user and says nothing about it.
+  it("drains the queue rather than rejecting the uploader's argument", () => {
+    const result = dispatch([FLUSH_QUEUE_ARG]);
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).not.toContain("unknown option");
   });
 
   it.each([[], ["NotAnEvent"], ["SessionStart"], ["userpromptsubmit"]])(
