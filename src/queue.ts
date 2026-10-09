@@ -9,8 +9,8 @@
  * read-modify-write the same file and no lock guards the append.
  */
 
-import { mkdirSync, readFileSync, readdirSync, rmdirSync, statSync, unlinkSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { mkdirSync, readFileSync, readdirSync, statSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import { createHmac, randomUUID } from "node:crypto";
 import {
   EMPTY_QUEUE_MIN_IDLE_MS,
@@ -24,10 +24,15 @@ import {
   QUEUE_MAX_ENTRIES,
   QUEUE_ORIGIN_LENGTH,
   QUEUE_RUN_MAX_AGE_MS,
-  QUEUE_SESSION_UNSAFE_CHARS,
   QUEUE_TEMP_SUFFIX,
 } from "./constants.js";
 import { publishByRename } from "./utils/atomic-file.js";
+import {
+  discardDirIfEmpty,
+  listStoredSessions,
+  storeDir,
+  storeRoot,
+} from "./utils/session-store.js";
 import { runConfigForMode } from "./privacy.js";
 import { debug, warn } from "./logger.js";
 import type { QueueDestination, QueuedRun, TracingMode } from "./types.js";
@@ -46,25 +51,13 @@ export function queueOrigin(destination: QueueDestination): string {
     .slice(0, QUEUE_ORIGIN_LENGTH);
 }
 
-export function queueDir(stateFilePath: string): string {
-  return join(dirname(stateFilePath), QUEUE_DIR_NAME);
-}
+export const queueDir = (stateFilePath: string): string => storeRoot(stateFilePath, QUEUE_DIR_NAME);
 
-export function queueSessionDir(stateFilePath: string, sessionId: string): string {
-  return join(queueDir(stateFilePath), sessionId.replace(QUEUE_SESSION_UNSAFE_CHARS, "_"));
-}
+export const queueSessionDir = (stateFilePath: string, sessionId: string): string =>
+  storeDir(stateFilePath, QUEUE_DIR_NAME, sessionId);
 
-export function listQueues(stateFilePath: string): string[] {
-  const root = queueDir(stateFilePath);
-  try {
-    return readdirSync(root, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => join(root, entry.name))
-      .sort();
-  } catch {
-    return [];
-  }
-}
+export const listQueues = (stateFilePath: string): string[] =>
+  listStoredSessions(stateFilePath, QUEUE_DIR_NAME);
 
 function names(dir: string): string[] {
   try {
@@ -195,11 +188,7 @@ export function discardEmptyQueue(dir: string, now: number = Date.now()): void {
       /* ignore */
     }
   }
-  try {
-    rmdirSync(dir);
-  } catch {
-    /* ignore */
-  }
+  discardDirIfEmpty(dir);
 }
 
 export function queueIdleMs(dir: string, now: number = Date.now()): number {

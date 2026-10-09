@@ -7,6 +7,7 @@
 
 import { Client } from "langsmith";
 import { createSecretAnonymizer } from "langsmith/anonymizer";
+import { join } from "node:path";
 import { initHook } from "../utils/hook-init.js";
 import { debug, warn } from "../logger.js";
 import {
@@ -14,12 +15,13 @@ import {
   listQueues,
   nextQueued,
   foreignQueueLooksAbandoned,
+  queueDir,
   queueOrigin,
-  queueSessionDir,
   removeQueued,
   recordFailure,
   runIsTooOldToUpload,
 } from "../queue.js";
+import { safeName } from "../utils/session-store.js";
 import { releaseLock, tryAcquireLock } from "../utils/file-lock.js";
 import { createRunTree } from "../privacy.js";
 import type { Config } from "../config.js";
@@ -100,11 +102,11 @@ async function flushQueue(dir: string, config: Config, origin: string): Promise<
 export async function main(cwd: string, sessionId?: string): Promise<void> {
   const config = initHook(cwd);
   if (!config) return;
-  const own = sessionId ? queueSessionDir(config.stateFilePath, sessionId) : undefined;
+  const own = sessionId ? safeName(sessionId) : undefined;
   const origin = queueOrigin(config);
-  for (const dir of listQueues(config.stateFilePath)) {
-    const mine = dir === own;
-    if (!mine && !foreignQueueLooksAbandoned(dir)) {
+  for (const session of listQueues(config.stateFilePath)) {
+    const dir = join(queueDir(config.stateFilePath), session);
+    if (session !== own && !foreignQueueLooksAbandoned(dir)) {
       debug(`Not flushing ${dir}, which another session may still be writing to`);
       discardEmptyQueue(dir);
       continue;

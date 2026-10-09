@@ -13840,6 +13840,9 @@ function createSecretAnonymizer(options) {
   return createAnonymizer(rules, { maxDepth: options?.maxDepth ?? 24 });
 }
 
+// dist/src/hooks/flush-queue.js
+import { join as join5 } from "node:path";
+
 // dist/src/utils/hook-init.js
 function initHook(cwd) {
   const config = loadConfig({ cwd });
@@ -13858,8 +13861,8 @@ function expandHome(path3) {
 }
 
 // dist/src/queue.js
-import { mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync, rmdirSync, statSync as statSync4, unlinkSync as unlinkSync3 } from "node:fs";
-import { dirname as dirname3, join as join3 } from "node:path";
+import { mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync as readdirSync2, statSync as statSync4, unlinkSync as unlinkSync3 } from "node:fs";
+import { join as join4 } from "node:path";
 import { createHmac, randomUUID as randomUUID2 } from "node:crypto";
 
 // dist/src/utils/atomic-file.js
@@ -13874,6 +13877,29 @@ function publishByRename(path3, contents, tempSuffix, mode) {
     closeSync(fd);
   }
   renameSync5(temp, path3);
+}
+
+// dist/src/utils/session-store.js
+import { readdirSync, rmdirSync } from "node:fs";
+import { dirname as dirname3, join as join3 } from "node:path";
+var safeName = (value) => {
+  const safe = value.replace(QUEUE_SESSION_UNSAFE_CHARS, "_");
+  return /[^.]/.test(safe) ? safe : `_${safe}`;
+};
+var storeRoot = (stateFilePath, dirName) => join3(dirname3(stateFilePath), dirName);
+var storeDir = (stateFilePath, dirName, sessionId) => join3(storeRoot(stateFilePath, dirName), safeName(sessionId));
+function listStoredSessions(stateFilePath, dirName) {
+  try {
+    return readdirSync(storeRoot(stateFilePath, dirName), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  } catch {
+    return [];
+  }
+}
+function discardDirIfEmpty(dir) {
+  try {
+    rmdirSync(dir);
+  } catch {
+  }
 }
 
 // dist/src/metadata.js
@@ -14069,36 +14095,25 @@ function queueOrigin(destination) {
   ]);
   return createHmac("sha256", destination.apiKey).update(identity).digest("hex").slice(0, QUEUE_ORIGIN_LENGTH);
 }
-function queueDir(stateFilePath) {
-  return join3(dirname3(stateFilePath), QUEUE_DIR_NAME);
-}
-function queueSessionDir(stateFilePath, sessionId) {
-  return join3(queueDir(stateFilePath), sessionId.replace(QUEUE_SESSION_UNSAFE_CHARS, "_"));
-}
-function listQueues(stateFilePath) {
-  const root = queueDir(stateFilePath);
-  try {
-    return readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => join3(root, entry.name)).sort();
-  } catch {
-    return [];
-  }
-}
+var queueDir = (stateFilePath) => storeRoot(stateFilePath, QUEUE_DIR_NAME);
+var queueSessionDir = (stateFilePath, sessionId) => storeDir(stateFilePath, QUEUE_DIR_NAME, sessionId);
+var listQueues = (stateFilePath) => listStoredSessions(stateFilePath, QUEUE_DIR_NAME);
 function names(dir) {
   try {
-    return readdirSync(dir);
+    return readdirSync2(dir);
   } catch {
     return [];
   }
 }
 function entryIds(dir) {
   try {
-    return readdirSync(dir).filter((name) => name.endsWith(QUEUE_FILE_SUFFIX)).sort().map((name) => name.slice(0, -QUEUE_FILE_SUFFIX.length));
+    return readdirSync2(dir).filter((name) => name.endsWith(QUEUE_FILE_SUFFIX)).sort().map((name) => name.slice(0, -QUEUE_FILE_SUFFIX.length));
   } catch {
     return [];
   }
 }
 function entryPath(dir, queueId) {
-  return join3(dir, `${queueId}${QUEUE_FILE_SUFFIX}`);
+  return join4(dir, `${queueId}${QUEUE_FILE_SUFFIX}`);
 }
 function readEntry(dir, queueId) {
   try {
@@ -14177,14 +14192,11 @@ function discardEmptyQueue(dir, now = Date.now()) {
     return;
   for (const name of names(dir).filter((entry) => entry.endsWith(QUEUE_TEMP_SUFFIX))) {
     try {
-      unlinkSync3(join3(dir, name));
+      unlinkSync3(join4(dir, name));
     } catch {
     }
   }
-  try {
-    rmdirSync(dir);
-  } catch {
-  }
+  discardDirIfEmpty(dir);
 }
 function queueIdleMs(dir, now = Date.now()) {
   try {
@@ -14381,11 +14393,11 @@ async function main(cwd, sessionId) {
   const config = initHook(cwd);
   if (!config)
     return;
-  const own = sessionId ? queueSessionDir(config.stateFilePath, sessionId) : void 0;
+  const own = sessionId ? safeName(sessionId) : void 0;
   const origin = queueOrigin(config);
-  for (const dir of listQueues(config.stateFilePath)) {
-    const mine = dir === own;
-    if (!mine && !foreignQueueLooksAbandoned(dir)) {
+  for (const session of listQueues(config.stateFilePath)) {
+    const dir = join5(queueDir(config.stateFilePath), session);
+    if (session !== own && !foreignQueueLooksAbandoned(dir)) {
       debug(`Not flushing ${dir}, which another session may still be writing to`);
       discardEmptyQueue(dir);
       continue;
