@@ -3,7 +3,7 @@
  */
 
 import type { RunTree } from "langsmith";
-import type { GIT_MARKERS, PINNED_REPOSITORY_KEYS } from "./constants.js";
+import type { GIT_MARKERS, PINNED_REPOSITORY_KEYS, TURN_RECORD_LINE } from "./constants.js";
 
 export type TracingMode = "full" | "metadata";
 
@@ -354,6 +354,37 @@ export interface QueuedRun {
   origin: string;
   /** A RunTree config without `client` or `replicas`, which the flusher supplies. */
   run: Record<string, unknown>;
+  record?: string;
+}
+
+export interface RecordedRun {
+  run_id: string;
+  parent_run_id?: string;
+  trace_id: string;
+  dotted_order: string;
+  name: string;
+  run_type: string;
+  project_name?: string;
+  start_time?: string;
+  end_time?: string;
+  tracing: TracingMode;
+  open?: boolean;
+  metadata: Record<string, unknown>;
+}
+
+export type TurnRecordLine =
+  | { k: typeof TURN_RECORD_LINE.run; root?: boolean; origin?: string; run: RecordedRun }
+  | { k: typeof TURN_RECORD_LINE.closed; turn_id?: string }
+  | { k: typeof TURN_RECORD_LINE.delivered; id: string };
+
+export interface TurnRecord {
+  path: string;
+  origin: string;
+  root?: RecordedRun;
+  children: RecordedRun[];
+  turnId?: string;
+  closed: boolean;
+  delivered: Set<string>;
 }
 
 // ─── Standalone Binary ──────────────────────────────────────────────────────

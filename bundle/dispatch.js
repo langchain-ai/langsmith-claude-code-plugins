@@ -925,6 +925,15 @@ var JQ_NULL_OUTPUT = "null";
 var STATE_FILE_DEFAULT = [".claude", "state", "langsmith_state.json"];
 var GH_LOGIN_MARKER_FILE = "langsmith_gh_login.json";
 var GH_LOGIN_RETRY_AFTER_MS = 24 * 60 * 60 * 1e3;
+var TURN_RECORD_DIR_NAME = "langsmith_turns";
+var TURN_RECORD_SUFFIX = ".turn.jsonl";
+var TURN_RECORD_MAX_BYTES = 8 * 1024 * 1024;
+var RECORDED_RUN_FALLBACK_TYPE = "tool";
+var TURN_RECORD_LINE = {
+  run: "run",
+  closed: "closed",
+  delivered: "ok"
+};
 
 // dist/src/utils/gh-login.js
 import { execFileSync } from "node:child_process";
@@ -13841,7 +13850,7 @@ function createSecretAnonymizer(options) {
 }
 
 // dist/src/hooks/flush-queue.js
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 
 // dist/src/utils/hook-init.js
 function initHook(cwd) {
@@ -14141,7 +14150,7 @@ function trim(dir) {
     removeQueued(dir, queueId);
   }
 }
-async function enqueueRun(stateFilePath, sessionId, run, tracing, origin) {
+async function enqueueRun(stateFilePath, sessionId, run, tracing, origin, record) {
   const dir = queueSessionDir(stateFilePath, sessionId);
   const queueId = `${String(Date.now()).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID2()}`;
   try {
@@ -14150,6 +14159,7 @@ async function enqueueRun(stateFilePath, sessionId, run, tracing, origin) {
       tracing,
       attempts: 0,
       origin,
+      record,
       run: runConfigForMode(run, tracing)
     });
     trim(dir);
@@ -14179,6 +14189,7 @@ function recordFailure2(dir, queueId) {
       tracing: entry.tracing,
       attempts,
       origin: entry.origin,
+      record: entry.record,
       run: entry.run
     });
   } catch (err) {
@@ -14227,9 +14238,175 @@ function runIsTooOldToUpload(entry, now = Date.now()) {
   return queuedAt === void 0 || now - queuedAt >= QUEUE_RUN_MAX_AGE_MS;
 }
 
+// dist/src/turn-record.js
+import { appendFileSync as appendFileSync2, existsSync as existsSync3, mkdirSync as mkdirSync6, readFileSync as readFileSync7, readdirSync as readdirSync3, statSync as statSync5, unlinkSync as unlinkSync4 } from "node:fs";
+import { dirname as dirname4, join as join5 } from "node:path";
+var turnRecordRoot = (stateFilePath) => storeRoot(stateFilePath, TURN_RECORD_DIR_NAME);
+var turnRecordDir = (stateFilePath, sessionId) => storeDir(stateFilePath, TURN_RECORD_DIR_NAME, sessionId);
+function turnRecordPath(stateFilePath, sessionId, turnKey) {
+  return join5(turnRecordDir(stateFilePath, sessionId), `${safeName(turnKey)}${TURN_RECORD_SUFFIX}`);
+}
+function entriesIn(dir, suffix) {
+  try {
+    return readdirSync3(dir).filter((name) => name.endsWith(suffix)).sort().map((name) => join5(dir, name));
+  } catch {
+    return [];
+  }
+}
+var listRecordedSessions = (stateFilePath) => listStoredSessions(stateFilePath, TURN_RECORD_DIR_NAME);
+var listTurnRecords = (dir) => entriesIn(dir, TURN_RECORD_SUFFIX);
+function recordsIdleMs(dir, now = Date.now()) {
+  let newest = 0;
+  for (const path3 of listTurnRecords(dir)) {
+    try {
+      newest = Math.max(newest, statSync5(path3).mtimeMs);
+    } catch {
+    }
+  }
+  return newest === 0 ? Number.POSITIVE_INFINITY : now - newest;
+}
+function append(path3, line) {
+  try {
+    mkdirSync6(dirname4(path3), { recursive: true, mode: PRIVATE_DIR_MODE });
+    appendFileSync2(path3, `${JSON.stringify(line)}
+`, { mode: PRIVATE_FILE_MODE });
+  } catch (err) {
+    warn(`Could not add to the turn record: ${err}`);
+  }
+}
+function recordedRun(run, tracing) {
+  const safe = runConfigForMode(run, tracing);
+  const extra = safe.extra;
+  if (typeof safe.id !== "string" || typeof safe.dotted_order !== "string")
+    return void 0;
+  return {
+    run_id: safe.id,
+    parent_run_id: typeof safe.parent_run_id === "string" ? safe.parent_run_id : void 0,
+    trace_id: typeof safe.trace_id === "string" ? safe.trace_id : safe.id,
+    dotted_order: safe.dotted_order,
+    name: typeof safe.name === "string" ? safe.name : "",
+    run_type: typeof safe.run_type === "string" ? safe.run_type : RECORDED_RUN_FALLBACK_TYPE,
+    project_name: typeof safe.project_name === "string" ? safe.project_name : void 0,
+    start_time: typeof safe.start_time === "string" ? safe.start_time : void 0,
+    end_time: typeof safe.end_time === "string" ? safe.end_time : void 0,
+    tracing,
+    metadata: JSON.parse(JSON.stringify(extra?.metadata ?? {}))
+  };
+}
+function recordRun(options) {
+  const run = recordedRun(options.run, options.tracing);
+  if (!run)
+    return;
+  if (options.closesAt) {
+    run.open = true;
+    run.end_time = options.closesAt;
+  }
+  append(options.path, {
+    k: TURN_RECORD_LINE.run,
+    root: options.root,
+    origin: options.origin,
+    run
+  });
+}
+function recordTurnClosed(path3, turnId) {
+  append(path3, { k: TURN_RECORD_LINE.closed, turn_id: turnId });
+}
+function closeTurnRecord(options) {
+  const path3 = turnRecordPath(options.stateFilePath, options.sessionId, options.turnRunId);
+  if (!existsSync3(path3))
+    return;
+  recordTurnClosed(path3, options.turnId);
+}
+function recordDelivered(path3, runId) {
+  append(path3, { k: TURN_RECORD_LINE.delivered, id: runId });
+}
+function readTurnRecord(path3) {
+  let contents;
+  try {
+    if (statSync5(path3).size > TURN_RECORD_MAX_BYTES) {
+      warn(`Dropping a turn record too large to be real: ${path3}`);
+      discardTurnRecord(path3);
+      return void 0;
+    }
+    contents = readFileSync7(path3, "utf-8");
+  } catch {
+    return void 0;
+  }
+  const record = {
+    path: path3,
+    origin: "",
+    children: [],
+    closed: false,
+    delivered: /* @__PURE__ */ new Set()
+  };
+  const byId = /* @__PURE__ */ new Map();
+  for (const line of contents.split("\n")) {
+    if (!line)
+      continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (parsed.k === TURN_RECORD_LINE.run && typeof parsed.run?.run_id === "string") {
+      if (parsed.root)
+        record.root = parsed.run;
+      else
+        byId.set(parsed.run.run_id, parsed.run);
+      if (parsed.origin)
+        record.origin = parsed.origin;
+    } else if (parsed.k === TURN_RECORD_LINE.closed) {
+      record.closed = true;
+      record.turnId = parsed.turn_id;
+    } else if (parsed.k === TURN_RECORD_LINE.delivered && typeof parsed.id === "string") {
+      record.delivered.add(parsed.id);
+    }
+  }
+  record.children = [...byId.values()];
+  return record;
+}
+function discardTurnRecord(path3) {
+  try {
+    unlinkSync4(path3);
+    debug(`Removed the turn record ${path3}`);
+  } catch {
+  }
+}
+
+// dist/src/upload-confirm.js
+function watchUploads(client2) {
+  let failure;
+  const createRun = client2.createRun.bind(client2);
+  const updateRun = client2.updateRun.bind(client2);
+  client2.createRun = async (...args) => {
+    try {
+      return await createRun(...args);
+    } catch (err) {
+      failure = err;
+      throw err;
+    }
+  };
+  client2.updateRun = async (...args) => {
+    try {
+      return await updateRun(...args);
+    } catch (err) {
+      failure = err;
+      throw err;
+    }
+  };
+  return {
+    failure() {
+      const seen = failure;
+      failure = void 0;
+      return seen;
+    }
+  };
+}
+
 // dist/src/utils/file-lock.js
-import { readFileSync as readFileSync7, writeFileSync as writeFileSync4, linkSync, mkdirSync as mkdirSync6, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync4 } from "node:fs";
-import { dirname as dirname4 } from "node:path";
+import { readFileSync as readFileSync8, writeFileSync as writeFileSync4, linkSync, mkdirSync as mkdirSync7, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync5 } from "node:fs";
+import { dirname as dirname5 } from "node:path";
 import { randomUUID as randomUUID3 } from "node:crypto";
 var LOCK_TIMEOUT_MS = 5e3;
 var LOCK_RETRY_MS = 20;
@@ -14242,7 +14419,7 @@ function sleep3(ms) {
 async function acquireLock(stateFilePath) {
   const lock = lockPath(stateFilePath);
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync6(dirname4(stateFilePath), { recursive: true });
+  mkdirSync7(dirname5(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
       const fd = openSync2(lock, "wx", PRIVATE_FILE_MODE);
@@ -14253,13 +14430,13 @@ async function acquireLock(stateFilePath) {
     }
   }
   try {
-    unlinkSync4(lock);
+    unlinkSync5(lock);
   } catch {
   }
 }
 function releaseLock(stateFilePath) {
   try {
-    unlinkSync4(lockPath(stateFilePath));
+    unlinkSync5(lockPath(stateFilePath));
   } catch {
   }
 }
@@ -14277,7 +14454,7 @@ function claimLock(lock) {
     return false;
   } finally {
     try {
-      unlinkSync4(staging);
+      unlinkSync5(staging);
     } catch {
     }
   }
@@ -14285,7 +14462,7 @@ function claimLock(lock) {
 function holderIsGone(lock) {
   let pid;
   try {
-    pid = Number(readFileSync7(lock, "utf-8"));
+    pid = Number(readFileSync8(lock, "utf-8"));
   } catch {
     return false;
   }
@@ -14301,7 +14478,7 @@ function holderIsGone(lock) {
 function tryAcquireLock(filePath) {
   const lock = lockPath(filePath);
   try {
-    mkdirSync6(dirname4(filePath), { recursive: true });
+    mkdirSync7(dirname5(filePath), { recursive: true });
   } catch {
     return false;
   }
@@ -14310,7 +14487,7 @@ function tryAcquireLock(filePath) {
   if (!holderIsGone(lock))
     return false;
   try {
-    unlinkSync4(lock);
+    unlinkSync5(lock);
   } catch {
     return false;
   }
@@ -14335,59 +14512,69 @@ function flusherClient(config) {
     autoBatchTracing: false
   });
 }
-function watchUploadFailures(client2) {
-  let failure;
-  const createRun = client2.createRun.bind(client2);
-  client2.createRun = async (...args) => {
-    try {
-      return await createRun(...args);
-    } catch (err) {
-      failure = err;
-      throw err;
+async function uploadQueued(dir, config, origin, client2, watch) {
+  for (; ; ) {
+    const entry = nextQueued(dir);
+    if (!entry)
+      break;
+    if (runIsTooOldToUpload(entry)) {
+      warn(`Dropping a queued run LangSmith will no longer accept: ${entry.queue_id}`);
+      removeQueued(dir, entry.queue_id);
+      continue;
     }
-  };
-  return () => {
-    const seen = failure;
-    failure = void 0;
-    return seen;
-  };
+    if (entry.origin !== origin) {
+      warn(`Leaving ${dir} alone: its next run was queued for a different LangSmith account`);
+      return false;
+    }
+    const runTree = createRunTree({ ...entry.run, client: client2, replicas: config.replicas }, entry.tracing);
+    await runTree.postRun();
+    const failure = watch.failure();
+    if (failure) {
+      warn(`Queued run upload failed: ${failure}`);
+      recordFailure2(dir, entry.queue_id);
+      return false;
+    }
+    if (entry.record && typeof entry.run.id === "string") {
+      recordDelivered(entry.record, entry.run.id);
+    }
+    removeQueued(dir, entry.queue_id);
+  }
+  discardEmptyQueue(dir);
+  return true;
 }
-async function flushQueue(dir, config, origin) {
+function clearFinishedTurns(recordDir, origin) {
+  for (const path3 of listTurnRecords(recordDir)) {
+    const record = readTurnRecord(path3);
+    if (!record || record.origin !== origin)
+      continue;
+    const everyChildLanded = record.children.every((child) => record.delivered.has(child.run_id));
+    if (record.closed && everyChildLanded)
+      discardTurnRecord(path3);
+  }
+  discardDirIfEmpty(recordDir);
+}
+async function drainSession(session, config, origin) {
+  const dir = join6(queueDir(config.stateFilePath), session);
   const flushTarget = `${dir}.flush`;
   if (!tryAcquireLock(flushTarget)) {
     debug(`Another flusher already owns ${dir}`);
     return;
   }
   const client2 = flusherClient(config);
-  const lastUploadError = watchUploadFailures(client2);
+  const watch = watchUploads(client2);
+  const records = join6(turnRecordRoot(config.stateFilePath), session);
   try {
-    for (; ; ) {
-      const entry = nextQueued(dir);
-      if (!entry)
-        break;
-      if (runIsTooOldToUpload(entry)) {
-        warn(`Dropping a queued run LangSmith will no longer accept: ${entry.queue_id}`);
-        removeQueued(dir, entry.queue_id);
-        continue;
-      }
-      if (entry.origin !== origin) {
-        warn(`Leaving ${dir} alone: its next run was queued for a different LangSmith account`);
-        break;
-      }
-      const runTree = createRunTree({ ...entry.run, client: client2, replicas: config.replicas }, entry.tracing);
-      await runTree.postRun();
-      const failure = lastUploadError();
-      if (failure) {
-        warn(`Queued run upload failed: ${failure}`);
-        recordFailure2(dir, entry.queue_id);
-        return;
-      }
-      removeQueued(dir, entry.queue_id);
-    }
-    discardEmptyQueue(dir);
+    await uploadQueued(dir, config, origin, client2, watch);
+    clearFinishedTurns(records, origin);
   } finally {
     releaseLock(flushTarget);
   }
+}
+function looksAbandoned(session, stateFilePath) {
+  const queued = join6(queueDir(stateFilePath), session);
+  if (foreignQueueLooksAbandoned(queued))
+    return true;
+  return recordsIdleMs(join6(turnRecordRoot(stateFilePath), session)) >= FOREIGN_QUEUE_MIN_RECORD_AGE_MS;
 }
 async function main(cwd, sessionId) {
   const config = initHook(cwd);
@@ -14395,26 +14582,31 @@ async function main(cwd, sessionId) {
     return;
   const own = sessionId ? safeName(sessionId) : void 0;
   const origin = queueOrigin(config);
-  for (const session of listQueues(config.stateFilePath)) {
-    const dir = join5(queueDir(config.stateFilePath), session);
-    if (session !== own && !foreignQueueLooksAbandoned(dir)) {
-      debug(`Not flushing ${dir}, which another session may still be writing to`);
-      discardEmptyQueue(dir);
+  const sessions = /* @__PURE__ */ new Set([
+    ...listQueues(config.stateFilePath),
+    ...listRecordedSessions(config.stateFilePath)
+  ]);
+  if (own)
+    sessions.add(own);
+  for (const session of [...sessions].sort()) {
+    if (session !== own && !looksAbandoned(session, config.stateFilePath)) {
+      debug(`Not flushing ${session}, which another session may still be writing to`);
+      discardEmptyQueue(join6(queueDir(config.stateFilePath), session));
       continue;
     }
     try {
-      await flushQueue(dir, config, origin);
+      await drainSession(session, config, origin);
     } catch (err) {
-      warn(`Could not flush ${dir}: ${err}`);
+      warn(`Could not flush ${session}: ${err}`);
     }
   }
 }
 
 // dist/src/tracing-policy.js
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { lstatSync as lstatSync2, readFileSync as readFileSync8 } from "node:fs";
+import { lstatSync as lstatSync2, readFileSync as readFileSync9 } from "node:fs";
 import { mkdir as mkdir3, open, rename as rename2, rmdir, unlink as unlink2 } from "node:fs/promises";
-import { dirname as dirname5 } from "node:path";
+import { dirname as dirname6 } from "node:path";
 import { performance as performance2 } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 function isMode(value) {
@@ -14429,7 +14621,7 @@ function hasCode(error2, code) {
 function readPolicy(path3) {
   let raw;
   try {
-    raw = readFileSync8(path3, "utf8");
+    raw = readFileSync9(path3, "utf8");
   } catch (error2) {
     if (hasCode(error2, "ENOENT")) {
       try {
@@ -14476,7 +14668,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
   }
   const path3 = tracingPolicyPath(stateFilePath);
   const lockPath2 = `${path3}.lock`;
-  await mkdir3(dirname5(path3), { recursive: true });
+  await mkdir3(dirname6(path3), { recursive: true });
   const deadline = performance2.now() + 2e3;
   let locked = false;
   while (!locked) {
@@ -14523,7 +14715,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     await rename2(tempPath, path3);
     tempPath = void 0;
     await bestEffort(async () => {
-      const directory = await open(dirname5(path3), "r");
+      const directory = await open(dirname6(path3), "r");
       try {
         await directory.sync();
       } finally {
@@ -14546,17 +14738,17 @@ function resolveTurnTracingMode(config, sessionId, ...snapshots) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync9, statSync as statSync5, fstatSync, openSync as openSync3, readSync, closeSync as closeSync3 } from "node:fs";
+import { readFileSync as readFileSync10, statSync as statSync6, fstatSync, openSync as openSync3, readSync, closeSync as closeSync3 } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
   let size;
   try {
-    size = statSync5(filePath).size;
+    size = statSync6(filePath).size;
   } catch {
     return { messages: [], lastLine: afterLine };
   }
   if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync9(filePath, "utf-8");
+    const raw = readFileSync10(filePath, "utf-8");
     const lines = raw.split("\n").filter((l) => l.trim() !== "");
     const messages = [];
     let lastLine = afterLine;
@@ -14618,11 +14810,11 @@ function readTranscript(filePath, afterLine = -1) {
 }
 function getTranscriptEndLine(filePath) {
   try {
-    const size = statSync5(filePath).size;
+    const size = statSync6(filePath).size;
     if (size === 0)
       return -1;
     if (size <= MAX_FULL_READ_BYTES) {
-      const raw = readFileSync9(filePath, "utf-8");
+      const raw = readFileSync10(filePath, "utf-8");
       const lines = raw.split("\n").filter((l) => l.trim() !== "");
       return lines.length > 0 ? lines.length - 1 : -1;
     }
@@ -14853,8 +15045,8 @@ function groupIntoTurns(messages) {
 }
 
 // dist/src/state.js
-import { readFileSync as readFileSync10, mkdirSync as mkdirSync7 } from "node:fs";
-import { dirname as dirname6 } from "node:path";
+import { readFileSync as readFileSync11, mkdirSync as mkdirSync8 } from "node:fs";
+import { dirname as dirname7 } from "node:path";
 function publishState(stateFilePath, state) {
   publishByRename(stateFilePath, JSON.stringify(state, null, 2), STATE_TEMP_SUFFIX, PRIVATE_FILE_MODE);
 }
@@ -14866,7 +15058,7 @@ async function atomicUpdateState(stateFilePath, fn) {
 }
 function loadState(stateFilePath) {
   try {
-    const raw = readFileSync10(stateFilePath, "utf-8");
+    const raw = readFileSync11(stateFilePath, "utf-8");
     return JSON.parse(raw);
   } catch {
     return {};
@@ -14928,21 +15120,21 @@ function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, c
 }
 
 // dist/src/repo-attribution.js
-import { existsSync as existsSync3 } from "node:fs";
+import { existsSync as existsSync4 } from "node:fs";
 import { isAbsolute, resolve as resolve3 } from "node:path";
 
 // dist/src/repo-attribution-paths.js
-import { statSync as statSync6 } from "node:fs";
-import { dirname as dirname7, join as join6, resolve as resolve2 } from "node:path";
+import { statSync as statSync7 } from "node:fs";
+import { dirname as dirname8, join as join7, resolve as resolve2 } from "node:path";
 function nearestExistingDirectory(path3) {
   let current = path3;
   for (; ; ) {
-    const parent = dirname7(current);
+    const parent = dirname8(current);
     const reachedFilesystemRoot = parent === current;
     if (reachedFilesystemRoot)
       return void 0;
     try {
-      if (statSync6(current).isDirectory())
+      if (statSync7(current).isDirectory())
         return current;
     } catch {
     }
@@ -14951,7 +15143,7 @@ function nearestExistingDirectory(path3) {
 }
 function gitMarkerAt(directory) {
   try {
-    return statSync6(join6(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
+    return statSync7(join7(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
   } catch {
     return GIT_MARKERS.NOTHING_HERE;
   }
@@ -14964,7 +15156,7 @@ function rootFromGitMarker(directory) {
       return current;
     if (marker === GIT_MARKERS.ONLY_GIT_CAN_SAY)
       return void 0;
-    const parent = dirname7(current);
+    const parent = dirname8(current);
     const reachedFilesystemRoot = parent === current;
     if (reachedFilesystemRoot)
       return null;
@@ -14992,7 +15184,7 @@ function toolPathFromInput(toolInput, sessionCwd) {
     if (!sessionCwd || !isAbsolute(sessionCwd))
       continue;
     const resolved = resolve3(sessionCwd, value);
-    if (existsSync3(resolved))
+    if (existsSync4(resolved))
       return { path: resolved, namedAPath };
   }
   return { namedAPath };
@@ -15396,7 +15588,7 @@ async function traceTurn(options) {
 async function patchTurnRun(id, result) {
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized \u2014 call initTracing() first");
-  const runTree = createRunTree({
+  const config = {
     client,
     replicas,
     name: USER_PROMPT_TURN_NAME,
@@ -15420,8 +15612,10 @@ async function patchTurnRun(id, result) {
         agentType: "root"
       })
     }
-  }, id.tracing);
+  };
+  const runTree = createRunTree(config, id.tracing);
   await runTree.patchRun({ excludeInputs: true });
+  return config;
 }
 function turnIdentityFromOpenTurn(turn, ctx) {
   return {
@@ -15441,7 +15635,7 @@ function turnIdentityFromOpenTurn(turn, ctx) {
   };
 }
 async function completeTurnRun(options) {
-  await patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
+  return patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
 }
 async function closeTurnRun(id, error2) {
   await patchTurnRun(id, { error: error2 });
@@ -15956,6 +16150,33 @@ async function handleWorkflowSubagentStop(opts) {
   await flushPendingTraces();
 }
 
+// dist/src/utils/detach.js
+import { spawn } from "node:child_process";
+
+// dist/src/utils/binary-runtime.js
+var COMPILED_ROOT = "/$bunfs/";
+function runningCompiledBinary() {
+  const main11 = globalThis.Bun?.main;
+  return typeof main11 === "string" && main11.startsWith(COMPILED_ROOT);
+}
+
+// dist/src/utils/detach.js
+function startQueueFlusher(cwd, sessionId) {
+  try {
+    const self = runningCompiledBinary() ? [] : [process.argv[1]];
+    const child = spawn(process.execPath, [...self, FLUSH_QUEUE_ARG, cwd, sessionId], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true
+    });
+    child.on("error", (err) => warn(`The queue flusher could not start: ${err}`));
+    child.unref();
+    debug(`Started detached queue flusher (pid ${child.pid})`);
+  } catch (err) {
+    warn(`Could not start the queue flusher: ${err}`);
+  }
+}
+
 // dist/src/hooks/post-tool-use.js
 async function main3() {
   const input = await readStdin();
@@ -15989,6 +16210,7 @@ async function main3() {
   const workflow = !agentId ? detectWorkflowLaunch(input.tool_name, input.tool_response) : void 0;
   const sessionMetadataBase = sessionScopedMetadata(config.customMetadata, input.cwd);
   const toolMetadataBase = repoScopedMetadata(sessionMetadataBase, input.tool_input, input.cwd);
+  const turnRecord = turnRecordPath(config.stateFilePath, input.session_id, parentRunId);
   if (agentId) {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
   } else if (workflow) {
@@ -16021,7 +16243,17 @@ async function main3() {
     }, tracing);
     await runTree.postRun();
   } else {
-    await enqueueRun(config.stateFilePath, input.session_id, {
+    const toolMetadata = codingAgentMetadata({
+      sessionId: input.session_id,
+      base: toolMetadataBase,
+      turnNumber: sessionState.current_turn_number,
+      runtimeVersion: sessionState.runtime_version,
+      agentType: "root",
+      toolName: input.tool_name,
+      runName: input.tool_name,
+      skillName: skillNameFromTool(input.tool_name, input.tool_input)
+    });
+    const toolRun = {
       id: toolRunId,
       name: input.tool_name,
       run_type: "tool",
@@ -16033,21 +16265,12 @@ async function main3() {
       parent_run_id: parentRunId,
       trace_id: traceId,
       dotted_order: toolDottedOrder,
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId: input.session_id,
-          base: toolMetadataBase,
-          // turn_id (promptId) isn't in the PostToolUse payload; turn_number is
-          // sufficient (the contract needs at least one of the two).
-          turnNumber: sessionState.current_turn_number,
-          runtimeVersion: sessionState.runtime_version,
-          agentType: "root",
-          toolName: input.tool_name,
-          runName: input.tool_name,
-          skillName: skillNameFromTool(input.tool_name, input.tool_input)
-        })
-      }
-    }, tracing, queueOrigin(config));
+      extra: { metadata: toolMetadata }
+    };
+    const origin = queueOrigin(config);
+    recordRun({ path: turnRecord, run: toolRun, tracing, origin });
+    await enqueueRun(config.stateFilePath, input.session_id, toolRun, tracing, origin, turnRecord);
+    startQueueFlusher(input.cwd, input.session_id);
   }
   await atomicUpdateState(config.stateFilePath, (freshState) => {
     const freshSession = getSessionState(freshState, input.session_id);
@@ -16198,6 +16421,11 @@ async function main6() {
   let lastLine = sessionState.last_line;
   let turnsTraced = 0;
   if (sessionState.current_turn_run_id) {
+    closeTurnRecord({
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      turnRunId: sessionState.current_turn_run_id
+    });
     debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
     try {
       const res = await closeInterruptedTurn({
@@ -16241,6 +16469,12 @@ async function main6() {
   for (const [turnRunId, entry] of Object.entries(openTurns)) {
     if (turnRunId === sessionState.current_turn_run_id)
       continue;
+    closeTurnRecord({
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      turnRunId,
+      turnId: entry.turn_id
+    });
     try {
       if (entry.stop_seen) {
         await completeTurnRun({
@@ -16273,6 +16507,7 @@ async function main6() {
     }
   }
   await flushPendingTraces();
+  startQueueFlusher(input.cwd, input.session_id);
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);
     return {
@@ -16300,33 +16535,6 @@ async function main6() {
     };
   });
   debug(`Session end cleanup complete (reason=${input.reason})`);
-}
-
-// dist/src/utils/detach.js
-import { spawn } from "node:child_process";
-
-// dist/src/utils/binary-runtime.js
-var COMPILED_ROOT = "/$bunfs/";
-function runningCompiledBinary() {
-  const main11 = globalThis.Bun?.main;
-  return typeof main11 === "string" && main11.startsWith(COMPILED_ROOT);
-}
-
-// dist/src/utils/detach.js
-function startQueueFlusher(cwd, sessionId) {
-  try {
-    const self = runningCompiledBinary() ? [] : [process.argv[1]];
-    const child = spawn(process.execPath, [...self, FLUSH_QUEUE_ARG, cwd, sessionId], {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true
-    });
-    child.on("error", (err) => warn(`The queue flusher could not start: ${err}`));
-    child.unref();
-    debug(`Started detached queue flusher (pid ${child.pid})`);
-  } catch (err) {
-    warn(`Could not start the queue flusher: ${err}`);
-  }
 }
 
 // dist/src/finalize.js
@@ -16391,6 +16599,12 @@ async function finalizeNotificationChain(opts) {
       };
     });
     if (toComplete) {
+      closeTurnRecord({
+        stateFilePath,
+        sessionId,
+        turnRunId: toComplete.run_id,
+        turnId: toComplete.turn_id
+      });
       try {
         await completeTurnRun({
           ...turnIdentityFromOpenTurn(toComplete, { sessionId, project, customMetadata }),
@@ -16616,10 +16830,13 @@ async function main7() {
     s.tool_start_times = {};
     return pruneOldSessions(updatedState);
   });
+  let turnRecord;
+  let closedTurnRun;
   if (completeNow && currentRunId) {
     debug(`Completing Turn run ${currentRunId}`);
+    turnRecord = turnRecordPath(config.stateFilePath, input.session_id, currentRunId);
     try {
-      await completeTurnRun({
+      closedTurnRun = await completeTurnRun({
         tracing: currentTracing,
         sessionId: input.session_id,
         runId: currentRunId,
@@ -16695,6 +16912,19 @@ async function main7() {
     }
   }
   await flushPendingTraces();
+  if (turnRecord) {
+    if (closedTurnRun) {
+      recordRun({
+        path: turnRecord,
+        run: closedTurnRun,
+        tracing: currentTracing,
+        origin: queueOrigin(config),
+        root: true
+      });
+    }
+    recordTurnClosed(turnRecord, lastTurnId);
+  }
+  startQueueFlusher(input.cwd, input.session_id);
   const duration = ((Date.now() - startTime) / 1e3).toFixed(1);
   log(`Processed ${tracedTurns} turns in ${duration}s`);
   if (Date.now() - startTime > 18e4) {
@@ -17075,7 +17305,7 @@ async function main10() {
     parentRunId = void 0;
     dottedOrder = segment;
   }
-  const runTree = createRunTree({
+  const turnRun = {
     client: client2,
     replicas: config.replicas,
     id: runId,
@@ -17091,15 +17321,22 @@ async function main10() {
       metadata: codingAgentMetadata({
         sessionId: input.session_id,
         base: config.customMetadata,
-        // turn_id (promptId) isn't known yet; Stop stamps it on completion.
         turnNumber: turnNum,
         runtimeVersion,
         approvalPolicy,
         agentType: "root"
       })
     }
-  }, turnMode);
+  };
+  const runTree = createRunTree(turnRun, turnMode);
   await runTree.postRun();
+  recordRun({
+    path: turnRecordPath(config.stateFilePath, input.session_id, runId),
+    run: turnRun,
+    tracing: turnMode,
+    origin: queueOrigin(config),
+    root: true
+  });
   debug(`Created initial run ${runId} for turn ${turnNum}`);
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);

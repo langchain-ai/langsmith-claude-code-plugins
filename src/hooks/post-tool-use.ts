@@ -25,6 +25,8 @@ import { createRunTree, runConfigForMode } from "../privacy.js";
 import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
 import { enqueueRun, queueOrigin } from "../queue.js";
+import { recordRun, turnRecordPath } from "../turn-record.js";
+import { startQueueFlusher } from "../utils/detach.js";
 
 interface PostToolUseHookInput {
   session_id: string;
@@ -99,6 +101,7 @@ export async function main(): Promise<void> {
 
   const sessionMetadataBase = sessionScopedMetadata(config.customMetadata, input.cwd);
   const toolMetadataBase = repoScopedMetadata(sessionMetadataBase, input.tool_input, input.cwd);
+  const turnRecord = turnRecordPath(config.stateFilePath, input.session_id, parentRunId);
 
   if (agentId) {
     // Agent tool: defer LangSmith run creation to the Stop hook, which will
@@ -149,39 +152,34 @@ export async function main(): Promise<void> {
     await runTree.postRun();
   } else {
     // Regular tool: queue the finished run and leave the upload to the flusher.
-    await enqueueRun(
-      config.stateFilePath,
-      input.session_id,
-      {
-        id: toolRunId,
-        name: input.tool_name,
-        run_type: "tool",
-        inputs: { input: input.tool_input },
-        outputs: { output: input.tool_response },
-        project_name: config.project,
-        start_time: startTimeIso,
-        end_time: toolEndTimeIso,
-        parent_run_id: parentRunId,
-        trace_id: traceId,
-        dotted_order: toolDottedOrder,
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId: input.session_id,
-            base: toolMetadataBase,
-            // turn_id (promptId) isn't in the PostToolUse payload; turn_number is
-            // sufficient (the contract needs at least one of the two).
-            turnNumber: sessionState.current_turn_number,
-            runtimeVersion: sessionState.runtime_version,
-            agentType: "root",
-            toolName: input.tool_name,
-            runName: input.tool_name,
-            skillName: skillNameFromTool(input.tool_name, input.tool_input),
-          }),
-        },
-      },
-      tracing,
-      queueOrigin(config),
-    );
+    const toolMetadata = codingAgentMetadata({
+      sessionId: input.session_id,
+      base: toolMetadataBase,
+      turnNumber: sessionState.current_turn_number,
+      runtimeVersion: sessionState.runtime_version,
+      agentType: "root",
+      toolName: input.tool_name,
+      runName: input.tool_name,
+      skillName: skillNameFromTool(input.tool_name, input.tool_input),
+    });
+    const toolRun = {
+      id: toolRunId,
+      name: input.tool_name,
+      run_type: "tool",
+      inputs: { input: input.tool_input },
+      outputs: { output: input.tool_response },
+      project_name: config.project,
+      start_time: startTimeIso,
+      end_time: toolEndTimeIso,
+      parent_run_id: parentRunId,
+      trace_id: traceId,
+      dotted_order: toolDottedOrder,
+      extra: { metadata: toolMetadata },
+    };
+    const origin = queueOrigin(config);
+    recordRun({ path: turnRecord, run: toolRun, tracing, origin });
+    await enqueueRun(config.stateFilePath, input.session_id, toolRun, tracing, origin, turnRecord);
+    startQueueFlusher(input.cwd, input.session_id);
   }
 
   // Save state atomically so concurrent PostToolUse hooks don't clobber each other.

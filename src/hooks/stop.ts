@@ -35,6 +35,8 @@ import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { startQueueFlusher } from "../utils/detach.js";
+import { recordRun, recordTurnClosed, turnRecordPath } from "../turn-record.js";
+import { queueOrigin } from "../queue.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { MUTED_TRACE_CONTENT } from "../privacy.js";
 import type { TaskRunEntry } from "../langsmith.js";
@@ -384,10 +386,13 @@ export async function main(): Promise<void> {
   });
 
   // Complete the Turn run created by UserPromptSubmit (unless deferred above).
+  let turnRecord: string | undefined;
+  let closedTurnRun: Record<string, unknown> | undefined;
   if (completeNow && currentRunId) {
     debug(`Completing Turn run ${currentRunId}`);
+    turnRecord = turnRecordPath(config.stateFilePath, input.session_id, currentRunId);
     try {
-      await completeTurnRun({
+      closedTurnRun = await completeTurnRun({
         tracing: currentTracing,
         sessionId: input.session_id,
         runId: currentRunId,
@@ -481,6 +486,21 @@ export async function main(): Promise<void> {
 
   // Flush pending batches to ensure all traces are sent before hook exits.
   await flushPendingTraces();
+
+  if (turnRecord) {
+    if (closedTurnRun) {
+      recordRun({
+        path: turnRecord,
+        run: closedTurnRun,
+        tracing: currentTracing,
+        origin: queueOrigin(config),
+        root: true,
+      });
+    }
+    recordTurnClosed(turnRecord, lastTurnId);
+  }
+
+  startQueueFlusher(input.cwd, input.session_id);
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
   log(`Processed ${tracedTurns} turns in ${duration}s`);

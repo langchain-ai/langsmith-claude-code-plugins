@@ -30,6 +30,8 @@ import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { startQueueFlusher } from "../utils/detach.js";
+import { queueOrigin } from "../queue.js";
+import { recordRun, turnRecordPath } from "../turn-record.js";
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
 import { codingAgentMetadata } from "../metadata.js";
 import { createRunTree } from "../privacy.js";
@@ -278,35 +280,41 @@ export async function main(): Promise<void> {
     dottedOrder = segment;
   }
 
-  const runTree = createRunTree(
-    {
-      client,
-      replicas: config.replicas,
-      id: runId,
-      name: USER_PROMPT_TURN_NAME,
-      run_type: "chain",
-      inputs: { messages: [{ role: "user", content: input.prompt }] },
-      project_name: config.project,
-      start_time: startTime,
-      trace_id: traceId,
-      dotted_order: dottedOrder,
-      ...(parentRunId ? { parent_run_id: parentRunId } : {}),
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId: input.session_id,
-          base: config.customMetadata,
-          // turn_id (promptId) isn't known yet; Stop stamps it on completion.
-          turnNumber: turnNum,
-          runtimeVersion,
-          approvalPolicy,
-          agentType: "root",
-        }),
-      },
+  const turnRun = {
+    client,
+    replicas: config.replicas,
+    id: runId,
+    name: USER_PROMPT_TURN_NAME,
+    run_type: "chain",
+    inputs: { messages: [{ role: "user", content: input.prompt }] },
+    project_name: config.project,
+    start_time: startTime,
+    trace_id: traceId,
+    dotted_order: dottedOrder,
+    ...(parentRunId ? { parent_run_id: parentRunId } : {}),
+    extra: {
+      metadata: codingAgentMetadata({
+        sessionId: input.session_id,
+        base: config.customMetadata,
+        turnNumber: turnNum,
+        runtimeVersion,
+        approvalPolicy,
+        agentType: "root",
+      }),
     },
-    turnMode,
-  );
+  };
+
+  const runTree = createRunTree(turnRun, turnMode);
 
   await runTree.postRun();
+
+  recordRun({
+    path: turnRecordPath(config.stateFilePath, input.session_id, runId),
+    run: turnRun,
+    tracing: turnMode,
+    origin: queueOrigin(config),
+    root: true,
+  });
 
   debug(`Created initial run ${runId} for turn ${turnNum}`);
 

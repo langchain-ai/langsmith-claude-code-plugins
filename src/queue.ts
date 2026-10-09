@@ -128,6 +128,7 @@ export async function enqueueRun(
   run: Record<string, unknown>,
   tracing: TracingMode,
   origin: string,
+  record?: string,
 ): Promise<void> {
   const dir = queueSessionDir(stateFilePath, sessionId);
   const queueId = `${String(Date.now()).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID()}`;
@@ -138,6 +139,7 @@ export async function enqueueRun(
       tracing,
       attempts: 0,
       origin,
+      record,
       run: runConfigForMode(run, tracing),
     });
     trim(dir);
@@ -169,6 +171,7 @@ export function recordFailure(dir: string, queueId: string): void {
       tracing: entry.tracing,
       attempts,
       origin: entry.origin,
+      record: entry.record,
       run: entry.run,
     });
   } catch (err) {
