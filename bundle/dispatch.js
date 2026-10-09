@@ -886,6 +886,11 @@ var GIT_LOCATION_ENV_KEYS = [
 var NOT_A_REPOSITORY = /not a git repository \(or any of the parent directories\)/i;
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
 var GIT_DIRECTORY_NAME = ".git";
+var GIT_MARKERS = {
+  REPOSITORY_ROOT: "repository root",
+  ONLY_GIT_CAN_SAY: "only git can say",
+  NOTHING_HERE: "nothing here"
+};
 var TURN_REPOSITORY_KEYS = [
   "repository_name",
   "repository_provider",
@@ -14575,18 +14580,18 @@ function nearestExistingDirectory(path3) {
 }
 function gitMarkerAt(directory) {
   try {
-    return statSync5(join3(directory, GIT_DIRECTORY_NAME)).isDirectory() ? "repository root" : "only git can say";
+    return statSync5(join3(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
   } catch {
-    return "nothing here";
+    return GIT_MARKERS.NOTHING_HERE;
   }
 }
 function rootFromGitMarker(directory) {
   let current = resolve2(directory);
   for (; ; ) {
     const marker = gitMarkerAt(current);
-    if (marker === "repository root")
+    if (marker === GIT_MARKERS.REPOSITORY_ROOT)
       return current;
-    if (marker === "only git can say")
+    if (marker === GIT_MARKERS.ONLY_GIT_CAN_SAY)
       return void 0;
     const parent = dirname5(current);
     const reachedFilesystemRoot = parent === current;

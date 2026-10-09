@@ -3,7 +3,7 @@
  */
 
 import type { RunTree } from "langsmith";
-import type { PINNED_REPOSITORY_KEYS } from "./constants.js";
+import type { GIT_MARKERS, PINNED_REPOSITORY_KEYS } from "./constants.js";
 
 export type TracingMode = "full" | "metadata";
 
@@ -186,7 +186,7 @@ export interface ToolPathLookup {
   namedAPath: boolean;
 }
 
-export type GitMarker = "repository root" | "only git can say" | "nothing here";
+export type GitMarker = (typeof GIT_MARKERS)[keyof typeof GIT_MARKERS];
 
 export interface MetadataWithPins {
   [PINNED_REPOSITORY_KEYS]?: ReadonlySet<string>;
