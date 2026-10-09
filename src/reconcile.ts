@@ -17,9 +17,14 @@ import {
 } from "./constants.js";
 import { createRunTree } from "./privacy.js";
 import { debug, warn } from "./logger.js";
-import { discardTurnRecord, recordReconciled } from "./turn-record.js";
+import {
+  discardTurnRecord,
+  readTurnRecord,
+  recordReconciled,
+  turnRecordPath,
+} from "./turn-record.js";
 import type { UploadWatch } from "./upload-confirm.js";
-import type { RecordedRun, TurnRecord } from "./types.js";
+import type { RecordedRun, TurnRecord, TurnRecordTarget } from "./types.js";
 
 type Attribution = Record<string, string>;
 
@@ -35,8 +40,8 @@ function attributionOf(metadata: Record<string, unknown> | undefined): Attributi
 const namesARepository = (carried: Attribution): boolean =>
   carried[REPOSITORY_NAME_KEY] !== undefined;
 
-export const awaitsTheTurn = (metadata: Record<string, unknown> | undefined): boolean =>
-  !metadata?.[REPOSITORY_NAME_KEY] || !metadata?.[ATTRIBUTION_IDENTIFIER_KEY];
+export const everyChildLanded = (record: TurnRecord): boolean =>
+  record.children.every((child) => record.delivered.has(child.run_id));
 
 export function turnAttribution(record: TurnRecord): Attribution | undefined {
   const root = attributionOf(record.root?.metadata);
@@ -83,6 +88,26 @@ export function settledTurnMetadata(
   if (!filled) return base;
   const missing = Object.entries(filled).filter(([key]) => base?.[key] === undefined);
   return missing.length === 0 ? base : { ...base, ...Object.fromEntries(missing) };
+}
+
+export function settledFromTurn(options: {
+  base: Record<string, unknown> | undefined;
+  stateFilePath: string;
+  sessionId: string;
+  turnRunId: string | undefined;
+}): Record<string, unknown> | undefined {
+  const { base, stateFilePath, sessionId, turnRunId } = options;
+  if (!turnRunId) return base;
+  const record = readTurnRecord(turnRecordPath(stateFilePath, sessionId, turnRunId));
+  if (!record || !everyChildLanded(record)) return base;
+  return settledTurnMetadata(base, record) ?? base;
+}
+
+export function attributionFiller(
+  target: TurnRecordTarget | undefined,
+): (metadata: Record<string, unknown>) => Record<string, unknown> {
+  const record = target ? readTurnRecord(target.path) : undefined;
+  return (metadata) => settledTurnMetadata(metadata, record) ?? metadata;
 }
 
 function runConfig(
@@ -133,9 +158,12 @@ export async function reconcileTurn(options: {
     return true;
   }
   if (!record.closed) return false;
+  if (!everyChildLanded(record)) {
+    debug(`Waiting for the rest of ${record.path} to land before settling it`);
+    return false;
+  }
 
   const filled = turnAttribution(record) ?? {};
-  const everyChildLanded = record.children.every((child) => record.delivered.has(child.run_id));
 
   const stillOpen = record.children.filter(
     (child) => child.open && record.delivered.has(child.run_id),
@@ -155,7 +183,7 @@ export async function reconcileTurn(options: {
     recordReconciled(record.path, run.run_id);
     debug(`Settled the repository and author on run ${run.run_id}`);
   }
-  return settled && everyChildLanded;
+  return settled;
 }
 
 export async function reconcileAndClear(options: {

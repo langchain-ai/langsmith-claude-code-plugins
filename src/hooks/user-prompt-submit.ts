@@ -19,6 +19,7 @@ import {
   parseDottedOrder,
 } from "../langsmith.js";
 import { finalizeNotificationChain } from "../finalize.js";
+import { settledFromTurn } from "../reconcile.js";
 import {
   loadState,
   atomicUpdateState,
@@ -194,6 +195,14 @@ export async function main(): Promise<void> {
         customMetadata: config.customMetadata,
         runtimeVersion,
         approvalPolicy,
+        record: {
+          path: turnRecordPath(
+            config.stateFilePath,
+            input.session_id,
+            sessionState.current_turn_run_id,
+          ),
+          origin: queueOrigin(config),
+        },
         error: supersededNotificationAgentId
           ? "Superseded by a newer task-notification"
           : "User interrupt",
@@ -280,6 +289,15 @@ export async function main(): Promise<void> {
     dottedOrder = segment;
   }
 
+  const launchingTurnId = (agentToolRun?.deferred as Record<string, unknown> | undefined)
+    ?.parent_run_id as string | undefined;
+  const inherited = settledFromTurn({
+    base: config.customMetadata,
+    stateFilePath: config.stateFilePath,
+    sessionId: input.session_id,
+    turnRunId: launchingTurnId,
+  });
+
   const turnRun = {
     client,
     replicas: config.replicas,
@@ -295,7 +313,7 @@ export async function main(): Promise<void> {
     extra: {
       metadata: codingAgentMetadata({
         sessionId: input.session_id,
-        base: config.customMetadata,
+        base: inherited,
         turnNumber: turnNum,
         runtimeVersion,
         approvalPolicy,

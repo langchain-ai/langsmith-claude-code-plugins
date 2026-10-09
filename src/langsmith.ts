@@ -24,12 +24,13 @@ import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import { createRunTree } from "./privacy.js";
 import {
+  awaitsTheTurn,
   repoScopedMetadata,
   sessionScopedMetadata,
   turnScopedMetadata,
 } from "./repo-attribution.js";
-import { awaitsTheTurn, settledTurnMetadata } from "./reconcile.js";
-import { readTurnRecord, recordDelivered, recordRun } from "./turn-record.js";
+import { attributionFiller } from "./reconcile.js";
+import { recordDelivered, recordRun } from "./turn-record.js";
 import type { TurnRecordTarget } from "./types.js";
 import type { LSAgentType } from "./metadata.js";
 
@@ -302,9 +303,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
 
   let lastEndTime = turn.userTimestamp;
 
-  const turnSoFar = record ? readTurnRecord(record.path) : undefined;
-  const filledForTheTurn = (metadata: Record<string, unknown>): Record<string, unknown> =>
-    settledTurnMetadata(metadata, turnSoFar) ?? metadata;
+  const filledForTheTurn = attributionFiller(record);
 
   // 2. Process each LLM call - create as children of the turn run
   for (const llmCall of turn.llmCalls) {
@@ -571,6 +570,7 @@ export interface TurnRunIdentity {
 async function patchTurnRun(
   id: TurnRunIdentity,
   result: { lastAssistantMessage?: string } | { error: string },
+  leaveOpen = false,
 ): Promise<Record<string, unknown>> {
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized — call initTracing() first");
@@ -586,7 +586,7 @@ async function patchTurnRun(
     dotted_order: id.dottedOrder,
     parent_run_id: id.parentRunId,
     start_time: id.startTime,
-    end_time: new Date().toISOString(),
+    ...(leaveOpen ? {} : { end_time: new Date().toISOString() }),
     ...("error" in result
       ? { error: result.error }
       : { outputs: { messages: [{ role: "assistant", content: result.lastAssistantMessage }] } }),
@@ -651,8 +651,14 @@ export async function completeTurnRun(options: {
   turnNumber?: number;
   runtimeVersion?: string;
   approvalPolicy?: string;
+  /** Nothing can say yet where the turn worked, so the settle fills and closes it. */
+  leaveOpen?: boolean;
 }): Promise<Record<string, unknown>> {
-  return patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
+  return patchTurnRun(
+    options,
+    { lastAssistantMessage: options.lastAssistantMessage },
+    options.leaveOpen,
+  );
 }
 
 /** Force-close a turn's root run with an error/status (e.g. session ended). */
@@ -692,6 +698,7 @@ export async function closeInterruptedTurn(options: {
   turn?: OpenTurn;
   /** Root-run error/status message. Defaults to "User interrupt". */
   error?: string;
+  record?: TurnRecordTarget;
 }): Promise<{ lastLine: number; turnsTraced: number; consumedToolUseIds?: string[] }> {
   const {
     sessionId,
@@ -703,6 +710,7 @@ export async function closeInterruptedTurn(options: {
     runtimeVersion,
     approvalPolicy,
     turn,
+    record,
     error: errorMessage = "User interrupt",
   } = options;
   if (!client && !replicas)
@@ -766,6 +774,7 @@ export async function closeInterruptedTurn(options: {
             customMetadata,
             runtimeVersion,
             approvalPolicy,
+            record,
           });
           lastLine = newLastLine;
           turnsTraced = 1;
@@ -797,6 +806,7 @@ export async function closeInterruptedTurn(options: {
         runtimeVersion,
         turnId,
         turnNumber,
+        record,
       });
     } catch (err) {
       logger.error(`Failed to trace pending subagents on interrupt: ${err}`);
@@ -878,6 +888,7 @@ export async function tracePendingSubagents(options: {
    *  {@link closeAgentToolRun}) once that follow-up is done. Used for async
    *  (background) subagents, which always emit a task-notification afterward. */
   keepAgentToolRunOpen?: boolean;
+  record?: TurnRecordTarget;
 }): Promise<string[]> {
   const {
     sessionId,
@@ -890,7 +901,10 @@ export async function tracePendingSubagents(options: {
     turnId,
     turnNumber,
     keepAgentToolRunOpen,
+    record,
   } = options;
+
+  const filledForTheTurn = attributionFiller(record);
 
   // agent_ids whose Agent tool run we posted *open* (keepAgentToolRunOpen), so
   // the caller knows which runs it's responsible for closing later.
@@ -973,21 +987,23 @@ export async function tracePendingSubagents(options: {
             trace_id: deferred.trace_id as string,
             dotted_order: agentToolDottedOrder,
             extra: {
-              metadata: codingAgentMetadata({
-                sessionId,
-                base: customMetadata,
-                runtimeVersion,
-                turnId,
-                turnNumber,
-                agentType: "root",
-                // run_type "tool" (run name "Agent", native tool "Task").
-                toolName: "Task",
-                runName: "Agent",
-                runSpecific: {
-                  agent_type: toolName, // DEPRECATED compat alias.
-                  agent_id: subagent.agent_id, // DEPRECATED compat alias.
-                },
-              }),
+              metadata: filledForTheTurn(
+                codingAgentMetadata({
+                  sessionId,
+                  base: customMetadata,
+                  runtimeVersion,
+                  turnId,
+                  turnNumber,
+                  agentType: "root",
+                  // run_type "tool" (run name "Agent", native tool "Task").
+                  toolName: "Task",
+                  runName: "Agent",
+                  runSpecific: {
+                    agent_type: toolName, // DEPRECATED compat alias.
+                    agent_id: subagent.agent_id, // DEPRECATED compat alias.
+                  },
+                }),
+              ),
             },
           },
           tracing,
@@ -1018,6 +1034,7 @@ export async function tracePendingSubagents(options: {
           runtimeVersion,
           turnId,
           turnNumber,
+          record,
         });
       }
     } catch (err) {
@@ -1054,7 +1071,9 @@ async function traceSubagentChain(opts: {
   runtimeVersion?: string;
   turnId?: string;
   turnNumber?: number;
+  record?: TurnRecordTarget;
 }): Promise<void> {
+  const filledForTheTurn = attributionFiller(opts.record);
   const subagentChainId = uuid7FromTime(opts.startTime);
   const subagentChainDottedOrder = `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, subagentChainId)}`;
 
@@ -1074,16 +1093,18 @@ async function traceSubagentChain(opts: {
       trace_id: opts.parentTraceId,
       dotted_order: subagentChainDottedOrder,
       extra: {
-        metadata: codingAgentMetadata({
-          sessionId: opts.sessionId,
-          base: opts.customMetadata,
-          runtimeVersion: opts.runtimeVersion,
-          turnId: opts.turnId,
-          turnNumber: opts.turnNumber,
-          agentType: "subagent",
-          subagentId: opts.subagentId, // → ls_subagent_id (+ agent_id alias).
-          subagentType: opts.subagentType, // → ls_subagent_type (+ agent_type alias).
-        }),
+        metadata: filledForTheTurn(
+          codingAgentMetadata({
+            sessionId: opts.sessionId,
+            base: opts.customMetadata,
+            runtimeVersion: opts.runtimeVersion,
+            turnId: opts.turnId,
+            turnNumber: opts.turnNumber,
+            agentType: "subagent",
+            subagentId: opts.subagentId, // → ls_subagent_id (+ agent_id alias).
+            subagentType: opts.subagentType, // → ls_subagent_type (+ agent_type alias).
+          }),
+        ),
       },
     },
     opts.tracing,
@@ -1104,6 +1125,7 @@ async function traceSubagentChain(opts: {
       customMetadata: opts.customMetadata,
       runtimeVersion: opts.runtimeVersion,
       agentType: "subagent",
+      record: opts.record,
     });
   }
 

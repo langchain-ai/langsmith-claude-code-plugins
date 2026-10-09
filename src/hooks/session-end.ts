@@ -21,7 +21,8 @@ import {
 } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
-import { closeTurnRecord } from "../turn-record.js";
+import { closeTurnRecord, turnRecordPath } from "../turn-record.js";
+import { queueOrigin } from "../queue.js";
 import { startQueueFlusher } from "../utils/detach.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
@@ -105,6 +106,14 @@ export async function main(): Promise<void> {
         customMetadata: config.customMetadata,
         runtimeVersion,
         approvalPolicy: sessionState.approval_policy,
+        record: {
+          path: turnRecordPath(
+            config.stateFilePath,
+            input.session_id,
+            sessionState.current_turn_run_id,
+          ),
+          origin: queueOrigin(config),
+        },
       });
       lastLine = res.lastLine;
       turnsTraced = res.turnsTraced;

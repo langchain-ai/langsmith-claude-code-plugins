@@ -14,7 +14,7 @@ import {
   completedToolUseIds,
   turnToolInputs,
 } from "../transcript.js";
-import { turnScopedMetadata } from "../repo-attribution.js";
+import { awaitsTheTurn, turnScopedMetadata } from "../repo-attribution.js";
 import { log, warn, debug, error } from "../logger.js";
 import {
   loadState,
@@ -37,7 +37,7 @@ import { readStdin } from "../utils/stdin.js";
 import { startQueueFlusher } from "../utils/detach.js";
 import { readTurnRecord, recordRun, recordTurnClosed, turnRecordPath } from "../turn-record.js";
 import { queueOrigin } from "../queue.js";
-import { settledTurnMetadata } from "../reconcile.js";
+import { everyChildLanded, settledFromTurn, settledTurnMetadata } from "../reconcile.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { MUTED_TRACE_CONTENT } from "../privacy.js";
 import type { TaskRunEntry } from "../langsmith.js";
@@ -115,6 +115,18 @@ export async function main(): Promise<void> {
 
   log(`Found ${messages.length} new messages`);
 
+  const notifiedBy = sessionState.current_notification_agent_id;
+  const notifiedFrom = notifiedBy
+    ? ((sessionState.task_run_map?.[notifiedBy]?.deferred as Record<string, unknown> | undefined)
+        ?.parent_run_id as string | undefined)
+    : undefined;
+  const sessionMetadata = settledFromTurn({
+    base: config.customMetadata,
+    stateFilePath: config.stateFilePath,
+    sessionId: input.session_id,
+    turnRunId: notifiedFrom,
+  });
+
   // Group into turns and trace each one.
   const turns = groupIntoTurns(messages);
   const currentTracing = resolveTurnTracingMode(
@@ -168,6 +180,12 @@ export async function main(): Promise<void> {
   const currentTraceId = sessionState.current_trace_id;
   const currentDottedOrder = sessionState.current_dotted_order;
   const currentParentRunId = sessionState.current_parent_run_id;
+  const currentTurnRecord = currentRunId
+    ? {
+        path: turnRecordPath(config.stateFilePath, input.session_id, currentRunId),
+        origin: queueOrigin(config),
+      }
+    : undefined;
 
   for (let i = 0; i < turns.length; i++) {
     const turn = turns[i];
@@ -185,13 +203,7 @@ export async function main(): Promise<void> {
     const tracedToolUseIds = isLastTurn
       ? new Set(sessionState.traced_tool_use_ids ?? [])
       : undefined;
-    const record =
-      isLastTurn && currentRunId
-        ? {
-            path: turnRecordPath(config.stateFilePath, input.session_id, currentRunId),
-            origin: queueOrigin(config),
-          }
-        : undefined;
+    const record = isLastTurn ? currentTurnRecord : undefined;
 
     try {
       const taskRunMap = await traceTurn({
@@ -202,7 +214,7 @@ export async function main(): Promise<void> {
         sessionId: input.session_id,
         turnNum,
         project: config.project,
-        customMetadata: config.customMetadata,
+        customMetadata: sessionMetadata,
         hookCwd: input.cwd,
         runtimeVersion,
         approvalPolicy,
@@ -232,7 +244,7 @@ export async function main(): Promise<void> {
   const lastTurnId = turns[turns.length - 1]?.promptId;
   const closingTurn = turns[turns.length - 1];
   const closingTurnTools = closingTurn ? turnToolInputs(closingTurn) : [];
-  const turnMetadata = turnScopedMetadata(config.customMetadata, closingTurnTools, input.cwd);
+  const turnMetadata = turnScopedMetadata(sessionMetadata, closingTurnTools, input.cwd);
 
   // Process any pending subagent traces queued by SubagentStop. These are
   // synchronous subagents whose SubagentStop fired before PostToolUse recorded
@@ -248,10 +260,11 @@ export async function main(): Promise<void> {
       taskRunMap: mergedTaskRunMap,
       parentTraceId: freshSession.current_trace_id,
       project: config.project,
-      customMetadata: config.customMetadata,
+      customMetadata: sessionMetadata,
       runtimeVersion,
       turnId: lastTurnId,
       turnNumber: sessionState.current_turn_number,
+      record: currentTurnRecord,
     });
     for (const sa of pendingSubagents) processedAgentIds.add(sa.agent_id);
   }
@@ -398,12 +411,17 @@ export async function main(): Promise<void> {
   // Complete the Turn run created by UserPromptSubmit (unless deferred above).
   let turnRecord: string | undefined;
   let closedTurnRun: Record<string, unknown> | undefined;
+  let leaveTurnOpen = false;
   if (completeNow && currentRunId) {
     debug(`Completing Turn run ${currentRunId}`);
     turnRecord = turnRecordPath(config.stateFilePath, input.session_id, currentRunId);
-    const settled = settledTurnMetadata(turnMetadata, readTurnRecord(turnRecord));
+    const record = readTurnRecord(turnRecord);
+    const everythingIn = !record || everyChildLanded(record);
+    const settled = everythingIn ? settledTurnMetadata(turnMetadata, record) : turnMetadata;
+    leaveTurnOpen = !everythingIn && awaitsTheTurn(settled);
     try {
       closedTurnRun = await completeTurnRun({
+        leaveOpen: leaveTurnOpen,
         tracing: currentTracing,
         sessionId: input.session_id,
         runId: currentRunId,
@@ -506,6 +524,7 @@ export async function main(): Promise<void> {
         tracing: currentTracing,
         origin: queueOrigin(config),
         root: true,
+        closesAt: leaveTurnOpen ? new Date().toISOString() : undefined,
       });
     }
     recordTurnClosed(turnRecord, lastTurnId);

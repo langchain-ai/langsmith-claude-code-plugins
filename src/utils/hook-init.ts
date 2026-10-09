@@ -12,8 +12,8 @@ import { initLogger, error } from "../logger.js";
  * Pass the hook input's `cwd` so repo/git metadata and the `cwd` contract key
  * reflect the working directory Claude Code is operating in.
  */
-export function initHook(cwd?: string): Config | null {
-  const config = loadConfig({ cwd });
+export function initHook(cwd?: string, options?: { deferGit?: boolean }): Config | null {
+  const config = loadConfig({ cwd, deferGit: options?.deferGit });
   initLogger(config.debug);
 
   if (!config.enabled) {

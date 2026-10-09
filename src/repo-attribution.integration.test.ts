@@ -1,11 +1,17 @@
 import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createGitSandbox } from "./fixtures/git-sandbox.js";
-import { QUEUE_DIR_NAME, QUEUE_FILE_SUFFIX, USER_PROMPT_TURN_NAME } from "./constants.js";
+import { waitFor } from "./fixtures/wait-for.js";
+import {
+  REPOSITORY_METADATA_KEYS,
+  TURN_RECORD_DIR_NAME,
+  TURN_RECORD_SUFFIX,
+  USER_PROMPT_TURN_NAME,
+} from "./constants.js";
 
 // Claude Code runs the built bundle, so drive that, one real process per hook.
 const bundle = fileURLToPath(new URL("../bundle/dispatch.js", import.meta.url));
@@ -109,21 +115,39 @@ function transcript(reaching: string, editing = "seed.txt", shell = false): stri
     .join("\n");
 }
 
-function toolRun(name: string): Record<string, unknown> {
-  const runs = posted.filter((run) => run.name === name);
-  expect(runs, `exactly one ${name} run`).toHaveLength(1);
-  return runs[0].extra?.metadata ?? {};
+/** A turn the assistant answered without touching a tool, so only the hooks know anything. */
+function replyOnly(): string {
+  return [
+    { type: "user", message: { role: "user", content: "find" }, timestamp: "2025-01-01T00:00:00Z" },
+    {
+      type: "assistant",
+      timestamp: "2025-01-01T00:00:01Z",
+      message: {
+        id: "msg_1",
+        role: "assistant",
+        model: "claude-sonnet-4-5-20250929",
+        content: [{ type: "text", text: "Looking." }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    },
+  ]
+    .map((message) => JSON.stringify(message))
+    .join("\n");
 }
 
-/** A tool hook saves its run for the uploader, so look wherever that run has got to. */
-function savedToolRun(session: string, name: string): Record<string, unknown> {
-  const dir = join(sandbox.root, QUEUE_DIR_NAME, session);
-  const waiting: Run[] = existsSync(dir)
-    ? readdirSync(dir)
-        .filter((entry) => entry.endsWith(QUEUE_FILE_SUFFIX))
-        .map((entry) => JSON.parse(readFileSync(join(dir, entry), "utf-8")).run as Run)
-    : [];
-  const runs = [...waiting, ...posted].filter((run) => run.name === name);
+/** Every run line the tool hook wrote down for a session, straight off disk. */
+function recordedRuns(session: string): Array<Record<string, any>> {
+  const dir = join(sandbox.root, TURN_RECORD_DIR_NAME, session);
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(TURN_RECORD_SUFFIX))
+    .flatMap((name) => readFileSync(join(dir, name), "utf-8").split("\n"))
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+    .filter((line) => line.run && !line.root);
+}
+
+function toolRun(name: string): Record<string, unknown> {
+  const runs = posted.filter((run) => run.name === name);
   expect(runs, `exactly one ${name} run`).toHaveLength(1);
   return runs[0].extra?.metadata ?? {};
 }
@@ -232,6 +256,69 @@ describe("a turn working across repositories", () => {
     });
   }, 120_000);
 
+  // Catches the repository being worked out on the tool hook's own path again, which is
+  // several git subprocesses per tool call. Every other test here reads the uploaded run,
+  // which looks identical either way.
+  it("saves a tool call without working out its repository", async () => {
+    const session = "hook-stays-off-git";
+    const path = join(sandbox.root, `${session}.jsonl`);
+    const base = { session_id: session, transcript_path: path, cwd: alpha };
+
+    await prompt(base);
+    await hook("PostToolUse", {
+      ...base,
+      hook_event_name: "PostToolUse",
+      tool_name: "Read",
+      tool_input: { file_path: join(beta, "seed.txt") },
+      tool_response: { ok: true },
+      tool_use_id: `${session}-tool-0`,
+    });
+
+    const [asSaved] = recordedRuns(session);
+    for (const key of REPOSITORY_METADATA_KEYS) {
+      expect(asSaved.run.metadata, `${key} was settled on the hook's path`).not.toHaveProperty(key);
+    }
+
+    // The uploader works it out and writes the answer back, so nothing is lost.
+    expect(await waitFor(() => recordedRuns(session).length > 1)).toBe(true);
+    expect(recordedRuns(session).at(-1)?.run.metadata).toMatchObject({
+      repository_name: "acme/b",
+      ls_attribution_identifier: "Beta Owner",
+    });
+    expect(toolRun("Read")).toMatchObject({
+      repository_name: "acme/b",
+      ls_attribution_identifier: "Beta Owner",
+    });
+  }, 120_000);
+
+  // Catches the end-of-turn fill going blank once the hook stops settling: here the turn
+  // has no transcript tool call to learn from, so the saved tool call is its only source.
+  it("fills a turn from a tool call only the hook saw", async () => {
+    const session = "turn-from-hook";
+    const path = join(sandbox.root, `${session}.jsonl`);
+    // Started outside every repository, so nothing but the tool call names one.
+    const base = { session_id: session, transcript_path: path, cwd: sandbox.root };
+
+    await prompt(base);
+    await hook("PostToolUse", {
+      ...base,
+      hook_event_name: "PostToolUse",
+      tool_name: "Read",
+      tool_input: { file_path: join(beta, "seed.txt") },
+      tool_response: { ok: true },
+      tool_use_id: `${session}-tool-0`,
+    });
+    expect(await waitFor(() => posted.some((run) => run.name === "Read"))).toBe(true);
+    writeFileSync(path, replyOnly());
+    await stop(base);
+
+    const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
+    expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject({
+      repository_name: "acme/b",
+      ls_attribution_identifier: "Beta Owner",
+    });
+  }, 120_000);
+
   it("names the home folder's own repository once a tool reads a file there", async () => {
     const session = "private-home";
     const path = join(sandbox.root, `${session}.jsonl`);
@@ -251,7 +338,8 @@ describe("a turn working across repositories", () => {
       home,
     );
 
-    expect(savedToolRun(session, "Read")).toMatchObject({
+    expect(await waitFor(() => posted.some((run) => run.name === "Read"))).toBe(true);
+    expect(toolRun("Read")).toMatchObject({
       repository_name: "private/dotfiles",
       git_branch: "trunk-home",
       ls_attribution_identifier: "Private Person",

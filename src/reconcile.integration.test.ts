@@ -3,9 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   alpha,
+  appendReply,
+  beta,
+  createdMetadataAll,
   createdMetadataOf,
   hook,
   metadataOf,
+  notification,
   plain,
   prompt,
   recordFiles,
@@ -13,6 +17,8 @@ import {
   recordLines,
   service,
   stop,
+  subagent,
+  task,
   tool,
   reply,
   useReconcileSandbox,
@@ -116,29 +122,165 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     });
   });
 
-  // Catches a reconcile that runs before a tool handler finishing late has uploaded,
-  // which leaves that one call unlabelled with nothing left to come back for it.
-  it("settles a tool call that only lands after the turn has closed", async () => {
-    const base = session("late-handler", plain);
+  // Catches a sub-task and everything under it being built from what the session knew
+  // at the start, so the Task, the subagent and its model calls arrive with no author.
+  it("gives a sub-task and the runs beneath it the repository and the author", async () => {
+    const base = session("subagent-born-known", plain);
     await prompt(base);
     await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
-
-    // Only this one call is refused, so the turn closes and settles without it.
-    service.refuse = "Bash";
-    await tool(base, "Bash", { command: "echo hi" });
+    await subagent(base, "agent-7");
+    await task(base, "agent-7");
     reply(base);
     await stop(base);
-    // Wait for the settling to have run, so the record is kept on purpose rather than by timing.
-    expect(
-      await waitFor(() => recordLines("late-handler").some((line) => line.k === "fixed")),
-    ).toBe(true);
-    expect(metadataOf("Read").repository_name).toBe("acme/a");
-    expect(recordFiles("late-handler")).toHaveLength(1);
+
+    const attributed = {
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    };
+    expect(await waitFor(() => service.created.some((run) => run.name === "Agent"))).toBe(true);
+    expect(createdMetadataOf(base.session_id, "Agent")).toMatchObject(attributed);
+    expect(createdMetadataOf(base.session_id, "Explore Subagent")).toMatchObject(attributed);
+    const beneath = createdMetadataAll(base.session_id, "Claude").filter(
+      (metadata) => metadata.ls_agent_type === "subagent",
+    );
+    expect(beneath).toHaveLength(1);
+    expect(beneath[0]).toMatchObject(attributed);
+  });
+
+  // Catches an interrupted turn's model calls being backfilled from what the session knew
+  // at the start, so a turn nobody stopped is the one turn that loses its author.
+  it("gives an interrupted turn's model calls the repository and the author", async () => {
+    const base = session("interrupted-fill", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    // The uploader works the repository out, so wait for that call to land before the
+    // interrupted turn asks the record where it worked.
+    expect(await waitFor(() => service.created.some((run) => run.name === "Read"))).toBe(true);
+    reply(base);
+    await prompt(base);
+
+    expect(await waitFor(() => createdMetadataAll(base.session_id, "Claude").length > 0)).toBe(
+      true,
+    );
+    expect(createdMetadataAll(base.session_id, "Claude")[0]).toMatchObject({
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    });
+  });
+
+  // Catches the write that closes a background agent being rebuilt from what the session
+  // knew at startup, which lands on top of the good metadata and clears it for good.
+  it("closes a background agent carrying the repository the turn worked out", async () => {
+    const base = session("background-open", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    expect(await waitFor(() => metadataOf("Read").repository_name === "acme/a")).toBe(true);
+    await task(base, "agent-bg1");
+    reply(base);
+    await stop(base);
+
+    // The agent finishes in the background, so its run is posted open here.
+    await subagent(base, "agent-bg1");
+    await notification(base, "agent-bg1");
+    appendReply(base, 2);
+    await stop(base);
+
+    expect(await waitFor(() => service.updated.some((run) => run.name === "Agent"))).toBe(true);
+    const attributed = {
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    };
+    expect(metadataOf("Agent")).toMatchObject(attributed);
+    expect(metadataOf("Claude Code Turn")).toMatchObject(attributed);
+  });
+
+  // Catches the turn that reports a background agent back being built from the session's
+  // own folder, which has no repository, so it and its model call are the two runs in the
+  // trace with nothing on them.
+  it("labels the turn that reports a background agent back", async () => {
+    const base = session("background-notify", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    expect(await waitFor(() => metadataOf("Read").repository_name === "acme/a")).toBe(true);
+    await task(base, "agent-bg3");
+    reply(base);
+    await stop(base);
+
+    await subagent(base, "agent-bg3");
+    await notification(base, "agent-bg3");
+    appendReply(base, 2);
+    await stop(base);
+
+    const attributed = {
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    };
+    const turns = createdMetadataAll(base.session_id, "Claude Code Turn");
+    expect(turns).toHaveLength(2);
+    expect(turns.at(-1)).toMatchObject(attributed);
+    expect(createdMetadataAll(base.session_id, "Claude").at(-1)).toMatchObject(attributed);
+  });
+
+  // Catches the same gap on the other route: a killed agent's run is never posted open,
+  // so it is created already closed and there is no earlier write to fall back on.
+  it("creates a killed agent's run carrying the repository the turn worked out", async () => {
+    const base = session("background-killed", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    expect(await waitFor(() => metadataOf("Read").repository_name === "acme/a")).toBe(true);
+    await task(base, "agent-bg2");
+    reply(base);
+    await stop(base);
+
+    // No SubagentStop ever fires for a killed agent.
+    await notification(base, "agent-bg2", "killed");
+    appendReply(base, 2);
+    await stop(base);
+
+    expect(await waitFor(() => service.created.some((run) => run.name === "Agent"))).toBe(true);
+    expect(service.updated.some((run) => run.name === "Agent")).toBe(false);
+    expect(metadataOf("Agent")).toMatchObject({
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    });
+  });
+
+  // Catches a turn settled on half its calls, and a turn's own run closed before the
+  // answer is in. Either one is permanent, since a closed run takes no correction.
+  it("settles a turn whose answer only lands after it closed", async () => {
+    const base = session("late-handler", plain);
+    await prompt(base);
+    // Nothing here says where the turn worked.
+    await tool(base, "Bash", { command: "echo hi" });
+    expect(await waitFor(() => service.created.some((run) => run.name === "Bash"))).toBe(true);
+
+    // The one call that does is refused, and the call behind it waits its turn.
+    service.refuse = "alpha repo";
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    await tool(base, "Edit", { file_path: join(beta, "seed.txt") });
+    reply(base);
+    await stop(base);
+    expect(await waitFor(() => hookLog().includes("Queued run upload failed"))).toBe(true);
 
     service.refuse = "";
     await stop(base);
-    expect(await waitFor(() => metadataOf("Bash").repository_name === "acme/a")).toBe(true);
     expect(await waitFor(() => recordFiles("late-handler").length === 0)).toBe(true);
+
+    const turn = metadataOf("Claude Code Turn");
+    expect(turn.repository_name).toBe("acme/a");
+    expect(turn.ls_attribution_identifier).toBe("Alpha Owner");
+    expect(metadataOf("Read").repository_name).toBe("acme/a");
+    expect(metadataOf("Bash").repository_name).toBe("acme/a");
+    // A call that reached into the other checkout keeps it.
+    expect(metadataOf("Edit")).toMatchObject({
+      repository_name: "acme/b",
+      ls_attribution_identifier: "Beta Owner",
+    });
   });
 
   // Catches a reconcile that records success before the service accepted the change, so
@@ -148,7 +290,9 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     await prompt(base);
     await tool(base, "Bash", { command: "echo hi" });
     await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
-    await waitFor(() => service.created.some((run) => run.name === "Bash"));
+    await waitFor(() =>
+      ["Bash", "Read"].every((name) => service.created.some((run) => run.name === name)),
+    );
 
     service.fail = true;
     reply(base);

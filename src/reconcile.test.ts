@@ -103,6 +103,26 @@ describe("letting go of a turn", () => {
     await expect(reconcileTurn({ record: old, ...nothingUploads })).resolves.toBe(true);
   });
 
+  // Catches a turn settled while a tool call is still being uploaded, which fills it from
+  // half the calls and can never be corrected, since a settled run is marked fixed for good.
+  it("settles nothing while a tool call has yet to land", async () => {
+    const waiting = record(bare, [
+      recorded("Bash", bare, 1),
+      recorded("Edit", { ...bare, ...inAlpha }, 2),
+    ]);
+    waiting.delivered = new Set(["Bash"]);
+    const touched: string[] = [];
+    const client = {
+      createRun: (run: { id: string }) => touched.push(run.id),
+      updateRun: (id: string) => touched.push(id),
+    } as never;
+
+    await expect(reconcileTurn({ ...nothingUploads, record: waiting, client })).resolves.toBe(
+      false,
+    );
+    expect(touched).toEqual([]);
+  });
+
   // Catches a turn still running being thrown away mid-flight, which loses every call
   // recorded for it so far.
   it("keeps a turn that is still running", async () => {

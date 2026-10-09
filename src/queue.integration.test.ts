@@ -16,6 +16,7 @@ import {
   queueRoot,
   queued,
   queueRunByHand,
+  sandboxHome,
   startTurn,
   stopTurn,
   toolCall,
@@ -88,6 +89,33 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     await stopTurn();
     expect(await waitFor(() => uploads.received.length >= names.length)).toBe(true);
     expect([...uploads.received].sort()).toEqual([...names].sort());
+  });
+
+  // Catches the uploader's hint being saved for a muted thread too, which would put that
+  // thread's file paths on disk. Nothing else looks inside the entry a muted tool call writes.
+  it("writes no file path for a muted tool call", async () => {
+    const muted = { CC_LANGSMITH_DEFAULT_MUTED: "true" };
+    const secret = join(sandboxHome(), "secret folder", "notes.txt");
+    await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" }, muted);
+    // The service is down, so the entry stays on disk for this test to read.
+    uploads.fail = true;
+    await hook(
+      "PostToolUse",
+      {
+        hook_event_name: "PostToolUse",
+        tool_name: "Tool0",
+        tool_use_id: "t0",
+        tool_input: { file_path: secret },
+        tool_response: { out: 0 },
+      },
+      muted,
+    );
+
+    const entries = entryFiles();
+    expect(entries).toHaveLength(1);
+    const raw = readFileSync(entries[0], "utf8");
+    expect(raw).not.toContain("secret folder");
+    expect(JSON.parse(raw)).not.toHaveProperty("where");
   });
 
   // Catches a sweep that never runs, or one that throws leftovers away the way

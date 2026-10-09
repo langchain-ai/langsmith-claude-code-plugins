@@ -34,8 +34,9 @@ import {
   storeRoot,
 } from "./utils/session-store.js";
 import { runConfigForMode } from "./privacy.js";
+import { recordDelivered } from "./turn-record.js";
 import { debug, warn } from "./logger.js";
-import type { QueueDestination, QueuedRun, TracingMode } from "./types.js";
+import type { QueueDestination, QueuedRun, ToolOrigin, TracingMode } from "./types.js";
 
 /** Identifies the account a run was queued for, from the key and everywhere the upload would go. */
 export function queueOrigin(destination: QueueDestination): string {
@@ -129,6 +130,7 @@ export async function enqueueRun(
   tracing: TracingMode,
   origin: string,
   record?: string,
+  where?: ToolOrigin,
 ): Promise<void> {
   const dir = queueSessionDir(stateFilePath, sessionId);
   const queueId = `${String(Date.now()).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID()}`;
@@ -140,6 +142,7 @@ export async function enqueueRun(
       attempts: 0,
       origin,
       record,
+      where,
       run: runConfigForMode(run, tracing),
     });
     trim(dir);
@@ -147,6 +150,11 @@ export async function enqueueRun(
   } catch (err) {
     warn(`Could not queue run for upload: ${err}`);
   }
+}
+
+/** A run nobody will upload still has to report in, or its turn waits for it forever. */
+export function abandonQueued(entry: QueuedRun): void {
+  if (entry.record && typeof entry.run.id === "string") recordDelivered(entry.record, entry.run.id);
 }
 
 export function removeQueued(dir: string, queueId: string): void {
@@ -163,6 +171,7 @@ export function recordFailure(dir: string, queueId: string): void {
   const attempts = (entry.attempts ?? 0) + 1;
   if (attempts >= QUEUE_MAX_ATTEMPTS) {
     warn(`Dropping a queued run after ${attempts} failed uploads: ${queueId}`);
+    abandonQueued(entry);
     removeQueued(dir, queueId);
     return;
   }
@@ -172,6 +181,7 @@ export function recordFailure(dir: string, queueId: string): void {
       attempts,
       origin: entry.origin,
       record: entry.record,
+      where: entry.where,
       run: entry.run,
     });
   } catch (err) {
