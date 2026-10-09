@@ -15120,48 +15120,12 @@ function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, c
 }
 
 // dist/src/repo-attribution.js
-<<<<<<< HEAD
-import { existsSync as existsSync3 } from "node:fs";
+import { existsSync as existsSync4 } from "node:fs";
 import { isAbsolute, resolve as resolve3 } from "node:path";
 
 // dist/src/repo-attribution-paths.js
-import { statSync as statSync6 } from "node:fs";
-import { dirname as dirname7, join as join6, resolve as resolve2 } from "node:path";
-<<<<<<< HEAD
-=======
-=======
-import { existsSync as existsSync4, statSync as statSync7 } from "node:fs";
-import { dirname as dirname8, isAbsolute, resolve as resolve2, sep } from "node:path";
-var rootByDirectory = /* @__PURE__ */ new Map();
-var attributionByRoot = /* @__PURE__ */ new Map();
-var identifierByRoot = /* @__PURE__ */ new Map();
-function toolPathFromInput(toolInput, sessionCwd) {
-  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput))
-    return void 0;
-  const input = toolInput;
-  for (const key of TOOL_PATH_INPUT_KEYS) {
-    const value = input[key];
-    if (typeof value !== "string" || value.length === 0)
-      continue;
-    if (isAbsolute(value))
-      return value;
-    if (!sessionCwd || !isAbsolute(sessionCwd))
-      continue;
-    const resolved = resolve2(sessionCwd, value);
-    if (existsSync4(resolved))
-      return resolved;
-  }
-  return void 0;
-}
-function outsideGitDirectory(path3) {
-  const nestedAt = path3.indexOf(`${sep}.git${sep}`);
-  if (nestedAt > 0)
-    return path3.slice(0, nestedAt);
-  const trailing = `${sep}.git`;
-  return path3.endsWith(trailing) && path3.length > trailing.length ? path3.slice(0, -trailing.length) : path3;
-}
->>>>>>> 4ec417e (feat(tracing): Keep the Plugin's Own Record of Each Turn)
->>>>>>> aff2aba (test(queue): Move the Queue's Boundary Rules Down to Unit Tests)
+import { statSync as statSync7 } from "node:fs";
+import { dirname as dirname8, join as join7, resolve as resolve2 } from "node:path";
 function nearestExistingDirectory(path3) {
   let current = path3;
   for (; ; ) {
@@ -15179,7 +15143,7 @@ function nearestExistingDirectory(path3) {
 }
 function gitMarkerAt(directory) {
   try {
-    return statSync6(join6(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
+    return statSync7(join7(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
   } catch {
     return GIT_MARKERS.NOTHING_HERE;
   }
@@ -15192,7 +15156,7 @@ function rootFromGitMarker(directory) {
       return current;
     if (marker === GIT_MARKERS.ONLY_GIT_CAN_SAY)
       return void 0;
-    const parent = dirname7(current);
+    const parent = dirname8(current);
     const reachedFilesystemRoot = parent === current;
     if (reachedFilesystemRoot)
       return null;
@@ -15220,7 +15184,7 @@ function toolPathFromInput(toolInput, sessionCwd) {
     if (!sessionCwd || !isAbsolute(sessionCwd))
       continue;
     const resolved = resolve3(sessionCwd, value);
-    if (existsSync3(resolved))
+    if (existsSync4(resolved))
       return { path: resolved, namedAPath };
   }
   return { namedAPath };

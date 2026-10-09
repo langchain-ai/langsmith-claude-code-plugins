@@ -3,11 +3,7 @@
  */
 
 import type { RunTree } from "langsmith";
-<<<<<<< HEAD
-import type { GIT_MARKERS, PINNED_REPOSITORY_KEYS } from "./constants.js";
-=======
-import type { PINNED_REPOSITORY_KEYS, TURN_RECORD_LINE } from "./constants.js";
->>>>>>> 4ec417e (feat(tracing): Keep the Plugin's Own Record of Each Turn)
+import type { GIT_MARKERS, PINNED_REPOSITORY_KEYS, TURN_RECORD_LINE } from "./constants.js";
 
 export type TracingMode = "full" | "metadata";
 
