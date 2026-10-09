@@ -37,7 +37,7 @@ import { readStdin } from "../utils/stdin.js";
 import { startQueueFlusher } from "../utils/detach.js";
 import { readTurnRecord, recordRun, recordTurnClosed, turnRecordPath } from "../turn-record.js";
 import { queueOrigin } from "../queue.js";
-import { everyChildLanded, settledTurnMetadata } from "../reconcile.js";
+import { everyChildLanded, settledFromTurn, settledTurnMetadata } from "../reconcile.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { MUTED_TRACE_CONTENT } from "../privacy.js";
 import type { TaskRunEntry } from "../langsmith.js";
@@ -114,6 +114,18 @@ export async function main(): Promise<void> {
   }
 
   log(`Found ${messages.length} new messages`);
+
+  const notifiedBy = sessionState.current_notification_agent_id;
+  const notifiedFrom = notifiedBy
+    ? ((sessionState.task_run_map?.[notifiedBy]?.deferred as Record<string, unknown> | undefined)
+        ?.parent_run_id as string | undefined)
+    : undefined;
+  const sessionMetadata = settledFromTurn({
+    base: config.customMetadata,
+    stateFilePath: config.stateFilePath,
+    sessionId: input.session_id,
+    turnRunId: notifiedFrom,
+  });
 
   // Group into turns and trace each one.
   const turns = groupIntoTurns(messages);
@@ -202,7 +214,7 @@ export async function main(): Promise<void> {
         sessionId: input.session_id,
         turnNum,
         project: config.project,
-        customMetadata: config.customMetadata,
+        customMetadata: sessionMetadata,
         hookCwd: input.cwd,
         runtimeVersion,
         approvalPolicy,
@@ -232,7 +244,7 @@ export async function main(): Promise<void> {
   const lastTurnId = turns[turns.length - 1]?.promptId;
   const closingTurn = turns[turns.length - 1];
   const closingTurnTools = closingTurn ? turnToolInputs(closingTurn) : [];
-  const turnMetadata = turnScopedMetadata(config.customMetadata, closingTurnTools, input.cwd);
+  const turnMetadata = turnScopedMetadata(sessionMetadata, closingTurnTools, input.cwd);
 
   // Process any pending subagent traces queued by SubagentStop. These are
   // synchronous subagents whose SubagentStop fired before PostToolUse recorded
@@ -248,7 +260,7 @@ export async function main(): Promise<void> {
       taskRunMap: mergedTaskRunMap,
       parentTraceId: freshSession.current_trace_id,
       project: config.project,
-      customMetadata: config.customMetadata,
+      customMetadata: sessionMetadata,
       runtimeVersion,
       turnId: lastTurnId,
       turnNumber: sessionState.current_turn_number,

@@ -13,8 +13,8 @@
  */
 
 import { resolveTurnTracingMode } from "./tracing-mode.js";
-import { closeTurnRecord, readTurnRecord, turnRecordPath } from "./turn-record.js";
-import { everyChildLanded, settledTurnMetadata } from "./reconcile.js";
+import { closeTurnRecord } from "./turn-record.js";
+import { settledFromTurn } from "./reconcile.js";
 import {
   closeAgentToolRun,
   completeTurnRun,
@@ -57,13 +57,12 @@ export async function finalizeNotificationChain(opts: {
     const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : undefined;
     const agentType = taskRunInfo.agent_type ?? "";
 
-    const record = launchingTurnId
-      ? readTurnRecord(turnRecordPath(stateFilePath, sessionId, launchingTurnId))
-      : undefined;
-    const settled =
-      record && everyChildLanded(record)
-        ? (settledTurnMetadata(customMetadata, record) ?? customMetadata)
-        : customMetadata;
+    const settled = settledFromTurn({
+      base: customMetadata,
+      stateFilePath,
+      sessionId,
+      turnRunId: launchingTurnId,
+    });
 
     // 1) Close the Agent tool run for this agent. If SubagentStop posted it open
     //    (subagent_done) we patch it closed; if it was killed before SubagentStop

@@ -17,7 +17,12 @@ import {
 } from "./constants.js";
 import { createRunTree } from "./privacy.js";
 import { debug, warn } from "./logger.js";
-import { discardTurnRecord, readTurnRecord, recordReconciled } from "./turn-record.js";
+import {
+  discardTurnRecord,
+  readTurnRecord,
+  recordReconciled,
+  turnRecordPath,
+} from "./turn-record.js";
 import type { UploadWatch } from "./upload-confirm.js";
 import type { RecordedRun, TurnRecord, TurnRecordTarget } from "./types.js";
 
@@ -83,6 +88,19 @@ export function settledTurnMetadata(
   if (!filled) return base;
   const missing = Object.entries(filled).filter(([key]) => base?.[key] === undefined);
   return missing.length === 0 ? base : { ...base, ...Object.fromEntries(missing) };
+}
+
+export function settledFromTurn(options: {
+  base: Record<string, unknown> | undefined;
+  stateFilePath: string;
+  sessionId: string;
+  turnRunId: string | undefined;
+}): Record<string, unknown> | undefined {
+  const { base, stateFilePath, sessionId, turnRunId } = options;
+  if (!turnRunId) return base;
+  const record = readTurnRecord(turnRecordPath(stateFilePath, sessionId, turnRunId));
+  if (!record || !everyChildLanded(record)) return base;
+  return settledTurnMetadata(base, record) ?? base;
 }
 
 export function attributionFiller(

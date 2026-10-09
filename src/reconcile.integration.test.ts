@@ -197,6 +197,34 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     expect(metadataOf("Claude Code Turn")).toMatchObject(attributed);
   });
 
+  // Catches the turn that reports a background agent back being built from the session's
+  // own folder, which has no repository, so it and its model call are the two runs in the
+  // trace with nothing on them.
+  it("labels the turn that reports a background agent back", async () => {
+    const base = session("background-notify", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    expect(await waitFor(() => metadataOf("Read").repository_name === "acme/a")).toBe(true);
+    await task(base, "agent-bg3");
+    reply(base);
+    await stop(base);
+
+    await subagent(base, "agent-bg3");
+    await notification(base, "agent-bg3");
+    appendReply(base, 2);
+    await stop(base);
+
+    const attributed = {
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    };
+    const turns = createdMetadataAll(base.session_id, "Claude Code Turn");
+    expect(turns).toHaveLength(2);
+    expect(turns.at(-1)).toMatchObject(attributed);
+    expect(createdMetadataAll(base.session_id, "Claude").at(-1)).toMatchObject(attributed);
+  });
+
   // Catches the same gap on the other route: a killed agent's run is never posted open,
   // so it is created already closed and there is no earlier write to fall back on.
   it("creates a killed agent's run carrying the repository the turn worked out", async () => {

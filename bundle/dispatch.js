@@ -14437,6 +14437,15 @@ function settledTurnMetadata(base, record) {
   const missing = Object.entries(filled).filter(([key]) => base?.[key] === void 0);
   return missing.length === 0 ? base : { ...base, ...Object.fromEntries(missing) };
 }
+function settledFromTurn(options) {
+  const { base, stateFilePath, sessionId, turnRunId } = options;
+  if (!turnRunId)
+    return base;
+  const record = readTurnRecord(turnRecordPath(stateFilePath, sessionId, turnRunId));
+  if (!record || !everyChildLanded(record))
+    return base;
+  return settledTurnMetadata(base, record) ?? base;
+}
 function attributionFiller(target) {
   const record = target ? readTurnRecord(target.path) : void 0;
   return (metadata) => settledTurnMetadata(metadata, record) ?? metadata;
@@ -16751,8 +16760,12 @@ async function finalizeNotificationChain(opts) {
     const launchingTurnId = taskRunInfo.deferred?.parent_run_id;
     const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : void 0;
     const agentType = taskRunInfo.agent_type ?? "";
-    const record = launchingTurnId ? readTurnRecord(turnRecordPath(stateFilePath, sessionId, launchingTurnId)) : void 0;
-    const settled = record && everyChildLanded(record) ? settledTurnMetadata(customMetadata, record) ?? customMetadata : customMetadata;
+    const settled = settledFromTurn({
+      base: customMetadata,
+      stateFilePath,
+      sessionId,
+      turnRunId: launchingTurnId
+    });
     try {
       await closeAgentToolRun({
         tracing: resolveTurnTracingMode(opts, sessionId, taskRunInfo.tracing, launchingTurn?.tracing, launchingTurnId === ss.current_turn_run_id ? ss.current_turn_tracing : void 0),
@@ -16869,6 +16882,14 @@ async function main7() {
     return;
   }
   log(`Found ${messages.length} new messages`);
+  const notifiedBy = sessionState.current_notification_agent_id;
+  const notifiedFrom = notifiedBy ? sessionState.task_run_map?.[notifiedBy]?.deferred?.parent_run_id : void 0;
+  const sessionMetadata = settledFromTurn({
+    base: config.customMetadata,
+    stateFilePath: config.stateFilePath,
+    sessionId: input.session_id,
+    turnRunId: notifiedFrom
+  });
   const turns = groupIntoTurns(messages);
   const currentTracing = resolveTurnTracingMode(config, input.session_id, sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
   if (turns.length > 0 && input.last_assistant_message) {
@@ -16921,7 +16942,7 @@ async function main7() {
         sessionId: input.session_id,
         turnNum,
         project: config.project,
-        customMetadata: config.customMetadata,
+        customMetadata: sessionMetadata,
         hookCwd: input.cwd,
         runtimeVersion,
         approvalPolicy,
@@ -16944,7 +16965,7 @@ async function main7() {
   const lastTurnId = turns[turns.length - 1]?.promptId;
   const closingTurn = turns[turns.length - 1];
   const closingTurnTools = closingTurn ? turnToolInputs(closingTurn) : [];
-  const turnMetadata = turnScopedMetadata(config.customMetadata, closingTurnTools, input.cwd);
+  const turnMetadata = turnScopedMetadata(sessionMetadata, closingTurnTools, input.cwd);
   const pendingSubagents = freshSession.pending_subagent_traces || [];
   const processedAgentIds = /* @__PURE__ */ new Set();
   if (pendingSubagents.length > 0) {
@@ -16956,7 +16977,7 @@ async function main7() {
       taskRunMap: mergedTaskRunMap,
       parentTraceId: freshSession.current_trace_id,
       project: config.project,
-      customMetadata: config.customMetadata,
+      customMetadata: sessionMetadata,
       runtimeVersion,
       turnId: lastTurnId,
       turnNumber: sessionState.current_turn_number,
@@ -17529,6 +17550,13 @@ async function main10() {
     parentRunId = void 0;
     dottedOrder = segment;
   }
+  const launchingTurnId = agentToolRun?.deferred?.parent_run_id;
+  const inherited = settledFromTurn({
+    base: config.customMetadata,
+    stateFilePath: config.stateFilePath,
+    sessionId: input.session_id,
+    turnRunId: launchingTurnId
+  });
   const turnRun = {
     client: client2,
     replicas: config.replicas,
@@ -17544,7 +17572,7 @@ async function main10() {
     extra: {
       metadata: codingAgentMetadata({
         sessionId: input.session_id,
-        base: config.customMetadata,
+        base: inherited,
         turnNumber: turnNum,
         runtimeVersion,
         approvalPolicy,
