@@ -377,3 +377,14 @@ export interface SettingsFile {
 export interface GhLoginMarker {
   failed: string;
 }
+
+// ─── Test Fixtures ──────────────────────────────────────────────────────────
+
+/** A refusal for one run, "ignore" to accept it and forget it, or nothing to accept it. */
+export type FakeRunVerdict = { status: number; body?: string } | "ignore" | undefined;
+
+/** How the fake LangSmith answers beyond the refusals every test can switch on. */
+export interface FakeLangSmithRules {
+  rejects?(body: string): boolean;
+  rejectsRun?(wire: { action: "post" | "patch"; run: Record<string, any> }): FakeRunVerdict;
+}
