@@ -22,17 +22,46 @@ const home = sandbox.makeRepo(
   "git@github.com:private/dotfiles.git",
 );
 
+const nameless = sandbox.makeRepo(
+  "nameless repo",
+  "trunk-nameless",
+  "Temporary",
+  "git@github.com:acme/c.git",
+);
+sandbox.git(nameless, "config", "--unset", "user.name");
+const fakeGh = join(sandbox.makeDir(sandbox.root, "gh bin"), "gh");
+writeFileSync(
+  fakeGh,
+  '#!/bin/sh\necho "a new release of gh is available" >&2\necho "ejaimez14"\n',
+  {
+    mode: 0o755,
+  },
+);
+const emptyGitConfig = join(sandbox.root, "empty git config");
+writeFileSync(emptyGitConfig, "");
+const signedInWithoutAGitName = {
+  GIT_CONFIG_GLOBAL: emptyGitConfig,
+  GIT_CONFIG_SYSTEM: emptyGitConfig,
+  PATH: `${join(sandbox.root, "gh bin")}:${process.env.PATH ?? ""}`,
+};
+
 let server: Server;
 let endpoint: string;
 const posted: Run[] = [];
 
-async function hook(event: string, payload: Record<string, unknown>, home?: string): Promise<void> {
+async function hook(
+  event: string,
+  payload: Record<string, unknown>,
+  home?: string,
+  extraEnv?: Record<string, string>,
+): Promise<string> {
   const child = spawn(process.execPath, [bundle, event], {
     cwd: String(payload.cwd ?? alpha),
     env: {
       ...sandbox.env,
       ...(home ? { HOME: home, USERPROFILE: home } : {}),
       PATH: process.env.PATH ?? "",
+      ...extraEnv,
       TRACE_TO_LANGSMITH: "true",
       LANGSMITH_API_KEY: "lsv2_pt_fake_key_for_tests",
       LANGSMITH_ENDPOINT: endpoint,
@@ -49,6 +78,7 @@ async function hook(event: string, payload: Record<string, unknown>, home?: stri
     child.on("close", resolve);
   });
   expect(status, stderr).toBe(0);
+  return stderr;
 }
 
 /** Two calls only the Stop hook traces: one reaching into the other repository, one relative to the session's own. */
@@ -84,10 +114,15 @@ function toolRun(name: string): Record<string, unknown> {
   return runs[0].extra?.metadata ?? {};
 }
 
-const prompt = (base: Record<string, unknown>, home?: string) =>
-  hook("UserPromptSubmit", { ...base, hook_event_name: "UserPromptSubmit", prompt: "go" }, home);
-const stop = (base: Record<string, unknown>, home?: string) =>
-  hook("Stop", { ...base, hook_event_name: "Stop", last_assistant_message: "done" }, home);
+const prompt = (base: Record<string, unknown>, home?: string, env?: Record<string, string>) =>
+  hook(
+    "UserPromptSubmit",
+    { ...base, hook_event_name: "UserPromptSubmit", prompt: "go" },
+    home,
+    env,
+  );
+const stop = (base: Record<string, unknown>, home?: string, env?: Record<string, string>) =>
+  hook("Stop", { ...base, hook_event_name: "Stop", last_assistant_message: "done" }, home, env);
 
 beforeEach(() => (posted.length = 0));
 
@@ -197,5 +232,22 @@ describe("a turn working across repositories", () => {
     for (const name of ["Read", "Glob", "Edit"]) {
       expect(toolRun(name)).toMatchObject({ repository_name: "acme/a", git_branch: "trunk-a" });
     }
+  }, 120_000);
+
+  it("labels a turn with the GitHub login when no git name is set", async () => {
+    const session = "gh-login-fallback";
+    const path = join(sandbox.root, `${session}.jsonl`);
+    const base = { session_id: session, transcript_path: path, cwd: nameless };
+
+    const opening = await prompt(base, undefined, signedInWithoutAGitName);
+    writeFileSync(path, transcript(join(nameless, "seed.txt")));
+    const closing = await stop(base, undefined, signedInWithoutAGitName);
+
+    const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
+    expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject({
+      repository_name: "acme/c",
+      ls_attribution_identifier: "ejaimez14",
+    });
+    expect(opening + closing).not.toContain("a new release of gh");
   }, 120_000);
 });

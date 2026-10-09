@@ -48,6 +48,22 @@ const PINNED_REPOSITORY_KEYS = Symbol("pinned repository metadata keys");
 
 const NO_PINNED_KEYS: ReadonlySet<string> = new Set();
 
+const GH_LOGIN_COMMAND = "gh";
+
+const GH_LOGIN_ARGUMENTS = ["api", "user", "--jq", ".login"];
+
+const GH_LOGIN_TIMEOUT_MS = 5000;
+
+const GH_LOGIN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
+
+const JQ_NULL_OUTPUT = "null";
+
+const STATE_FILE_DEFAULT = [".claude", "state", "langsmith_state.json"];
+
+const GH_LOGIN_MARKER_FILE = "langsmith_gh_login.json";
+
+const GH_LOGIN_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
+
 export {
   USER_PROMPT_TURN_NAME,
   ASSISTANT_RUN_NAME,
@@ -60,5 +76,13 @@ export {
   REPOSITORY_METADATA_KEYS,
   PINNED_REPOSITORY_KEYS,
   NO_PINNED_KEYS,
+  GH_LOGIN_COMMAND,
+  GH_LOGIN_ARGUMENTS,
+  GH_LOGIN_TIMEOUT_MS,
+  GH_LOGIN_PATTERN,
+  JQ_NULL_OUTPUT,
+  STATE_FILE_DEFAULT,
+  GH_LOGIN_MARKER_FILE,
+  GH_LOGIN_RETRY_AFTER_MS,
 };
 export type { HookEventName };

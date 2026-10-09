@@ -344,3 +344,7 @@ export interface SettingsFile {
   hooks?: HooksManifest;
   [key: string]: unknown;
 }
+
+export interface GhLoginMarker {
+  failed: string;
+}
