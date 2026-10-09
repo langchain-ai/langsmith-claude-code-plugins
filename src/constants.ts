@@ -119,12 +119,25 @@ const TURN_RECORD_SUFFIX = ".turn.jsonl";
 
 const TURN_RECORD_MAX_BYTES = 8 * 1024 * 1024;
 
+const REPOSITORY_NAME_KEY = "repository_name";
+
+const ATTRIBUTION_IDENTIFIER_KEY = "ls_attribution_identifier";
+
+const UPDATE_ALREADY_RECEIVED_STATUS = 409;
+
 const RECORDED_RUN_FALLBACK_TYPE = "tool";
+
+const GIT_MARKER = {
+  repositoryRoot: "repository root",
+  onlyGitCanSay: "only git can say",
+  nothingHere: "nothing here",
+} as const;
 
 const TURN_RECORD_LINE = {
   run: "run",
   closed: "closed",
   delivered: "ok",
+  reconciled: "fixed",
 } as const;
 
 export {
@@ -137,12 +150,17 @@ export {
   TOOL_PATH_INPUT_KEYS,
   GIT_DIRECTORY_NAME,
   GIT_MARKERS,
+  TURN_REPOSITORY_KEYS,
   REPOSITORY_METADATA_KEYS,
+  REPOSITORY_NAME_KEY,
+  ATTRIBUTION_IDENTIFIER_KEY,
+  UPDATE_ALREADY_RECEIVED_STATUS,
   TURN_RECORD_DIR_NAME,
   TURN_RECORD_SUFFIX,
   TURN_RECORD_MAX_BYTES,
   TURN_RECORD_LINE,
   RECORDED_RUN_FALLBACK_TYPE,
+  GIT_MARKER,
   PINNED_REPOSITORY_KEYS,
   NO_PINNED_KEYS,
   GH_LOGIN_COMMAND,

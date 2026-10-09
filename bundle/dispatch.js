@@ -928,11 +928,15 @@ var GH_LOGIN_RETRY_AFTER_MS = 24 * 60 * 60 * 1e3;
 var TURN_RECORD_DIR_NAME = "langsmith_turns";
 var TURN_RECORD_SUFFIX = ".turn.jsonl";
 var TURN_RECORD_MAX_BYTES = 8 * 1024 * 1024;
+var REPOSITORY_NAME_KEY = "repository_name";
+var ATTRIBUTION_IDENTIFIER_KEY = "ls_attribution_identifier";
+var UPDATE_ALREADY_RECEIVED_STATUS = 409;
 var RECORDED_RUN_FALLBACK_TYPE = "tool";
 var TURN_RECORD_LINE = {
   run: "run",
   closed: "closed",
-  delivered: "ok"
+  delivered: "ok",
+  reconciled: "fixed"
 };
 
 // dist/src/utils/gh-login.js
@@ -14320,6 +14324,9 @@ function closeTurnRecord(options) {
 function recordDelivered(path3, runId) {
   append(path3, { k: TURN_RECORD_LINE.delivered, id: runId });
 }
+function recordReconciled(path3, runId) {
+  append(path3, { k: TURN_RECORD_LINE.reconciled, id: runId });
+}
 function readTurnRecord(path3) {
   let contents;
   try {
@@ -14337,7 +14344,8 @@ function readTurnRecord(path3) {
     origin: "",
     children: [],
     closed: false,
-    delivered: /* @__PURE__ */ new Set()
+    delivered: /* @__PURE__ */ new Set(),
+    fixed: /* @__PURE__ */ new Set()
   };
   const byId = /* @__PURE__ */ new Map();
   for (const line of contents.split("\n")) {
@@ -14361,6 +14369,8 @@ function readTurnRecord(path3) {
       record.turnId = parsed.turn_id;
     } else if (parsed.k === TURN_RECORD_LINE.delivered && typeof parsed.id === "string") {
       record.delivered.add(parsed.id);
+    } else if (parsed.k === TURN_RECORD_LINE.reconciled && typeof parsed.id === "string") {
+      record.fixed.add(parsed.id);
     }
   }
   record.children = [...byId.values()];
@@ -14372,6 +14382,108 @@ function discardTurnRecord(path3) {
     debug(`Removed the turn record ${path3}`);
   } catch {
   }
+}
+
+// dist/src/reconcile.js
+function attributionOf(metadata) {
+  const carried = {};
+  for (const key of REPOSITORY_METADATA_KEYS) {
+    const value = metadata?.[key];
+    if (typeof value === "string" && value.length > 0)
+      carried[key] = value;
+  }
+  return carried;
+}
+var namesARepository = (carried) => carried[REPOSITORY_NAME_KEY] !== void 0;
+function turnAttribution(record) {
+  const root = attributionOf(record.root?.metadata);
+  const inToolCallOrder = [...record.children].sort((left, right) => left.dotted_order < right.dotted_order ? -1 : 1).map((child) => attributionOf(child.metadata));
+  const source = namesARepository(root) ? root : inToolCallOrder.find((carried) => namesARepository(carried));
+  const knowsWhoWorkedInSource = (carried) => carried[ATTRIBUTION_IDENTIFIER_KEY] !== void 0 && carried[REPOSITORY_NAME_KEY] === source?.[REPOSITORY_NAME_KEY];
+  const author = root[ATTRIBUTION_IDENTIFIER_KEY] ?? source?.[ATTRIBUTION_IDENTIFIER_KEY] ?? inToolCallOrder.find(knowsWhoWorkedInSource)?.[ATTRIBUTION_IDENTIFIER_KEY];
+  const filled = { ...source };
+  if (author !== void 0)
+    filled[ATTRIBUTION_IDENTIFIER_KEY] = author;
+  return Object.keys(filled).length > 0 ? filled : void 0;
+}
+function metadataAfterFill(run, filled) {
+  const carried = attributionOf(run.metadata);
+  const workedOutItsOwn = namesARepository(carried) && carried[REPOSITORY_NAME_KEY] !== filled[REPOSITORY_NAME_KEY];
+  if (workedOutItsOwn)
+    return void 0;
+  const missing = Object.entries(filled).filter(([key]) => carried[key] === void 0);
+  if (missing.length === 0)
+    return void 0;
+  return { ...run.metadata, ...Object.fromEntries(missing) };
+}
+function settledTurnMetadata(base, record) {
+  if (!record?.root)
+    return base;
+  const filled = turnAttribution({ ...record, root: { ...record.root, metadata: base ?? {} } });
+  if (!filled)
+    return base;
+  const missing = Object.entries(filled).filter(([key]) => base?.[key] === void 0);
+  return missing.length === 0 ? base : { ...base, ...Object.fromEntries(missing) };
+}
+function runConfig(run, metadata, client2, replicas2) {
+  return {
+    client: client2,
+    replicas: replicas2,
+    id: run.run_id,
+    name: run.name,
+    run_type: run.run_type,
+    project_name: run.project_name,
+    start_time: run.start_time,
+    end_time: run.end_time,
+    parent_run_id: run.parent_run_id,
+    trace_id: run.trace_id,
+    dotted_order: run.dotted_order,
+    extra: { metadata }
+  };
+}
+function alreadyUpdated(failure) {
+  const status = failure?.status;
+  return status === UPDATE_ALREADY_RECEIVED_STATUS;
+}
+function tooOldToUpload(record, now) {
+  const started = new Date(record.root?.start_time ?? "").getTime();
+  return Number.isFinite(started) && now - started >= QUEUE_RUN_MAX_AGE_MS;
+}
+async function reconcileTurn(options) {
+  const { record, client: client2, replicas: replicas2, watch } = options;
+  const now = options.now ?? Date.now();
+  if (!record.root)
+    return true;
+  if (tooOldToUpload(record, now)) {
+    warn(`Dropping a turn record LangSmith will no longer accept: ${record.path}`);
+    return true;
+  }
+  if (!record.closed)
+    return false;
+  const filled = turnAttribution(record) ?? {};
+  const everyChildLanded = record.children.every((child) => record.delivered.has(child.run_id));
+  const stillOpen = record.children.filter((child) => child.open && record.delivered.has(child.run_id));
+  let settled = true;
+  for (const run of [record.root, ...stillOpen]) {
+    if (record.fixed.has(run.run_id))
+      continue;
+    const metadata = metadataAfterFill(run, filled) ?? run.metadata;
+    const runTree = createRunTree(runConfig(run, metadata, client2, replicas2), run.tracing);
+    await runTree.patchRun({ excludeInputs: true });
+    const failure = watch.failure();
+    if (failure && !alreadyUpdated(failure)) {
+      warn(`Could not settle the repository on run ${run.run_id}: ${failure}`);
+      settled = false;
+      continue;
+    }
+    recordReconciled(record.path, run.run_id);
+    debug(`Settled the repository and author on run ${run.run_id}`);
+  }
+  return settled && everyChildLanded;
+}
+async function reconcileAndClear(options) {
+  if (await reconcileTurn(options))
+    discardTurnRecord(options.record.path);
 }
 
 // dist/src/upload-confirm.js
@@ -14542,14 +14654,20 @@ async function uploadQueued(dir, config, origin, client2, watch) {
   discardEmptyQueue(dir);
   return true;
 }
-function clearFinishedTurns(recordDir, origin) {
+async function settleTurns(recordDir, config, origin, client2, watch) {
   for (const path3 of listTurnRecords(recordDir)) {
     const record = readTurnRecord(path3);
-    if (!record || record.origin !== origin)
+    if (!record)
       continue;
-    const everyChildLanded = record.children.every((child) => record.delivered.has(child.run_id));
-    if (record.closed && everyChildLanded)
-      discardTurnRecord(path3);
+    if (record.origin !== origin) {
+      debug(`Leaving ${path3} alone: it was traced for a different LangSmith account`);
+      continue;
+    }
+    try {
+      await reconcileAndClear({ record, client: client2, replicas: config.replicas, watch });
+    } catch (err) {
+      warn(`Could not settle the repository on ${path3}: ${err}`);
+    }
   }
   discardDirIfEmpty(recordDir);
 }
@@ -14565,7 +14683,7 @@ async function drainSession(session, config, origin) {
   const records = join6(turnRecordRoot(config.stateFilePath), session);
   try {
     await uploadQueued(dir, config, origin, client2, watch);
-    clearFinishedTurns(records, origin);
+    await settleTurns(records, config, origin, client2, watch);
   } finally {
     releaseLock(flushTarget);
   }
@@ -16253,6 +16371,7 @@ async function main3() {
       runName: input.tool_name,
       skillName: skillNameFromTool(input.tool_name, input.tool_input)
     });
+    const awaitsTheTurn = !toolMetadata[REPOSITORY_NAME_KEY] || !toolMetadata[ATTRIBUTION_IDENTIFIER_KEY];
     const toolRun = {
       id: toolRunId,
       name: input.tool_name,
@@ -16261,14 +16380,20 @@ async function main3() {
       outputs: { output: input.tool_response },
       project_name: config.project,
       start_time: startTimeIso,
-      end_time: toolEndTimeIso,
+      ...awaitsTheTurn ? {} : { end_time: toolEndTimeIso },
       parent_run_id: parentRunId,
       trace_id: traceId,
       dotted_order: toolDottedOrder,
       extra: { metadata: toolMetadata }
     };
     const origin = queueOrigin(config);
-    recordRun({ path: turnRecord, run: toolRun, tracing, origin });
+    recordRun({
+      path: turnRecord,
+      run: toolRun,
+      tracing,
+      origin,
+      closesAt: awaitsTheTurn ? toolEndTimeIso : void 0
+    });
     await enqueueRun(config.stateFilePath, input.session_id, toolRun, tracing, origin, turnRecord);
     startQueueFlusher(input.cwd, input.session_id);
   }
@@ -16835,6 +16960,7 @@ async function main7() {
   if (completeNow && currentRunId) {
     debug(`Completing Turn run ${currentRunId}`);
     turnRecord = turnRecordPath(config.stateFilePath, input.session_id, currentRunId);
+    const settled = settledTurnMetadata(turnMetadata, readTurnRecord(turnRecord));
     try {
       closedTurnRun = await completeTurnRun({
         tracing: currentTracing,
@@ -16846,7 +16972,7 @@ async function main7() {
         startTime: sessionState.current_turn_start,
         project: config.project,
         lastAssistantMessage: input.last_assistant_message,
-        customMetadata: turnMetadata,
+        customMetadata: settled,
         turnId: lastTurnId,
         turnNumber: sessionState.current_turn_number,
         runtimeVersion,

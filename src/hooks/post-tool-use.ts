@@ -24,6 +24,7 @@ import { repoScopedMetadata, sessionScopedMetadata } from "../repo-attribution.j
 import { createRunTree, runConfigForMode } from "../privacy.js";
 import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
+import { ATTRIBUTION_IDENTIFIER_KEY, REPOSITORY_NAME_KEY } from "../constants.js";
 import { enqueueRun, queueOrigin } from "../queue.js";
 import { recordRun, turnRecordPath } from "../turn-record.js";
 import { startQueueFlusher } from "../utils/detach.js";
@@ -162,6 +163,8 @@ export async function main(): Promise<void> {
       runName: input.tool_name,
       skillName: skillNameFromTool(input.tool_name, input.tool_input),
     });
+    const awaitsTheTurn =
+      !toolMetadata[REPOSITORY_NAME_KEY] || !toolMetadata[ATTRIBUTION_IDENTIFIER_KEY];
     const toolRun = {
       id: toolRunId,
       name: input.tool_name,
@@ -170,14 +173,20 @@ export async function main(): Promise<void> {
       outputs: { output: input.tool_response },
       project_name: config.project,
       start_time: startTimeIso,
-      end_time: toolEndTimeIso,
+      ...(awaitsTheTurn ? {} : { end_time: toolEndTimeIso }),
       parent_run_id: parentRunId,
       trace_id: traceId,
       dotted_order: toolDottedOrder,
       extra: { metadata: toolMetadata },
     };
     const origin = queueOrigin(config);
-    recordRun({ path: turnRecord, run: toolRun, tracing, origin });
+    recordRun({
+      path: turnRecord,
+      run: toolRun,
+      tracing,
+      origin,
+      closesAt: awaitsTheTurn ? toolEndTimeIso : undefined,
+    });
     await enqueueRun(config.stateFilePath, input.session_id, toolRun, tracing, origin, turnRecord);
     startQueueFlusher(input.cwd, input.session_id);
   }

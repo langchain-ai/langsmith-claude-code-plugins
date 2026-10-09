@@ -35,8 +35,9 @@ import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { startQueueFlusher } from "../utils/detach.js";
-import { recordRun, recordTurnClosed, turnRecordPath } from "../turn-record.js";
+import { readTurnRecord, recordRun, recordTurnClosed, turnRecordPath } from "../turn-record.js";
 import { queueOrigin } from "../queue.js";
+import { settledTurnMetadata } from "../reconcile.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { MUTED_TRACE_CONTENT } from "../privacy.js";
 import type { TaskRunEntry } from "../langsmith.js";
@@ -391,6 +392,7 @@ export async function main(): Promise<void> {
   if (completeNow && currentRunId) {
     debug(`Completing Turn run ${currentRunId}`);
     turnRecord = turnRecordPath(config.stateFilePath, input.session_id, currentRunId);
+    const settled = settledTurnMetadata(turnMetadata, readTurnRecord(turnRecord));
     try {
       closedTurnRun = await completeTurnRun({
         tracing: currentTracing,
@@ -402,7 +404,7 @@ export async function main(): Promise<void> {
         startTime: sessionState.current_turn_start,
         project: config.project,
         lastAssistantMessage: input.last_assistant_message,
-        customMetadata: turnMetadata,
+        customMetadata: settled,
         turnId: lastTurnId,
         turnNumber: sessionState.current_turn_number,
         runtimeVersion,

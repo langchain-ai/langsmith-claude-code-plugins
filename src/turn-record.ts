@@ -135,6 +135,10 @@ export function recordDelivered(path: string, runId: string): void {
   append(path, { k: TURN_RECORD_LINE.delivered, id: runId });
 }
 
+export function recordReconciled(path: string, runId: string): void {
+  append(path, { k: TURN_RECORD_LINE.reconciled, id: runId });
+}
+
 export function readTurnRecord(path: string): TurnRecord | undefined {
   let contents: string;
   try {
@@ -154,6 +158,7 @@ export function readTurnRecord(path: string): TurnRecord | undefined {
     children: [],
     closed: false,
     delivered: new Set(),
+    fixed: new Set(),
   };
   const byId = new Map<string, RecordedRun>();
   for (const line of contents.split("\n")) {
@@ -173,6 +178,8 @@ export function readTurnRecord(path: string): TurnRecord | undefined {
       record.turnId = parsed.turn_id;
     } else if (parsed.k === TURN_RECORD_LINE.delivered && typeof parsed.id === "string") {
       record.delivered.add(parsed.id);
+    } else if (parsed.k === TURN_RECORD_LINE.reconciled && typeof parsed.id === "string") {
+      record.fixed.add(parsed.id);
     }
   }
   record.children = [...byId.values()];

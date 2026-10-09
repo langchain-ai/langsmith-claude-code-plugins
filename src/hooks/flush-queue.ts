@@ -2,8 +2,8 @@
  * Detached queue flusher.
  *
  * Started by a hook and outliving it, this uploads every queued run in order,
- * removes each entry only once LangSmith has confirmed it, and notes that
- * delivery in the plugin's own record of the turn.
+ * removes each entry only once LangSmith has confirmed it, and then settles the
+ * repository and author on the turns those runs belong to.
  */
 
 import { Client } from "langsmith";
@@ -24,7 +24,6 @@ import {
   runIsTooOldToUpload,
 } from "../queue.js";
 import {
-  discardTurnRecord,
   listRecordedSessions,
   listTurnRecords,
   readTurnRecord,
@@ -32,6 +31,7 @@ import {
   recordsIdleMs,
   turnRecordRoot,
 } from "../turn-record.js";
+import { reconcileAndClear } from "../reconcile.js";
 import { discardDirIfEmpty, safeName } from "../utils/session-store.js";
 import { watchUploads, type UploadWatch } from "../upload-confirm.js";
 import { releaseLock, tryAcquireLock } from "../utils/file-lock.js";
@@ -91,12 +91,25 @@ async function uploadQueued(
   return true;
 }
 
-function clearFinishedTurns(recordDir: string, origin: string): void {
+async function settleTurns(
+  recordDir: string,
+  config: Config,
+  origin: string,
+  client: Client,
+  watch: UploadWatch,
+): Promise<void> {
   for (const path of listTurnRecords(recordDir)) {
     const record = readTurnRecord(path);
-    if (!record || record.origin !== origin) continue;
-    const everyChildLanded = record.children.every((child) => record.delivered.has(child.run_id));
-    if (record.closed && everyChildLanded) discardTurnRecord(path);
+    if (!record) continue;
+    if (record.origin !== origin) {
+      debug(`Leaving ${path} alone: it was traced for a different LangSmith account`);
+      continue;
+    }
+    try {
+      await reconcileAndClear({ record, client, replicas: config.replicas, watch });
+    } catch (err) {
+      warn(`Could not settle the repository on ${path}: ${err}`);
+    }
   }
   discardDirIfEmpty(recordDir);
 }
@@ -113,7 +126,7 @@ async function drainSession(session: string, config: Config, origin: string): Pr
   const records = join(turnRecordRoot(config.stateFilePath), session);
   try {
     await uploadQueued(dir, config, origin, client, watch);
-    clearFinishedTurns(records, origin);
+    await settleTurns(records, config, origin, client, watch);
   } finally {
     releaseLock(flushTarget);
   }
