@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { setTimeout as after } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
@@ -22,6 +22,29 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const picker = join(root, "hooks/langsmith-tracing");
 const executable = binary.target.executableName;
 const SLOW_BUILD_TIMEOUT_MS = 15_000;
+const windowsShell =
+  process.platform === "win32"
+    ? [
+        join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe"),
+        ...(process.env["ProgramFiles(x86)"]
+          ? [join(process.env["ProgramFiles(x86)"], "Git", "bin", "bash.exe")]
+          : []),
+        ...(process.env.LOCALAPPDATA
+          ? [join(process.env.LOCALAPPDATA, "Programs", "Git", "bin", "bash.exe")]
+          : []),
+        ...(process.env.PATH ?? "")
+          .split(delimiter)
+          .filter((dir) => /[\\/]Git[\\/](?:bin|cmd|usr[\\/]bin)$/i.test(dir))
+          .flatMap((dir) =>
+            /[\\/]cmd$/i.test(dir) ? [join(dir, "..", "bin", "bash.exe")] : [join(dir, "bash.exe")],
+          ),
+      ].find(existsSync)
+    : undefined;
+
+function windowsShellPath(): string {
+  if (!windowsShell) throw new Error("Git for Windows Bash was not found");
+  return windowsShell;
+}
 
 const body = {
   works: (build: string) => `#!/bin/sh\necho "${build} $1"\n`,
@@ -65,7 +88,30 @@ function machine(dir: string, system: string, hardware: string): string {
     `#!/bin/sh\nif [ "$1" = "-m" ]; then echo ${hardware}; else echo ${system}; fi\n`,
   );
   chmodSync(path, 0o755);
-  return `${join(dir, "machine")}:${process.env.PATH ?? ""}`;
+  return [join(dir, "machine"), process.env.PATH ?? ""].filter(Boolean).join(delimiter);
+}
+
+function shellPath(path: string): string {
+  if (process.platform !== "win32") return path;
+  return path
+    .replaceAll("\\", "/")
+    .replace(/^([A-Za-z]):/, (_, drive: string) => `/${drive.toLowerCase()}`);
+}
+
+function launcherEnvironment(dir: string, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    CLAUDE_PLUGIN_ROOT: dir,
+    ...extra,
+  };
+  if (extra.PATH === undefined) env.PATH = machine(dir, "Darwin", "arm64");
+  if (process.platform === "win32") {
+    if (env.CLAUDE_PLUGIN_ROOT) {
+      env.CLAUDE_PLUGIN_ROOT = shellPath(env.CLAUDE_PLUGIN_ROOT);
+    }
+    if (env.TMPDIR) env.TMPDIR = shellPath(env.TMPDIR);
+  }
+  return env;
 }
 
 function run(
@@ -78,32 +124,38 @@ function run(
     ...env
   } = {},
 ) {
-  return spawnSync(join(dir, "hooks/langsmith-tracing"), [event], {
+  const command =
+    process.platform === "win32" ? windowsShellPath() : join(dir, "hooks/langsmith-tracing");
+  const args =
+    process.platform === "win32"
+      ? [shellPath(join(dir, "hooks/langsmith-tracing")), event]
+      : [event];
+  return spawnSync(command, args, {
     encoding: "utf8",
     input,
     maxBuffer: 16 * 1024 * 1024,
-    env: {
-      ...process.env,
-      CLAUDE_PLUGIN_ROOT: dir,
-      PATH: machine(dir, system, hardware),
-      ...env,
-    },
+    env: launcherEnvironment(dir, { PATH: machine(dir, system, hardware), ...env }),
   });
 }
 
-const interpreters = ["/bin/sh", "/bin/bash", "/bin/zsh", "/bin/dash"].filter((path) =>
-  existsSync(path),
-);
+const interpreters =
+  process.platform === "win32"
+    ? windowsShell === undefined
+      ? []
+      : [windowsShell]
+    : ["/bin/sh", "/bin/bash", "/bin/zsh", "/bin/dash"].filter(existsSync);
 
 function under(interpreter: string, dir: string, redirect = "") {
+  if (process.platform === "win32") {
+    return spawnSync(interpreter, ["-c", `exec "$0" Stop ${redirect}`, shellPath(launcher(dir))], {
+      encoding: "utf8",
+      env: launcherEnvironment(dir),
+    });
+  }
   const argv = ["-c", `exec "$0" "$1" Stop ${redirect}`, interpreter, launcher(dir)];
   return spawnSync(interpreter, argv, {
     encoding: "utf8",
-    env: {
-      ...process.env,
-      CLAUDE_PLUGIN_ROOT: dir,
-      PATH: machine(dir, "Darwin", "arm64"),
-    },
+    env: launcherEnvironment(dir),
   });
 }
 
@@ -126,12 +178,7 @@ async function timedOut(
   const spool = join(dir, "spool");
   mkdirSync(spool);
   const child = spawn(join(dir, "hooks/langsmith-tracing"), ["Stop"], {
-    env: {
-      ...process.env,
-      CLAUDE_PLUGIN_ROOT: dir,
-      TMPDIR: spool,
-      PATH: machine(dir, "Darwin", "arm64"),
-    },
+    env: launcherEnvironment(dir, { TMPDIR: spool }),
     stdio: ["pipe", "ignore", "ignore"],
   });
   child.stdin.on("error", () => {});
@@ -165,12 +212,13 @@ describe("the build picker", () => {
     expect(tracked.slice(0, 6)).toBe("100755");
   });
 
-  it("survives a Windows clone runnable, where Git rewrites line endings", () => {
+  it("keeps a Windows checkout runnable under autocrlf", () => {
     const converted = execFileSync(
       "git",
       ["-c", "core.autocrlf=true", "cat-file", "--filters", ":hooks/langsmith-tracing"],
       { cwd: root },
     );
+    expect(converted.toString("utf8")).not.toContain("\r\n");
     inSandbox(["darwin-arm64"], (dir) => {
       writeFileSync(join(dir, "hooks/langsmith-tracing"), converted);
       chmodSync(join(dir, "hooks/langsmith-tracing"), 0o755);
@@ -202,15 +250,18 @@ describe("the build picker", () => {
     });
   });
 
-  it("falls back to Node when a build lost its executable bit", () => {
-    inSandbox(
-      ["darwin-arm64", "darwin-x64"],
-      (dir) => {
-        expect(pick(dir)).toBe("node Stop");
-      },
-      { runnable: false },
-    );
-  });
+  it.skipIf(process.platform === "win32")(
+    "falls back to Node when a build lost its executable bit",
+    () => {
+      inSandbox(
+        ["darwin-arm64", "darwin-x64"],
+        (dir) => {
+          expect(pick(dir)).toBe("node Stop");
+        },
+        { runnable: false },
+      );
+    },
+  );
 
   it("falls back to Node off a Mac, so a Mac build is never started there", () => {
     inSandbox(["darwin-arm64", "darwin-x64"], (dir) => {
@@ -289,8 +340,10 @@ describe("the build picker", () => {
     });
   });
 
-  it("has at least two of the four interpreters to run the launcher under", () => {
-    expect(interpreters.length, `only found ${interpreters.join(", ")}`).toBeGreaterThanOrEqual(2);
+  it("has enough interpreters to run the launcher under", () => {
+    expect(interpreters.length, `only found ${interpreters.join(", ")}`).toBeGreaterThanOrEqual(
+      process.platform === "win32" ? 1 : 2,
+    );
   });
 
   it.each(interpreters)(
@@ -338,7 +391,11 @@ describe("the build picker", () => {
     inSandbox(
       ["darwin-arm64"],
       (dir) => {
-        const result = under("/bin/bash", dir, "2> >(exit 0)");
+        const result = under(
+          process.platform === "win32" ? windowsShellPath() : "/bin/bash",
+          dir,
+          "2> >(exit 0)",
+        );
         expect(result.status, result.stdout).toBe(0);
         expect(result.stdout.trim()).toBe("node Stop");
       },
@@ -384,48 +441,57 @@ describe("the build picker", () => {
     );
   });
 
-  it("keeps the spooled event readable only by the person being traced", () => {
-    inSandbox(
-      ["darwin-arm64"],
-      (dir) => {
+  it.skipIf(process.platform === "win32")(
+    "keeps the spooled event readable only by the person being traced",
+    () => {
+      inSandbox(
+        ["darwin-arm64"],
+        (dir) => {
+          const spool = join(dir, "spool");
+          mkdirSync(spool);
+          expect(pick(dir, { TMPDIR: spool, input: "x".repeat(1_000) })).toBe("-rw-------");
+        },
+        { shaped: "readsOffTheSpoolPermissions" },
+      );
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "hands the turn to node when the event cannot be spooled at all",
+    () => {
+      inSandbox(["darwin-arm64"], (dir) => {
+        const spool = join(dir, "spool");
+        mkdirSync(spool, { mode: 0o500 });
+        expect(pick(dir, { TMPDIR: spool, input: "hello" })).toBe("node Stop");
+      });
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "leaves no half-written copy behind when the event cannot be spooled",
+    () => {
+      inSandbox(["darwin-arm64"], (dir) => {
         const spool = join(dir, "spool");
         mkdirSync(spool);
-        expect(pick(dir, { TMPDIR: spool, input: "x".repeat(1_000) })).toBe("-rw-------");
-      },
-      { shaped: "readsOffTheSpoolPermissions" },
-    );
-  });
-
-  it("hands the turn to node when the event cannot be spooled at all", () => {
-    inSandbox(["darwin-arm64"], (dir) => {
-      const spool = join(dir, "spool");
-      mkdirSync(spool, { mode: 0o500 });
-      expect(pick(dir, { TMPDIR: spool, input: "hello" })).toBe("node Stop");
-    });
-  });
-
-  it("leaves no half-written copy behind when the event cannot be spooled", () => {
-    inSandbox(["darwin-arm64"], (dir) => {
-      const spool = join(dir, "spool");
-      mkdirSync(spool);
-      const result = spawnSync(
-        "/bin/sh",
-        ["-c", 'ulimit -f 1; exec "$0" Stop', join(dir, "hooks/langsmith-tracing")],
-        {
-          encoding: "utf8",
-          input: "x".repeat(200_000),
-          env: {
-            ...process.env,
-            CLAUDE_PLUGIN_ROOT: dir,
-            TMPDIR: spool,
-            PATH: machine(dir, "Darwin", "arm64"),
+        const result = spawnSync(
+          "/bin/sh",
+          ["-c", 'ulimit -f 1; exec "$0" Stop', join(dir, "hooks/langsmith-tracing")],
+          {
+            encoding: "utf8",
+            input: "x".repeat(200_000),
+            env: {
+              ...process.env,
+              CLAUDE_PLUGIN_ROOT: dir,
+              TMPDIR: spool,
+              PATH: machine(dir, "Darwin", "arm64"),
+            },
           },
-        },
-      );
-      expect(result.status).not.toBe(0);
-      expect(readdirSync(spool)).toEqual([]);
-    });
-  });
+        );
+        expect(result.status).not.toBe(0);
+        expect(readdirSync(spool)).toEqual([]);
+      });
+    },
+  );
 
   it("keeps no copy of the event once it is done, whichever path ran it", () => {
     const spooled = (shaped: Body, expected: string) =>
@@ -443,7 +509,7 @@ describe("the build picker", () => {
     spooled("reportsItCouldNotStart", "node Stop");
   });
 
-  it(
+  it.skipIf(process.platform === "win32")(
     "stops when Claude Code times it out, rather than waiting out a stuck build",
     async () => {
       const dir = sandbox(["darwin-arm64"], { shaped: "outlastsTheTimeout" });
@@ -460,7 +526,7 @@ describe("the build picker", () => {
     SLOW_BUILD_TIMEOUT_MS,
   );
 
-  it.each([
+  it.skipIf(process.platform === "win32").each([
     ["SIGTERM", 143],
     ["SIGQUIT", 131],
   ])(
@@ -484,14 +550,16 @@ describe("the build picker", () => {
 
   it("finds its own plugin root when Claude Code does not supply one", () => {
     inSandbox(["darwin-arm64", "darwin-x64"], (dir) => {
-      const result = spawnSync(join(dir, "hooks/langsmith-tracing"), ["PreToolUse"], {
+      const command =
+        process.platform === "win32" ? windowsShellPath() : join(dir, "hooks/langsmith-tracing");
+      const args =
+        process.platform === "win32"
+          ? [shellPath(join(dir, "hooks/langsmith-tracing")), "PreToolUse"]
+          : ["PreToolUse"];
+      const result = spawnSync(command, args, {
         encoding: "utf8",
         cwd: tmpdir(),
-        env: {
-          ...process.env,
-          CLAUDE_PLUGIN_ROOT: "",
-          PATH: machine(dir, "Darwin", "arm64"),
-        },
+        env: launcherEnvironment(dir, { CLAUDE_PLUGIN_ROOT: "" }),
       });
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout.trim()).toBe("darwin-arm64 PreToolUse");

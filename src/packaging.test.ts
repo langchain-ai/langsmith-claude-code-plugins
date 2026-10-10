@@ -121,7 +121,10 @@ describe("separate marketplace packages", () => {
 
   it("ships only argument-preserving deterministic command wrappers in the gateway", () => {
     for (const name of ["setup", "disable", "status"]) {
-      const command = readFileSync(join(gatewayRoot, "commands", `${name}.md`), "utf8");
+      const command = readFileSync(join(gatewayRoot, "commands", `${name}.md`), "utf8").replace(
+        /\r\n/g,
+        "\n",
+      );
       const [, frontmatter, body] = command.split("---\n");
       expect(frontmatter.trim().split("\n")).toEqual([
         name === "status"

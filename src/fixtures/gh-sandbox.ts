@@ -1,9 +1,26 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 
 export function createGhSandbox(prefix: string) {
   const root = mkdtempSync(join(tmpdir(), prefix));
+  const commandBin = join(root, "fake gh bin");
+  const commandPath = join(commandBin, process.platform === "win32" ? "gh.exe" : "gh");
+  mkdirSync(commandBin);
+  if (process.platform === "win32") {
+    copyFileSync(process.execPath, commandPath);
+    chmodSync(commandPath, 0o755);
+  } else {
+    symlinkSync(process.execPath, commandPath);
+  }
 
   const emptyBin = (name: string): string => {
     const dir = join(root, `${name} bin`);
@@ -11,13 +28,12 @@ export function createGhSandbox(prefix: string) {
     return dir;
   };
 
-  const fakeGh = (name: string, script: string): string => {
-    const dir = emptyBin(name);
-    writeFileSync(join(dir, "gh"), `#!/bin/sh\n${script}\n`, { mode: 0o755 });
-    return `${dir}:${process.env.PATH ?? ""}`;
+  const fakeGh = (_name: string, script: string): string => {
+    writeFileSync(join(root, "api"), `${script}\n`);
+    return [commandBin, process.env.PATH ?? ""].filter(Boolean).join(delimiter);
   };
 
-  const prints = (login: string): string => `echo "${login}"`;
+  const prints = (login: string): string => `console.log(${JSON.stringify(login)});`;
 
   const stateFile = (name: string): string => {
     const dir = join(root, `${name} state`);

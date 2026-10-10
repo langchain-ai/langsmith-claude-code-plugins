@@ -6,6 +6,9 @@ on:
       lifecycle_only:
         type: boolean
         default: false
+      fixtures_only:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -33,6 +36,8 @@ jobs:
       - run: pnpm build
       - run: git diff --exit-code -- bundle/ plugins/langsmith-gateway/bundle/
       - run: node .github/scripts/test-engine.mjs
-        if: ${{ !inputs.lifecycle_only }}
+        if: ${{ !inputs.lifecycle_only && !inputs.fixtures_only }}
       - run: node .github/scripts/test-engine.mjs src/hooks/mute-lifecycle.integration.test.ts
         if: ${{ inputs.lifecycle_only }}
+      - run: node .github/scripts/test-engine.mjs src/binary-picker.test.ts src/utils/gh-login.test.ts src/repo-attribution.integration.test.ts src/packaging.test.ts
+        if: ${{ inputs.fixtures_only }}

@@ -12,19 +12,24 @@ const { emptyBin, fakeGh, prints } = gh;
 
 const statePath = gh.stateFile("shared");
 const marker = gh.markerFor(statePath);
+const originalCwd = process.cwd();
 
 function markerSaying(failed: string): void {
   writeFileSync(marker, JSON.stringify({ failed }));
 }
 
 beforeEach(() => {
+  process.chdir(gh.root);
   vi.unstubAllEnvs();
   clearGithubLoginCache();
   rmSync(marker, { force: true });
   vi.stubEnv("STATE_FILE", statePath);
 });
 
-afterAll(() => gh.remove());
+afterAll(() => {
+  process.chdir(originalCwd);
+  gh.remove();
+});
 
 describe("the GitHub login the tool reports", () => {
   it("answers with nothing when the tool is not installed", () => {
@@ -42,7 +47,7 @@ describe("the GitHub login the tool reports", () => {
   });
 
   it("gives up on a tool that never answers", () => {
-    vi.stubEnv("PATH", fakeGh("hanging", "sleep 30"));
+    vi.stubEnv("PATH", fakeGh("hanging", "setInterval(() => {}, 1000);"));
     const started = Date.now();
     expect(githubLogin()).toBeUndefined();
     const waited = Date.now() - started;
@@ -53,7 +58,13 @@ describe("the GitHub login the tool reports", () => {
   it("asks once however many times it is needed", () => {
     const counter = join(gh.root, "times asked");
     rmSync(counter, { force: true });
-    vi.stubEnv("PATH", fakeGh("counting", `echo x >> "${counter}"\n${prints("ejaimez14")}`));
+    vi.stubEnv(
+      "PATH",
+      fakeGh(
+        "counting",
+        `require("node:fs").appendFileSync(${JSON.stringify(counter)}, "x\\n");${prints("ejaimez14")}`,
+      ),
+    );
     expect(githubLogin()).toBe("ejaimez14");
     expect(githubLogin()).toBe("ejaimez14");
     expect(readFileSync(counter, "utf-8").trim().split("\n")).toHaveLength(1);
@@ -71,7 +82,13 @@ describe("the day of quiet after a failure", () => {
     const counter = join(gh.root, "times asked after failing");
     rmSync(counter, { force: true });
     markerSaying(new Date().toISOString());
-    vi.stubEnv("PATH", fakeGh("quiet", `echo x >> "${counter}"\n${prints("ejaimez14")}`));
+    vi.stubEnv(
+      "PATH",
+      fakeGh(
+        "quiet",
+        `require("node:fs").appendFileSync(${JSON.stringify(counter)}, "x\\n");${prints("ejaimez14")}`,
+      ),
+    );
     expect(githubLogin()).toBeUndefined();
     expect(existsSync(counter)).toBe(false);
   });
@@ -108,7 +125,13 @@ describe("the name a trace is labelled with", () => {
     rmSync(asked, { force: true });
     vi.stubEnv("GIT_CONFIG_GLOBAL", emptyGitConfig);
     vi.stubEnv("GIT_CONFIG_SYSTEM", emptyGitConfig);
-    vi.stubEnv("PATH", fakeGh("labelling", `touch "${asked}"\n${prints("ejaimez14")}`));
+    vi.stubEnv(
+      "PATH",
+      fakeGh(
+        "labelling",
+        `require("node:fs").writeFileSync(${JSON.stringify(asked)}, "");${prints("ejaimez14")}`,
+      ),
+    );
   });
 
   afterAll(() => sandbox.remove());

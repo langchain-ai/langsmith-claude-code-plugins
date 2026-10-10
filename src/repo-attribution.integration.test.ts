@@ -1,7 +1,14 @@
 import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  chmodSync,
+  copyFileSync,
+  readFileSync,
+  readdirSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createGitSandbox } from "./fixtures/git-sandbox.js";
@@ -35,20 +42,26 @@ const nameless = sandbox.makeRepo(
   "git@github.com:acme/c.git",
 );
 sandbox.git(nameless, "config", "--unset", "user.name");
-const fakeGh = join(sandbox.makeDir(sandbox.root, "gh bin"), "gh");
+const fakeGh = join(
+  sandbox.makeDir(sandbox.root, "gh bin"),
+  process.platform === "win32" ? "gh.exe" : "gh",
+);
+if (process.platform === "win32") {
+  copyFileSync(process.execPath, fakeGh);
+  chmodSync(fakeGh, 0o755);
+} else {
+  symlinkSync(process.execPath, fakeGh);
+}
 writeFileSync(
-  fakeGh,
-  '#!/bin/sh\necho "a new release of gh is available" >&2\necho "ejaimez14"\n',
-  {
-    mode: 0o755,
-  },
+  join(nameless, "api"),
+  'console.error("a new release of gh is available");\nconsole.log("ejaimez14");\n',
 );
 const emptyGitConfig = join(sandbox.root, "empty git config");
 writeFileSync(emptyGitConfig, "");
 const signedInWithoutAGitName = {
   GIT_CONFIG_GLOBAL: emptyGitConfig,
   GIT_CONFIG_SYSTEM: emptyGitConfig,
-  PATH: `${join(sandbox.root, "gh bin")}:${process.env.PATH ?? ""}`,
+  PATH: [join(sandbox.root, "gh bin"), process.env.PATH ?? ""].filter(Boolean).join(delimiter),
 };
 
 let server: Server;
