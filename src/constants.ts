@@ -88,6 +88,7 @@ const QUEUE_TEMP_SUFFIX = ".queue.tmp";
 
 /** The same guard for the state file, which readers load without taking the lock. */
 const STATE_TEMP_SUFFIX = ".state.tmp";
+const STATE_LOCK_RELEASE_WARNING = "Could not release the shared state lock";
 
 /** A lock is staged under this and linked into place, so it never exists without its owner's pid. */
 const LOCK_STAGING_SUFFIX = ".lock.staging";
@@ -258,6 +259,7 @@ export {
   QUEUE_SESSION_UNSAFE_CHARS,
   QUEUE_TEMP_SUFFIX,
   STATE_TEMP_SUFFIX,
+  STATE_LOCK_RELEASE_WARNING,
   LOCK_STAGING_SUFFIX,
   QUEUE_ID_TIME_WIDTH,
   PRIVATE_DIR_MODE,

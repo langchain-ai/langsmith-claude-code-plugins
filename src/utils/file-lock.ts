@@ -2,50 +2,13 @@
  * Cross-process file locking, used to serialise writers that share a file.
  */
 
-import {
-  readFileSync,
-  writeFileSync,
-  linkSync,
-  mkdirSync,
-  openSync,
-  closeSync,
-  unlinkSync,
-} from "node:fs";
+import { readFileSync, writeFileSync, linkSync, mkdirSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { LOCK_STAGING_SUFFIX, PRIVATE_FILE_MODE } from "../constants.js";
 
-const LOCK_TIMEOUT_MS = 5_000;
-const LOCK_RETRY_MS = 20;
-
 function lockPath(stateFilePath: string): string {
   return `${stateFilePath}.lock`;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function acquireLock(stateFilePath: string): Promise<void> {
-  const lock = lockPath(stateFilePath);
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync(dirname(stateFilePath), { recursive: true });
-  while (Date.now() < deadline) {
-    try {
-      // O_EXCL | O_CREAT: fails atomically if the file already exists.
-      const fd = openSync(lock, "wx", PRIVATE_FILE_MODE);
-      closeSync(fd);
-      return;
-    } catch {
-      await sleep(LOCK_RETRY_MS);
-    }
-  }
-  // Stale lock — remove it and proceed rather than deadlocking.
-  try {
-    unlinkSync(lock);
-  } catch {
-    /* ignore */
-  }
 }
 
 export function releaseLock(stateFilePath: string): void {
@@ -112,14 +75,4 @@ export function tryAcquireLock(filePath: string): boolean {
     return false;
   }
   return claimLock(lock);
-}
-
-/** Run `fn` while holding the cross-process lock that guards `filePath`. */
-export async function withFileLock<T>(filePath: string, fn: () => T | Promise<T>): Promise<T> {
-  await acquireLock(filePath);
-  try {
-    return await fn();
-  } finally {
-    releaseLock(filePath);
-  }
 }

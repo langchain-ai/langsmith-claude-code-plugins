@@ -24,6 +24,8 @@ Run these inside Claude Code:
 
 Updates are off by default for this marketplace, so turn on auto-update in `/plugin` under **Marketplaces**, or run `claude plugin update langsmith-tracing@langsmith-claude-code-plugins`. Either way the new version loads in your next session.
 
+Before updating, close every Claude Code session and let its hooks finish. Old and new hook versions cannot safely write the shared state at once.
+
 ## Turn on tracing
 
 Tracing is off until you give it a key and switch it on. Write both to `~/.claude/langsmith.json`:

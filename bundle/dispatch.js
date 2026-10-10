@@ -920,6 +920,7 @@ var QUEUE_FILE_SUFFIX = ".queue.json";
 var QUEUE_SESSION_UNSAFE_CHARS = /[^\w.-]/g;
 var QUEUE_TEMP_SUFFIX = ".queue.tmp";
 var STATE_TEMP_SUFFIX = ".state.tmp";
+var STATE_LOCK_RELEASE_WARNING = "Could not release the shared state lock";
 var LOCK_STAGING_SUFFIX = ".lock.staging";
 var PRIVATE_DIR_MODE = 448;
 var PRIVATE_FILE_MODE = 384;
@@ -15171,34 +15172,11 @@ function watchUploads(client2) {
 }
 
 // dist/src/utils/file-lock.js
-import { readFileSync as readFileSync8, writeFileSync as writeFileSync4, linkSync, mkdirSync as mkdirSync7, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync5 } from "node:fs";
+import { readFileSync as readFileSync8, writeFileSync as writeFileSync4, linkSync, mkdirSync as mkdirSync7, unlinkSync as unlinkSync5 } from "node:fs";
 import { dirname as dirname5 } from "node:path";
 import { randomUUID as randomUUID3 } from "node:crypto";
-var LOCK_TIMEOUT_MS = 5e3;
-var LOCK_RETRY_MS = 20;
 function lockPath(stateFilePath) {
   return `${stateFilePath}.lock`;
-}
-function sleep3(ms) {
-  return new Promise((resolve16) => setTimeout(resolve16, ms));
-}
-async function acquireLock(stateFilePath) {
-  const lock = lockPath(stateFilePath);
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  mkdirSync7(dirname5(stateFilePath), { recursive: true });
-  while (Date.now() < deadline) {
-    try {
-      const fd = openSync2(lock, "wx", PRIVATE_FILE_MODE);
-      closeSync2(fd);
-      return;
-    } catch {
-      await sleep3(LOCK_RETRY_MS);
-    }
-  }
-  try {
-    unlinkSync5(lock);
-  } catch {
-  }
 }
 function releaseLock(stateFilePath) {
   try {
@@ -15258,14 +15236,6 @@ function tryAcquireLock(filePath) {
     return false;
   }
   return claimLock(lock);
-}
-async function withFileLock(filePath, fn) {
-  await acquireLock(filePath);
-  try {
-    return await fn();
-  } finally {
-    releaseLock(filePath);
-  }
 }
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_5b41075d8d5baf56f521199db73d7747/node_modules/@langchain/plugins-base/dist/storage/capture/capture-store.js
@@ -16163,7 +16133,7 @@ async function waitOrReleaseClaim(waitForPeers, deadline, filePath, claimDirecto
   await waitForNextScan(deadline, filePath);
   return true;
 }
-async function withFileLock2(filePath, callback, options) {
+async function withFileLock(filePath, callback, options) {
   const waitMs = timeoutMs(options);
   const deadline = performance2.now() + waitMs;
   const acquired = await acquireClaim(filePath, true, deadline);
@@ -16296,7 +16266,7 @@ function createBackgroundWorker(options) {
       let retryExhausted = false;
       let failures = 0;
       for (; ; ) {
-        const result = await withFileLock2(lockPath2, async () => {
+        const result = await withFileLock(lockPath2, async () => {
           for (; ; ) {
             if (!await matchesScope(config.resolveScope, scope))
               return "scope-mismatch";
@@ -18841,7 +18811,7 @@ async function captureLifecycleSnapshot(options, input) {
     "runs",
     identifierHash(runId)
   ]);
-  return withFileLock2(join15(lockDirectory, LIFECYCLE_SNAPSHOT_LOCK_FILE), async () => {
+  return withFileLock(join15(lockDirectory, LIFECYCLE_SNAPSHOT_LOCK_FILE), async () => {
     const records = (await options.store.enumerateTurn(options.integration, options.sessionId, turnId)).map(({ record }) => record).filter((record) => record.runId === runId);
     const state = readSnapshotState(records, options.destinationFingerprint, revisionPrefix);
     if (state === "conflict")
@@ -20384,7 +20354,7 @@ async function runBackgroundRecovery(runtime, options, scopeGuard) {
     const observedMarker = await readMarker(runtime.storageRoot, paths.marker);
     if (observedMarker && observedMarker.retryAtMs > Date.now())
       return { status: "cooldown", retryAtMs: observedMarker.retryAtMs };
-    return await withFileLock2(paths.lock, async () => {
+    return await withFileLock(paths.lock, async () => {
       if (checkScope && !await checkScope())
         return scopeCheckFailed ? { status: "failed", message: describe(scopeCheckError), retryable: true } : { status: "scope-mismatch" };
       const now = Date.now();
@@ -21939,7 +21909,7 @@ function resolveTurnTracingMode(config, sessionId, ...snapshots) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync10, statSync as statSync7, fstatSync, openSync as openSync3, readSync, closeSync as closeSync3 } from "node:fs";
+import { readFileSync as readFileSync10, statSync as statSync7, fstatSync, openSync as openSync2, readSync, closeSync as closeSync2 } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
   let size;
@@ -21964,7 +21934,7 @@ function readTranscript(filePath, afterLine = -1) {
     }
     return { messages, lastLine };
   }
-  const fd = openSync3(filePath, "r");
+  const fd = openSync2(filePath, "r");
   try {
     const chunkSize = 2 * 1024 * 1024;
     const buf = Buffer.alloc(chunkSize);
@@ -22006,7 +21976,7 @@ function readTranscript(filePath, afterLine = -1) {
     }
     return { messages, lastLine };
   } finally {
-    closeSync3(fd);
+    closeSync2(fd);
   }
 }
 function getTranscriptEndLine(filePath) {
@@ -22019,7 +21989,7 @@ function getTranscriptEndLine(filePath) {
       const lines = raw.split("\n").filter((l) => l.trim() !== "");
       return lines.length > 0 ? lines.length - 1 : -1;
     }
-    const fd = openSync3(filePath, "r");
+    const fd = openSync2(filePath, "r");
     try {
       const chunkSize = 1024 * 1024;
       const buf = Buffer.alloc(chunkSize);
@@ -22042,7 +22012,7 @@ function getTranscriptEndLine(filePath) {
         lineCount++;
       return lineCount > 0 ? lineCount - 1 : -1;
     } finally {
-      closeSync3(fd);
+      closeSync2(fd);
     }
   } catch {
     return -1;
@@ -22051,7 +22021,7 @@ function getTranscriptEndLine(filePath) {
 function readRuntimeVersion(filePath) {
   let fd;
   try {
-    fd = openSync3(filePath, "r");
+    fd = openSync2(filePath, "r");
     const size = fstatSync(fd).size;
     if (size === 0)
       return void 0;
@@ -22074,7 +22044,7 @@ function readRuntimeVersion(filePath) {
   } catch {
   } finally {
     if (fd !== void 0)
-      closeSync3(fd);
+      closeSync2(fd);
   }
   return void 0;
 }
@@ -22246,13 +22216,53 @@ function groupIntoTurns(messages) {
 }
 
 // dist/src/state.js
-import { readFileSync as readFileSync11, mkdirSync as mkdirSync8 } from "node:fs";
-import { dirname as dirname11 } from "node:path";
+import { readFileSync as readFileSync11 } from "node:fs";
+
+// dist/src/utils/locks/state-file-lock.js
+async function withStateFileLock(stateFilePath, callback) {
+  let callbackCompleted = false;
+  let callbackFailed = false;
+  let callbackResult;
+  let callbackError;
+  try {
+    return await withFileLock(stateFilePath, async () => {
+      try {
+        callbackResult = await callback();
+        callbackCompleted = true;
+        return callbackResult;
+      } catch (error2) {
+        callbackFailed = true;
+        callbackError = error2;
+        throw error2;
+      }
+    });
+  } catch (error2) {
+    if (callbackFailed) {
+      if (error2 !== callbackError)
+        warnStateLockReleaseFailure(error2);
+      throw callbackError;
+    }
+    if (callbackCompleted) {
+      warnStateLockReleaseFailure(error2);
+      return callbackResult;
+    }
+    throw error2;
+  }
+}
+function warnStateLockReleaseFailure(error2) {
+  try {
+    console.warn(STATE_LOCK_RELEASE_WARNING, error2);
+  } catch {
+    return;
+  }
+}
+
+// dist/src/state.js
 function publishState(stateFilePath, state) {
   publishByRename(stateFilePath, JSON.stringify(state, null, 2), STATE_TEMP_SUFFIX, PRIVATE_FILE_MODE);
 }
 async function atomicUpdateState(stateFilePath, fn) {
-  await withFileLock(stateFilePath, () => {
+  await withStateFileLock(stateFilePath, () => {
     const state = loadState(stateFilePath);
     publishState(stateFilePath, fn(state));
   });
