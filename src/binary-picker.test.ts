@@ -25,18 +25,20 @@ const SLOW_BUILD_TIMEOUT_MS = 15_000;
 const windowsShell =
   process.platform === "win32"
     ? [
-        join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe"),
+        join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "usr", "bin", "bash.exe"),
         ...(process.env["ProgramFiles(x86)"]
-          ? [join(process.env["ProgramFiles(x86)"], "Git", "bin", "bash.exe")]
+          ? [join(process.env["ProgramFiles(x86)"], "Git", "usr", "bin", "bash.exe")]
           : []),
         ...(process.env.LOCALAPPDATA
-          ? [join(process.env.LOCALAPPDATA, "Programs", "Git", "bin", "bash.exe")]
+          ? [join(process.env.LOCALAPPDATA, "Programs", "Git", "usr", "bin", "bash.exe")]
           : []),
         ...(process.env.PATH ?? "")
           .split(delimiter)
           .filter((dir) => /[\\/]Git[\\/](?:bin|cmd|usr[\\/]bin)$/i.test(dir))
           .flatMap((dir) =>
-            /[\\/]cmd$/i.test(dir) ? [join(dir, "..", "bin", "bash.exe")] : [join(dir, "bash.exe")],
+            /[\\/]usr[\\/]bin$/i.test(dir)
+              ? [join(dir, "bash.exe")]
+              : [join(dir, "..", "usr", "bin", "bash.exe")],
           ),
       ].find(existsSync)
     : undefined;
