@@ -16,6 +16,7 @@ import {
   queued,
   queueRunByHand,
   sandboxFiles,
+  readSandboxFile,
   sandboxHome,
   startTurn,
   stopTurn,
@@ -107,9 +108,7 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
       muted,
     );
 
-    const raw = sandboxFiles()
-      .map((path) => readFileSync(path, "utf8"))
-      .join("\n");
+    const raw = sandboxFiles().map(readSandboxFile).join("\n");
     expect(raw).not.toContain("secret folder");
   });
 

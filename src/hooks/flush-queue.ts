@@ -44,6 +44,7 @@ import {
   createClaudeTracingSession,
 } from "../tracing-engine.js";
 import type { Config } from "../config.js";
+import type { ClaudeTracingEngineContext } from "../models/tracing-engine.js";
 import type { QueuedRun } from "../types.js";
 
 function flusherClient(config: Config): Client {
@@ -145,7 +146,12 @@ async function settleTurns(
   discardDirIfEmpty(recordDir);
 }
 
-async function drainSession(session: string, config: Config, origin: string): Promise<void> {
+async function drainSession(
+  session: string,
+  config: Config,
+  origin: string,
+  sharedContext?: ClaudeTracingEngineContext,
+): Promise<void> {
   const dir = join(queueDir(config.stateFilePath), session);
   const flushTarget = `${dir}.flush`;
   if (!tryAcquireLock(flushTarget)) {
@@ -156,6 +162,8 @@ async function drainSession(session: string, config: Config, origin: string): Pr
   const watch = watchUploads(client);
   const records = join(turnRecordRoot(config.stateFilePath), session);
   try {
+    if (sharedContext)
+      await acknowledgeClaudeSharedDeliveries(sharedContext, config, sharedContext.sessionId);
     await uploadQueued(dir, config, origin, client, watch);
     await settleTurns(records, config, origin, client, watch);
   } finally {
@@ -174,6 +182,7 @@ function looksAbandoned(session: string, stateFilePath: string): boolean {
 export async function main(cwd: string, sessionId?: string): Promise<void> {
   const config = initHook(cwd);
   if (!config) return;
+  let sharedContext: ClaudeTracingEngineContext | undefined;
   if (sessionId) {
     const engine = createClaudeTracingSession(config, cwd, sessionId);
     if (engine) {
@@ -182,7 +191,7 @@ export async function main(cwd: string, sessionId?: string): Promise<void> {
         if (result === "scope-mismatch") {
           debug(`Leaving shared captures for ${sessionId} alone after an account change`);
         } else {
-          await acknowledgeClaudeSharedDeliveries(engine, config, sessionId);
+          sharedContext = engine;
         }
       } catch (err) {
         warn(`Could not drain shared captures for ${sessionId}: ${err}`);
@@ -203,7 +212,7 @@ export async function main(cwd: string, sessionId?: string): Promise<void> {
       continue;
     }
     try {
-      await drainSession(session, config, origin);
+      await drainSession(session, config, origin, session === own ? sharedContext : undefined);
     } catch (err) {
       warn(`Could not flush ${session}: ${err}`);
     }

@@ -20758,7 +20758,7 @@ async function settleTurns(recordDir, config, origin, client2, watch) {
   }
   discardDirIfEmpty(recordDir);
 }
-async function drainSession(session, config, origin) {
+async function drainSession(session, config, origin, sharedContext) {
   const dir = join21(queueDir(config.stateFilePath), session);
   const flushTarget = `${dir}.flush`;
   if (!tryAcquireLock(flushTarget)) {
@@ -20769,6 +20769,8 @@ async function drainSession(session, config, origin) {
   const watch = watchUploads(client2);
   const records = join21(turnRecordRoot(config.stateFilePath), session);
   try {
+    if (sharedContext)
+      await acknowledgeClaudeSharedDeliveries(sharedContext, config, sharedContext.sessionId);
     await uploadQueued(dir, config, origin, client2, watch);
     await settleTurns(records, config, origin, client2, watch);
   } finally {
@@ -20785,6 +20787,7 @@ async function main(cwd, sessionId) {
   const config = initHook(cwd);
   if (!config)
     return;
+  let sharedContext;
   if (sessionId) {
     const engine = createClaudeTracingSession(config, cwd, sessionId);
     if (engine) {
@@ -20793,7 +20796,7 @@ async function main(cwd, sessionId) {
         if (result === "scope-mismatch") {
           debug(`Leaving shared captures for ${sessionId} alone after an account change`);
         } else {
-          await acknowledgeClaudeSharedDeliveries(engine, config, sessionId);
+          sharedContext = engine;
         }
       } catch (err) {
         warn(`Could not drain shared captures for ${sessionId}: ${err}`);
@@ -20815,7 +20818,7 @@ async function main(cwd, sessionId) {
       continue;
     }
     try {
-      await drainSession(session, config, origin);
+      await drainSession(session, config, origin, session === own ? sharedContext : void 0);
     } catch (err) {
       warn(`Could not flush ${session}: ${err}`);
     }

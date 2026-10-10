@@ -190,6 +190,15 @@ export function entryFiles(sessionId = "s1"): string[] {
     .map((name) => join(dir, name));
 }
 
+export function readSandboxFile(path: string): string {
+  try {
+    return readFileSync(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw error;
+  }
+}
+
 export function sandboxFiles(): string[] {
   const pending = [home];
   const files: string[] = [];
