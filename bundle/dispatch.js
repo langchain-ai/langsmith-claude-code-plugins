@@ -593,15 +593,15 @@ var require_dist = __commonJS({
   }
 });
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_314320fd659ed0832308a978d46b360c/node_modules/@langchain/langsmith-plugin-binary/dist/binary.js
+// node_modules/.pnpm/@langchain+plugins-base@https+++codeload.github.com+langchain-ai+langsmith-plugin-binar_628ff1d9f80989defbced4daf654782a/node_modules/@langchain/plugins-base/dist/binary.js
 import { arch as osArch, platform as osPlatform } from "node:os";
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_314320fd659ed0832308a978d46b360c/node_modules/@langchain/langsmith-plugin-binary/dist/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@https+++codeload.github.com+langchain-ai+langsmith-plugin-binar_628ff1d9f80989defbced4daf654782a/node_modules/@langchain/plugins-base/dist/constants.js
 var DEFAULT_PUBLISHED_TARGETS = {
   darwin: ["arm64", "x64"]
 };
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_314320fd659ed0832308a978d46b360c/node_modules/@langchain/langsmith-plugin-binary/dist/target.js
+// node_modules/.pnpm/@langchain+plugins-base@https+++codeload.github.com+langchain-ai+langsmith-plugin-binar_628ff1d9f80989defbced4daf654782a/node_modules/@langchain/plugins-base/dist/target.js
 function resolveTarget(options) {
   for (const field of ["executableName", "repository", "userAgent"]) {
     if (typeof options[field] !== "string" || options[field].trim() === "") {
@@ -623,7 +623,7 @@ function releaseAssetName(target, platform, arch, version) {
   return `${target.executableName}-${platform}-${arch}-${version}`;
 }
 
-// node_modules/.pnpm/@langchain+langsmith-plugin-binary@https+++codeload.github.com+langchain-ai+langsmith-p_314320fd659ed0832308a978d46b360c/node_modules/@langchain/langsmith-plugin-binary/dist/binary.js
+// node_modules/.pnpm/@langchain+plugins-base@https+++codeload.github.com+langchain-ai+langsmith-plugin-binar_628ff1d9f80989defbced4daf654782a/node_modules/@langchain/plugins-base/dist/binary.js
 function defineBinaryTarget(options) {
   const target = resolveTarget(options);
   return {
@@ -647,12 +647,14 @@ var binary = defineBinaryTarget({
 // dist/src/config.js
 import { readFileSync as readFileSync3 } from "node:fs";
 
-// dist/src/shared-config.js
-import { lstatSync, readFileSync, statSync } from "node:fs";
+// node_modules/.pnpm/@langchain+plugins-base@https+++codeload.github.com+langchain-ai+langsmith-plugin-binar_628ff1d9f80989defbced4daf654782a/node_modules/@langchain/plugins-base/dist/settings/constants.js
 var COMMON_BOOLEAN_SETTINGS = {
   enabled: { default: false, restrictive: false },
   defaultMuted: { default: false, restrictive: true }
 };
+
+// node_modules/.pnpm/@langchain+plugins-base@https+++codeload.github.com+langchain-ai+langsmith-plugin-binar_628ff1d9f80989defbced4daf654782a/node_modules/@langchain/plugins-base/dist/settings/common-config.js
+import { lstatSync, readFileSync, statSync } from "node:fs";
 function object(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

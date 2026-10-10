@@ -757,7 +757,7 @@ describe("loadConfig", () => {
       writeFileSync(userPath, '{"enabled":true}');
       expect(loadConfig({ cwd: projectDir })).toMatchObject({
         enabled: true,
-        stateFilePath: `${tmpHome}/.claude/state/langsmith_state.json`,
+        stateFilePath: join(tmpHome, ".claude", "state", "langsmith_state.json"),
       });
       expect(homedir).toHaveBeenCalled();
     });
