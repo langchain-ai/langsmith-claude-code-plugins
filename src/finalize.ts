@@ -62,6 +62,7 @@ export async function finalizeNotificationChain(opts: {
 
     const settled = settledFromTurn({
       base: customMetadata,
+      source: "finalize-notification",
       stateFilePath,
       sessionId,
       turnRunId: launchingTurnId,

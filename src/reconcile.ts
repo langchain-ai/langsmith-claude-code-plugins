@@ -17,6 +17,7 @@ import {
 } from "./constants.js";
 import { createRunTree } from "./privacy.js";
 import { debug, warn } from "./logger.js";
+import { recordRepoAttributionDiagnostic } from "./repo-attribution-diagnostics.js";
 import {
   discardTurnRecord,
   readTurnRecord,
@@ -100,15 +101,29 @@ export function settledTurnMetadata(
 
 export function settledFromTurn(options: {
   base: Record<string, unknown> | undefined;
+  source: string;
   stateFilePath: string;
   sessionId: string;
   turnRunId: string | undefined;
 }): Record<string, unknown> | undefined {
-  const { base, stateFilePath, sessionId, turnRunId } = options;
+  const { base, source, stateFilePath, sessionId, turnRunId } = options;
   if (!turnRunId) return base;
   const record = readTurnRecord(turnRecordPath(stateFilePath, sessionId, turnRunId));
-  if (!record || !everyChildLanded(record)) return base;
-  return settledTurnMetadata(base, record) ?? base;
+  const allChildrenLanded = record !== undefined && everyChildLanded(record);
+  const result = allChildrenLanded ? settledTurnMetadata(base, record) ?? base : base;
+  recordRepoAttributionDiagnostic("settled-from-turn", {
+    source,
+    sessionId,
+    turnRunId,
+    recordFound: record !== undefined,
+    rootRunId: record?.root?.run_id,
+    childRunIds: record?.children.map((child) => child.run_id),
+    deliveredRunIds: record === undefined ? [] : [...record.delivered],
+    allChildrenLanded,
+    baseAttribution: attributionOf(base),
+    resultAttribution: attributionOf(result),
+  });
+  return result;
 }
 
 export function attributionFiller(

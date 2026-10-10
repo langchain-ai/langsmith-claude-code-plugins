@@ -63,6 +63,46 @@ function printRepoAttributionDiagnostics(path: string): void {
   process.stdout.write(`CLAUDE_REPO_ATTRIBUTION_DIAGNOSTICS\n${readFileSync(path, "utf8")}\n`);
 }
 
+async function printRunAttributionDiagnostics(sessionId: string): Promise<void> {
+  const posts = service.attempts
+    .filter(({ action }) => action === "post")
+    .map(({ run }) => ({
+      id: run.id,
+      parentRunId: run.parent_run_id,
+      traceId: run.trace_id,
+      name: run.name,
+      runType: run.run_type,
+      threadId: run.extra?.metadata?.thread_id,
+      turnNumber: run.extra?.metadata?.turn_number,
+      metadata: run.extra?.metadata,
+    }));
+  const captures = await createCaptureStore(
+    join(sandbox.root, SHARED_ENGINE_STORAGE_DIRECTORY, "capture-v1"),
+  ).enumerate(CLAUDE_CODE_INTEGRATION, sessionId);
+  process.stdout.write(
+    `CLAUDE_RUN_ATTRIBUTION_POSTS_AND_CAPTURES\n${JSON.stringify(
+      {
+        sessionId,
+        posts,
+        captures: captures.map(({ record }) => ({
+          runId: record.runId,
+          eventId: record.eventId,
+          eventKind: record.eventKind,
+          turnId: record.turnId,
+          sourceRefs: record.sourceRefs,
+          sourceSnapshots: record.sourceSnapshots?.map((snapshot) => ({
+            sourceRef: snapshot.sourceRef,
+            runId: snapshot.submission.run.id,
+            parentRunId: snapshot.submission.run.parent_run_id,
+          })),
+        })),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
 describe("settling a turn's repository and author", { timeout: 120_000 }, () => {
   useReconcileSandbox();
 
@@ -699,6 +739,12 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     await task(base, "agent-bg1", diagnostics.overrides);
     reply(base, 1, [
       { id: "use-Read", name: "Read", input: { file_path: join(alpha, "seed.txt") } },
+      {
+        id: "use-agent-bg1",
+        name: "Task",
+        input: { prompt: "go and look" },
+        agentId: "agent-bg1",
+      },
     ]);
     await stop(base, diagnostics.overrides);
 
@@ -711,7 +757,9 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     printRepoAttributionDiagnostics(diagnostics.path);
     const agentRunId = service.created.find((run) => run.name === "Agent")?.id;
     expect(agentRunId).toBeDefined();
-    expect(await waitFor(() => service.updated.some((run) => run.id === agentRunId))).toBe(true);
+    const agentUpdated = await waitFor(() => service.updated.some((run) => run.id === agentRunId));
+    await printRunAttributionDiagnostics(base.session_id);
+    expect(agentUpdated).toBe(true);
     const attributed = {
       repository_name: "acme/a",
       git_branch: "trunk-a",
@@ -770,11 +818,11 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
           run.extra?.metadata?.thread_id === base.session_id &&
           run.extra?.metadata?.ls_agent_type === "root",
       );
-    expect(
-      await waitFor(
-        () => models().filter((run) => run.parent_run_id === secondTurn.id).length === 1,
-      ),
-    ).toBe(true);
+    const secondModelArrived = await waitFor(
+      () => models().filter((run) => run.parent_run_id === secondTurn.id).length === 1,
+    );
+    await printRunAttributionDiagnostics(base.session_id);
+    expect(secondModelArrived).toBe(true);
     const secondModels = models().filter((run) => run.parent_run_id === secondTurn.id);
     expect(secondModels).toHaveLength(1);
     expect(secondModels[0].extra?.metadata).toMatchObject(attributed);

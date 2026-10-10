@@ -193,6 +193,7 @@ export async function main(): Promise<void> {
     : undefined;
   const sessionMetadata = settledFromTurn({
     base: config.customMetadata,
+    source: "stop",
     stateFilePath: config.stateFilePath,
     sessionId: input.session_id,
     turnRunId: notifiedFrom,

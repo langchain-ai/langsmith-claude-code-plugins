@@ -673,6 +673,25 @@ function reconstructClaudeRun(
   const turn = readTurnRecord(
     turnRecordPath(context.stateFilePath, context.sessionId, nativeTurnRecordRunId),
   );
+  const launchRunId = job.turnEvidence.rootRunId;
+  const launchTurn =
+    launchRunId === nativeTurnRecordRunId
+      ? turn
+      : readTurnRecord(turnRecordPath(context.stateFilePath, context.sessionId, launchRunId));
+  recordRepoAttributionDiagnostic("run-reconstruction-records", {
+    capture: { eventId: job.eventId, sourceRef },
+    runId: run.id,
+    nativeTurn: {
+      runId: nativeTurnRecordRunId,
+      found: turn !== undefined,
+      summary: turn === undefined ? undefined : attributionDiagnosticRecord(turn),
+    },
+    launchTurn: {
+      runId: launchRunId,
+      found: launchTurn !== undefined,
+      summary: launchTurn === undefined ? undefined : attributionDiagnosticRecord(launchTurn),
+    },
+  });
   if (
     !turn ||
     turn.origin !== context.recordOrigin ||
@@ -681,6 +700,7 @@ function reconstructClaudeRun(
     throw new Error("Claude native turn record is missing or invalid");
   }
   recordRepoAttributionDiagnostic("run-reconstruction-input", {
+    capture: { eventId: job.eventId, sourceRef },
     run: { runId: run.id, name: run.name, runType: run.run_type, parentRunId: run.parent_run_id },
     turn: attributionDiagnosticRecord(turn),
   });
@@ -715,6 +735,7 @@ function reconstructClaudeRun(
           },
         };
   recordRepoAttributionDiagnostic("run-reconstruction-output", {
+    capture: { eventId: job.eventId, sourceRef },
     run: { runId: run.id, name: run.name, runType: run.run_type, parentRunId: run.parent_run_id },
     attribution: repositoryMetadata(attribution),
     sourceMetadata: repositoryMetadata(sourceMetadata),

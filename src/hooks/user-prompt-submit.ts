@@ -358,6 +358,7 @@ export async function main(): Promise<void> {
     ?.parent_run_id as string | undefined;
   const inherited = settledFromTurn({
     base: config.customMetadata,
+    source: "user-prompt-submit",
     stateFilePath: config.stateFilePath,
     sessionId: input.session_id,
     turnRunId: launchingTurnId,

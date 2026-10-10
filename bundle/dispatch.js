@@ -14982,6 +14982,19 @@ function runIsTooOldToUpload(entry, now = Date.now()) {
   return queuedAt === void 0 || now - queuedAt >= QUEUE_RUN_MAX_AGE_MS;
 }
 
+// dist/src/repo-attribution-diagnostics.js
+import { appendFileSync as appendFileSync3 } from "node:fs";
+function recordRepoAttributionDiagnostic(event2, details) {
+  const path3 = process.env.CC_LANGSMITH_TEST_RECONCILE_DIAGNOSTICS_FILE;
+  if (!path3)
+    return;
+  appendFileSync3(path3, `${JSON.stringify({ event: event2, ...details })}
+`, {
+    encoding: "utf8",
+    mode: 384
+  });
+}
+
 // dist/src/reconcile.js
 function attributionOf(metadata) {
   const carried = {};
@@ -15029,13 +15042,25 @@ function settledTurnMetadata(base, record) {
   return missing.length === 0 ? base : { ...base, ...Object.fromEntries(missing) };
 }
 function settledFromTurn(options) {
-  const { base, stateFilePath, sessionId, turnRunId } = options;
+  const { base, source, stateFilePath, sessionId, turnRunId } = options;
   if (!turnRunId)
     return base;
   const record = readTurnRecord(turnRecordPath(stateFilePath, sessionId, turnRunId));
-  if (!record || !everyChildLanded(record))
-    return base;
-  return settledTurnMetadata(base, record) ?? base;
+  const allChildrenLanded = record !== void 0 && everyChildLanded(record);
+  const result = allChildrenLanded ? settledTurnMetadata(base, record) ?? base : base;
+  recordRepoAttributionDiagnostic("settled-from-turn", {
+    source,
+    sessionId,
+    turnRunId,
+    recordFound: record !== void 0,
+    rootRunId: record?.root?.run_id,
+    childRunIds: record?.children.map((child) => child.run_id),
+    deliveredRunIds: record === void 0 ? [] : [...record.delivered],
+    allChildrenLanded,
+    baseAttribution: attributionOf(base),
+    resultAttribution: attributionOf(result)
+  });
+  return result;
 }
 function attributionFiller(target) {
   const record = target ? readTurnRecord(target.path) : void 0;
@@ -20657,19 +20682,6 @@ function rootFromGitMarker(directory) {
   }
 }
 
-// dist/src/repo-attribution-diagnostics.js
-import { appendFileSync as appendFileSync3 } from "node:fs";
-function recordRepoAttributionDiagnostic(event2, details) {
-  const path3 = process.env.CC_LANGSMITH_TEST_RECONCILE_DIAGNOSTICS_FILE;
-  if (!path3)
-    return;
-  appendFileSync3(path3, `${JSON.stringify({ event: event2, ...details })}
-`, {
-    encoding: "utf8",
-    mode: 384
-  });
-}
-
 // dist/src/repo-attribution.js
 var rootByDirectory = /* @__PURE__ */ new Map();
 var attributionByRoot = /* @__PURE__ */ new Map();
@@ -21645,10 +21657,27 @@ function reconstructClaudeRun(job, context) {
     throw new Error("Claude run snapshot does not match its reconstruction job");
   }
   const turn = readTurnRecord(turnRecordPath(context.stateFilePath, context.sessionId, nativeTurnRecordRunId));
+  const launchRunId = job.turnEvidence.rootRunId;
+  const launchTurn = launchRunId === nativeTurnRecordRunId ? turn : readTurnRecord(turnRecordPath(context.stateFilePath, context.sessionId, launchRunId));
+  recordRepoAttributionDiagnostic("run-reconstruction-records", {
+    capture: { eventId: job.eventId, sourceRef },
+    runId: run.id,
+    nativeTurn: {
+      runId: nativeTurnRecordRunId,
+      found: turn !== void 0,
+      summary: turn === void 0 ? void 0 : attributionDiagnosticRecord(turn)
+    },
+    launchTurn: {
+      runId: launchRunId,
+      found: launchTurn !== void 0,
+      summary: launchTurn === void 0 ? void 0 : attributionDiagnosticRecord(launchTurn)
+    }
+  });
   if (!turn || turn.origin !== context.recordOrigin || turn.root?.run_id !== nativeTurnRecordRunId) {
     throw new Error("Claude native turn record is missing or invalid");
   }
   recordRepoAttributionDiagnostic("run-reconstruction-input", {
+    capture: { eventId: job.eventId, sourceRef },
     run: { runId: run.id, name: run.name, runType: run.run_type, parentRunId: run.parent_run_id },
     turn: attributionDiagnosticRecord(turn)
   });
@@ -21674,6 +21703,7 @@ function reconstructClaudeRun(job, context) {
     }
   };
   recordRepoAttributionDiagnostic("run-reconstruction-output", {
+    capture: { eventId: job.eventId, sourceRef },
     run: { runId: run.id, name: run.name, runType: run.run_type, parentRunId: run.parent_run_id },
     attribution: repositoryMetadata(attribution),
     sourceMetadata: repositoryMetadata(sourceMetadata),
@@ -24230,6 +24260,7 @@ async function finalizeNotificationChain(opts) {
     const agentType = taskRunInfo.agent_type ?? "";
     const settled = settledFromTurn({
       base: customMetadata,
+      source: "finalize-notification",
       stateFilePath,
       sessionId,
       turnRunId: launchingTurnId
@@ -24384,6 +24415,7 @@ async function main7() {
   const notifiedFrom = notifiedBy ? sessionState.task_run_map?.[notifiedBy]?.deferred?.parent_run_id : void 0;
   const sessionMetadata = settledFromTurn({
     base: config.customMetadata,
+    source: "stop",
     stateFilePath: config.stateFilePath,
     sessionId: input.session_id,
     turnRunId: notifiedFrom
@@ -25326,6 +25358,7 @@ async function main10() {
   const launchingTurnId = agentToolRun?.deferred?.parent_run_id;
   const inherited = settledFromTurn({
     base: config.customMetadata,
+    source: "user-prompt-submit",
     stateFilePath: config.stateFilePath,
     sessionId: input.session_id,
     turnRunId: launchingTurnId
