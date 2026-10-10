@@ -20,21 +20,60 @@ import {
   rootFromGitMarker,
   toolPathFromInput,
 } from "./repo-attribution-paths.js";
+import { recordRepoAttributionDiagnostic } from "./repo-attribution-diagnostics.js";
 import type { RepositoryAttribution, ToolOrigin, ToolPathLookup } from "./types.js";
 
 const rootByDirectory = new Map<string, string | null | undefined>();
 const attributionByRoot = new Map<string, RepositoryAttribution>();
 const identifierByRoot = new Map<string, RepositoryAttribution>();
 
+function diagnosticRepositoryMetadata(
+  metadata: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    REPOSITORY_METADATA_KEYS.flatMap((key) =>
+      typeof metadata?.[key] === "string" && metadata[key].length > 0 ? [[key, metadata[key]]] : [],
+    ),
+  );
+}
+
 function rootForPath(path: string): string | null | undefined {
   const directory = nearestExistingDirectory(path);
-  if (!directory) return undefined;
-  if (rootByDirectory.has(directory)) return rootByDirectory.get(directory);
+  if (!directory) {
+    recordRepoAttributionDiagnostic("root-resolution", {
+      path,
+      source: "no-existing-directory",
+      rootStatus: "unresolved",
+    });
+    return undefined;
+  }
+  if (rootByDirectory.has(directory)) {
+    const root = rootByDirectory.get(directory);
+    recordRepoAttributionDiagnostic("root-resolution", {
+      directory,
+      source: "cache",
+      rootStatus: repositoryRootStatus(root),
+      ...(typeof root === "string" ? { repositoryRoot: root } : {}),
+    });
+    return root;
+  }
   const walked = rootFromGitMarker(directory);
   const onlyGitCanSay = walked === undefined;
   const root = onlyGitCanSay ? getRepoRoot(directory) : walked;
   rootByDirectory.set(directory, root);
+  recordRepoAttributionDiagnostic("root-resolution", {
+    directory,
+    source: "filesystem-and-git",
+    markerStatus: repositoryRootStatus(walked),
+    gitFallback: onlyGitCanSay,
+    rootStatus: repositoryRootStatus(root),
+    ...(typeof root === "string" ? { repositoryRoot: root } : {}),
+  });
   return root;
+}
+
+function repositoryRootStatus(root: string | null | undefined): string {
+  return root === undefined ? "unresolved" : root === null ? "not-repository" : "repository";
 }
 
 function isSessionsOwnRepository(sessionCwd: string | undefined, root: string): boolean {
@@ -111,21 +150,83 @@ function scopedToPath(
 ): Record<string, unknown> | undefined {
   const { path: toolPath, namedAPath } = lookup;
   const namedSomewhereNothingSits = namedAPath && !toolPath;
-  if (namedSomewhereNothingSits) return base;
+  if (namedSomewhereNothingSits) {
+    recordRepoAttributionDiagnostic("path-scope", {
+      toolPath,
+      sessionCwd,
+      namedAPath,
+      pinnedRepositoryKeys: [...pinned],
+      base: diagnosticRepositoryMetadata(base),
+      result: "named-path-missing-preserve-base",
+    });
+    return base;
+  }
 
   const path = toolPath ?? sessionCwd;
-  if (!path || !isAbsolute(path)) return base;
+  if (!path || !isAbsolute(path)) {
+    recordRepoAttributionDiagnostic("path-scope", {
+      toolPath,
+      sessionCwd,
+      namedAPath,
+      pinnedRepositoryKeys: [...pinned],
+      base: diagnosticRepositoryMetadata(base),
+      result: "no-absolute-path-preserve-base",
+    });
+    return base;
+  }
 
   const root = rootForPath(path);
   const gitCouldNotAnswer = root === undefined;
-  if (gitCouldNotAnswer) return base;
+  if (gitCouldNotAnswer) {
+    recordRepoAttributionDiagnostic("path-scope", {
+      path,
+      sessionCwd,
+      namedAPath,
+      pinnedRepositoryKeys: [...pinned],
+      rootStatus: repositoryRootStatus(root),
+      base: diagnosticRepositoryMetadata(base),
+      result: "git-unanswered-preserve-base",
+    });
+    return base;
+  }
 
   const pathIsInNoRepository = root === null;
-  if (pathIsInNoRepository) return withoutRepositoryKeys(base, pinned);
+  if (pathIsInNoRepository) {
+    recordRepoAttributionDiagnostic("path-scope", {
+      path,
+      sessionCwd,
+      namedAPath,
+      pinnedRepositoryKeys: [...pinned],
+      rootStatus: repositoryRootStatus(root),
+      base: diagnosticRepositoryMetadata(base),
+      result: "not-repository-strip-unpinned",
+    });
+    return withoutRepositoryKeys(base, pinned);
+  }
 
   if (isSessionsOwnRepository(sessionCwd, root)) {
+    recordRepoAttributionDiagnostic("path-scope", {
+      path,
+      sessionCwd,
+      namedAPath,
+      pinnedRepositoryKeys: [...pinned],
+      rootStatus: repositoryRootStatus(root),
+      repositoryRoot: root,
+      base: diagnosticRepositoryMetadata(base),
+      result: "session-repository",
+    });
     return { ...base, ...withoutPinnedKeys(identifierForRoot(root), pinned) };
   }
+  recordRepoAttributionDiagnostic("path-scope", {
+    path,
+    sessionCwd,
+    namedAPath,
+    pinnedRepositoryKeys: [...pinned],
+    rootStatus: repositoryRootStatus(root),
+    repositoryRoot: root,
+    base: diagnosticRepositoryMetadata(base),
+    result: "tool-repository",
+  });
   return {
     ...withoutRepositoryKeys(base, pinned),
     ...withoutPinnedKeys(attributionForRoot(root), pinned),

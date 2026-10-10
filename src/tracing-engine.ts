@@ -54,6 +54,7 @@ import type {
 } from "./models/tracing-engine.js";
 import { warn } from "./logger.js";
 import { settledRepositoryMetadata } from "./repo-attribution.js";
+import { recordRepoAttributionDiagnostic } from "./repo-attribution-diagnostics.js";
 import type { RecordedRun, TracingMode, TurnRecord } from "./types.js";
 
 export function createClaudeTracingSession(
@@ -679,6 +680,10 @@ function reconstructClaudeRun(
   ) {
     throw new Error("Claude native turn record is missing or invalid");
   }
+  recordRepoAttributionDiagnostic("run-reconstruction-input", {
+    run: { runId: run.id, name: run.name, runType: run.run_type, parentRunId: run.parent_run_id },
+    turn: attributionDiagnosticRecord(turn),
+  });
   const attribution = turnAttributionWithToolOrigins(turn);
   const sourceMetadata = buildCodingAgentMetadata(source.metadata);
   const recorded: RecordedRun = {
@@ -709,6 +714,14 @@ function reconstructClaudeRun(
             base: { ...source.metadata.base, ...additions },
           },
         };
+  recordRepoAttributionDiagnostic("run-reconstruction-output", {
+    run: { runId: run.id, name: run.name, runType: run.run_type, parentRunId: run.parent_run_id },
+    attribution: repositoryMetadata(attribution),
+    sourceMetadata: repositoryMetadata(sourceMetadata),
+    additions,
+    submittedMetadata: repositoryMetadata(submission.metadata.base),
+    turn: attributionDiagnosticRecord(readTurnRecord(turn.path) ?? turn),
+  });
   return {
     status: "ready",
     outputs: [
@@ -739,15 +752,35 @@ export function turnAttributionWithToolOrigins(
     let resolvedMetadata = toolOrigin.resolvedMetadata;
     if (resolvedMetadata === undefined) {
       const base = withPinnedRepositoryKeys(record.root?.metadata, toolOrigin.pinnedRepositoryKeys);
-      resolvedMetadata = repositoryMetadata(resolveOrigin(base, toolOrigin.origin));
-      if (
-        !recordResolvedToolOriginMetadata(
-          record.path,
-          record.origin,
-          toolOrigin.toolUseId,
-          resolvedMetadata,
-        )
-      ) {
+      recordRepoAttributionDiagnostic("tool-origin-resolution-input", {
+        toolUseId: toolOrigin.toolUseId,
+        toolName: toolOrigin.toolName,
+        order: toolOrigin.order,
+        origin: toolOrigin.origin,
+        pinnedRepositoryKeys: toolOrigin.pinnedRepositoryKeys,
+        base: repositoryMetadata(base),
+        turn: attributionDiagnosticRecord(record),
+      });
+      const resolved = resolveOrigin(base, toolOrigin.origin);
+      resolvedMetadata = repositoryMetadata(resolved);
+      recordRepoAttributionDiagnostic("tool-origin-resolution-output", {
+        toolUseId: toolOrigin.toolUseId,
+        returned: resolved === undefined ? "undefined" : "metadata",
+        resolvedMetadata,
+        turn: attributionDiagnosticRecord(record),
+      });
+      const saved = recordResolvedToolOriginMetadata(
+        record.path,
+        record.origin,
+        toolOrigin.toolUseId,
+        resolvedMetadata,
+      );
+      recordRepoAttributionDiagnostic("tool-origin-resolution-saved", {
+        toolUseId: toolOrigin.toolUseId,
+        saved,
+        turn: attributionDiagnosticRecord(readTurnRecord(record.path) ?? record),
+      });
+      if (!saved) {
         throw new Error(`Could not save the resolved origin for tool ${toolOrigin.toolUseId}`);
       }
     }
@@ -788,6 +821,35 @@ function repositoryMetadata(metadata: Record<string, unknown> | undefined): Reco
         : [],
     ),
   );
+}
+
+function attributionDiagnosticRecord(record: TurnRecord) {
+  return {
+    closed: record.closed,
+    delivered: [...record.delivered],
+    fixed: [...record.fixed],
+    root: record.root
+      ? {
+          runId: record.root.run_id,
+          metadata: repositoryMetadata(record.root.metadata),
+        }
+      : undefined,
+    children: record.children.map((child) => ({
+      runId: child.run_id,
+      name: child.name,
+      runType: child.run_type,
+      toolUseId: child.toolUseId,
+      metadata: repositoryMetadata(child.metadata),
+    })),
+    toolOrigins: record.toolOrigins.map((origin) => ({
+      toolUseId: origin.toolUseId,
+      toolName: origin.toolName,
+      order: origin.order,
+      origin: origin.origin,
+      pinnedRepositoryKeys: origin.pinnedRepositoryKeys,
+      resolvedMetadata: origin.resolvedMetadata,
+    })),
+  };
 }
 
 function recordedToolForOrigin(

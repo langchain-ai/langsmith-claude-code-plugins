@@ -123,53 +123,91 @@ export function appendReply(base: { transcript_path: string }, turn: number): vo
   );
 }
 
-export const prompt = (base: Record<string, unknown>) =>
-  hook("UserPromptSubmit", { ...base, hook_event_name: "UserPromptSubmit", prompt: "go" });
+export const prompt = (base: Record<string, unknown>, overrides: Record<string, string> = {}) =>
+  hook(
+    "UserPromptSubmit",
+    { ...base, hook_event_name: "UserPromptSubmit", prompt: "go" },
+    overrides,
+  );
 
-export const stop = (base: Record<string, unknown>) =>
-  hook("Stop", { ...base, hook_event_name: "Stop", last_assistant_message: "done" });
+export const stop = (base: Record<string, unknown>, overrides: Record<string, string> = {}) =>
+  hook("Stop", { ...base, hook_event_name: "Stop", last_assistant_message: "done" }, overrides);
 
-export const notification = (base: Record<string, unknown>, agentId: string, status?: string) =>
-  hook("UserPromptSubmit", {
-    ...base,
-    hook_event_name: "UserPromptSubmit",
-    prompt: `<task-notification>${agentId}${status ? `<status>${status}</status>` : ""}</task-notification>`,
-  });
+export const notification = (
+  base: Record<string, unknown>,
+  agentId: string,
+  status?: string,
+  overrides: Record<string, string> = {},
+) =>
+  hook(
+    "UserPromptSubmit",
+    {
+      ...base,
+      hook_event_name: "UserPromptSubmit",
+      prompt: `<task-notification>${agentId}${status ? `<status>${status}</status>` : ""}</task-notification>`,
+    },
+    overrides,
+  );
 
-export const task = (base: Record<string, unknown>, agentId: string) =>
-  hook("PostToolUse", {
-    ...base,
-    hook_event_name: "PostToolUse",
-    tool_name: "Task",
-    tool_use_id: `use-${agentId}`,
-    tool_input: { prompt: "go and look" },
-    tool_response: { agentId },
-  });
+export const task = (
+  base: Record<string, unknown>,
+  agentId: string,
+  overrides: Record<string, string> = {},
+) =>
+  hook(
+    "PostToolUse",
+    {
+      ...base,
+      hook_event_name: "PostToolUse",
+      tool_name: "Task",
+      tool_use_id: `use-${agentId}`,
+      tool_input: { prompt: "go and look" },
+      tool_response: { agentId },
+    },
+    overrides,
+  );
 
-export function subagent(base: Record<string, unknown>, agentId: string): Promise<void> {
+export function subagent(
+  base: Record<string, unknown>,
+  agentId: string,
+  overrides: Record<string, string> = {},
+): Promise<void> {
   const path = join(plain, `${agentId}.jsonl`);
   writeFileSync(
     path,
     turnLines({ turn: 1, model: "claude-sonnet-4-5-20250929", prompt: "look", reply: "looked" }),
   );
-  return hook("SubagentStop", {
-    ...base,
-    hook_event_name: "SubagentStop",
-    agent_id: agentId,
-    agent_type: "Explore",
-    agent_transcript_path: path,
-  });
+  return hook(
+    "SubagentStop",
+    {
+      ...base,
+      hook_event_name: "SubagentStop",
+      agent_id: agentId,
+      agent_type: "Explore",
+      agent_transcript_path: path,
+    },
+    overrides,
+  );
 }
 
-export const tool = (base: Record<string, unknown>, name: string, input: Record<string, unknown>) =>
-  hook("PostToolUse", {
-    ...base,
-    hook_event_name: "PostToolUse",
-    tool_name: name,
-    tool_use_id: `use-${name}`,
-    tool_input: input,
-    tool_response: { ok: true },
-  });
+export const tool = (
+  base: Record<string, unknown>,
+  name: string,
+  input: Record<string, unknown>,
+  overrides: Record<string, string> = {},
+) =>
+  hook(
+    "PostToolUse",
+    {
+      ...base,
+      hook_event_name: "PostToolUse",
+      tool_name: name,
+      tool_use_id: `use-${name}`,
+      tool_input: input,
+      tool_response: { ok: true },
+    },
+    overrides,
+  );
 
 /** The metadata each named run ended up with, the newest write for that run winning. */
 export function metadataOf(name: string): Record<string, unknown> {

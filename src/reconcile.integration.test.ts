@@ -1,4 +1,12 @@
-import { chmodSync, existsSync, mkdirSync, renameSync, rmdirSync, statSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmdirSync,
+  statSync,
+} from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createCaptureStore } from "@langchain/plugins-base/storage/capture";
@@ -42,6 +50,18 @@ const session = (id: string, cwd: string) => ({
   transcript_path: join(plain, `${id}.jsonl`),
   cwd,
 });
+
+function repoAttributionDiagnostics(sessionId: string) {
+  const path = join(sandbox.root, `${sessionId}-attribution.jsonl`);
+  return {
+    path,
+    overrides: { CC_LANGSMITH_TEST_RECONCILE_DIAGNOSTICS_FILE: path },
+  };
+}
+
+function printRepoAttributionDiagnostics(path: string): void {
+  process.stdout.write(`CLAUDE_REPO_ATTRIBUTION_DIAGNOSTICS\n${readFileSync(path, "utf8")}\n`);
+}
 
 describe("settling a turn's repository and author", { timeout: 120_000 }, () => {
   useReconcileSandbox();
@@ -119,14 +139,16 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
   // leaves it the only run in the trace with no repository at all.
   it("uploads a model run knowing the repository a call reached into", async () => {
     const base = session("model-born-outside", plain);
-    await prompt(base);
-    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    const diagnostics = repoAttributionDiagnostics(base.session_id);
+    await prompt(base, diagnostics.overrides);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") }, diagnostics.overrides);
     reply(base);
-    await stop(base);
+    await stop(base, diagnostics.overrides);
 
     expect(
       await waitFor(() => Object.keys(createdMetadataOf(base.session_id, "Claude")).length > 0),
     ).toBe(true);
+    printRepoAttributionDiagnostics(diagnostics.path);
     expect(createdMetadataOf(base.session_id, "Claude")).toMatchObject({
       repository_name: "acme/a",
       git_branch: "trunk-a",
@@ -602,12 +624,13 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
   // at the start, so the Task, the subagent and its model calls arrive with no author.
   it("gives a sub-task and the runs beneath it the repository and the author", async () => {
     const base = session("subagent-born-known", plain);
-    await prompt(base);
-    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
-    await subagent(base, "agent-7");
-    await task(base, "agent-7");
+    const diagnostics = repoAttributionDiagnostics(base.session_id);
+    await prompt(base, diagnostics.overrides);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") }, diagnostics.overrides);
+    await subagent(base, "agent-7", diagnostics.overrides);
+    await task(base, "agent-7", diagnostics.overrides);
     reply(base);
-    await stop(base);
+    await stop(base, diagnostics.overrides);
 
     const attributed = {
       repository_name: "acme/a",
@@ -615,6 +638,7 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
       ls_attribution_identifier: "Alpha Owner",
     };
     expect(await waitFor(() => service.created.some((run) => run.name === "Agent"))).toBe(true);
+    printRepoAttributionDiagnostics(diagnostics.path);
     expect(createdMetadataOf(base.session_id, "Agent")).toMatchObject(attributed);
     expect(
       await waitFor(
@@ -662,19 +686,21 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
   // knew at startup, which lands on top of the good metadata and clears it for good.
   it("closes a background agent carrying the repository the turn worked out", async () => {
     const base = session("background-open", plain);
-    await prompt(base);
-    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    const diagnostics = repoAttributionDiagnostics(base.session_id);
+    await prompt(base, diagnostics.overrides);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") }, diagnostics.overrides);
     expect(await waitFor(() => metadataOf("Read").repository_name === "acme/a")).toBe(true);
-    await task(base, "agent-bg1");
+    await task(base, "agent-bg1", diagnostics.overrides);
     reply(base);
-    await stop(base);
+    await stop(base, diagnostics.overrides);
 
     // The agent finishes in the background, so its run is posted open here.
-    await subagent(base, "agent-bg1");
-    await notification(base, "agent-bg1");
+    await subagent(base, "agent-bg1", diagnostics.overrides);
+    await notification(base, "agent-bg1", undefined, diagnostics.overrides);
     appendReply(base, 2);
-    await stop(base);
+    await stop(base, diagnostics.overrides);
 
+    printRepoAttributionDiagnostics(diagnostics.path);
     const agentRunId = service.created.find((run) => run.name === "Agent")?.id;
     expect(agentRunId).toBeDefined();
     expect(await waitFor(() => service.updated.some((run) => run.id === agentRunId))).toBe(true);
@@ -696,17 +722,19 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
 
   it("labels the turn that reports a background agent back", async () => {
     const base = session("background-notify", plain);
-    await prompt(base);
-    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    const diagnostics = repoAttributionDiagnostics(base.session_id);
+    await prompt(base, diagnostics.overrides);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") }, diagnostics.overrides);
     expect(await waitFor(() => metadataOf("Read").repository_name === "acme/a")).toBe(true);
-    await task(base, "agent-bg3");
+    await task(base, "agent-bg3", diagnostics.overrides);
     reply(base);
-    await stop(base);
+    await stop(base, diagnostics.overrides);
 
-    await subagent(base, "agent-bg3");
-    await notification(base, "agent-bg3");
+    await subagent(base, "agent-bg3", diagnostics.overrides);
+    await notification(base, "agent-bg3", undefined, diagnostics.overrides);
     appendReply(base, 2);
-    await stop(base);
+    await stop(base, diagnostics.overrides);
+    printRepoAttributionDiagnostics(diagnostics.path);
 
     const attributed = {
       repository_name: "acme/a",
