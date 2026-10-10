@@ -28,6 +28,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const gatewayRoot = join(root, "plugins/langsmith-gateway");
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 const events = ["SessionStart", "UserPromptSubmit", "SessionEnd"];
+const REJECTED_INVOCATION_MATRIX_TIMEOUT_MS = 20_000;
 type Hooks = Record<string, { hooks: { type: string; command: string }[] }[]>;
 
 function hookBundles(pluginRoot: string): string[] {
@@ -305,6 +306,7 @@ require("node:module").syncBuiltinESMExports();
         rmSync(sandbox, { recursive: true, force: true });
       }
     },
+    REJECTED_INVOCATION_MATRIX_TIMEOUT_MS,
   );
 
   it("enables/disables the standalone bundle against isolated OS home and a healthy daemon without invoking tokens", async () => {

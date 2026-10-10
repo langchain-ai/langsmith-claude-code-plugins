@@ -15,9 +15,9 @@ importers:
         specifier: ^0.10.5
         version: 0.10.5
     devDependencies:
-      '@langchain/langsmith-plugin-binary':
-        specifier: github:langchain-ai/langsmith-plugin-binary#v0.3.0
-        version: https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/f0fea706ecbb20ca45519801b510c07157c2bf9f
+      '@langchain/plugins-base':
+        specifier: github:langchain-ai/langsmith-plugin-binary#5214a3010b2adb00c006a45fa9f2bd6921ada739
+        version: https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/5214a3010b2adb00c006a45fa9f2bd6921ada739
       '@types/node':
         specifier: ^26.6.3
         version: 26.6.3
@@ -211,10 +211,10 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@langchain/langsmith-plugin-binary@https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/f0fea706ecbb20ca45519801b510c07157c2bf9f':
-    resolution: {tarball: https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/f0fea706ecbb20ca45519801b510c07157c2bf9f}
+  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/5214a3010b2adb00c006a45fa9f2bd6921ada739':
+    resolution: {tarball: https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/5214a3010b2adb00c006a45fa9f2bd6921ada739}
     version: 0.1.0
-    engines: {node: '>=22'}
+    engines: {node: '>=20'}
     hasBin: true
 
   '@oxc-project/types@0.152.0':
@@ -1127,7 +1127,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@langchain/langsmith-plugin-binary@https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/f0fea706ecbb20ca45519801b510c07157c2bf9f': {}
+  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/5214a3010b2adb00c006a45fa9f2bd6921ada739': {}
 
   '@oxc-project/types@0.152.0': {}
 

@@ -4,7 +4,7 @@ import {
   mergeCommonConfig,
   readCommonConfigFile,
   toSdkReplicas,
-} from "./shared-config.js";
+} from "@langchain/plugins-base/settings";
 import { homedir, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import type { RunTreeConfig } from "langsmith";
