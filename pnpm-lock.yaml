@@ -16,8 +16,8 @@ importers:
         version: 0.10.5
     devDependencies:
       '@langchain/plugins-base':
-        specifier: github:langchain-ai/langsmith-plugin-binary#5214a3010b2adb00c006a45fa9f2bd6921ada739
-        version: https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/5214a3010b2adb00c006a45fa9f2bd6921ada739
+        specifier: github:langchain-ai/langsmith-plugin-binary#26e0b421e283438e50d2d6fa103e34cc725eab25
+        version: https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/26e0b421e283438e50d2d6fa103e34cc725eab25(langsmith@0.10.5)
       '@types/node':
         specifier: ^26.6.3
         version: 26.6.3
@@ -211,11 +211,13 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/5214a3010b2adb00c006a45fa9f2bd6921ada739':
-    resolution: {tarball: https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/5214a3010b2adb00c006a45fa9f2bd6921ada739}
+  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/26e0b421e283438e50d2d6fa103e34cc725eab25':
+    resolution: {tarball: https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/26e0b421e283438e50d2d6fa103e34cc725eab25}
     version: 0.1.0
     engines: {node: '>=20'}
     hasBin: true
+    peerDependencies:
+      langsmith: ^0.9.0 || ^0.10.0
 
   '@oxc-project/types@0.152.0':
     resolution: {integrity: sha512-oM/5rLBm2tPkg0iBgkH/FOeR3PCDpY19GTgAZjMFM8h9WI9VW7cLgzp6nwtarYKmovavIQZ+Fe/RKX/8C8O/Rw==}
@@ -1127,7 +1129,9 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/5214a3010b2adb00c006a45fa9f2bd6921ada739': {}
+  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/26e0b421e283438e50d2d6fa103e34cc725eab25(langsmith@0.10.5)':
+    dependencies:
+      langsmith: 0.10.5
 
   '@oxc-project/types@0.152.0': {}
 

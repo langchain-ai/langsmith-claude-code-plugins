@@ -1,70 +1,20 @@
 import { RunTree, type RunTreeConfig } from "langsmith";
+import {
+  metadataForMode as sharedMetadataForMode,
+  projectCodingAgentMetadata,
+} from "@langchain/plugins-base/metadata";
+import { CLAUDE_CODE_INTEGRATION } from "./constants.js";
 import type { TracingMode } from "./types.js";
-import { trustedCodingAgentMetadata } from "./metadata.js";
 
 export const MUTED_TRACE_CONTENT =
   "[LangSmith system notice: content omitted because tracing is muted.]";
-
-const METADATA_KEYS = new Set([
-  "thread_id",
-  "turn_number",
-  "turn_id",
-  "status",
-  "ls_tracing_mode",
-  "ls_agent_purpose",
-  "ls_agent_type",
-  "ls_agent_runtime",
-  "ls_agent_runtime_version",
-  "ls_integration",
-  "ls_integration_version",
-  "ls_trace_schema_version",
-  "ls_model_name",
-  "ls_tool_name",
-  "ls_skill_name",
-  "usage_metadata",
-  "ls_subagent_id",
-  "ls_subagent_type",
-]);
-
-/** Preserve all usage fields, including provider-specific and nested values. */
-function usageForMetadata(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  return value as Record<string, unknown>;
-}
-
-// Also used at the wire boundary, on CURRENT (possibly anonymized) metadata.
-// It must not retrieve provenance there and restore pre-anonymization values.
-function projectMetadata(
-  metadata: Record<string, unknown> | undefined,
-  status?: string,
-): Record<string, unknown> {
-  const safe: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(metadata ?? {})) {
-    if (!METADATA_KEYS.has(key)) continue;
-    if (key === "usage_metadata") {
-      const usage = usageForMetadata(value);
-      if (usage) safe[key] = usage;
-    } else if (key === "turn_number") {
-      if (typeof value === "number" && Number.isSafeInteger(value) && value >= 1) safe[key] = value;
-    } else if (typeof value === "string" && value.length) {
-      safe[key] = value;
-    }
-  }
-  safe.status = status === "error" || status === "completed" ? status : "running";
-  safe.ls_tracing_mode = "metadata";
-  return safe;
-}
 
 export function metadataForMode(
   metadata: Record<string, unknown> | undefined,
   mode: TracingMode = "full",
   status?: string,
 ): Record<string, unknown> | undefined {
-  if (mode === "full") return metadata;
-  // Builder provenance wins over ALL merged fields. Plain direct RunTree
-  // configs remain supported as explicitly supplied metadata, schema-filtered
-  // below; plugin callsites must use the builder, not clone its merged result.
-  return projectMetadata(trustedCodingAgentMetadata(metadata) ?? metadata, status);
+  return sharedMetadataForMode(metadata, CLAUDE_CODE_INTEGRATION, mode, status);
 }
 
 function sanitizeReplica(replica: unknown, mode: TracingMode): unknown {
@@ -113,8 +63,9 @@ export function runConfigForMode<T extends Record<string, unknown>>(
       return {
         // Read the current metadata, not the constructor's copy: the client may
         // have anonymized allowlisted values, which must not be restored here.
-        metadata: projectMetadata(
+        metadata: projectCodingAgentMetadata(
           this.metadata,
+          CLAUDE_CODE_INTEGRATION,
           typeof this.metadata?.status === "string" ? this.metadata.status : status,
         ),
       };

@@ -3,9 +3,18 @@
  */
 
 import type { RunTree } from "langsmith";
+import type {
+  CodingAgentAgentType,
+  CodingAgentMetadataOptions as SharedCodingAgentMetadataOptions,
+} from "@langchain/plugins-base/metadata";
 import type { GIT_MARKERS, PINNED_REPOSITORY_KEYS, TURN_RECORD_LINE } from "./constants.js";
 
 export type TracingMode = "full" | "metadata";
+export type LSAgentType = CodingAgentAgentType;
+export type CodingAgentMetadataOptions = Omit<
+  SharedCodingAgentMetadataOptions,
+  "integration" | "integrationVersion" | "threadId"
+> & { sessionId: string };
 
 // ─── Hook Input Types ───────────────────────────────────────────────────────
 
@@ -328,6 +337,8 @@ export interface OpenTurn {
   stop_seen: boolean;
   /** Background subagents launched by this turn that haven't been traced yet. */
   agent_ids: string[];
+  retry_closure?: boolean;
+  leave_open?: boolean;
   /** Set when this turn is itself a deferred task-notification turn: the agent_id
    *  whose tool run + launching turn must be finalized once this turn completes
    *  (handles a notification turn that spawns its own background subagent). */
@@ -374,6 +385,7 @@ export interface RecordedRun {
   start_time?: string;
   end_time?: string;
   tracing: TracingMode;
+  shared?: boolean;
   open?: boolean;
   metadata: Record<string, unknown>;
 }

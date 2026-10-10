@@ -164,15 +164,38 @@ function withSessionRepository(
 export function settledRepositoryMetadata(
   base: Record<string, unknown> | undefined,
   origin: ToolOrigin,
+  turnAttributionFallback?: RepositoryAttribution,
 ): Record<string, unknown> | undefined {
   const pinned = new Set(REPOSITORY_METADATA_KEYS.filter((key) => base?.[key] !== undefined));
   const sessionScoped = withSessionRepository(base, origin.cwd);
-  return scopedToPath(
+  const settled = scopedToPath(
     sessionScoped,
     { path: origin.path, namedAPath: origin.namedAPath },
     origin.cwd,
     pinned,
   );
+  const sessionRoot = origin.cwd ? rootForPath(origin.cwd) : undefined;
+  const sessionAttribution =
+    typeof sessionRoot === "string" ? attributionForRoot(sessionRoot) : undefined;
+  const sessionAuthorFallback =
+    (settled?.[REPOSITORY_NAME_KEY] === sessionAttribution?.[REPOSITORY_NAME_KEY] ||
+      turnAttributionFallback?.[REPOSITORY_NAME_KEY] ===
+        sessionAttribution?.[REPOSITORY_NAME_KEY]) &&
+    typeof sessionAttribution?.[ATTRIBUTION_IDENTIFIER_KEY] === "string"
+      ? { [ATTRIBUTION_IDENTIFIER_KEY]: sessionAttribution[ATTRIBUTION_IDENTIFIER_KEY] }
+      : undefined;
+  const fallback = { ...sessionAuthorFallback, ...turnAttributionFallback };
+  const settledRepository = settled?.[REPOSITORY_NAME_KEY];
+  const fallbackRepository = fallback[REPOSITORY_NAME_KEY];
+  if (
+    typeof fallbackRepository !== "string" ||
+    (typeof settledRepository === "string" && settledRepository !== fallbackRepository)
+  )
+    return settled;
+  const missing = Object.fromEntries(
+    Object.entries(fallback).filter(([key]) => settled?.[key] === undefined),
+  );
+  return { ...settled, ...missing };
 }
 
 /** The settled run to upload, left open when only the turn can say where it worked. */

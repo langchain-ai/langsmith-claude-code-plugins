@@ -169,7 +169,7 @@ export async function reconcileTurn(options: {
     (child) => child.open && record.delivered.has(child.run_id),
   );
   let settled = true;
-  for (const run of [record.root, ...stillOpen]) {
+  for (const run of [...(record.root.shared ? [] : [record.root]), ...stillOpen]) {
     if (record.fixed.has(run.run_id)) continue;
     const metadata = metadataAfterFill(run, filled) ?? run.metadata;
     const runTree = createRunTree(runConfig(run, metadata, client, replicas), run.tracing);

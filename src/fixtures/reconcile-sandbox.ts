@@ -158,8 +158,13 @@ export const tool = (base: Record<string, unknown>, name: string, input: Record<
 
 /** The metadata each named run ended up with, the newest write for that run winning. */
 export function metadataOf(name: string): Record<string, unknown> {
-  const writes = [...service.created, ...service.updated].filter((run) => run.name === name);
-  return writes.at(-1)?.extra?.metadata ?? {};
+  const created = service.created.filter((run) => run.name === name).at(-1);
+  if (!created) return {};
+  const metadata = { ...created.extra?.metadata };
+  for (const update of service.updated.filter((run) => run.id === created.id)) {
+    Object.assign(metadata, update.extra?.metadata);
+  }
+  return metadata;
 }
 
 export function createdMetadataAll(
@@ -179,9 +184,12 @@ export function createdMetadataOf(sessionId: string, name: string): Record<strin
 export const recordDir = (sessionId: string) => join(sandbox.root, TURN_RECORD_DIR_NAME, sessionId);
 
 export function recordFiles(sessionId: string): string[] {
-  const dir = recordDir(sessionId);
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter((name) => name.endsWith(TURN_RECORD_SUFFIX));
+  try {
+    return readdirSync(recordDir(sessionId)).filter((name) => name.endsWith(TURN_RECORD_SUFFIX));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
 }
 
 export function recordLines(sessionId: string): Array<Record<string, any>> {

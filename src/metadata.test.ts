@@ -1,25 +1,18 @@
 /**
- * Contract test: loads validator.json and asserts the helper emits the required
+ * Contract test: loads the shared contract and asserts the helper emits the required
  * keys (correct types + allowed values) for each run type.
  */
 
 import { describe, it, expect } from "vitest";
+import {
+  CODING_AGENT_V1_CONTRACT,
+  type CodingAgentMetadataField,
+  type CodingAgentRunType as RunType,
+} from "@langchain/plugins-base/metadata";
 import { codingAgentMetadata, skillNameFromTool, trustedCodingAgentMetadata } from "./metadata.js";
 import { metadataForMode } from "./privacy.js";
-import validator from "./fixtures/coding-agent-v1/validator.json" with { type: "json" };
 
-type RunType = "root" | "llm" | "tool" | "subagent" | "interrupted";
-
-interface ValidatorKey {
-  key: string;
-  appliesTo: RunType[];
-  type: "string" | "integer";
-  allowedValues: string[] | null;
-  requirement: "always" | "where_known" | "contextual";
-  requiredWhereKnown: boolean;
-}
-
-const KEYS = validator.keys as ValidatorKey[];
+const KEYS = CODING_AGENT_V1_CONTRACT.keys;
 
 // Static base metadata as produced by config.ts (config-sourced contract keys
 // + user attribution). The helper merges this onto every run.
@@ -47,9 +40,10 @@ const COMMON = {
 
 // One representative metadata object per run type, built via the shared helper.
 const RUNS: Record<RunType, Record<string, unknown>> = {
-  root: codingAgentMetadata({ ...COMMON, approvalPolicy: "acceptEdits" }),
+  root: codingAgentMetadata({ ...COMMON, runType: "root", approvalPolicy: "acceptEdits" }),
   llm: codingAgentMetadata({
     ...COMMON,
+    runType: "llm",
     runSpecific: {
       ls_provider: "anthropic",
       ls_model_name: "claude-opus-4-8",
@@ -57,29 +51,35 @@ const RUNS: Record<RunType, Record<string, unknown>> = {
       usage_metadata: { input_tokens: 12873, output_tokens: 412, total_tokens: 13285 },
     },
   }),
-  tool: codingAgentMetadata({ ...COMMON, toolName: "Bash", runName: "Bash" }),
+  tool: codingAgentMetadata({ ...COMMON, runType: "tool", toolName: "Bash", runName: "Bash" }),
   subagent: codingAgentMetadata({
     ...COMMON,
+    runType: "subagent",
     agentType: "subagent",
     subagentId: "sub_4d8e1f",
     subagentType: "Explore",
   }),
   interrupted: codingAgentMetadata({
     ...COMMON,
+    runType: "interrupted",
     approvalPolicy: "acceptEdits",
   }),
 };
 
-function checkType(value: unknown, type: "string" | "integer"): boolean {
-  return type === "integer" ? Number.isInteger(value) : typeof value === "string";
+function checkType(value: unknown, type: CodingAgentMetadataField["type"]): boolean {
+  return type === "string"
+    ? typeof value === "string" && value.length > 0
+    : type === "integer"
+      ? Number.isSafeInteger(value) && (value as number) >= 1
+      : value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 describe("coding-agent-v1 contract", () => {
   const runTypes = Object.keys(RUNS) as RunType[];
 
   it("validator covers the expected run types", () => {
-    expect(new Set(validator.integrations)).toContain("claude-code");
-    expect(validator.schemaVersion).toBe("coding-agent-v1");
+    expect(new Set(CODING_AGENT_V1_CONTRACT.integrations)).toContain("claude-code");
+    expect(CODING_AGENT_V1_CONTRACT.schemaVersion).toBe("coding-agent-v1");
   });
 
   describe.each(runTypes)("%s run", (runType) => {
@@ -157,7 +157,9 @@ describe("coding-agent-v1 contract", () => {
   it.each(["root", "subagent", "middleware", "compaction"] as const)(
     "supports ls_agent_type='%s'",
     (agentType) => {
-      expect(codingAgentMetadata({ sessionId: "s1", agentType }).ls_agent_type).toBe(agentType);
+      expect(
+        codingAgentMetadata({ sessionId: "s1", runType: "root", agentType }).ls_agent_type,
+      ).toBe(agentType);
     },
   );
 
@@ -172,6 +174,7 @@ describe("coding-agent-v1 contract", () => {
     // Mirrors tracePendingSubagents: run name "Agent", native tool "Task".
     const agentTool = codingAgentMetadata({
       ...COMMON,
+      runType: "tool",
       toolName: "Task",
       runName: "Agent",
       runSpecific: { agent_type: "Explore", agent_id: "sub_4d8e1f" },
@@ -202,7 +205,12 @@ describe("coding-agent-v1 contract", () => {
   });
 
   it("emits ls_tool_name when tool name differs from run name", () => {
-    const meta = codingAgentMetadata({ ...COMMON, toolName: "Bash", runName: "Agent" });
+    const meta = codingAgentMetadata({
+      ...COMMON,
+      runType: "tool",
+      toolName: "Bash",
+      runName: "Agent",
+    });
     expect(meta.ls_tool_name).toBe("Bash");
     expect(meta.tool_name).toBe("Bash");
   });
@@ -220,6 +228,7 @@ describe("coding-agent-v1 contract", () => {
   it("emits ls_skill_name on a Skill tool run, and nowhere else", () => {
     const skillRun = codingAgentMetadata({
       ...COMMON,
+      runType: "tool",
       toolName: "Skill",
       runName: "Skill",
       skillName: skillNameFromTool("Skill", { skill: "deep-research", args: "compare" }),
@@ -238,11 +247,6 @@ describe("coding-agent-v1 contract", () => {
   // ─── Model run keeps existing conventions unchanged ──────────────────────────
 
   it("preserves ls_provider/ls_model_name/usage_metadata on model runs", () => {
-    for (const key of validator.preserveExistingOnModelAndToolRuns) {
-      if (key === "usage_metadata" || key.startsWith("ls_")) {
-        // present on the llm fixture
-      }
-    }
     expect(RUNS.llm.ls_provider).toBe("anthropic");
     expect(RUNS.llm.ls_model_name).toBe("claude-opus-4-8");
     expect(RUNS.llm.usage_metadata).toMatchObject({ total_tokens: 13285 });
@@ -251,7 +255,11 @@ describe("coding-agent-v1 contract", () => {
   // ─── Unknown values are omitted, never null/empty ────────────────────────────
 
   it("omits keys whose source is unknown (no null/empty values)", () => {
-    const sparse = codingAgentMetadata({ sessionId: "s1", agentType: "middleware" });
+    const sparse = codingAgentMetadata({
+      sessionId: "s1",
+      runType: "root",
+      agentType: "middleware",
+    });
     expect(sparse.turn_id).toBeUndefined();
     expect(sparse.turn_number).toBeUndefined();
     expect(sparse.ls_agent_runtime_version).toBeUndefined();
@@ -287,6 +295,7 @@ describe("coding-agent-v1 contract", () => {
     for (const layer of ["base", "runSpecific"] as const) {
       const meta = codingAgentMetadata({
         ...COMMON,
+        runType: "tool",
         base: undefined,
         [layer]: overrides,
         modelName: "plugin-model",
@@ -316,8 +325,9 @@ describe("coding-agent-v1 contract", () => {
         usage_metadata: { total_tokens: 5 },
       });
       expect(safe.ls_integration_version).toBe(
-        trustedCodingAgentMetadata(codingAgentMetadata({ sessionId: "s1", agentType: "root" }))
-          ?.ls_integration_version,
+        trustedCodingAgentMetadata(
+          codingAgentMetadata({ sessionId: "s1", runType: "root", agentType: "root" }),
+        )?.ls_integration_version,
       );
       expect(JSON.stringify(safe)).not.toContain("custom-");
       expect(trustedCodingAgentMetadata(meta)).toBeDefined();
@@ -334,6 +344,7 @@ describe("coding-agent-v1 contract", () => {
     const safe = metadataForMode(
       codingAgentMetadata({
         sessionId: "s1",
+        runType: "root",
         agentType: "root",
         base: { ls_model_name: "secret", usage_metadata: { total_tokens: 12 } },
         runSpecific: { ls_agent_runtime_version: "secret" },
@@ -348,6 +359,7 @@ describe("coding-agent-v1 contract", () => {
   it("lets user-supplied base metadata override contract keys", () => {
     const meta = codingAgentMetadata({
       sessionId: "s1",
+      runType: "root",
       agentType: "root",
       base: { thread_id: "override", ls_integration: "custom" },
     });

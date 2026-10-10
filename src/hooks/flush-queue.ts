@@ -39,6 +39,10 @@ import { discardDirIfEmpty, safeName } from "../utils/session-store.js";
 import { watchUploads, type UploadWatch } from "../upload-confirm.js";
 import { releaseLock, tryAcquireLock } from "../utils/file-lock.js";
 import { createRunTree } from "../privacy.js";
+import {
+  acknowledgeClaudeSharedDeliveries,
+  createClaudeTracingSession,
+} from "../tracing-engine.js";
 import type { Config } from "../config.js";
 import type { QueuedRun } from "../types.js";
 
@@ -170,6 +174,21 @@ function looksAbandoned(session: string, stateFilePath: string): boolean {
 export async function main(cwd: string, sessionId?: string): Promise<void> {
   const config = initHook(cwd);
   if (!config) return;
+  if (sessionId) {
+    const engine = createClaudeTracingSession(config, cwd, sessionId);
+    if (engine) {
+      try {
+        const result = await engine.session.drain();
+        if (result === "scope-mismatch") {
+          debug(`Leaving shared captures for ${sessionId} alone after an account change`);
+        } else {
+          await acknowledgeClaudeSharedDeliveries(engine, config, sessionId);
+        }
+      } catch (err) {
+        warn(`Could not drain shared captures for ${sessionId}: ${err}`);
+      }
+    }
+  }
   const own = sessionId ? safeName(sessionId) : undefined;
   const origin = queueOrigin(config);
   const sessions = new Set([

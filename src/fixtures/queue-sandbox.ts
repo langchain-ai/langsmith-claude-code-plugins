@@ -17,9 +17,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach } from "vitest";
+import { afterEach, beforeEach, expect } from "vitest";
+import { waitFor } from "./wait-for.js";
 
 import { QUEUE_DIR_NAME, QUEUE_FILE_SUFFIX, QUEUE_ID_TIME_WIDTH } from "../constants.js";
+import { queueOrigin } from "../queue.js";
 import { fakeLangSmith, readLog, spawnHook, turnLines } from "./hook-sandbox.js";
 
 let home: string;
@@ -63,9 +65,22 @@ export function useQueueSandbox(): void {
   });
 
   afterEach(async () => {
+    const pids = [
+      ...readLog(join(home, "hook.log")).matchAll(/Started detached queue flusher \(pid (\d+)\)/g),
+    ].map((match) => Number(match[1]));
+    expect(await waitFor(() => pids.every((pid) => !processIsRunning(pid)))).toBe(true);
     await service.close();
     rmSync(home, { recursive: true, force: true });
   });
+}
+
+function processIsRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function env() {
@@ -73,6 +88,7 @@ function env() {
     PATH: process.env.PATH ?? "",
     HOME: home,
     TRACE_TO_LANGSMITH: "true",
+    CC_LANGSMITH_DEBUG: "true",
     CC_LANGSMITH_API_KEY: "test-key",
     LANGSMITH_API_KEY: "test-key",
     LANGSMITH_ENDPOINT: service.endpoint,
@@ -161,6 +177,10 @@ export const queueRoot = () => join(home, QUEUE_DIR_NAME);
 
 export const queueDirFor = (sessionId = "s1") => join(queueRoot(), sessionId);
 
+export function currentQueueOrigin(): string {
+  return queueOrigin({ apiKey: "test-key", apiBaseUrl: service.endpoint, redact: true });
+}
+
 export function entryFiles(sessionId = "s1"): string[] {
   const dir = queueDirFor(sessionId);
   if (!existsSync(dir)) return [];
@@ -168,6 +188,21 @@ export function entryFiles(sessionId = "s1"): string[] {
     .filter((name) => name.endsWith(QUEUE_FILE_SUFFIX))
     .sort()
     .map((name) => join(dir, name));
+}
+
+export function sandboxFiles(): string[] {
+  const pending = [home];
+  const files: string[] = [];
+  while (pending.length > 0) {
+    const directory = pending.pop();
+    if (!directory) continue;
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) pending.push(path);
+      else files.push(path);
+    }
+  }
+  return files;
 }
 
 export function queued(
@@ -193,7 +228,7 @@ export function queueRunByHand(
     origin = "another-account",
   } = options;
   const dir = queueDirFor(sessionId);
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
   const queuedAt = Date.now() - queuedAgoMs;
   const queueId = `${String(queuedAt).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID()}`;
   const path = join(dir, `${queueId}${QUEUE_FILE_SUFFIX}`);
@@ -214,6 +249,7 @@ export function queueRunByHand(
         dotted_order: "20250101T000000000000Z00000000-0000-0000-0000-000000000000",
       },
     }),
+    { mode: 0o600 },
   );
   return path;
 }

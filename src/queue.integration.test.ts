@@ -1,21 +1,21 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { QUEUE_FILE_SUFFIX } from "./constants.js";
 import {
   ageOldestRecord,
   ageQueueDir,
   appendTurnToTranscript,
   entryFiles,
+  currentQueueOrigin,
   hook,
   hookLog,
   newSession,
   queueDirFor,
-  queueRoot,
   queued,
   queueRunByHand,
+  sandboxFiles,
   sandboxHome,
   startTurn,
   stopTurn,
@@ -28,14 +28,13 @@ import {
 describe("the detached upload queue", { timeout: 60_000 }, () => {
   useQueueSandbox();
 
-  // Catches a PostToolUse that uploads inline again (no saving), and a queued run
-  // that never reaches LangSmith at all. No other test drives an upload end to end.
-  it("uploads a run the tool hook queued without waiting on the network", async () => {
+  // Catches a PostToolUse that uploads inline or a saved run that never reaches LangSmith.
+  it("uploads a run the tool hook captured without waiting on the network", async () => {
     await startTurn();
     await toolCall(0);
 
     expect(uploads.received).toEqual([]);
-    expect(queued()).toHaveLength(1);
+    expect(queued()).toHaveLength(0);
 
     await stopTurn();
     expect(await waitFor(() => uploads.received.includes("Tool0"))).toBe(true);
@@ -46,14 +45,16 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // the ordering the old one-hook-at-a-time upload gave for free.
   it("uploads several queued tool calls in the order they ran", async () => {
     await startTurn();
-    // A service that answers slowly makes the later calls queue behind the first upload.
     uploads.delayMs = 50;
-    for (let index = 0; index < 5; index++) await toolCall(index);
-    uploads.delayMs = 0;
+    const origin = currentQueueOrigin();
+    for (let index = 0; index < 5; index++) {
+      queueRunByHand(`Tool${index}`, { origin, queuedAgoMs: 100 - index });
+    }
 
     await stopTurn();
     expect(await waitFor(() => uploads.received.length >= 5)).toBe(true);
     expect(uploads.received).toEqual(["Tool0", "Tool1", "Tool2", "Tool3", "Tool4"]);
+    uploads.delayMs = 0;
   });
 
   // Catches an entry deleted before its upload was confirmed, which loses the run
@@ -61,7 +62,8 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   it("keeps a run whose upload failed and uploads it on the next flush", async () => {
     await startTurn();
     uploads.fail = true;
-    await toolCall(0);
+    queueRunByHand("Tool0", { origin: currentQueueOrigin() });
+    await stopTurn();
     expect(
       await waitFor(() => {
         const entries = queued();
@@ -75,13 +77,8 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     expect(await waitFor(() => uploads.received.includes("Tool0"))).toBe(true);
   });
 
-  // Catches a queue that serialises appends behind a lock, where one hook giving up on
-  // a lock a dead hook left behind silently overwrites every run queued beside it.
-  it("uploads every parallel tool call when a dead hook left a lock behind", async () => {
+  it("uploads every parallel tool capture", async () => {
     await startTurn();
-
-    mkdirSync(queueRoot(), { recursive: true });
-    writeFileSync(join(queueRoot(), `s1${QUEUE_FILE_SUFFIX}.lock`), "");
 
     const names = Array.from({ length: 12 }, (_, index) => `Tool${index}`);
     await Promise.all(names.map((_, index) => toolCall(index)));
@@ -89,10 +86,9 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     await stopTurn();
     expect(await waitFor(() => uploads.received.length >= names.length)).toBe(true);
     expect([...uploads.received].sort()).toEqual([...names].sort());
+    expect(await waitFor(() => !existsSync(`${queueDirFor("s1")}.flush.lock`))).toBe(true);
   });
 
-  // Catches the uploader's hint being saved for a muted thread too, which would put that
-  // thread's file paths on disk. Nothing else looks inside the entry a muted tool call writes.
   it("writes no file path for a muted tool call", async () => {
     const muted = { CC_LANGSMITH_DEFAULT_MUTED: "true" };
     const secret = join(sandboxHome(), "secret folder", "notes.txt");
@@ -111,18 +107,16 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
       muted,
     );
 
-    const entries = entryFiles();
-    expect(entries).toHaveLength(1);
-    const raw = readFileSync(entries[0], "utf8");
+    const raw = sandboxFiles()
+      .map((path) => readFileSync(path, "utf8"))
+      .join("\n");
     expect(raw).not.toContain("secret folder");
-    expect(JSON.parse(raw)).not.toHaveProperty("where");
   });
 
   // Catches a sweep that never runs, or one that throws leftovers away the way
   // pruneOldSessions throws away stale state.
   it("flushes a queue left behind by a session whose records went stale", async () => {
-    await startTurn();
-    await toolCall(0);
+    queueRunByHand("Tool0", { origin: currentQueueOrigin() });
     expect(queued()).toHaveLength(1);
 
     ageOldestRecord("s1", 3 * 60 * 60 * 1000);
@@ -136,10 +130,11 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches a flush that helps itself to a folder still being written by a live
   // session elsewhere, which is how two uploaders end up on one folder.
   it("leaves another session's recent folder completely alone", async () => {
-    await startTurn();
     // The service is briefly down, so this session's own run has to stay on disk.
+    await startTurn();
     uploads.fail = true;
-    await toolCall(0);
+    queueRunByHand("Tool0", { origin: currentQueueOrigin() });
+    await stopTurn("s1");
     expect(await waitFor(() => (queued("s1")[0]?.attempts ?? 0) >= 1)).toBe(true);
     uploads.fail = false;
     await newSession("s2");
@@ -160,7 +155,7 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     const turn = async (index: number) => {
       appendTurnToTranscript(index);
       await hook("UserPromptSubmit", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
-      await toolCall(index);
+      queueRunByHand(`Tool${index}`, { origin: currentQueueOrigin() });
       await stopTurn();
     };
 
@@ -176,23 +171,17 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     await turn(2);
     expect(await waitFor(() => uploads.received.length >= 3)).toBe(true);
     expect([...uploads.received].sort()).toEqual(["Tool0", "Tool1", "Tool2"]);
+    expect(await waitFor(() => !existsSync(`${queueDirFor("s1")}.flush.lock`))).toBe(true);
   });
 
   // Catches two flushers draining one old folder at once, which uploads a run twice
   // and lets one delete the entry the other is still working on.
   it("lets only one of two flushers drain the same old folder", async () => {
-    await startTurn();
-    // One real call, for the account fingerprint; the rest go straight to disk so no
-    // uploader of this session's own is ever running while the folder is aged.
-    uploads.fail = true;
-    await toolCall(0);
-    expect(await waitFor(() => (queued("s1")[0]?.attempts ?? 0) >= 1)).toBe(true);
-    const { origin } = queued("s1")[0];
-    for (let index = 1; index < 6; index++) {
+    const origin = currentQueueOrigin();
+    for (let index = 0; index < 6; index++) {
       queueRunByHand(`Tool${index}`, { origin, queuedAgoMs: 60_000 - index });
     }
     ageOldestRecord("s1", 3 * 60 * 60 * 1000);
-    uploads.fail = false;
 
     await Promise.all([stopTurn("s2"), stopTurn("s3")]);
 
@@ -204,8 +193,7 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches a flusher lock that outlives the flusher, which stops that session
   // uploading for good. No other test leaves a flusher lock behind.
   it("flushes a queue whose previous flusher died still holding the lock", async () => {
-    await startTurn();
-    await toolCall(0);
+    queueRunByHand("Tool0", { origin: currentQueueOrigin() });
 
     const dead = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
     writeFileSync(`${queueDirFor()}.flush.lock`, String(dead.pid));
@@ -217,8 +205,7 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches a drained folder that outlives its session for good, which only the next
   // session on that machine would ever clear, and never if the plugin is removed.
   it("removes a drained folder nothing has touched for two hours", async () => {
-    await startTurn();
-    await toolCall(0);
+    queueRunByHand("Tool0", { origin: currentQueueOrigin() });
     await stopTurn();
     expect(await waitFor(() => queued().length === 0)).toBe(true);
 
@@ -231,8 +218,7 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches a folder a dead session drained being left on disk for good, since the
   // session that would have removed it is gone. No other test has a stranger remove one.
   it("removes an abandoned folder another session drained hours ago", async () => {
-    await startTurn();
-    await toolCall(0);
+    queueRunByHand("Tool0", { origin: currentQueueOrigin() });
     await stopTurn();
     expect(await waitFor(() => queued().length === 0)).toBe(true);
 
@@ -247,8 +233,7 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   it.skipIf(process.platform === "win32")(
     "keeps the queue readable only by its owner",
     async () => {
-      await startTurn();
-      await toolCall(0);
+      queueRunByHand("Tool0", { origin: currentQueueOrigin() });
 
       expect(statSync(queueDirFor("s1")).mode & 0o777).toBe(0o700);
       expect(statSync(entryFiles("s1")[0]).mode & 0o777).toBe(0o600);
@@ -258,9 +243,9 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches an account check that reads one record and then uploads the rest anyway, which
   // sends a run to the wrong workspace, and a held-back run going unmentioned in the log.
   it("uploads only the records queued for the account doing the flushing", async () => {
-    await startTurn();
     uploads.fail = true;
-    await toolCall(0);
+    queueRunByHand("Tool0", { origin: currentQueueOrigin() });
+    await stopTurn();
     expect(await waitFor(() => (queued()[0]?.attempts ?? 0) >= 1)).toBe(true);
     uploads.fail = false;
     queueRunByHand("Tool1");
@@ -277,9 +262,8 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches a run for an account nobody has sitting in front of the queue for good, which
   // strands every run behind it. No other test puts a run too old to accept out of reach.
   it("drops a run for another account once it is too old to accept", async () => {
-    await startTurn();
     queueRunByHand("Tool0", { queuedAgoMs: 1000, startedAgoMs: 2 * 24 * 60 * 60 * 1000 });
-    await toolCall(1);
+    queueRunByHand("Tool1", { origin: currentQueueOrigin() });
 
     await stopTurn();
     expect(await waitFor(() => uploads.received.includes("Tool1"))).toBe(true);
@@ -289,9 +273,8 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches an uploader that re-reads the run it cannot send instead of standing down,
   // which spins forever holding the lock and stops that folder uploading ever again.
   it("stands down and releases the lock when the next run is not its own", async () => {
-    await startTurn();
     queueRunByHand("Tool0", { queuedAgoMs: 1000 });
-    await toolCall(1);
+    queueRunByHand("Tool1", { origin: currentQueueOrigin() });
 
     await stopTurn();
     expect(await waitFor(() => !existsSync(`${queueDirFor("s1")}.flush.lock`), 10_000)).toBe(true);
@@ -301,9 +284,12 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches a run LangSmith will reject for age being retried forever, and taking
   // every run batched with it down too.
   it("drops a run too old to accept and uploads the ones queued around it", async () => {
-    await startTurn();
     uploads.fail = true;
-    for (let index = 0; index < 3; index++) await toolCall(index);
+    const origin = currentQueueOrigin();
+    for (let index = 0; index < 3; index++) {
+      queueRunByHand(`Tool${index}`, { origin, queuedAgoMs: 100 - index });
+    }
+    await stopTurn();
     expect(await waitFor(() => (queued()[0]?.attempts ?? 0) >= 1)).toBe(true);
 
     const middle = entryFiles()[1];

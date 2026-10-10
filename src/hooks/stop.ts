@@ -40,8 +40,21 @@ import { queueOrigin } from "../queue.js";
 import { everyChildLanded, settledFromTurn, settledTurnMetadata } from "../reconcile.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { MUTED_TRACE_CONTENT } from "../privacy.js";
+import {
+  CLAUDE_CODE_INTEGRATION,
+  CLAUDE_TURN_CLOSURE_EVENT_SUFFIX,
+  CLAUDE_TURN_PROGRESS_EVENT_SUFFIX,
+  USER_PROMPT_TURN_NAME,
+} from "../constants.js";
+import { codingAgentMetadata, codingAgentMetadataOptions } from "../metadata.js";
+import {
+  captureClaudeRun,
+  createClaudeTracingSession,
+  sharedClaudeChildRunIds,
+} from "../tracing-engine.js";
 import type { TaskRunEntry } from "../langsmith.js";
 import type { StopHookInput } from "../types.js";
+import type { ClaudeSharedRunCapture } from "../models/tracing-engine.js";
 
 export async function main(): Promise<void> {
   const startTime = Date.now();
@@ -78,6 +91,7 @@ export async function main(): Promise<void> {
     config.redact,
     config.redactExtraRules,
   );
+  const engine = createClaudeTracingSession(config, input.cwd, input.session_id);
 
   // Load state and read new messages.
   const state = loadState(config.stateFilePath);
@@ -186,6 +200,13 @@ export async function main(): Promise<void> {
         origin: queueOrigin(config),
       }
     : undefined;
+  const captureSharedRun: ClaudeSharedRunCapture | undefined = engine
+    ? (capture) => captureClaudeRun(engine, capture)
+    : undefined;
+  const getSharedChildRunIds = engine
+    ? (turnId: string, rootRunId: string, recorded?: readonly string[]) =>
+        sharedClaudeChildRunIds(engine, turnId, rootRunId, recorded)
+    : undefined;
 
   for (let i = 0; i < turns.length; i++) {
     const turn = turns[i];
@@ -225,6 +246,7 @@ export async function main(): Promise<void> {
         traceId,
         parentDottedOrder: dottedOrder,
         record,
+        captureSharedRun,
       });
       allTaskRunMaps = { ...allTaskRunMaps, ...taskRunMap };
       tracedTurns++;
@@ -244,7 +266,12 @@ export async function main(): Promise<void> {
   const lastTurnId = turns[turns.length - 1]?.promptId;
   const closingTurn = turns[turns.length - 1];
   const closingTurnTools = closingTurn ? turnToolInputs(closingTurn) : [];
-  const turnMetadata = turnScopedMetadata(sessionMetadata, closingTurnTools, input.cwd);
+  const turnMetadataBase = turnScopedMetadata(sessionMetadata, closingTurnTools, input.cwd);
+  const recordedTurn = currentTurnRecord ? readTurnRecord(currentTurnRecord.path) : undefined;
+  const turnMetadata =
+    recordedTurn?.origin === currentTurnRecord?.origin
+      ? settledTurnMetadata(turnMetadataBase, recordedTurn)
+      : turnMetadataBase;
 
   // Process any pending subagent traces queued by SubagentStop. These are
   // synchronous subagents whose SubagentStop fired before PostToolUse recorded
@@ -260,11 +287,12 @@ export async function main(): Promise<void> {
       taskRunMap: mergedTaskRunMap,
       parentTraceId: freshSession.current_trace_id,
       project: config.project,
-      customMetadata: sessionMetadata,
+      customMetadata: turnMetadata,
       runtimeVersion,
       turnId: lastTurnId,
       turnNumber: sessionState.current_turn_number,
       record: currentTurnRecord,
+      captureSharedRun,
     });
     for (const sa of pendingSubagents) processedAgentIds.add(sa.agent_id);
   }
@@ -412,32 +440,121 @@ export async function main(): Promise<void> {
   let turnRecord: string | undefined;
   let closedTurnRun: Record<string, unknown> | undefined;
   let leaveTurnOpen = false;
+  let rootUsesSharedEngine = false;
+  let turnClosureCaptured = false;
   if (completeNow && currentRunId) {
     debug(`Completing Turn run ${currentRunId}`);
     turnRecord = turnRecordPath(config.stateFilePath, input.session_id, currentRunId);
     const record = readTurnRecord(turnRecord);
     const everythingIn = !record || everyChildLanded(record);
-    const settled = everythingIn ? settledTurnMetadata(turnMetadata, record) : turnMetadata;
+    const settled = settledTurnMetadata(turnMetadata, record);
     leaveTurnOpen = !everythingIn && awaitsTheTurn(settled);
+    const rootCapture = engine
+      ? await engine.captureStore.read({
+          integration: CLAUDE_CODE_INTEGRATION,
+          sessionId: input.session_id,
+          turnId: currentRunId,
+          eventId: currentRunId,
+        })
+      : undefined;
+    const rootCaptureAvailable =
+      engine !== undefined &&
+      rootCapture?.runId === currentRunId &&
+      rootCapture.destinationFingerprint === engine.accountFingerprint;
+    rootUsesSharedEngine = rootCaptureAvailable || record?.root?.shared === true;
     try {
-      closedTurnRun = await completeTurnRun({
-        leaveOpen: leaveTurnOpen,
-        tracing: currentTracing,
-        sessionId: input.session_id,
-        runId: currentRunId,
-        traceId: currentTraceId,
-        dottedOrder: currentDottedOrder,
-        parentRunId: currentParentRunId,
-        startTime: sessionState.current_turn_start,
-        project: config.project,
-        lastAssistantMessage: input.last_assistant_message,
-        customMetadata: settled,
-        turnId: lastTurnId,
-        turnNumber: sessionState.current_turn_number,
-        runtimeVersion,
-        approvalPolicy,
-      });
-      debug(`Turn run ${currentRunId} completed`);
+      if (rootUsesSharedEngine) {
+        if (!engine || !rootCaptureAvailable) {
+          error(
+            `Could not capture shared Turn closure ${currentRunId}: root capture is unavailable`,
+          );
+        } else {
+          const runMetadata = {
+            sessionId: input.session_id,
+            runType: "root" as const,
+            base: settled,
+            turnId: lastTurnId,
+            turnNumber: sessionState.current_turn_number,
+            runtimeVersion,
+            approvalPolicy,
+            agentType: "root" as const,
+          };
+          const run = {
+            id: currentRunId,
+            name: USER_PROMPT_TURN_NAME,
+            run_type: "chain",
+            ...(sessionState.current_turn_start === undefined
+              ? {}
+              : { start_time: sessionState.current_turn_start }),
+            ...(currentTraceId === undefined ? {} : { trace_id: currentTraceId }),
+            ...(currentDottedOrder === undefined ? {} : { dotted_order: currentDottedOrder }),
+            ...(currentParentRunId === undefined ? {} : { parent_run_id: currentParentRunId }),
+          };
+          const outputs = {
+            messages: [{ role: "assistant", content: input.last_assistant_message }],
+          };
+          const endTime = new Date().toISOString();
+          const captured = await captureClaudeRun(engine, {
+            turnId: currentRunId,
+            eventId: `${currentRunId}${leaveTurnOpen ? CLAUDE_TURN_PROGRESS_EVENT_SUFFIX : CLAUDE_TURN_CLOSURE_EVENT_SUFFIX}`,
+            submission: {
+              operation: "patch",
+              integration: CLAUDE_CODE_INTEGRATION,
+              privacyMode: currentTracing,
+              metadata: codingAgentMetadataOptions(runMetadata),
+              privacyContext: { status: "completed" },
+              run,
+              patch: leaveTurnOpen
+                ? { fields: ["outputs"], values: { outputs } }
+                : { fields: ["outputs", "end_time"], values: { outputs, end_time: endTime } },
+            },
+            turnEvidence: {
+              rootRunId: currentRunId,
+              childRunIds: await sharedClaudeChildRunIds(
+                engine,
+                currentRunId,
+                currentRunId,
+                record?.origin === queueOrigin(config)
+                  ? record.children.filter((child) => child.shared).map((child) => child.run_id)
+                  : [],
+              ),
+              closureState: leaveTurnOpen ? "open" : "authoritative",
+            },
+          });
+          if (!captured) {
+            error(`Could not capture shared Turn closure ${currentRunId}`);
+          } else {
+            closedTurnRun = {
+              ...run,
+              project_name: config.project,
+              ...(leaveTurnOpen ? {} : { end_time: endTime }),
+              outputs,
+              extra: { metadata: codingAgentMetadata(runMetadata) },
+            };
+            turnClosureCaptured = true;
+          }
+        }
+      } else {
+        closedTurnRun = await completeTurnRun({
+          leaveOpen: leaveTurnOpen,
+          tracing: currentTracing,
+          sessionId: input.session_id,
+          runId: currentRunId,
+          traceId: currentTraceId,
+          dottedOrder: currentDottedOrder,
+          parentRunId: currentParentRunId,
+          startTime: sessionState.current_turn_start,
+          project: config.project,
+          lastAssistantMessage: input.last_assistant_message,
+          customMetadata: settled,
+          turnId: lastTurnId,
+          turnNumber: sessionState.current_turn_number,
+          runtimeVersion,
+          approvalPolicy,
+        });
+        turnClosureCaptured = closedTurnRun !== undefined;
+      }
+      if (closedTurnRun) debug(`Turn run ${currentRunId} completed`);
     } catch (err) {
       error(`Failed to complete turn run: ${err}`);
     }
@@ -454,9 +571,11 @@ export async function main(): Promise<void> {
       stateFilePath: config.stateFilePath,
       sessionId: input.session_id,
       project: config.project,
-      customMetadata: config.customMetadata,
+      customMetadata: turnMetadata,
       runtimeVersion,
       agentId: doneAgentId,
+      captureSharedRun,
+      getSharedChildRunIds,
     });
   }
 
@@ -476,10 +595,12 @@ export async function main(): Promise<void> {
       stateFilePath: config.stateFilePath,
       sessionId: input.session_id,
       project: config.project,
-      customMetadata: config.customMetadata,
+      customMetadata: sessionMetadata,
       runtimeVersion,
       agentId: notificationToFinalize,
       interrupted: true,
+      captureSharedRun,
+      getSharedChildRunIds,
     });
   } else if (notificationToFinalize) {
     let finalizeNow = false;
@@ -506,9 +627,11 @@ export async function main(): Promise<void> {
         stateFilePath: config.stateFilePath,
         sessionId: input.session_id,
         project: config.project,
-        customMetadata: config.customMetadata,
+        customMetadata: sessionMetadata,
         runtimeVersion,
         agentId: notificationToFinalize,
+        captureSharedRun,
+        getSharedChildRunIds,
       });
     }
   }
@@ -523,11 +646,40 @@ export async function main(): Promise<void> {
         run: closedTurnRun,
         tracing: currentTracing,
         origin: queueOrigin(config),
+        shared: rootUsesSharedEngine,
         root: true,
         closesAt: leaveTurnOpen ? new Date().toISOString() : undefined,
       });
     }
-    recordTurnClosed(turnRecord, lastTurnId);
+    if (turnClosureCaptured) recordTurnClosed(turnRecord, lastTurnId);
+  }
+
+  if (completeNow && rootUsesSharedEngine && !turnClosureCaptured && currentRunId) {
+    await atomicUpdateState(config.stateFilePath, (s) => {
+      const ss = getSessionState(s, input.session_id);
+      const openTurns = { ...ss.open_turns };
+      const existing = openTurns[currentRunId];
+      openTurns[currentRunId] = {
+        ...existing,
+        run_id: currentRunId,
+        trace_id: currentTraceId,
+        dotted_order: currentDottedOrder,
+        parent_run_id: currentParentRunId,
+        start_time: sessionState.current_turn_start,
+        turn_number: sessionState.current_turn_number,
+        turn_id: lastTurnId,
+        runtime_version: runtimeVersion,
+        approval_policy: approvalPolicy,
+        tracing: currentTracing,
+        last_assistant_message:
+          currentTracing === "metadata" ? MUTED_TRACE_CONTENT : input.last_assistant_message,
+        stop_seen: true,
+        agent_ids: existing?.agent_ids ?? [],
+        retry_closure: true,
+        leave_open: leaveTurnOpen,
+      };
+      return { ...s, [input.session_id]: { ...ss, open_turns: openTurns } };
+    });
   }
 
   startQueueFlusher(input.cwd, input.session_id);

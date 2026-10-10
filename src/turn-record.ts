@@ -77,7 +77,11 @@ function append(path: string, line: TurnRecordLine): boolean {
   }
 }
 
-function recordedRun(run: Record<string, unknown>, tracing: TracingMode): RecordedRun | undefined {
+function recordedRun(
+  run: Record<string, unknown>,
+  tracing: TracingMode,
+  shared: boolean,
+): RecordedRun | undefined {
   const safe = runConfigForMode(run, tracing);
   const extra = safe.extra as { metadata?: Record<string, unknown> } | undefined;
   if (typeof safe.id !== "string" || typeof safe.dotted_order !== "string") return undefined;
@@ -92,6 +96,7 @@ function recordedRun(run: Record<string, unknown>, tracing: TracingMode): Record
     start_time: typeof safe.start_time === "string" ? safe.start_time : undefined,
     end_time: typeof safe.end_time === "string" ? safe.end_time : undefined,
     tracing,
+    ...(shared ? { shared: true } : {}),
     metadata: JSON.parse(JSON.stringify(extra?.metadata ?? {})) as Record<string, unknown>,
   };
 }
@@ -101,10 +106,11 @@ export function recordRun(options: {
   run: Record<string, unknown>;
   tracing: TracingMode;
   origin: string;
+  shared?: boolean;
   root?: boolean;
   closesAt?: string;
 }): boolean {
-  const run = recordedRun(options.run, options.tracing);
+  const run = recordedRun(options.run, options.tracing, options.shared ?? false);
   if (!run) return false;
   if (options.closesAt) {
     run.open = true;
@@ -115,6 +121,28 @@ export function recordRun(options: {
     root: options.root,
     origin: options.origin,
     run,
+  });
+}
+
+export function recordResolvedMetadata(
+  path: string,
+  runId: string,
+  metadata: Record<string, unknown>,
+): boolean {
+  const record = readTurnRecord(path);
+  if (!record) return false;
+  const isRoot = record.root?.run_id === runId;
+  const run = isRoot ? record.root : record.children.find((child) => child.run_id === runId);
+  if (!run) return false;
+  const additions = Object.fromEntries(
+    Object.entries(metadata).filter(([key, value]) => run.metadata[key] !== value),
+  );
+  if (Object.keys(additions).length === 0) return true;
+  return append(path, {
+    k: TURN_RECORD_LINE.run,
+    ...(isRoot ? { root: true } : {}),
+    origin: record.origin,
+    run: { ...run, metadata: { ...run.metadata, ...additions } },
   });
 }
 

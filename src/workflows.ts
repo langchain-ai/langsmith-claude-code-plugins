@@ -46,6 +46,7 @@ import { flushPendingTraces, traceWorkflowStage } from "./langsmith.js";
 import type { TaskRunEntry } from "./langsmith.js";
 import { getSessionState, loadState } from "./state.js";
 import type { SessionState } from "./types.js";
+import type { ClaudeSharedRunCapture } from "./models/tracing-engine.js";
 
 /** The tool name that launches a dynamic workflow. */
 export const WORKFLOW_TOOL_NAME = "Workflow";
@@ -116,6 +117,7 @@ export async function handleWorkflowSubagentStop(opts: {
   defaultMuted?: boolean;
   project: string;
   customMetadata?: Record<string, unknown>;
+  captureSharedRun?: ClaudeSharedRunCapture;
 }): Promise<void> {
   const runId = workflowRunIdFromPath(opts.agentTranscriptPath);
   if (!runId) {
@@ -158,6 +160,7 @@ export async function handleWorkflowSubagentStop(opts: {
       runtimeVersion: launchingTurn?.runtime_version ?? ss.runtime_version,
       turnId: launchingTurn?.turn_id,
       turnNumber: launchingTurn?.turn_number ?? ss.current_turn_number,
+      captureSharedRun: opts.captureSharedRun,
     });
     debug(`Traced workflow stage ${opts.agentId} under Workflow run ${entry.run_id}`);
   } catch (err) {

@@ -24,6 +24,7 @@ import {
 import { atomicUpdateState, getSessionState, loadState } from "./state.js";
 import * as logger from "./logger.js";
 import type { OpenTurn } from "./types.js";
+import type { ClaudeSharedChildRunIds, ClaudeSharedRunCapture } from "./models/tracing-engine.js";
 
 export async function finalizeNotificationChain(opts: {
   stateFilePath: string;
@@ -34,6 +35,8 @@ export async function finalizeNotificationChain(opts: {
   runtimeVersion?: string;
   /** The agent whose notification turn just completed. */
   agentId: string;
+  captureSharedRun?: ClaudeSharedRunCapture;
+  getSharedChildRunIds?: ClaudeSharedChildRunIds;
   /** Set when the originating agent was killed/interrupted (its task-notification
    *  reported a non-"completed" status and SubagentStop never fired). Stamps an
    *  error on that agent's tool run; only applies to the originating agent, not
@@ -90,6 +93,7 @@ export async function finalizeNotificationChain(opts: {
             ? "Workflow killed"
             : "Subagent killed"
           : undefined,
+        captureSharedRun: opts.captureSharedRun,
       });
     } catch (err) {
       logger.error(`Failed to close Agent tool run for ${agentId}: ${err}`);
@@ -146,10 +150,15 @@ export async function finalizeNotificationChain(opts: {
         turnId: toComplete.turn_id,
       });
       try {
+        const sharedChildRunIds = opts.getSharedChildRunIds
+          ? await opts.getSharedChildRunIds(toComplete.run_id, toComplete.run_id)
+          : [];
         await completeTurnRun({
           ...turnIdentityFromOpenTurn(toComplete, { sessionId, project, customMetadata: settled }),
           tracing: resolveTurnTracingMode(opts, sessionId, toComplete.tracing),
           lastAssistantMessage: toComplete.last_assistant_message,
+          captureSharedRun: opts.captureSharedRun,
+          sharedChildRunIds,
         });
         logger.debug(`Completed launching turn ${toComplete.run_id} after notification chain`);
       } catch (err) {

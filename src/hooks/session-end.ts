@@ -27,6 +27,12 @@ import { startQueueFlusher } from "../utils/detach.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { readRuntimeVersion } from "../transcript.js";
+import {
+  captureClaudeRun,
+  createClaudeTracingSession,
+  sharedClaudeChildRunIds,
+} from "../tracing-engine.js";
+import type { ClaudeSharedRunCapture } from "../models/tracing-engine.js";
 
 interface SessionEndHookInput {
   session_id: string;
@@ -78,6 +84,14 @@ export async function main(): Promise<void> {
     config.redact,
     config.redactExtraRules,
   );
+  const engine = createClaudeTracingSession(config, input.cwd, input.session_id);
+  const captureSharedRun: ClaudeSharedRunCapture | undefined = engine
+    ? (capture) => captureClaudeRun(engine, capture)
+    : undefined;
+  const getSharedChildRunIds = engine
+    ? (turnId: string, rootRunId: string, recorded?: readonly string[]) =>
+        sharedClaudeChildRunIds(engine, turnId, rootRunId, recorded)
+    : undefined;
 
   const expandedTranscript = expandHome(input.transcript_path);
   const runtimeVersion =
@@ -114,6 +128,8 @@ export async function main(): Promise<void> {
           ),
           origin: queueOrigin(config),
         },
+        captureSharedRun,
+        getSharedChildRunIds,
       });
       lastLine = res.lastLine;
       turnsTraced = res.turnsTraced;
@@ -147,6 +163,7 @@ export async function main(): Promise<void> {
         customMetadata: config.customMetadata,
         runtimeVersion,
         wasOpen: true, // subagent_done ⇒ SubagentStop posted it open
+        captureSharedRun,
       });
       debug(`Closed open Agent tool run ${agentId} on session end`);
     } catch (err) {
@@ -172,6 +189,9 @@ export async function main(): Promise<void> {
     });
     try {
       if (entry.stop_seen) {
+        const sharedChildRunIds = getSharedChildRunIds
+          ? await getSharedChildRunIds(turnRunId, turnRunId)
+          : [];
         await completeTurnRun({
           ...turnIdentityFromOpenTurn(entry, {
             sessionId: input.session_id,
@@ -180,6 +200,8 @@ export async function main(): Promise<void> {
           }),
           tracing: resolveTurnTracingMode(config, input.session_id, entry.tracing),
           lastAssistantMessage: entry.last_assistant_message,
+          captureSharedRun,
+          sharedChildRunIds,
         });
         debug(`Completed deferred turn ${turnRunId} on session end`);
       } else {
@@ -194,6 +216,8 @@ export async function main(): Promise<void> {
           runtimeVersion,
           turn: entry,
           error: "Session ended before turn completed",
+          captureSharedRun,
+          getSharedChildRunIds,
         });
         debug(`Closed interrupted deferred turn ${turnRunId} on session end`);
       }

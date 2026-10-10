@@ -280,6 +280,7 @@ describe.each(transports)("real SDK privacy over %s", (selectedTransport) => {
     const { codingAgentMetadata } = await import("./metadata.js");
     const metadata = codingAgentMetadata({
       sessionId: "plugin-session",
+      runType: "root",
       agentType: "root",
       usageMetadata: {},
     });
@@ -312,6 +313,7 @@ describe.each(transports)("real SDK privacy over %s", (selectedTransport) => {
       collisions.usage_metadata = { total_tokens: 999, custom: FORBIDDEN };
       const metadata = codingAgentMetadata({
         sessionId: "plugin-session",
+        runType: "root",
         turnId: "plugin-turn",
         turnNumber: 2,
         agentType: "root",
@@ -741,6 +743,7 @@ describe("file-fed privacy and routing", () => {
           extra: {
             metadata: codingAgentMetadata({
               sessionId: "trusted-thread",
+              runType: "root",
               agentType: "root",
               modelName: SECRET,
               base: loaded.customMetadata,

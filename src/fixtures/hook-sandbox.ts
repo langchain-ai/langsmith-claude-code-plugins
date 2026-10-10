@@ -17,12 +17,17 @@ const INFO = {
 export function fakeLangSmith(rules: FakeLangSmithRules = {}) {
   let server: Server | undefined;
   const seen: WireRun[] = [];
+  const attempted: WireRun[] = [];
   const service = {
     fail: false,
+    failOnce: undefined as { action: WireRun["action"]; id: string } | undefined,
     delayMs: 0,
     /** Refuse only the requests whose body mentions this, so one run can fail on its own. */
     refuse: "",
     endpoint: "",
+    get attempts() {
+      return [...attempted];
+    },
     get created() {
       return seen.filter((wire) => wire.action === "post").map((wire) => wire.run);
     },
@@ -31,7 +36,9 @@ export function fakeLangSmith(rules: FakeLangSmithRules = {}) {
     },
     reset() {
       seen.length = 0;
+      attempted.length = 0;
       service.fail = false;
+      service.failOnce = undefined;
       service.delayMs = 0;
       service.refuse = "";
     },
@@ -44,8 +51,21 @@ export function fakeLangSmith(rules: FakeLangSmithRules = {}) {
           const answer = () => {
             response.setHeader("content-type", "application/json");
             if (request.url?.includes("/info")) return response.end(JSON.stringify(INFO));
+            const writes = wireRuns(request.url ?? "", request.method ?? "POST", body);
+            attempted.push(...writes);
+            const failedOnce = service.failOnce;
+            const shouldFailOnce =
+              failedOnce !== undefined &&
+              writes.some(
+                (wire) => wire.action === failedOnce.action && wire.run.id === failedOnce.id,
+              );
+            if (shouldFailOnce) service.failOnce = undefined;
             // 400, not 500: the SDK retries a 5xx with backoff and slows the test down.
-            if (service.fail || (service.refuse && body.includes(service.refuse))) {
+            if (
+              service.fail ||
+              shouldFailOnce ||
+              (service.refuse && body.includes(service.refuse))
+            ) {
               response.writeHead(400);
               return response.end("{}");
             }
@@ -53,7 +73,7 @@ export function fakeLangSmith(rules: FakeLangSmithRules = {}) {
               response.writeHead(400);
               return response.end("{}");
             }
-            for (const wire of wireRuns(request.url ?? "", request.method ?? "POST", body)) {
+            for (const wire of writes) {
               const verdict = rules.rejectsRun?.(wire);
               if (verdict === "ignore") continue;
               if (verdict) {

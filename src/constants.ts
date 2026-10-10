@@ -1,5 +1,23 @@
 const USER_PROMPT_TURN_NAME = "Claude Code Turn";
 const ASSISTANT_RUN_NAME = "Claude";
+const CLAUDE_CODE_INTEGRATION = "claude-code";
+const CLAUDE_TOOL_SNAPSHOT_EVENT_SUFFIX = ":native-tool";
+const CLAUDE_TOOL_RECONSTRUCTION_EVENT_SUFFIX = ":reconstruct-tool";
+const CLAUDE_TURN_CLOSURE_EVENT_SUFFIX = ":turn-closure";
+const CLAUDE_TURN_FAILURE_EVENT_SUFFIX = ":turn-failure";
+const CLAUDE_AGENT_CLOSURE_EVENT_SUFFIX = ":agent-closure";
+const CLAUDE_TURN_PROGRESS_EVENT_SUFFIX = ":turn-progress";
+const CLAUDE_TOOL_SNAPSHOT_EVENT_KIND = "claude-tool-snapshot-v1";
+const CLAUDE_SETTLEMENT_EVENT_KIND = "run-settlement-patch";
+const CLAUDE_NATIVE_SOURCE_STORAGE_DIRECTORY = "claude_native_sources_v1";
+
+// Same build-time source as config.ts, read independently of its custom base.
+// Keep this helper independent of config I/O (and hook configuration mocks).
+declare const __LS_INTEGRATION_VERSION__: string;
+const TRUSTED_INTEGRATION_VERSION =
+  typeof __LS_INTEGRATION_VERSION__ !== "undefined"
+    ? __LS_INTEGRATION_VERSION__
+    : process.env.CC_LANGSMITH_INTEGRATION_VERSION || undefined;
 
 /** The single source of truth for the hook list; `hooks/hooks.json` is asserted against it. */
 const HOOK_EVENT_NAMES = [
@@ -116,6 +134,7 @@ const GH_LOGIN_MARKER_FILE = "langsmith_gh_login.json";
 const GH_LOGIN_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
 const TURN_RECORD_DIR_NAME = "langsmith_turns";
 const TURN_RECORD_SUFFIX = ".turn.jsonl";
+const SHARED_ENGINE_STORAGE_DIRECTORY = "langsmith_engine_v1";
 
 const TURN_RECORD_MAX_BYTES = 8 * 1024 * 1024;
 
@@ -143,6 +162,17 @@ const TURN_RECORD_LINE = {
 export {
   USER_PROMPT_TURN_NAME,
   ASSISTANT_RUN_NAME,
+  CLAUDE_CODE_INTEGRATION,
+  CLAUDE_TOOL_SNAPSHOT_EVENT_SUFFIX,
+  CLAUDE_TOOL_RECONSTRUCTION_EVENT_SUFFIX,
+  CLAUDE_TURN_CLOSURE_EVENT_SUFFIX,
+  CLAUDE_TURN_FAILURE_EVENT_SUFFIX,
+  CLAUDE_AGENT_CLOSURE_EVENT_SUFFIX,
+  CLAUDE_TURN_PROGRESS_EVENT_SUFFIX,
+  CLAUDE_TOOL_SNAPSHOT_EVENT_KIND,
+  CLAUDE_SETTLEMENT_EVENT_KIND,
+  CLAUDE_NATIVE_SOURCE_STORAGE_DIRECTORY,
+  TRUSTED_INTEGRATION_VERSION,
   HOOK_EVENT_NAMES,
   CURSOR_VERSION_FIELD,
   GIT_LOCATION_ENV_KEYS,
@@ -157,6 +187,7 @@ export {
   UPDATE_ALREADY_RECEIVED_STATUS,
   TURN_RECORD_DIR_NAME,
   TURN_RECORD_SUFFIX,
+  SHARED_ENGINE_STORAGE_DIRECTORY,
   TURN_RECORD_MAX_BYTES,
   TURN_RECORD_LINE,
   RECORDED_RUN_FALLBACK_TYPE,

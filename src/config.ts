@@ -8,7 +8,7 @@ import {
 import { homedir, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import type { RunTreeConfig } from "langsmith";
-import type { StringNodeRule } from "langsmith/anonymizer";
+import type { CommonRedactRule } from "@langchain/plugins-base/settings";
 import { debug, error } from "./logger.js";
 import { execSync } from "node:child_process";
 import {
@@ -93,7 +93,7 @@ export interface Config {
   /** Whether to redact detected secrets from traced data before upload. */
   redact: boolean;
   /** Extra user-supplied rules from CC_LANGSMITH_REDACT_EXTRA or common file config. */
-  redactExtraRules?: StringNodeRule[];
+  redactExtraRules?: CommonRedactRule[];
 }
 
 /**
@@ -288,7 +288,7 @@ export function loadConfig(options?: { cwd?: string; deferGit?: boolean }): Conf
 
   // Optional user-supplied redaction rules: JSON array of { pattern, replace }.
   // `pattern` is a string (compiled with the global flag by the SDK anonymizer).
-  let redactExtraRules: StringNodeRule[] | undefined;
+  let redactExtraRules: CommonRedactRule[] | undefined;
   const providedExtra = process.env.CC_LANGSMITH_REDACT_EXTRA;
   if (providedExtra !== undefined) {
     try {
@@ -299,7 +299,7 @@ export function loadConfig(options?: { cwd?: string; deferGit?: boolean }): Conf
         // Validate each rule's shape and compile its pattern here, so a malformed
         // rule surfaces as a logged error instead of throwing inside
         // createSecretAnonymizer — which would break tracing for the whole session.
-        const validRules: StringNodeRule[] = [];
+        const validRules: CommonRedactRule[] = [];
         for (const rule of parsed) {
           if (
             typeof rule !== "object" ||

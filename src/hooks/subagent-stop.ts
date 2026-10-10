@@ -36,9 +36,15 @@ import { finalizeNotificationChain } from "../finalize.js";
 import { WORKFLOW_SUBAGENT_TYPE, handleWorkflowSubagentStop } from "../workflows.js";
 import { turnRecordPath } from "../turn-record.js";
 import { queueOrigin } from "../queue.js";
+import {
+  captureClaudeRun,
+  createClaudeTracingSession,
+  sharedClaudeChildRunIds,
+} from "../tracing-engine.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
+import type { ClaudeSharedRunCapture } from "../models/tracing-engine.js";
 import type { SubagentStopHookInput, OpenTurn } from "../types.js";
 
 export async function main(): Promise<void> {
@@ -63,6 +69,14 @@ export async function main(): Promise<void> {
     config.redact,
     config.redactExtraRules,
   );
+  const engine = createClaudeTracingSession(config, input.cwd, input.session_id);
+  const captureSharedRun: ClaudeSharedRunCapture | undefined = engine
+    ? (capture) => captureClaudeRun(engine, capture)
+    : undefined;
+  const getSharedChildRunIds = engine
+    ? (turnId: string, rootRunId: string, recorded?: readonly string[]) =>
+        sharedClaudeChildRunIds(engine, turnId, rootRunId, recorded)
+    : undefined;
 
   // Dynamic-workflow stage: not launched via the Task tool (so it's absent from
   // task_run_map), it nests under its open Workflow run instead. Handled
@@ -77,6 +91,7 @@ export async function main(): Promise<void> {
       stateFilePath: config.stateFilePath,
       project: config.project,
       customMetadata: config.customMetadata,
+      captureSharedRun,
     });
     return;
   }
@@ -161,6 +176,7 @@ export async function main(): Promise<void> {
             origin: queueOrigin(config),
           }
         : undefined,
+      captureSharedRun,
     });
     debug(`Traced background subagent ${input.agent_type} (${input.agent_id})`);
   } catch (err) {
@@ -212,6 +228,8 @@ export async function main(): Promise<void> {
       customMetadata: config.customMetadata,
       runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
       agentId: input.agent_id,
+      captureSharedRun,
+      getSharedChildRunIds,
     });
   } else {
     debug(`Subagent ${input.agent_id} traced; awaiting task-notification to finalize`);

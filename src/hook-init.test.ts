@@ -6,6 +6,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 vi.mock("node:child_process", () => ({ execSync: vi.fn(() => "") }));
 vi.mock("./utils/stdin.js", () => ({ readStdin: vi.fn() }));
 vi.mock("./langsmith.js", { spy: true });
+vi.mock("./utils/detach.js", () => ({
+  startQueueFlusher: vi.fn(),
+  launchQueueFlusher: vi.fn(async () => 1),
+}));
 
 vi.mock("./logger.js", () => ({
   log: vi.fn(),
@@ -15,7 +19,12 @@ vi.mock("./logger.js", () => ({
   initLogger: vi.fn(),
 }));
 
-import { HOOK_EVENT_NAMES } from "./constants.js";
+import {
+  CLAUDE_CODE_INTEGRATION,
+  HOOK_EVENT_NAMES,
+  SHARED_ENGINE_STORAGE_DIRECTORY,
+} from "./constants.js";
+import { createCaptureStore } from "@langchain/plugins-base/storage/capture";
 import { initHook } from "./utils/hook-init.js";
 import { readStdin } from "./utils/stdin.js";
 import { initTracing } from "./langsmith.js";
@@ -300,13 +309,16 @@ describe("initHook", () => {
       await HOOK_HANDLERS.UserPromptSubmit();
       const { readFileSync, existsSync } = await import("node:fs");
       expect(existsSync(process.env.STATE_FILE!)).toBe(true);
-      expect(
-        JSON.parse(readFileSync(process.env.STATE_FILE!, "utf8"))["env-enabled"],
-      ).toMatchObject({ current_turn_tracing: "full" });
+      const session = JSON.parse(readFileSync(process.env.STATE_FILE!, "utf8"))["env-enabled"];
+      expect(session).toMatchObject({ current_turn_tracing: "full" });
       expect(initTracing).toHaveBeenCalled();
-      expect(post).toHaveBeenCalledOnce();
+      expect(post).not.toHaveBeenCalled();
       expect(fetch).not.toHaveBeenCalled();
       expect(error).not.toHaveBeenCalled();
+      const captures = await createCaptureStore(
+        join(home, SHARED_ENGINE_STORAGE_DIRECTORY),
+      ).enumerate(CLAUDE_CODE_INTEGRATION, "env-enabled");
+      expect(captures.map(({ record }) => record.runId)).toEqual([session.current_turn_run_id]);
     },
   );
 

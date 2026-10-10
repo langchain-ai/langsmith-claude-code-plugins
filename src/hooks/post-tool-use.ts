@@ -19,14 +19,23 @@ import {
 import { initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
-import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
-import { settledRepositoryMetadata, toolOrigin } from "../repo-attribution.js";
+import { codingAgentMetadata, codingAgentMetadataOptions, skillNameFromTool } from "../metadata.js";
+import { toolOrigin } from "../repo-attribution.js";
+import { turnAttribution } from "../reconcile.js";
 import { createRunTree, runConfigForMode } from "../privacy.js";
 import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
 import { enqueueRun, queueOrigin } from "../queue.js";
-import { recordRun, turnRecordPath } from "../turn-record.js";
+import { readTurnRecord, recordRun, turnRecordPath } from "../turn-record.js";
 import { startQueueFlusher } from "../utils/detach.js";
+import {
+  captureClaudeRun,
+  createClaudeTracingSession,
+  queueClaudeToolReconstruction,
+} from "../tracing-engine.js";
+import { pinnedRepositoryKeys } from "../config.js";
+import { CLAUDE_CODE_INTEGRATION, PINNED_REPOSITORY_KEYS } from "../constants.js";
+import type { ClaudeSharedRunCapture } from "../models/tracing-engine.js";
 
 interface PostToolUseHookInput {
   session_id: string;
@@ -120,39 +129,80 @@ export async function main(): Promise<void> {
       config.redact,
       config.redactExtraRules,
     );
-    const runTree = createRunTree(
-      {
-        client,
-        replicas: config.replicas,
-        id: toolRunId,
-        name: "Workflow",
-        run_type: "tool",
-        inputs: { input: input.tool_input },
-        project_name: config.project,
-        start_time: startTimeIso,
-        // No end_time — left open until finalizeNotificationChain closes it.
-        parent_run_id: parentRunId,
-        trace_id: traceId,
-        dotted_order: toolDottedOrder,
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId: input.session_id,
-            base: settledRepositoryMetadata(config.customMetadata, origin),
-            turnNumber: sessionState.current_turn_number,
-            runtimeVersion: sessionState.runtime_version,
-            agentType: "root",
-            toolName: "Workflow",
-            runName: "Workflow",
-          }),
+    const metadataInput = {
+      sessionId: input.session_id,
+      runType: "tool" as const,
+      base: config.customMetadata,
+      turnNumber: sessionState.current_turn_number,
+      runtimeVersion: sessionState.runtime_version,
+      agentType: "root" as const,
+      toolName: "Workflow",
+      runName: "Workflow",
+    };
+    const metadata = codingAgentMetadata(metadataInput);
+    const run = {
+      id: toolRunId,
+      name: "Workflow",
+      run_type: "tool",
+      inputs: { input: input.tool_input },
+      start_time: startTimeIso,
+      parent_run_id: parentRunId,
+      trace_id: traceId,
+      dotted_order: toolDottedOrder,
+    };
+    const engine = createClaudeTracingSession(config, input.cwd, input.session_id);
+    const captureSharedRun: ClaudeSharedRunCapture | undefined = engine
+      ? (capture) => captureClaudeRun(engine, capture)
+      : undefined;
+    if (captureSharedRun) {
+      const captured = await captureSharedRun({
+        turnId: parentRunId,
+        eventId: toolRunId,
+        submission: {
+          operation: "post",
+          integration: CLAUDE_CODE_INTEGRATION,
+          privacyMode: tracing,
+          metadata: codingAgentMetadataOptions(metadataInput),
+          privacyContext: { status: "running" },
+          run,
         },
-      },
-      tracing,
-    );
-    await runTree.postRun();
+        turnEvidence: {
+          rootRunId: traceId,
+          childRunIds: [toolRunId],
+          closureState: "open",
+        },
+      });
+      if (!captured) throw new Error(`Could not capture shared Claude Workflow run ${toolRunId}`);
+      recordRun({
+        path: turnRecord,
+        run: { ...run, project_name: config.project, extra: { metadata } },
+        tracing,
+        origin: queueOrigin(config),
+        shared: true,
+      });
+    } else {
+      const runTree = createRunTree(
+        {
+          client,
+          replicas: config.replicas,
+          project_name: config.project,
+          // No end_time — left open until finalizeNotificationChain closes it.
+          ...run,
+          extra: { metadata },
+        },
+        tracing,
+      );
+      await runTree.postRun();
+    }
   } else {
-    // Regular tool: queue the finished run and leave the upload to the flusher.
+    const queued = queueOrigin(config);
+    const engine = createClaudeTracingSession(config, input.cwd, input.session_id);
+    const existing = readTurnRecord(turnRecord);
+    const turnAttributionFallback =
+      tracing === "full" && existing?.origin === queued ? turnAttribution(existing) : undefined;
     const toolMetadata = codingAgentMetadata({
       sessionId: input.session_id,
+      runType: "tool",
       base: config.customMetadata,
       turnNumber: sessionState.current_turn_number,
       runtimeVersion: sessionState.runtime_version,
@@ -176,18 +226,77 @@ export async function main(): Promise<void> {
       dotted_order: toolDottedOrder,
       extra: { metadata: toolMetadata },
     };
-    const queued = queueOrigin(config);
-    recordRun({ path: turnRecord, run: toolRun, tracing, origin: queued });
-    await enqueueRun(
-      config.stateFilePath,
-      input.session_id,
-      toolRun,
-      tracing,
-      queued,
-      turnRecord,
-      settles,
-    );
-    startQueueFlusher(input.cwd, input.session_id);
+    if (engine) {
+      const childRunIds = new Set<string>();
+      for (const child of existing?.origin === queued ? existing.children : []) {
+        if (child.shared) {
+          childRunIds.add(child.run_id);
+          continue;
+        }
+        const stored = await engine.captureStore.read({
+          integration: CLAUDE_CODE_INTEGRATION,
+          sessionId: input.session_id,
+          turnId: parentRunId,
+          eventId: child.run_id,
+        });
+        if (
+          stored?.runId === child.run_id &&
+          stored.destinationFingerprint === engine.accountFingerprint
+        ) {
+          childRunIds.add(child.run_id);
+          continue;
+        }
+      }
+      childRunIds.add(toolRunId);
+      await queueClaudeToolReconstruction(engine, {
+        turnId: parentRunId,
+        privacyMode: tracing,
+        run: {
+          id: toolRunId,
+          name: input.tool_name,
+          run_type: "tool",
+          inputs: { input: input.tool_input },
+          outputs: { output: input.tool_response },
+          start_time: startTimeIso,
+          end_time: toolEndTimeIso,
+          parent_run_id: parentRunId,
+          trace_id: traceId,
+          dotted_order: toolDottedOrder,
+        },
+        origin,
+        ...(tracing === "full" && Object.hasOwn(config.customMetadata ?? {}, PINNED_REPOSITORY_KEYS)
+          ? { pinnedRepositoryKeys: [...pinnedRepositoryKeys(config.customMetadata)].sort() }
+          : {}),
+        metadata: {
+          turnNumber: sessionState.current_turn_number,
+          runtimeVersion: sessionState.runtime_version,
+          toolName: input.tool_name,
+          skillName: skillNameFromTool(input.tool_name, input.tool_input),
+          ...(tracing === "full" ? { base: config.customMetadata } : {}),
+          ...(tracing === "full" && turnAttributionFallback !== undefined
+            ? { turnAttributionFallback }
+            : {}),
+        },
+        turnEvidence: {
+          rootRunId: parentRunId,
+          childRunIds: [...childRunIds],
+          closureState: "open",
+        },
+      });
+      recordRun({ path: turnRecord, run: toolRun, tracing, origin: queued, shared: true });
+    } else {
+      recordRun({ path: turnRecord, run: toolRun, tracing, origin: queued });
+      await enqueueRun(
+        config.stateFilePath,
+        input.session_id,
+        toolRun,
+        tracing,
+        queued,
+        turnRecord,
+        settles,
+      );
+      startQueueFlusher(input.cwd, input.session_id);
+    }
   }
 
   // Save state atomically so concurrent PostToolUse hooks don't clobber each other.

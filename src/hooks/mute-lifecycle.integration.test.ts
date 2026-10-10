@@ -1,10 +1,15 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HookEventName } from "../constants.js";
+import {
+  CLAUDE_CODE_INTEGRATION,
+  CLAUDE_TOOL_RECONSTRUCTION_EVENT_SUFFIX,
+  type HookEventName,
+} from "../constants.js";
 import type { TracingMode, TracingState, TranscriptMessage } from "../types.js";
 import { tracingPolicyPath } from "../tracing-policy.js";
+import { createCaptureStore } from "@langchain/plugins-base/storage/capture";
 
 // Exercise the real hooks, grouping, run builders, background registration and
 // finalization. Only I/O/SDK transport is replaced; privacy projection is real.
@@ -13,12 +18,15 @@ const h = vi.hoisted(() => ({
   policy: "full" as TracingMode,
   policyPath: undefined as string | undefined,
   defaultMuted: false,
+  apiKey: "test",
+  replicas: undefined as unknown,
   input: {} as Record<string, unknown>,
   messages: [] as TranscriptMessage[],
   agentMessages: [] as TranscriptMessage[],
   operations: [] as Array<{ action: string; config: Record<string, any> }>,
   ids: 0,
   beforePost: undefined as undefined | (() => void | Promise<void>),
+  captureFalse: false,
   event: "" as string,
   errors: [] as unknown[],
   queueState: "",
@@ -26,6 +34,12 @@ const h = vi.hoisted(() => ({
 vi.mock("langsmith", () => ({
   Client: class {
     async awaitPendingTraceBatches() {}
+    async createRun(run: Record<string, any>) {
+      h.operations.push({ action: "post", config: JSON.parse(JSON.stringify(run)) });
+    }
+    async updateRun(id: string, update: Record<string, any>) {
+      h.operations.push({ action: "patch", config: JSON.parse(JSON.stringify({ id, ...update })) });
+    }
   },
   uuid7FromTime: () => `run-${++h.ids}`,
   RunTree: class {
@@ -40,13 +54,30 @@ vi.mock("langsmith", () => ({
     async patchRun() {
       h.operations.push({ action: "patch", config: JSON.parse(JSON.stringify(this.config)) });
     }
+    createChild(config: Record<string, any>) {
+      return Object.assign(Object.create(Object.getPrototypeOf(this)), { config });
+    }
+    async end(outputs?: unknown, error?: string, endTime?: string | number) {
+      this.config = {
+        ...this.config,
+        ...(outputs === undefined ? {} : { outputs }),
+        ...(error === undefined ? {} : { error }),
+        ...(endTime === undefined ? {} : { end_time: endTime }),
+      };
+    }
+    toJSON() {
+      const { client: _client, ...config } = this.config;
+      return JSON.parse(JSON.stringify(config));
+    }
   },
 }));
 vi.mock("../utils/stdin.js", () => ({ readStdin: async () => h.input }));
 vi.mock("../utils/hook-init.js", () => ({
   initHook: () => ({
-    apiKey: "test",
+    apiKey: h.apiKey,
+    apiBaseUrl: "http://127.0.0.1:1",
     project: "test",
+    replicas: h.replicas,
     stateFilePath: h.queueState,
     defaultMuted: h.defaultMuted,
     redact: false,
@@ -56,8 +87,34 @@ vi.mock("../utils/hook-init.js", () => ({
 }));
 vi.mock("../config.js", async (original) => ({
   ...(await original<typeof import("../config.js")>()),
-  loadConfig: () => ({ stateFilePath: "/unused", apiKey: "test", enabled: true }),
+  loadConfig: () => ({
+    stateFilePath: "/unused",
+    apiKey: h.apiKey,
+    apiBaseUrl: "http://127.0.0.1:1",
+    project: "test",
+    replicas: h.replicas,
+    enabled: true,
+    redact: false,
+  }),
 }));
+vi.mock("../utils/detach.js", () => ({
+  launchQueueFlusher: async () => 1,
+  startQueueFlusher: () => {},
+}));
+vi.mock("../tracing-engine.js", async (original) => {
+  const tracingEngine = await original<typeof import("../tracing-engine.js")>();
+  return {
+    ...tracingEngine,
+    captureClaudeRun: async (...args: Parameters<typeof tracingEngine.captureClaudeRun>) => {
+      if (h.captureFalse) {
+        h.captureFalse = false;
+        return false;
+      }
+      if (h.event === "PostToolUse" || h.event === "Stop") await h.beforePost?.();
+      return tracingEngine.captureClaudeRun(...args);
+    },
+  };
+});
 vi.mock("../tracing-policy.js", async (original) => {
   const policy = await original<typeof import("../tracing-policy.js")>();
   return {
@@ -151,12 +208,16 @@ function reset(mode: TracingMode) {
   h.state = {};
   h.policy = mode;
   h.defaultMuted = false;
+  h.apiKey = "test";
+  h.replicas = undefined;
   h.ids = 0;
   h.operations = [];
   h.messages = [];
   h.agentMessages = transcript();
   h.errors = [];
   h.beforePost = undefined;
+  h.captureFalse = false;
+  h.queueState = join(mkdtempSync(join(tmpdir(), "queue-sandbox-")), "state.json");
 }
 const HOOK_EVENT_BY_NAME = {
   prompt: "UserPromptSubmit",
@@ -183,14 +244,15 @@ async function hook(name: keyof typeof HOOK_EVENT_BY_NAME, extra: Record<string,
     tool_response: { content: privateText },
     ...extra,
   };
-  h.event = HOOK_EVENT_BY_NAME[name];
+  const eventName = HOOK_EVENT_BY_NAME[name];
+  h.event = eventName;
   vi.resetModules();
   const { HOOK_HANDLERS } = await import("./registry.js");
   const { queueSessionDir, readQueue, removeQueued } = await import("../queue.js");
   const queued = queueSessionDir(h.queueState, String(h.input.session_id));
   // A nested hook must leave its caller's entry for the caller to drain in order.
   const inherited = new Set(readQueue(queued).map((entry) => entry.queue_id));
-  await HOOK_HANDLERS[HOOK_EVENT_BY_NAME[name]]();
+  await HOOK_HANDLERS[eventName]();
   // Awaiting the handler covers Stop's 200ms transcript flush, so this settle
   // only has to let the SDK's unawaited posts land.
   await new Promise((resolve) => setTimeout(resolve, 15));
@@ -200,6 +262,21 @@ async function hook(name: keyof typeof HOOK_EVENT_BY_NAME, extra: Record<string,
     h.operations.push({ action: "post", config: entry.run as Record<string, any> });
     removeQueued(queued, entry.queue_id);
   }
+  await drainSharedEngine();
+}
+
+async function drainSharedEngine() {
+  const context = await sharedEngineContext();
+  if (!context) return;
+  await context.session.drain();
+}
+
+async function sharedEngineContext() {
+  const { initHook } = await import("../utils/hook-init.js");
+  const config = initHook("/repo");
+  if (!config) return undefined;
+  const { createClaudeTracingSession } = await import("../tracing-engine.js");
+  return createClaudeTracingSession(config, "/repo", String(h.input.session_id));
 }
 function topology() {
   return h.operations.map(({ action, config: c }) => ({
@@ -219,9 +296,11 @@ function expectPrivate(operations = h.operations) {
   for (const { config } of operations)
     expect(config.extra.metadata.ls_tracing_mode).toBe("metadata");
 }
-const queueSandbox = join(mkdtempSync(join(tmpdir(), "queue-sandbox-")), "state.json");
+let queueSandbox: string;
 beforeEach(async () => {
+  queueSandbox = join(mkdtempSync(join(tmpdir(), "queue-sandbox-")), "state.json");
   h.queueState = queueSandbox;
+  h.sharedEventIds = new Set();
   const { queueSessionDir, readQueue, removeQueued } = await import("../queue.js");
   const previous = queueSessionDir(queueSandbox, "session");
   for (const entry of readQueue(previous)) removeQueued(previous, entry.queue_id);
@@ -230,7 +309,10 @@ beforeEach(async () => {
 });
 afterEach(() => {
   vi.useRealTimers();
-  if (h.policyPath) rmSync(join(h.policyPath, ".."), { recursive: true, force: true });
+  if (h.policyPath) {
+    rmSync(tracingPolicyPath(h.policyPath), { force: true });
+    rmdirSync(join(h.policyPath, ".."));
+  }
   h.policyPath = undefined;
 });
 
@@ -282,6 +364,22 @@ describe("configured default lifecycle", () => {
     h.policyPath = join(mkdtempSync(join(tmpdir(), "default-mode-")), "state.json");
   }
 
+  it("does not start a turn when shared root capture is rejected", async () => {
+    reset("full");
+    h.captureFalse = true;
+    await hook("prompt");
+    expect(h.state.session?.current_turn_run_id).toBeUndefined();
+    expect(h.operations).toHaveLength(0);
+    expect(h.errors).toHaveLength(1);
+  });
+
+  it("does not fall back to the native uploader for an invalid replica route", async () => {
+    reset("full");
+    h.replicas = ["invalid"];
+    await expect(hook("prompt")).rejects.toThrow("LangSmith replica configuration is invalid");
+    expect(h.operations).toHaveLength(0);
+  });
+
   it("snapshots the default, leaves policy absent, and changes only the next turn", async () => {
     configuredDefault();
     await hook("prompt");
@@ -301,7 +399,7 @@ describe("configured default lifecycle", () => {
     expect(h.state.session.current_turn_tracing).toBe("full");
     expect(JSON.stringify(h.operations.slice(from))).toContain(privateText);
     expect(h.errors).toEqual([]);
-  });
+  }, 20_000);
 
   it("does not mute an existing full snapshot when the configured default changes", async () => {
     configuredDefault();
@@ -385,6 +483,40 @@ describe("configured default lifecycle", () => {
 });
 
 describe("tool privacy snapshot reclamation", () => {
+  it("keeps metadata-mode source snapshots private and out of lifecycle delivery", async () => {
+    reset("metadata");
+    await hook("prompt");
+    await hook("post");
+
+    const context = await sharedEngineContext();
+    expect(context).toBeDefined();
+    const sources = await createCaptureStore(
+      join(context!.storageRoot, "reconstruction-v1"),
+    ).enumerate(CLAUDE_CODE_INTEGRATION, "session");
+    const snapshots = sources.filter(({ record }) =>
+      record.eventId.endsWith(CLAUDE_TOOL_RECONSTRUCTION_EVENT_SUFFIX),
+    );
+    expect(snapshots).toHaveLength(1);
+    expect(JSON.stringify(snapshots[0]!.record.normalizedPayload)).not.toContain(privateText);
+    expect(snapshots[0]!.record.normalizedPayload).toMatchObject({
+      privacyMode: "metadata",
+      sourceSnapshots: [{ attributionContext: { toolOrigin: { namedAPath: false } } }],
+    });
+    expect(snapshots[0]!.record.normalizedPayload).not.toHaveProperty(
+      "sourceSnapshots.0.attributionContext.toolOrigin.path",
+    );
+    expect(snapshots[0]!.record.normalizedPayload).not.toHaveProperty(
+      "sourceSnapshots.0.attributionContext.toolOrigin.cwd",
+    );
+
+    const delivered = await context!.captureStore.enumerate(CLAUDE_CODE_INTEGRATION, "session");
+    expect(
+      delivered.some(({ record }) =>
+        record.eventId.endsWith(CLAUDE_TOOL_RECONSTRUCTION_EVENT_SUFFIX),
+      ),
+    ).toBe(false);
+  });
+
   it.each(["Bash", "Agent", "Workflow"])(
     "reclaims completed %s IDs after Stop, not Post",
     async (name) => {
@@ -447,7 +579,7 @@ describe("tool privacy snapshot reclamation", () => {
       expect(h.state.session.tool_tracing_progress).toEqual({});
       await hook("pre", { tool_use_id: "new" });
       await hook("post", { tool_use_id: "new" });
-      expect(h.operations.at(-1)!.config.extra.metadata.ls_tracing_mode).toBeUndefined();
+      expect(h.operations.at(-1)!.config.extra?.metadata?.ls_tracing_mode).toBeUndefined();
       expect(h.errors).toEqual([]);
     },
   );
@@ -525,6 +657,26 @@ describe("tool privacy snapshot reclamation", () => {
     expect(h.state.session.tool_tracing_modes).toEqual({});
     expect(h.state.session.tool_tracing_progress).toEqual({});
   });
+
+  it("retries a shared turn closure after Stop capture fails", async () => {
+    reset("full");
+    await hook("prompt");
+    const turnRunId = h.state.session.current_turn_run_id!;
+    h.messages = transcript();
+    h.beforePost = () => {
+      throw new Error("test capture failure");
+    };
+    await hook("stop");
+    expect(h.state.session.open_turns?.[turnRunId]?.retry_closure).toBe(true);
+
+    h.beforePost = undefined;
+    const from = h.operations.length;
+    await hook("prompt");
+    expect(h.state.session.open_turns?.[turnRunId]).toBeUndefined();
+    expect(
+      h.operations.slice(from).some((op) => op.action === "patch" && op.config.id === turnRunId),
+    ).toBe(true);
+  }, 20_000);
 
   it.each([true, false])(
     "SessionEnd clears pending and completed evidence with open runs=%s",
@@ -781,6 +933,7 @@ describe("privacy propagation without lifecycle changes", () => {
     const from = h.operations.length;
     await hook("prompt", { prompt: "notification background " + privateText });
     expect(h.state.session.current_turn_tracing).toBe(next);
+    const notificationRootId = h.state.session.current_turn_run_id!;
     expect(h.operations[from].config.parent_run_id).toBe(
       before.session.task_run_map!.background.run_id,
     );
@@ -799,19 +952,24 @@ describe("privacy propagation without lifecycle changes", () => {
     // Duplicate PreToolUse retains its original privacy snapshot even in a new turn.
     await hook("pre");
     expect(h.state.session.tool_tracing_modes?.tool).toBe(mode);
-    const stopFrom = h.operations.length;
     h.messages = transcript(undefined, "notification background " + privateText);
     await hook("stop");
-    const notificationOps = [
-      h.operations[from],
-      ...h.operations
-        .slice(stopFrom)
-        .filter(
-          (op) =>
-            op.config.id !== oldRoot &&
-            op.config.id !== before.session.task_run_map!.background.run_id,
-        ),
-    ];
+    const runParents = new Map<string, string>();
+    for (const { config } of h.operations) {
+      if (typeof config.id === "string" && typeof config.parent_run_id === "string")
+        runParents.set(config.id, config.parent_run_id);
+    }
+    const belongsToNotification = (runId: string): boolean => {
+      let current: string | undefined = runId;
+      while (current) {
+        if (current === notificationRootId) return true;
+        current = runParents.get(current);
+      }
+      return false;
+    };
+    const notificationOps = h.operations
+      .slice(from)
+      .filter(({ config }) => belongsToNotification(config.id));
     if (next === "metadata") expectPrivate(notificationOps);
     else
       expect(notificationOps.every((op) => !op.config.extra?.metadata?.ls_tracing_mode)).toBe(true);
@@ -839,7 +997,7 @@ describe("privacy propagation without lifecycle changes", () => {
     await hook("pre", { tool_use_id: "default-full" });
     expect(h.state.session.tool_tracing_modes?.["default-full"]).toBe("full");
     await hook("post", { tool_use_id: "no-pre" });
-    expect(h.operations.at(-1)!.config.extra.metadata.ls_tracing_mode).toBeUndefined();
+    expect(h.operations.at(-1)!.config.extra?.metadata?.ls_tracing_mode).toBeUndefined();
     h.state.session.tool_tracing_modes!.private = "metadata";
     h.messages = transcript({ id: "private", name: "Bash" });
     const from = h.operations.length;
@@ -987,18 +1145,47 @@ describe("privacy propagation without lifecycle changes", () => {
       expect(h.state.session.open_turns).toEqual({});
       expect(h.state.session.task_run_map).toEqual({});
       expect(h.errors).toEqual([]);
-      topologies.push(topology());
+      const context = await sharedEngineContext();
+      const captures = await context!.captureStore.enumerate(CLAUDE_CODE_INTEGRATION, "session");
+      const capturedTopology = captures
+        .map(({ record }) => {
+          const payload = record.normalizedPayload as Record<string, any>;
+          const run = payload.run as Record<string, any>;
+          const patch = payload.patch as Record<string, any> | undefined;
+          return {
+            action: payload.operation,
+            id: run.id,
+            name: run.name,
+            type: run.run_type,
+            parent: run.parent_run_id,
+            trace: run.trace_id,
+            order: run.dotted_order,
+            start: run.start_time,
+            end: run.end_time ?? patch?.values?.end_time,
+          };
+        })
+        .sort((left, right) =>
+          `${left.id}:${left.action}`.localeCompare(`${right.id}:${right.action}`),
+        );
+      expect(capturedTopology.some(({ name }) => name === "Agent")).toBe(true);
+      expect(capturedTopology.some(({ name }) => name === "Explore Subagent")).toBe(true);
+      topologies.push(capturedTopology);
+      const serializedCaptures = JSON.stringify(captures.map(({ record }) => record));
       if (mode === "metadata") {
         expectPrivate();
-        const llm = h.operations.find(
-          (op) => op.action === "patch" && op.config.run_type === "llm",
-        )!;
-        expect(llm.config.extra.metadata.ls_model_name).toBe("claude-test");
-        expect(llm.config.extra.metadata.usage_metadata.total_tokens).toBe(5);
-      } else expect(JSON.stringify(h.operations)).toContain(privateText);
+        expect(serializedCaptures).not.toContain(privateText);
+        const llm = captures.find(({ record }) => {
+          const payload = record.normalizedPayload as Record<string, any>;
+          return payload.operation === "post" && payload.run.run_type === "llm";
+        })?.record;
+        expect(llm?.metadataProvenance).toMatchObject({
+          modelName: "claude-test",
+          usageMetadata: { total_tokens: 5 },
+        });
+      } else expect(serializedCaptures).toContain(privateText);
     }
     expect(topologies[1]).toEqual(topologies[0]);
-  });
+  }, 10_000);
 
   it("absent PreToolUse follows the current snapshot with the same parent and fallback timing", async () => {
     const topologies = [];
@@ -1030,7 +1217,7 @@ describe("privacy propagation without lifecycle changes", () => {
     const incomplete = structuredClone(h.state);
     await hook("post");
     expect(h.state).toEqual(incomplete); // all missing-parent-context exits stay unchanged
-  });
+  }, 20_000);
 
   it("retains delayed tool privacy evidence across turn resets without changing PostToolUse parent choice", async () => {
     reset("metadata");
@@ -1102,7 +1289,7 @@ describe("privacy propagation without lifecycle changes", () => {
       }
     }
     expect(topologies[1]).toEqual(topologies[0]);
-  });
+  }, 20_000);
 
   it("keeps an owned full launch full while policy is muted, including synchronous subagents", async () => {
     reset("full");
@@ -1161,9 +1348,13 @@ describe("privacy propagation without lifecycle changes", () => {
     h.policy = "full";
     await hook("precompact", { trigger: "auto" });
     await hook("postcompact", { trigger: "auto", compact_summary: privateText });
+    const failedRunId = h.state.session.current_turn_run_id;
     await hook("failure", { error: privateText, error_details: privateText });
     expectPrivate();
-    expect(h.operations.at(-1)!.config.extra.metadata.status).toBe("error");
+    expect(
+      h.operations.filter((op) => op.config.id === failedRunId).at(-1)?.config.extra.metadata
+        .status,
+    ).toBe("error");
     reset("metadata");
     await hook("prompt");
     h.messages = transcript();

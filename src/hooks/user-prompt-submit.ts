@@ -15,8 +15,10 @@ import { debug, error } from "../logger.js";
 import {
   initTracing,
   closeInterruptedTurn,
+  completeTurnRun,
   generateDottedOrderSegment,
   parseDottedOrder,
+  turnIdentityFromOpenTurn,
 } from "../langsmith.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { settledFromTurn } from "../reconcile.js";
@@ -32,11 +34,17 @@ import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { startQueueFlusher } from "../utils/detach.js";
 import { queueOrigin } from "../queue.js";
-import { recordRun, turnRecordPath } from "../turn-record.js";
-import { USER_PROMPT_TURN_NAME } from "../constants.js";
-import { codingAgentMetadata } from "../metadata.js";
+import { recordRun, recordTurnClosed, turnRecordPath } from "../turn-record.js";
+import { CLAUDE_CODE_INTEGRATION, USER_PROMPT_TURN_NAME } from "../constants.js";
+import { codingAgentMetadata, codingAgentMetadataOptions } from "../metadata.js";
 import { createRunTree } from "../privacy.js";
 import { loadConfig } from "../config.js";
+import {
+  captureClaudeRun,
+  createClaudeTracingSession,
+  sharedClaudeChildRunIds,
+} from "../tracing-engine.js";
+import type { ClaudeSharedRunCapture } from "../models/tracing-engine.js";
 import { describeThreadLinks } from "../thread-link.js";
 import {
   parseTracingCommand,
@@ -131,6 +139,14 @@ export async function main(): Promise<void> {
     config.redact,
     config.redactExtraRules,
   );
+  const engine = createClaudeTracingSession(config, input.cwd, input.session_id);
+  const captureSharedRun: ClaudeSharedRunCapture | undefined = engine
+    ? (capture) => captureClaudeRun(engine, capture)
+    : undefined;
+  const getSharedChildRunIds = engine
+    ? (turnId: string, rootRunId: string, recorded?: readonly string[]) =>
+        sharedClaudeChildRunIds(engine, turnId, rootRunId, recorded)
+    : undefined;
 
   const state = loadState(config.stateFilePath);
   // Sweep once at the start, for folders other sessions left behind long enough ago to be safe.
@@ -206,6 +222,8 @@ export async function main(): Promise<void> {
         error: supersededNotificationAgentId
           ? "Superseded by a newer task-notification"
           : "User interrupt",
+        captureSharedRun,
+        getSharedChildRunIds,
       });
       interruptedLastLine = lastLine;
       interruptedTurnsTraced = turnsTraced;
@@ -222,10 +240,52 @@ export async function main(): Promise<void> {
           // Carry the killed marker through this path too, in case the killed
           // subagent's notification turn was itself superseded before its Stop.
           interrupted: sessionState.current_notification_interrupted,
+          captureSharedRun,
+          getSharedChildRunIds,
         });
       }
     } catch (err) {
       error(`Failed to close interrupted turn: ${err}`);
+    }
+  }
+
+  for (const [turnRunId, turn] of Object.entries(sessionState.open_turns ?? {})) {
+    if (!turn.retry_closure) continue;
+    try {
+      const sharedChildRunIds = getSharedChildRunIds
+        ? await getSharedChildRunIds(turnRunId, turnRunId)
+        : [];
+      const closedRun = await completeTurnRun({
+        ...turnIdentityFromOpenTurn(turn, {
+          sessionId: input.session_id,
+          project: config.project,
+          customMetadata: config.customMetadata,
+        }),
+        tracing: turn.tracing ?? "full",
+        lastAssistantMessage: turn.last_assistant_message,
+        leaveOpen: turn.leave_open,
+        captureSharedRun,
+        sharedChildRunIds,
+      });
+      const recordPath = turnRecordPath(config.stateFilePath, input.session_id, turnRunId);
+      recordRun({
+        path: recordPath,
+        run: closedRun,
+        tracing: turn.tracing ?? "full",
+        origin: queueOrigin(config),
+        shared: true,
+        root: true,
+        ...(turn.leave_open ? { closesAt: new Date().toISOString() } : {}),
+      });
+      recordTurnClosed(recordPath, turn.turn_id);
+      await atomicUpdateState(config.stateFilePath, (s) => {
+        const ss = getSessionState(s, input.session_id);
+        const openTurns = { ...ss.open_turns };
+        if (openTurns[turnRunId]?.retry_closure) delete openTurns[turnRunId];
+        return { ...s, [input.session_id]: { ...ss, open_turns: openTurns } };
+      });
+    } catch (err) {
+      error(`Failed to retry shared Turn closure ${turnRunId}: ${err}`);
     }
   }
 
@@ -298,6 +358,15 @@ export async function main(): Promise<void> {
     turnRunId: launchingTurnId,
   });
 
+  const rootMetadata = {
+    sessionId: input.session_id,
+    runType: "root" as const,
+    base: inherited,
+    turnNumber: turnNum,
+    runtimeVersion,
+    approvalPolicy,
+    agentType: "root" as const,
+  };
   const turnRun = {
     client,
     replicas: config.replicas,
@@ -311,20 +380,39 @@ export async function main(): Promise<void> {
     dotted_order: dottedOrder,
     ...(parentRunId ? { parent_run_id: parentRunId } : {}),
     extra: {
-      metadata: codingAgentMetadata({
-        sessionId: input.session_id,
-        base: inherited,
-        turnNumber: turnNum,
-        runtimeVersion,
-        approvalPolicy,
-        agentType: "root",
-      }),
+      metadata: codingAgentMetadata(rootMetadata),
     },
   };
 
-  const runTree = createRunTree(turnRun, turnMode);
-
-  await runTree.postRun();
+  const sharedRoot = engine
+    ? await captureClaudeRun(engine, {
+        turnId: runId,
+        eventId: runId,
+        submission: {
+          operation: "post",
+          integration: CLAUDE_CODE_INTEGRATION,
+          privacyMode: turnMode,
+          metadata: codingAgentMetadataOptions(rootMetadata),
+          privacyContext: { status: "running" },
+          run: {
+            id: runId,
+            name: USER_PROMPT_TURN_NAME,
+            run_type: "chain",
+            inputs: { messages: [{ role: "user", content: input.prompt }] },
+            start_time: startTime,
+            trace_id: traceId,
+            dotted_order: dottedOrder,
+            ...(parentRunId ? { parent_run_id: parentRunId } : {}),
+          },
+        },
+        turnEvidence: { rootRunId: runId, childRunIds: [], closureState: "open" },
+      })
+    : false;
+  if (!engine) await createRunTree(turnRun, turnMode).postRun();
+  else if (!sharedRoot) {
+    error(`Could not capture shared Turn run ${runId}`);
+    return;
+  }
 
   recordRun({
     path: turnRecordPath(config.stateFilePath, input.session_id, runId),
@@ -332,6 +420,7 @@ export async function main(): Promise<void> {
     tracing: turnMode,
     origin: queueOrigin(config),
     root: true,
+    shared: engine !== undefined,
   });
 
   debug(`Created initial run ${runId} for turn ${turnNum}`);

@@ -13,7 +13,6 @@ import {
   plain,
   prompt,
   recordFiles,
-  hookLog,
   recordLines,
   service,
   stop,
@@ -63,7 +62,7 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     ).toBe(true);
     const created = (name: string) => service.created.find((run) => run.name === name);
     expect(created("Read")?.end_time).toBeTruthy();
-    expect(created("Glob")?.end_time).toBeFalsy();
+    expect(created("Glob")?.end_time).toBeTruthy();
   });
 
   // Catches a reconcile that never runs for a turn that already knew its repository, so a
@@ -140,7 +139,19 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     };
     expect(await waitFor(() => service.created.some((run) => run.name === "Agent"))).toBe(true);
     expect(createdMetadataOf(base.session_id, "Agent")).toMatchObject(attributed);
+    expect(
+      await waitFor(() =>
+        createdMetadataOf(base.session_id, "Explore Subagent").repository_name === "acme/a",
+      ),
+    ).toBe(true);
     expect(createdMetadataOf(base.session_id, "Explore Subagent")).toMatchObject(attributed);
+    expect(
+      await waitFor(() =>
+        createdMetadataAll(base.session_id, "Claude").some(
+          (metadata) => metadata.ls_agent_type === "subagent",
+        ),
+      ),
+    ).toBe(true);
     const beneath = createdMetadataAll(base.session_id, "Claude").filter(
       (metadata) => metadata.ls_agent_type === "subagent",
     );
@@ -187,7 +198,9 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     appendReply(base, 2);
     await stop(base);
 
-    expect(await waitFor(() => service.updated.some((run) => run.name === "Agent"))).toBe(true);
+    const agentRunId = service.created.find((run) => run.name === "Agent")?.id;
+    expect(agentRunId).toBeDefined();
+    expect(await waitFor(() => service.updated.some((run) => run.id === agentRunId))).toBe(true);
     const attributed = {
       repository_name: "acme/a",
       git_branch: "trunk-a",
@@ -250,25 +263,33 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     });
   });
 
-  // Catches a turn settled on half its calls, and a turn's own run closed before the
-  // answer is in. Either one is permanent, since a closed run takes no correction.
-  it("settles a turn whose answer only lands after it closed", async () => {
+  it("retries a refused turn closure without duplicating its tool runs", async () => {
     const base = session("late-handler", plain);
     await prompt(base);
     // Nothing here says where the turn worked.
     await tool(base, "Bash", { command: "echo hi" });
     expect(await waitFor(() => service.created.some((run) => run.name === "Bash"))).toBe(true);
 
-    // The one call that does is refused, and the call behind it waits its turn.
-    service.refuse = "alpha repo";
     await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
     await tool(base, "Edit", { file_path: join(beta, "seed.txt") });
+    expect(
+      await waitFor(() =>
+        ["Read", "Edit"].every((name) => service.created.some((run) => run.name === name)),
+      ),
+    ).toBe(true);
+    const turnRunId = service.created.find((run) => run.name === "Claude Code Turn")?.id;
+    expect(turnRunId).toBeDefined();
+    service.failOnce = { action: "patch", id: turnRunId! };
     reply(base);
     await stop(base);
-    expect(await waitFor(() => hookLog().includes("Queued run upload failed"))).toBe(true);
-
-    service.refuse = "";
-    await stop(base);
+    expect(
+      await waitFor(
+        () =>
+          service.attempts.filter((wire) => wire.action === "patch" && wire.run.id === turnRunId)
+            .length >= 2,
+      ),
+    ).toBe(true);
+    expect(await waitFor(() => service.updated.some((run) => run.id === turnRunId))).toBe(true);
     expect(await waitFor(() => recordFiles("late-handler").length === 0)).toBe(true);
 
     const turn = metadataOf("Claude Code Turn");
@@ -297,8 +318,14 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     service.fail = true;
     reply(base);
     await stop(base);
-    // Wait for the refusal itself, so the retry below is a retry and not the first attempt.
-    expect(await waitFor(() => hookLog().includes("Could not settle the repository"))).toBe(true);
+    const turnRunId = service.created.find((run) => run.name === "Claude Code Turn")?.id;
+    expect(turnRunId).toBeDefined();
+    expect(
+      await waitFor(() =>
+        service.attempts.some((wire) => wire.action === "patch" && wire.run.id === turnRunId),
+      ),
+    ).toBe(true);
+    expect(service.updated.some((run) => run.id === turnRunId)).toBe(false);
 
     service.fail = false;
     await stop(base);
