@@ -24,7 +24,7 @@
     "clean": "rm -rf dist bin"
   },
   "dependencies": {
-    "langsmith": "^0.10.5"
+    "langsmith": "^0.10.8"
   },
   "devDependencies": {
     "@langchain/langsmith-plugin-binary": "github:langchain-ai/langsmith-plugin-binary#v0.3.0",
