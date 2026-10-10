@@ -3,6 +3,9 @@ name: Engine Validation
 on:
   workflow_dispatch:
     inputs:
+      state_only:
+        type: boolean
+        default: false
       hook_only:
         type: boolean
         default: false
@@ -42,7 +45,7 @@ jobs:
       - run: pnpm build
       - run: git diff --exit-code -- bundle/ plugins/langsmith-gateway/bundle/
       - run: node .github/scripts/test-engine.mjs
-        if: ${{ !inputs.lifecycle_only && !inputs.fixtures_only && !inputs.reconcile_only && !inputs.hook_only }}
+        if: ${{ !inputs.lifecycle_only && !inputs.fixtures_only && !inputs.reconcile_only && !inputs.hook_only && !inputs.state_only }}
       - run: node .github/scripts/test-engine.mjs src/hooks/mute-lifecycle.integration.test.ts
         if: ${{ inputs.lifecycle_only }}
       - run: node .github/scripts/test-engine.mjs src/binary-picker.test.ts src/utils/gh-login.test.ts src/repo-attribution.integration.test.ts src/packaging.test.ts
@@ -51,3 +54,5 @@ jobs:
         if: ${{ inputs.reconcile_only }}
       - run: node .github/scripts/test-engine.mjs src/hook-command.test.ts
         if: ${{ inputs.hook_only }}
+      - run: node .github/scripts/test-engine.mjs src/state.test.ts src/queue.integration.test.ts
+        if: ${{ inputs.state_only }}

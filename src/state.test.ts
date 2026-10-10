@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import {
   existsSync,
   mkdirSync,
@@ -24,7 +25,7 @@ import {
 } from "./state.js";
 
 let tmpDir: string;
-const tsxLoader = createRequire(import.meta.url).resolve("tsx/esm");
+const tsxLoader = pathToFileURL(createRequire(import.meta.url).resolve("tsx/esm")).href;
 const stateModuleUrl = new URL("./state.ts", import.meta.url).href;
 
 async function waitFor(condition: () => boolean, children: ChildProcess[]): Promise<void> {
@@ -255,7 +256,7 @@ describe("atomicUpdateState", () => {
           TEMP: childHome,
           ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
         },
-        stdio: "ignore",
+        stdio: ["ignore", "ignore", "inherit"],
         timeout: 7000,
         killSignal: "SIGKILL",
       });
