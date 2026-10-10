@@ -57,9 +57,20 @@ function shell(dir: string): string {
         },
   };
   const result = onWindows
-    ? spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], options)
+    ? spawnSync(
+        "powershell.exe",
+        ["-NoProfile", "-NonInteractive", "-Command", command],
+        { ...options, timeout: 10_000 },
+      )
     : spawnSync("/bin/sh", ["-c", command], options);
-  expect(result.error, String(result.error)).toBeUndefined();
+  const failureContext = JSON.stringify({
+    error: result.error?.message,
+    status: result.status,
+    signal: result.signal,
+    stderr: result.stderr,
+  });
+  expect(result.error, failureContext).toBeUndefined();
+  expect(result.status, failureContext).toBe(0);
   return result.stdout.trim();
 }
 
