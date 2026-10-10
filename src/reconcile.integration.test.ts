@@ -684,6 +684,13 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
       ls_attribution_identifier: "Alpha Owner",
     };
     expect(metadataOf("Agent")).toMatchObject(attributed);
+    expect(
+      await waitFor(() =>
+        Object.entries(attributed).every(
+          ([key, value]) => metadataOf("Claude Code Turn")[key] === value,
+        ),
+      ),
+    ).toBe(true);
     expect(metadataOf("Claude Code Turn")).toMatchObject(attributed);
   });
 

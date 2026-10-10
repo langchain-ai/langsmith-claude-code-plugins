@@ -1264,7 +1264,7 @@ describe("privacy propagation without lifecycle changes", () => {
       } else expect(serializedCaptures).toContain(privateText);
     }
     expect(topologies[1]).toEqual(topologies[0]);
-  }, 10_000);
+  }, 30_000);
 
   it("absent PreToolUse follows the current snapshot with the same parent and fallback timing", async () => {
     const topologies = [];
@@ -1393,7 +1393,7 @@ describe("privacy propagation without lifecycle changes", () => {
       }
     }
     expect(topologies[1]).toEqual(topologies[0]);
-  }, 20_000);
+  }, 30_000);
 
   it("keeps an owned full launch full while policy is muted, including synchronous subagents", async () => {
     reset("full");

@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -74,7 +75,7 @@ describe("the legacy queue flusher", () => {
   it("does not import legacy entries while another flusher holds the session lock", async () => {
     await main("/saved/project", "session-1", "saved-project");
 
-    expect(mocks.tryAcquireLock).toHaveBeenCalledWith("/tmp/queue/session-1.flush");
+    expect(mocks.tryAcquireLock).toHaveBeenCalledWith(join("/tmp/queue", "session-1.flush"));
     expect(mocks.importLegacyQueueEntries).not.toHaveBeenCalled();
     expect(mocks.releaseLock).not.toHaveBeenCalled();
   });
