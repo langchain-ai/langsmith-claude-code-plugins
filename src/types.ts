@@ -7,7 +7,7 @@ import type {
   CodingAgentAgentType,
   CodingAgentMetadataOptions as SharedCodingAgentMetadataOptions,
 } from "@langchain/plugins-base/metadata";
-import type { GIT_MARKERS, PINNED_REPOSITORY_KEYS, TURN_RECORD_LINE } from "./constants.js";
+import type { GIT_MARKERS, PINNED_REPOSITORY_KEYS } from "./constants.js";
 import type { NativeRunRouting } from "./models/native-routing.js";
 import type { ClaudeRecordedToolOrigin } from "./models/tracing-engine.js";
 
@@ -393,17 +393,6 @@ export interface RecordedRun {
   routing?: NativeRunRouting;
   metadata: Record<string, unknown>;
 }
-
-export type TurnRecordLine =
-  | { k: typeof TURN_RECORD_LINE.run; root?: boolean; origin?: string; run: RecordedRun }
-  | {
-      k: typeof TURN_RECORD_LINE.toolOrigin;
-      origin?: string;
-      toolOrigin: ClaudeRecordedToolOrigin;
-    }
-  | { k: typeof TURN_RECORD_LINE.closed; turn_id?: string }
-  | { k: typeof TURN_RECORD_LINE.delivered; id: string }
-  | { k: typeof TURN_RECORD_LINE.reconciled; id: string };
 
 export interface TurnRecordTarget {
   path: string;

@@ -10,6 +10,7 @@ import {
 import type { TracingMode, TracingState, TranscriptMessage } from "../types.js";
 import { tracingPolicyPath } from "../tracing-policy.js";
 import { createCaptureStore } from "@langchain/plugins-base/storage/capture";
+import type { TurnRecordTestCaptureScope, TurnRecordTestLine } from "../models/turn-record-test.js";
 
 // Exercise the real hooks, grouping, run builders, background registration and
 // finalization. Only I/O/SDK transport is replaced; privacy projection is real.
@@ -504,6 +505,98 @@ describe("configured default lifecycle", () => {
 });
 
 describe("tool privacy snapshot reclamation", () => {
+  it("does not let a real B PostToolUse claim A's pending native receipts", async () => {
+    reset("full");
+    await hook("prompt");
+    await hook("pre", { tool_use_id: "read-A", tool_name: "Read" });
+
+    const invokePost = async (apiKey: string, toolUseId: string) => {
+      h.apiKey = apiKey;
+      h.input = {
+        session_id: "session",
+        cwd: "/repo",
+        transcript_path: "/transcript",
+        hook_event_name: "PostToolUse",
+        tool_name: "Read",
+        tool_use_id: toolUseId,
+        tool_input: {
+          file_path: join(process.cwd(), "package.json"),
+        },
+        tool_response: { content: "synthetic result" },
+      };
+      h.event = "PostToolUse";
+      vi.resetModules();
+      const { HOOK_HANDLERS } = await import("./registry.js");
+      await HOOK_HANDLERS.PostToolUse();
+      await new Promise((resolve) => setTimeout(resolve, 15));
+    };
+
+    await invokePost("synthetic-account-A", "read-A");
+    const { readFileSync } = await import("node:fs");
+    const { readTurnRecord, turnRecordPath } = await import("../turn-record.js");
+    const { queueOrigin } = await import("../queue.js");
+    const rootRunId = h.state.session.current_turn_run_id!;
+    const path = turnRecordPath(h.queueState, "session", rootRunId);
+    const before = readTurnRecord(path)!;
+    const runA = before.children.find((run) => run.toolUseId === "read-A")!;
+    const contextA = await sharedEngineContext();
+    const { initHook } = await import("../utils/hook-init.js");
+    const configA = initHook("/repo")!;
+    const { drainClaudeSession } = await import("../tracing-engine.js");
+    const readOutcome = contextA!.captureStore.readOutcome.bind(contextA!.captureStore);
+    let enterRead!: () => void;
+    let releaseRead!: () => void;
+    const entered = new Promise<void>((resolve) => (enterRead = resolve));
+    const released = new Promise<void>((resolve) => (releaseRead = resolve));
+    vi.spyOn(contextA!.captureStore, "readOutcome").mockImplementation(
+      async (scope: TurnRecordTestCaptureScope, destination) => {
+        if (scope.eventId === runA.run_id) {
+          enterRead();
+          await released;
+        }
+        return readOutcome(scope, destination);
+      },
+    );
+
+    const pendingA = drainClaudeSession(contextA!, configA, "session");
+    await entered;
+    await invokePost("synthetic-account-B", "read-B");
+    const originA = before.origin;
+    const originB = queueOrigin(initHook("/repo")!);
+    const afterB = readTurnRecord(path)!;
+    expect(originA).not.toBe(originB);
+    expect(afterB.origin).toBe(originB);
+    releaseRead();
+    await pendingA;
+
+    const final = readTurnRecord(path)!;
+    const runAAfter = final.children.find((run) => run.run_id === runA.run_id)!;
+    const nativeLines = readFileSync(path, "utf-8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as TurnRecordTestLine);
+    const resolvedUnderB = nativeLines.some(
+      (line) => line.k === "run" && line.origin === originB && line.run?.run_id === runA.run_id,
+    );
+    expect(final.origin).toBe(originB);
+    expect(final.delivered.has(runA.run_id)).toBe(false);
+    expect(resolvedUnderB).toBe(false);
+    expect(nativeLines.some((line) => line.ackOrigin === originA)).toBe(false);
+    expect(runAAfter.metadata).toEqual(runA.metadata);
+    h.messages = transcript(undefined);
+    await hook("stop");
+    const contextB = await sharedEngineContext();
+    const accountBRootCaptures = (
+      await contextB!.captureStore.enumerate(CLAUDE_CODE_INTEGRATION, "session")
+    ).filter(
+      ({ record }) =>
+        record.runId === rootRunId &&
+        record.destinationFingerprint === contextB!.accountFingerprint,
+    );
+    expect(accountBRootCaptures).toEqual([]);
+    expect(JSON.stringify(h.errors)).toContain("root capture is unavailable");
+  }, 20_000);
+
   it("keeps metadata-mode source snapshots private and out of lifecycle delivery", async () => {
     reset("metadata");
     await hook("prompt");

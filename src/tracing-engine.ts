@@ -463,7 +463,7 @@ export async function acknowledgeClaudeSharedDeliveries(
         const attribution = repositoryMetadataFromCapture(record.metadataProvenance);
         if (
           Object.keys(attribution).length > 0 &&
-          !recordResolvedMetadata(turn.path, run.run_id, attribution)
+          !recordResolvedMetadata(turn.path, run.run_id, attribution, origin)
         ) {
           warn(`Could not save resolved repository metadata for run ${run.run_id}`);
           break;
@@ -492,7 +492,7 @@ export async function acknowledgeClaudeSharedDeliveries(
               (outcome) => outcome.status === "settled" && outcome.receipt.outcome === "delivered",
             )
           ) {
-            recordDelivered(turn.path, run.run_id);
+            recordDelivered(turn.path, run.run_id, origin);
           }
         }
       }

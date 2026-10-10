@@ -32,9 +32,9 @@ import {
 import { listStoredSessions, safeName, storeDir, storeRoot } from "./utils/session-store.js";
 import { runConfigForMode } from "./privacy.js";
 import { debug, warn } from "./logger.js";
-import type { RecordedRun, TracingMode, TurnRecord, TurnRecordLine } from "./types.js";
+import type { RecordedRun, TracingMode, TurnRecord } from "./types.js";
 import type { NativeRunRouting } from "./models/native-routing.js";
-import type { RecordRunOptions } from "./models/turn-record.js";
+import type { RecordRunOptions, TurnRecordLine } from "./models/turn-record.js";
 import type { ClaudeRecordedToolOrigin } from "./models/tracing-engine.js";
 import { isValidOriginPath, isValidRecordOrigin } from "./utils/validation/origin.js";
 
@@ -243,9 +243,10 @@ export function recordResolvedMetadata(
   path: string,
   runId: string,
   metadata: Record<string, unknown>,
+  expectedOrigin?: string,
 ): boolean {
   const record = readTurnRecord(path);
-  if (!record) return false;
+  if (!record || (expectedOrigin !== undefined && record.origin !== expectedOrigin)) return false;
   const isRoot = record.root?.run_id === runId;
   const run = isRoot ? record.root : record.children.find((child) => child.run_id === runId);
   if (!run) return false;
@@ -257,6 +258,7 @@ export function recordResolvedMetadata(
     k: TURN_RECORD_LINE.run,
     ...(isRoot ? { root: true } : {}),
     origin: record.origin,
+    ...(expectedOrigin === undefined ? {} : { ackOrigin: expectedOrigin }),
     run: { ...run, metadata: { ...run.metadata, ...additions } },
   });
 }
@@ -276,8 +278,16 @@ export function closeTurnRecord(options: {
   recordTurnClosed(path, options.turnId);
 }
 
-export function recordDelivered(path: string, runId: string): boolean {
-  return append(path, { k: TURN_RECORD_LINE.delivered, id: runId });
+export function recordDelivered(path: string, runId: string, expectedOrigin?: string): boolean {
+  if (expectedOrigin !== undefined) {
+    const record = readTurnRecord(path);
+    if (!record || record.origin !== expectedOrigin) return false;
+  }
+  return append(path, {
+    k: TURN_RECORD_LINE.delivered,
+    id: runId,
+    ...(expectedOrigin === undefined ? {} : { origin: expectedOrigin, ackOrigin: expectedOrigin }),
+  });
 }
 
 export function recordReconciled(path: string, runId: string): void {
@@ -308,6 +318,8 @@ export function readTurnRecord(path: string): TurnRecord | undefined {
   };
   const byId = new Map<string, RecordedRun>();
   const originsByToolUseId = new Map<string, ClaudeRecordedToolOrigin>();
+  const runLines: TurnRecordLine[] = [];
+  const scopedDeliveryLines: TurnRecordLine[] = [];
   for (const line of contents.split("\n")) {
     if (!line) continue;
     let parsed: TurnRecordLine;
@@ -316,9 +328,18 @@ export function readTurnRecord(path: string): TurnRecord | undefined {
     } catch {
       continue;
     }
+    const ackOrigin = "ackOrigin" in parsed ? parsed.ackOrigin : undefined;
+    if (ackOrigin !== undefined) {
+      if (!isValidRecordOrigin(ackOrigin)) continue;
+      if (parsed.k === TURN_RECORD_LINE.run && typeof parsed.run?.run_id === "string") {
+        runLines.push(parsed);
+      } else if (parsed.k === TURN_RECORD_LINE.delivered && typeof parsed.id === "string") {
+        scopedDeliveryLines.push(parsed);
+      }
+      continue;
+    }
     if (parsed.k === TURN_RECORD_LINE.run && typeof parsed.run?.run_id === "string") {
-      if (parsed.root) record.root = parsed.run;
-      else byId.set(parsed.run.run_id, parsed.run);
+      runLines.push(parsed);
       if (parsed.origin) record.origin = parsed.origin;
     } else if (
       parsed.k === TURN_RECORD_LINE.toolOrigin &&
@@ -335,6 +356,25 @@ export function readTurnRecord(path: string): TurnRecord | undefined {
       record.delivered.add(parsed.id);
     } else if (parsed.k === TURN_RECORD_LINE.reconciled && typeof parsed.id === "string") {
       record.fixed.add(parsed.id);
+    }
+  }
+  for (const line of runLines) {
+    if (line.k !== TURN_RECORD_LINE.run || typeof line.run?.run_id !== "string") continue;
+    if (
+      line.ackOrigin !== undefined &&
+      (line.ackOrigin !== record.origin || line.origin !== line.ackOrigin)
+    )
+      continue;
+    if (line.root) record.root = line.run;
+    else byId.set(line.run.run_id, line.run);
+  }
+  for (const line of scopedDeliveryLines) {
+    if (
+      line.k === TURN_RECORD_LINE.delivered &&
+      line.ackOrigin === record.origin &&
+      line.origin === line.ackOrigin
+    ) {
+      record.delivered.add(line.id);
     }
   }
   record.children = [...byId.values()];
