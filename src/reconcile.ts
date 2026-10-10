@@ -44,10 +44,18 @@ export const everyChildLanded = (record: TurnRecord): boolean =>
   record.children.every((child) => record.delivered.has(child.run_id));
 
 export function turnAttribution(record: TurnRecord): Attribution | undefined {
+  const inToolCallOrder = [...record.children].sort((left, right) =>
+    left.dotted_order < right.dotted_order ? -1 : 1,
+  );
+  return turnAttributionFromOrderedChildren(record, inToolCallOrder);
+}
+
+export function turnAttributionFromOrderedChildren(
+  record: TurnRecord,
+  children: readonly RecordedRun[],
+): Attribution | undefined {
   const root = attributionOf(record.root?.metadata);
-  const inToolCallOrder = [...record.children]
-    .sort((left, right) => (left.dotted_order < right.dotted_order ? -1 : 1))
-    .map((child) => attributionOf(child.metadata));
+  const inToolCallOrder = children.map((child) => attributionOf(child.metadata));
   const source = namesARepository(root)
     ? root
     : inToolCallOrder.find((carried) => namesARepository(carried));
@@ -166,7 +174,7 @@ export async function reconcileTurn(options: {
   const filled = turnAttribution(record) ?? {};
 
   const stillOpen = record.children.filter(
-    (child) => child.open && record.delivered.has(child.run_id),
+    (child) => !child.shared && child.open && record.delivered.has(child.run_id),
   );
   let settled = true;
   for (const run of [...(record.root.shared ? [] : [record.root]), ...stillOpen]) {

@@ -178,7 +178,9 @@ export async function main(): Promise<void> {
         run: { ...run, project_name: config.project, extra: { metadata } },
         tracing,
         origin: queueOrigin(config),
+        toolUseId: input.tool_use_id,
         shared: true,
+        routing: { cwd: input.cwd },
       });
     } else {
       const runTree = createRunTree(
@@ -283,9 +285,24 @@ export async function main(): Promise<void> {
           closureState: "open",
         },
       });
-      recordRun({ path: turnRecord, run: toolRun, tracing, origin: queued, shared: true });
+      recordRun({
+        path: turnRecord,
+        run: toolRun,
+        tracing,
+        origin: queued,
+        shared: true,
+        routing: { cwd: input.cwd },
+        toolUseId: input.tool_use_id,
+      });
     } else {
-      recordRun({ path: turnRecord, run: toolRun, tracing, origin: queued });
+      recordRun({
+        path: turnRecord,
+        run: toolRun,
+        tracing,
+        origin: queued,
+        routing: { cwd: input.cwd },
+        toolUseId: input.tool_use_id,
+      });
       await enqueueRun(
         config.stateFilePath,
         input.session_id,
@@ -295,7 +312,7 @@ export async function main(): Promise<void> {
         turnRecord,
         settles,
       );
-      startQueueFlusher(input.cwd, input.session_id);
+      startQueueFlusher(input.cwd, input.session_id, config.project);
     }
   }
 

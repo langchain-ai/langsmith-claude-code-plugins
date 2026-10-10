@@ -32,8 +32,10 @@ if (argument === "--help" || argument === "-h") {
 } else if (argument === "--version" || argument === "-v") {
   console.log(LS_INTEGRATION_VERSION ?? "development");
 } else if (argument === FLUSH_QUEUE_ARG) {
-  const [cwd, sessionId] = process.argv.slice(3);
-  void runHookEntry(FLUSH_QUEUE_ARG, () => flushQueue(cwd ?? process.cwd(), sessionId));
+  const [cwd, sessionId, projectName] = process.argv.slice(3);
+  void runHookEntry(FLUSH_QUEUE_ARG, () =>
+    flushQueue(cwd ?? process.cwd(), sessionId, projectName),
+  );
 } else if (event) {
   void runHookEntry(event, HOOK_HANDLERS[event]);
 } else if (argument?.startsWith("-")) {

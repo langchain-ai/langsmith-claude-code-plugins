@@ -20,19 +20,44 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect } from "vitest";
 import { waitFor } from "./wait-for.js";
 
-import { QUEUE_DIR_NAME, QUEUE_FILE_SUFFIX, QUEUE_ID_TIME_WIDTH } from "../constants.js";
+import {
+  QUEUE_DIR_NAME,
+  QUEUE_FILE_SUFFIX,
+  QUEUE_ID_TIME_WIDTH,
+  USER_PROMPT_TURN_NAME,
+} from "../constants.js";
+import { codingAgentMetadata } from "../metadata.js";
+import { generateDottedOrderSegment } from "../langsmith.js";
 import { queueOrigin } from "../queue.js";
+import { recordRun, turnRecordPath } from "../turn-record.js";
 import { fakeLangSmith, readLog, spawnHook, turnLines } from "./hook-sandbox.js";
 
 let home: string;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const QUEUE_TEST_PROJECT_NAME = "queue-test";
+const QUEUE_TEST_PROMPT = "hi";
+const failNextPosts = new Set<string>();
+const failedPosts = new Set<string>();
+const failureListeners = new Map<string, () => void>();
 
 /** What the fake LangSmith has accepted, and whether it is currently refusing uploads. */
 export const uploads = {
   /** Names of the tool runs created, in the order the service accepted them. */
   get received(): string[] {
     return service.created.map((run) => String(run.name)).filter((name) => /^Tool\d+$/.test(name));
+  },
+  get attempted(): string[] {
+    return service.attempts
+      .filter((wire) => wire.action === "post")
+      .map((wire) => String(wire.run.name))
+      .filter((name) => /^Tool\d+$/.test(name));
+  },
+  get started(): string[] {
+    return service.started
+      .filter((wire) => wire.action === "post")
+      .map((wire) => String(wire.run.name))
+      .filter((name) => /^Tool\d+$/.test(name));
   },
   get fail(): boolean {
     return service.fail;
@@ -46,6 +71,19 @@ export const uploads = {
   set delayMs(value: number) {
     service.delayMs = value;
   },
+  failNextPost(runId: string): void {
+    failNextPosts.add(runId);
+  },
+  holdNextUploadNamed(name: string) {
+    return service.holdNextUploadNamed(name);
+  },
+  didFail(runId: string): boolean {
+    return failedPosts.has(runId);
+  },
+  waitForFailure(runId: string): Promise<void> {
+    if (failedPosts.has(runId)) return Promise.resolve();
+    return new Promise((resolve) => failureListeners.set(runId, resolve));
+  },
 };
 
 // LangSmith rejects a run that started over a day ago, and everything sent with it.
@@ -54,6 +92,13 @@ const service = fakeLangSmith({
     [...body.matchAll(/"start_time":"([^"]+)"/g)].some(
       (match) => Date.now() - new Date(match[1]).getTime() >= DAY_MS,
     ),
+  rejectsRun: (wire) => {
+    if (wire.action !== "post" || !failNextPosts.delete(wire.run.id)) return undefined;
+    failedPosts.add(wire.run.id);
+    failureListeners.get(wire.run.id)?.();
+    failureListeners.delete(wire.run.id);
+    return { status: 400 };
+  },
 });
 
 /** Registers the throwaway home and the fake LangSmith for every test in the calling suite. */
@@ -61,6 +106,9 @@ export function useQueueSandbox(): void {
   beforeEach(async () => {
     home = mkdtempSync(join(tmpdir(), "ls-queue-"));
     service.reset();
+    failNextPosts.clear();
+    failedPosts.clear();
+    failureListeners.clear();
     await service.listen();
   });
 
@@ -97,7 +145,7 @@ function env() {
     CC_LANGSMITH_API_KEY: "test-key",
     LANGSMITH_API_KEY: "test-key",
     LANGSMITH_ENDPOINT: service.endpoint,
-    CC_LANGSMITH_PROJECT: "queue-test",
+    CC_LANGSMITH_PROJECT: QUEUE_TEST_PROJECT_NAME,
     STATE_FILE: join(home, "state.json"),
     CC_LANGSMITH_LOG_FILE: join(home, "hook.log"),
     CLAUDE_PROJECT_DIR: home,
@@ -233,6 +281,7 @@ export function queueRunByHand(
     queuedAgoMs?: number;
     startedAgoMs?: number;
     origin?: string;
+    cwd?: string;
   } = {},
 ): string {
   const {
@@ -240,28 +289,82 @@ export function queueRunByHand(
     queuedAgoMs = 0,
     startedAgoMs = 0,
     origin = "another-account",
+    cwd = home,
   } = options;
   const dir = queueDirFor(sessionId);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const queuedAt = Date.now() - queuedAgoMs;
   const queueId = `${String(queuedAt).padStart(QUEUE_ID_TIME_WIDTH, "0")}-${randomUUID()}`;
   const path = join(dir, `${queueId}${QUEUE_FILE_SUFFIX}`);
+  const turnId = randomUUID();
+  const runId = randomUUID();
+  const record = turnRecordPath(join(home, "state.json"), sessionId, turnId);
+  const startTime = new Date(Date.now() - startedAgoMs).toISOString();
+  const endTime = new Date().toISOString();
+  const rootDottedOrder = generateDottedOrderSegment(startTime, turnId);
+  const toolDottedOrder = `${rootDottedOrder}.${generateDottedOrderSegment(startTime, runId)}`;
+  const rootRun = {
+    id: turnId,
+    name: USER_PROMPT_TURN_NAME,
+    run_type: "chain",
+    inputs: { messages: [{ role: "user", content: QUEUE_TEST_PROMPT }] },
+    project_name: QUEUE_TEST_PROJECT_NAME,
+    start_time: startTime,
+    trace_id: turnId,
+    dotted_order: rootDottedOrder,
+    extra: {
+      metadata: codingAgentMetadata({
+        sessionId,
+        runType: "root",
+        runName: USER_PROMPT_TURN_NAME,
+        agentType: "root",
+      }),
+    },
+  };
+  const run = {
+    id: runId,
+    name,
+    run_type: "tool",
+    inputs: { input: { name } },
+    outputs: { output: { name } },
+    project_name: QUEUE_TEST_PROJECT_NAME,
+    start_time: startTime,
+    end_time: endTime,
+    parent_run_id: turnId,
+    trace_id: turnId,
+    dotted_order: toolDottedOrder,
+    extra: {
+      metadata: codingAgentMetadata({
+        sessionId,
+        runType: "tool",
+        runName: name,
+        toolName: name,
+        agentType: "root",
+      }),
+    },
+  };
+  if (
+    !recordRun({
+      path: record,
+      run: rootRun,
+      tracing: "full",
+      origin,
+      root: true,
+      routing: { cwd },
+    }) ||
+    !recordRun({ path: record, run, tracing: "full", origin, routing: { cwd } })
+  ) {
+    throw new Error("Could not create the saved turn record for a queue fixture");
+  }
   writeFileSync(
     path,
     JSON.stringify({
       tracing: "full",
       attempts: 0,
       origin,
-      run: {
-        id: randomUUID(),
-        name,
-        run_type: "tool",
-        project_name: "queue-test",
-        start_time: new Date(Date.now() - startedAgoMs).toISOString(),
-        end_time: new Date().toISOString(),
-        trace_id: randomUUID(),
-        dotted_order: "20250101T000000000000Z00000000-0000-0000-0000-000000000000",
-      },
+      record,
+      where: { cwd, namedAPath: false },
+      run,
     }),
     { mode: 0o600 },
   );

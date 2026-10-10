@@ -1,6 +1,6 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, statSync, writeFileSync } from "node:fs";
+import { join, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -15,9 +15,9 @@ import {
   queueDirFor,
   queued,
   queueRunByHand,
+  sandboxHome,
   sandboxFiles,
   readSandboxFile,
-  sandboxHome,
   startTurn,
   stopTurn,
   toolCall,
@@ -26,6 +26,15 @@ import {
   waitFor,
   waitForUploaders,
 } from "./fixtures/queue-sandbox.js";
+import { SHARED_ENGINE_STORAGE_DIRECTORY } from "./constants.js";
+
+function savedRun(name: string): boolean {
+  const captureDirectory = `${join(sandboxHome(), SHARED_ENGINE_STORAGE_DIRECTORY, "capture-v1")}${sep}`;
+  return sandboxFiles()
+    .filter((path) => path.startsWith(captureDirectory) && path.endsWith(".json"))
+    .map(readSandboxFile)
+    .some((capture) => capture.includes(`"name":"${name}"`));
+}
 
 describe("the detached upload queue", { timeout: 60_000 }, () => {
   useQueueSandbox();
@@ -61,22 +70,19 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
 
   // Catches an entry deleted before its upload was confirmed, which loses the run
   // silently because nothing is left to notice a detached failure.
-  it("keeps a run whose upload failed and uploads it on the next flush", async () => {
+  it("retries an imported run after its first upload fails", async () => {
     await startTurn();
-    uploads.fail = true;
-    queueRunByHand("Tool0", { origin: currentQueueOrigin() });
+    const path = queueRunByHand("Tool0", { origin: currentQueueOrigin() });
+    const runId = JSON.parse(readSandboxFile(path)).run.id as string;
+    uploads.failNextPost(runId);
+    const failedAttempt = uploads.waitForFailure(runId);
     await stopTurn();
-    expect(
-      await waitFor(() => {
-        const entries = queued();
-        return entries.length === 1 && entries[0].attempts >= 1;
-      }),
-    ).toBe(true);
-    expect(uploads.received).toEqual([]);
-
-    uploads.fail = false;
-    await stopTurn();
+    await failedAttempt;
+    expect(uploads.didFail(runId)).toBe(true);
     expect(await waitFor(() => uploads.received.includes("Tool0"))).toBe(true);
+    expect(await waitForUploaders()).toBe(true);
+    expect(uploads.attempted.filter((name) => name === "Tool0").length).toBeGreaterThan(1);
+    expect(uploads.received).toEqual(["Tool0"]);
   });
 
   it("uploads every parallel tool capture", async () => {
@@ -130,24 +136,29 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches a flush that helps itself to a folder still being written by a live
   // session elsewhere, which is how two uploaders end up on one folder.
   it("leaves another session's recent folder completely alone", async () => {
-    // The service is briefly down, so this session's own run has to stay on disk.
     await startTurn();
-    uploads.fail = true;
+    const heldUpload = uploads.holdNextUploadNamed("Tool0");
     queueRunByHand("Tool0", { origin: currentQueueOrigin() });
     await stopTurn("s1");
-    expect(await waitFor(() => (queued("s1")[0]?.attempts ?? 0) >= 1)).toBe(true);
+    try {
+      await heldUpload.entered;
+      expect(savedRun("Tool0")).toBe(true);
+      expect(uploads.started.filter((name) => name === "Tool0")).toHaveLength(1);
+      await newSession("s2");
+      await toolCall(1, "s2");
+      await stopTurn("s2");
+
+      expect(await waitFor(() => uploads.received.includes("Tool1"))).toBe(true);
+      expect(uploads.started.filter((name) => name === "Tool0")).toHaveLength(1);
+      expect(savedRun("Tool0")).toBe(true);
+    } finally {
+      heldUpload.release();
+    }
+
+    expect(await waitFor(() => uploads.received.includes("Tool0"))).toBe(true);
     expect(await waitForUploaders()).toBe(true);
-    uploads.fail = false;
-    await newSession("s2");
-    await toolCall(1, "s2");
-
-    // s2 takes a turn. s1's folder was written moments ago, so it is not s2's to touch.
-    await stopTurn("s2");
-
-    expect(await waitFor(() => uploads.received.includes("Tool1"))).toBe(true);
-    expect(queued("s1")).toHaveLength(1);
-    expect(existsSync(queueDirFor("s1"))).toBe(true);
-    expect(uploads.received).not.toContain("Tool0");
+    expect([...uploads.received].sort()).toEqual(["Tool0", "Tool1"]);
+    expect(uploads.attempted.filter((name) => name === "Tool0")).toHaveLength(1);
   });
 
   // Catches a sweep that bins the folder its own session is still filling, so a run
@@ -163,15 +174,27 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     await turn(0);
     expect(await waitFor(() => uploads.received.includes("Tool0"))).toBe(true);
 
-    // The service is briefly unreachable, so this turn's run has to wait on disk.
-    uploads.fail = true;
-    await turn(1);
-    expect(await waitFor(() => queued().length === 1)).toBe(true);
+    const heldUpload = uploads.holdNextUploadNamed("Tool1");
+    try {
+      await turn(1);
+      await heldUpload.entered;
+      expect(savedRun("Tool1")).toBe(true);
+      expect(uploads.started.filter((name) => name === "Tool1")).toHaveLength(1);
 
-    uploads.fail = false;
-    await turn(2);
+      await turn(2);
+      expect(queued().map((entry) => entry.run.name)).toEqual(["Tool2"]);
+      expect(uploads.started.filter((name) => name === "Tool1")).toHaveLength(1);
+    } finally {
+      heldUpload.release();
+    }
+
+    expect(await waitFor(() => uploads.received.includes("Tool1"))).toBe(true);
+    expect(await waitForUploaders()).toBe(true);
     expect(await waitFor(() => uploads.received.length >= 3)).toBe(true);
+    expect(await waitForUploaders()).toBe(true);
     expect([...uploads.received].sort()).toEqual(["Tool0", "Tool1", "Tool2"]);
+    expect(uploads.started.sort()).toEqual(["Tool0", "Tool1", "Tool2"]);
+    expect(uploads.attempted.sort()).toEqual(["Tool0", "Tool1", "Tool2"]);
     expect(await waitFor(() => !existsSync(`${queueDirFor("s1")}.flush.lock`))).toBe(true);
   });
 
@@ -183,12 +206,51 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
       queueRunByHand(`Tool${index}`, { origin, queuedAgoMs: 60_000 - index });
     }
     ageOldestRecord("s1", 3 * 60 * 60 * 1000);
+    const paths = entryFiles("s1");
+    const entriesBefore = paths.map(readSandboxFile);
+    const runIds = paths.map((path) => JSON.parse(readSandboxFile(path)).run.id as string);
+    const holder = spawn(process.execPath, ["-e", "process.stdin.resume()"], {
+      stdio: ["pipe", "ignore", "ignore"],
+    });
+    await new Promise<void>((resolve, reject) => {
+      holder.once("spawn", resolve);
+      holder.once("error", reject);
+    });
+    if (!holder.pid) throw new Error("The queue lock holder did not start");
+    writeFileSync(`${queueDirFor("s1")}.flush.lock`, String(holder.pid));
+
+    try {
+      await stopTurn("s2");
+      expect(await waitForUploaders()).toBe(true);
+      expect(paths.map(readSandboxFile)).toEqual(entriesBefore);
+      expect(uploads.attempted).toEqual([]);
+      expect(uploads.received).toEqual([]);
+      const captureDirectory = `${join(sandboxHome(), SHARED_ENGINE_STORAGE_DIRECTORY, "capture-v1")}${sep}`;
+      const captureRunIds = new Set(
+        sandboxFiles()
+          .filter((path) => path.startsWith(captureDirectory) && path.endsWith(".json"))
+          .map(readSandboxFile)
+          .map((contents) => JSON.parse(contents) as { runId?: string })
+          .map((capture) => capture.runId),
+      );
+      expect(runIds.some((runId) => captureRunIds.has(runId))).toBe(false);
+      await startTurn();
+      await toolCall(99);
+      expect(await waitFor(() => uploads.received.includes("Tool99"))).toBe(true);
+      expect(paths.map(readSandboxFile)).toEqual(entriesBefore);
+    } finally {
+      const holderExited = new Promise<void>((resolve) => holder.once("exit", () => resolve()));
+      holder.stdin?.end();
+      await holderExited;
+    }
 
     await Promise.all([stopTurn("s2"), stopTurn("s3")]);
 
-    expect(await waitFor(() => uploads.received.length >= 6)).toBe(true);
+    expect(await waitFor(() => uploads.received.length >= 7)).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    expect([...uploads.received].sort()).toEqual([0, 1, 2, 3, 4, 5].map((index) => `Tool${index}`));
+    expect([...uploads.received].sort()).toEqual(
+      [0, 1, 2, 3, 4, 5, 99].map((index) => `Tool${index}`),
+    );
   });
 
   // Catches a flusher lock that outlives the flusher, which stops that session
@@ -247,7 +309,8 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     uploads.fail = true;
     queueRunByHand("Tool0", { origin: currentQueueOrigin() });
     await stopTurn();
-    expect(await waitFor(() => (queued()[0]?.attempts ?? 0) >= 1)).toBe(true);
+    expect(await waitFor(() => uploads.attempted.includes("Tool0"))).toBe(true);
+    expect(queued()).toHaveLength(0);
     uploads.fail = false;
     queueRunByHand("Tool1");
 
@@ -257,18 +320,26 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
 
     expect(uploads.received).toEqual(["Tool0"]);
     expect(queued().map((entry) => entry.run.name)).toEqual(["Tool1"]);
-    expect(hookLog()).toContain("queued for a different LangSmith account");
+    expect(hookLog()).toContain("different LangSmith account");
   });
 
-  // Catches a run for an account nobody has sitting in front of the queue for good, which
-  // strands every run behind it. No other test puts a run too old to accept out of reach.
-  it("drops a run for another account once it is too old to accept", async () => {
-    queueRunByHand("Tool0", { queuedAgoMs: 1000, startedAgoMs: 2 * 24 * 60 * 60 * 1000 });
-    queueRunByHand("Tool1", { origin: currentQueueOrigin() });
+  it("leaves another account's stale run ahead of the current account's queued work", async () => {
+    const foreignPath = queueRunByHand("Tool0", {
+      queuedAgoMs: 1000,
+      startedAgoMs: 2 * 24 * 60 * 60 * 1000,
+    });
+    const foreignEntry = readSandboxFile(foreignPath);
+    const origin = currentQueueOrigin();
+    queueRunByHand("Tool1", { origin });
 
     await stopTurn();
-    expect(await waitFor(() => uploads.received.includes("Tool1"))).toBe(true);
-    expect(await waitFor(() => queued().length === 0)).toBe(true);
+    expect(readSandboxFile(foreignPath)).toBe(foreignEntry);
+    expect(queued().map(({ origin: entryOrigin, run }) => [run.name, entryOrigin])).toEqual([
+      ["Tool0", "another-account"],
+      ["Tool1", origin],
+    ]);
+    expect(uploads.received).toEqual([]);
+    expect(await waitFor(() => !existsSync(`${queueDirFor()}.flush.lock`))).toBe(true);
   });
 
   // Catches an uploader that re-reads the run it cannot send instead of standing down,
@@ -285,22 +356,13 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
   // Catches a run LangSmith will reject for age being retried forever, and taking
   // every run batched with it down too.
   it("drops a run too old to accept and uploads the ones queued around it", async () => {
-    uploads.fail = true;
     const origin = currentQueueOrigin();
-    for (let index = 0; index < 3; index++) {
-      queueRunByHand(`Tool${index}`, { origin, queuedAgoMs: 100 - index });
-    }
-    await stopTurn();
-    expect(await waitFor(() => (queued()[0]?.attempts ?? 0) >= 1)).toBe(true);
-
-    const middle = entryFiles()[1];
-    const entry = JSON.parse(readFileSync(middle, "utf8"));
-    entry.run.start_time = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-    writeFileSync(middle, JSON.stringify(entry));
-    uploads.fail = false;
+    queueRunByHand("Tool0", { origin, queuedAgoMs: 100 });
+    queueRunByHand("Tool1", { origin, startedAgoMs: 48 * 60 * 60 * 1000 });
+    queueRunByHand("Tool2", { origin, queuedAgoMs: 98 });
 
     await stopTurn();
-    expect(await waitFor(() => uploads.received.length >= 2)).toBe(true);
+    expect(await waitFor(() => uploads.received.length === 2)).toBe(true);
     expect(await waitFor(() => queued().length === 0)).toBe(true);
     expect(uploads.received).toEqual(["Tool0", "Tool2"]);
   });

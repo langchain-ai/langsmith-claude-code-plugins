@@ -3,6 +3,9 @@ const ASSISTANT_RUN_NAME = "Claude";
 const CLAUDE_CODE_INTEGRATION = "claude-code";
 const CLAUDE_TOOL_SNAPSHOT_EVENT_SUFFIX = ":native-tool";
 const CLAUDE_TOOL_RECONSTRUCTION_EVENT_SUFFIX = ":reconstruct-tool";
+const CLAUDE_RUN_RECONSTRUCTION_EVENT_SUFFIX = ":reconstruct-run";
+const CLAUDE_RUN_SNAPSHOT_EVENT_SUFFIX = ":run-snapshot";
+const CLAUDE_RUN_SNAPSHOT_SOURCE_SEPARATOR = ":";
 const CLAUDE_TURN_CLOSURE_EVENT_SUFFIX = ":turn-closure";
 const CLAUDE_TURN_FAILURE_EVENT_SUFFIX = ":turn-failure";
 const CLAUDE_AGENT_CLOSURE_EVENT_SUFFIX = ":agent-closure";
@@ -137,6 +140,43 @@ const TURN_RECORD_SUFFIX = ".turn.jsonl";
 const SHARED_ENGINE_STORAGE_DIRECTORY = "langsmith_engine_v1";
 
 const TURN_RECORD_MAX_BYTES = 8 * 1024 * 1024;
+const TURN_RECORD_VALIDATION_LIMITS = {
+  originLength: 512,
+  pathLength: 16_384,
+  toolUseIdLength: 512,
+  toolNameLength: 512,
+  resolvedMetadataValueLength: 4096,
+} as const;
+const TURN_RECORD_TOOL_ORIGIN_KEYS = [
+  "toolUseId",
+  "toolName",
+  "order",
+  "origin",
+  "pinnedRepositoryKeys",
+  "resolvedMetadata",
+] as const;
+const TURN_RECORD_TOOL_ORIGIN_FIELDS = ["path", "cwd", "namedAPath"] as const;
+const TURN_RECORD_ORIGIN_NULL_CHARACTER = "\0";
+
+const LEGACY_PROVIDER_METADATA_KEYS = [
+  "ls_provider",
+  "ls_model_type",
+  "ls_message_format",
+  "codex_cli_version",
+  "ls_raw_aggregated_usage",
+  "ls_invocation_params",
+] as const;
+
+const LEGACY_RUN_STRING_FIELDS = [
+  "end_time",
+  "parent_run_id",
+  "trace_id",
+  "dotted_order",
+  "error",
+  "reference_example_id",
+] as const;
+
+const LEGACY_RUN_OBJECT_FIELDS = ["outputs", "serialized"] as const;
 
 const REPOSITORY_NAME_KEY = "repository_name";
 
@@ -154,6 +194,7 @@ const GIT_MARKER = {
 
 const TURN_RECORD_LINE = {
   run: "run",
+  toolOrigin: "tool-origin",
   closed: "closed",
   delivered: "ok",
   reconciled: "fixed",
@@ -165,6 +206,9 @@ export {
   CLAUDE_CODE_INTEGRATION,
   CLAUDE_TOOL_SNAPSHOT_EVENT_SUFFIX,
   CLAUDE_TOOL_RECONSTRUCTION_EVENT_SUFFIX,
+  CLAUDE_RUN_RECONSTRUCTION_EVENT_SUFFIX,
+  CLAUDE_RUN_SNAPSHOT_EVENT_SUFFIX,
+  CLAUDE_RUN_SNAPSHOT_SOURCE_SEPARATOR,
   CLAUDE_TURN_CLOSURE_EVENT_SUFFIX,
   CLAUDE_TURN_FAILURE_EVENT_SUFFIX,
   CLAUDE_AGENT_CLOSURE_EVENT_SUFFIX,
@@ -189,6 +233,13 @@ export {
   TURN_RECORD_SUFFIX,
   SHARED_ENGINE_STORAGE_DIRECTORY,
   TURN_RECORD_MAX_BYTES,
+  LEGACY_PROVIDER_METADATA_KEYS,
+  LEGACY_RUN_STRING_FIELDS,
+  LEGACY_RUN_OBJECT_FIELDS,
+  TURN_RECORD_VALIDATION_LIMITS,
+  TURN_RECORD_TOOL_ORIGIN_KEYS,
+  TURN_RECORD_TOOL_ORIGIN_FIELDS,
+  TURN_RECORD_ORIGIN_NULL_CHARACTER,
   TURN_RECORD_LINE,
   RECORDED_RUN_FALLBACK_TYPE,
   GIT_MARKER,

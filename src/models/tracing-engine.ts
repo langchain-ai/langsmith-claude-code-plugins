@@ -25,16 +25,38 @@ export interface ClaudeToolReconstructionInput {
   turnEvidence: ReconstructionTurnEvidence;
 }
 
+export interface ClaudeRecordedToolOrigin {
+  toolUseId: string;
+  toolName: string;
+  order: number;
+  origin: ToolOrigin;
+  pinnedRepositoryKeys?: string[];
+  resolvedMetadata?: Record<string, string>;
+}
+
+export interface ClaudeRunReconstructionContext {
+  project: string;
+  recordOrigin: string;
+  sessionId: string;
+  stateFilePath: string;
+}
+
 export interface ClaudeTracingEngineContext {
   accountFingerprint: string;
   captureStore: CaptureStore;
   destinations: readonly UploadDestination[];
+  project: string;
+  recordOrigin: string;
+  stateFilePath: string;
   session: TracingEngineSession;
   sessionId: string;
   storageRoot: string;
 }
 
-export type ClaudeSharedRunCapture = (input: LifecycleCaptureInput) => Promise<boolean>;
+export type ClaudeSharedRunCapture = (
+  input: LifecycleCaptureInput,
+  nativeTurnRecordRunId?: string,
+) => Promise<boolean>;
 
 export type ClaudeSharedChildRunIds = (
   turnId: string,

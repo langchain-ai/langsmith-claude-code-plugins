@@ -37,7 +37,7 @@ import { WORKFLOW_SUBAGENT_TYPE, handleWorkflowSubagentStop } from "../workflows
 import { turnRecordPath } from "../turn-record.js";
 import { queueOrigin } from "../queue.js";
 import {
-  captureClaudeRun,
+  captureClaudeRunWithReconstruction,
   createClaudeTracingSession,
   sharedClaudeChildRunIds,
 } from "../tracing-engine.js";
@@ -71,7 +71,8 @@ export async function main(): Promise<void> {
   );
   const engine = createClaudeTracingSession(config, input.cwd, input.session_id);
   const captureSharedRun: ClaudeSharedRunCapture | undefined = engine
-    ? (capture) => captureClaudeRun(engine, capture)
+    ? (capture, nativeTurnRecordRunId) =>
+        captureClaudeRunWithReconstruction(engine, capture, nativeTurnRecordRunId)
     : undefined;
   const getSharedChildRunIds = engine
     ? (turnId: string, rootRunId: string, recorded?: readonly string[]) =>
@@ -92,6 +93,7 @@ export async function main(): Promise<void> {
       project: config.project,
       customMetadata: config.customMetadata,
       captureSharedRun,
+      recordOrigin: engine?.recordOrigin,
     });
     return;
   }
@@ -174,6 +176,7 @@ export async function main(): Promise<void> {
         ? {
             path: turnRecordPath(config.stateFilePath, input.session_id, turnRunId),
             origin: queueOrigin(config),
+            runId: turnRunId,
           }
         : undefined,
       captureSharedRun,

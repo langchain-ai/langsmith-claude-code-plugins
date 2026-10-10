@@ -1,5 +1,7 @@
+import { chmodSync, existsSync, mkdirSync, renameSync, rmdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createCaptureStore } from "@langchain/plugins-base/storage/capture";
 
 import {
   alpha,
@@ -7,13 +9,16 @@ import {
   beta,
   createdMetadataAll,
   createdMetadataOf,
+  hookLog,
   hook,
   metadataOf,
   notification,
   plain,
   prompt,
+  recordDir,
   recordFiles,
   recordLines,
+  sandbox,
   service,
   stop,
   subagent,
@@ -23,6 +28,14 @@ import {
   useReconcileSandbox,
   waitFor,
 } from "./fixtures/reconcile-sandbox.js";
+import { recordRun, recordToolOrigin, readTurnRecord, turnRecordPath } from "./turn-record.js";
+import { getSessionState, loadState } from "./state.js";
+import { turnAttributionWithToolOrigins } from "./tracing-engine.js";
+import {
+  CLAUDE_CODE_INTEGRATION,
+  CLAUDE_RUN_RECONSTRUCTION_EVENT_SUFFIX,
+  SHARED_ENGINE_STORAGE_DIRECTORY,
+} from "./constants.js";
 
 const session = (id: string, cwd: string) => ({
   session_id: id,
@@ -121,6 +134,470 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     });
   });
 
+  it("saves a standalone current turn before reconstructing its model run", async () => {
+    const base = session("standalone-model-origin", plain);
+    reply(base, 1, [
+      {
+        id: "use-beta-read",
+        name: "Read",
+        input: { file_path: join(beta, "seed.txt") },
+      },
+    ]);
+    await stop(base);
+
+    expect(await waitFor(() => createdMetadataAll(base.session_id, "Claude").length > 0)).toBe(
+      true,
+    );
+    expect(createdMetadataOf(base.session_id, "Claude")).toMatchObject({
+      repository_name: "acme/b",
+      git_branch: "trunk-b",
+      ls_attribution_identifier: "Beta Owner",
+    });
+    const nativeRecord = readTurnRecord(
+      join(recordDir(base.session_id), recordFiles(base.session_id)[0]),
+    );
+    expect(nativeRecord?.root?.routing).toEqual({ cwd: base.cwd });
+  });
+
+  it("includes captured tool attribution in initial model and Agent posts while the worker is held", async () => {
+    const base = session("held-tool-upload", plain);
+    const held = service.holdNextUploadNamed("Read");
+    try {
+      await prompt(base);
+      await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+      await held.entered;
+      await subagent(base, "held-agent");
+      await task(base, "held-agent");
+      reply(base, 1, [
+        {
+          id: "use-Read",
+          name: "Read",
+          input: { file_path: join(alpha, "seed.txt") },
+        },
+        {
+          id: "use-held-agent",
+          name: "Task",
+          input: { prompt: "go and look" },
+          agentId: "held-agent",
+        },
+      ]);
+      await stop(base);
+
+      expect(service.created.some((run) => run.name === "Claude" || run.name === "Agent")).toBe(
+        false,
+      );
+    } finally {
+      held.release();
+    }
+
+    const attributed = {
+      repository_name: "acme/a",
+      git_branch: "trunk-a",
+      ls_attribution_identifier: "Alpha Owner",
+    };
+    expect(await waitFor(() => createdMetadataAll(base.session_id, "Claude").length > 0)).toBe(
+      true,
+    );
+    expect(await waitFor(() => service.created.some((run) => run.name === "Agent"))).toBe(true);
+    expect({
+      models: createdMetadataAll(base.session_id, "Claude"),
+      agent: createdMetadataOf(base.session_id, "Agent"),
+    }).toEqual({
+      models: expect.arrayContaining([expect.objectContaining(attributed)]),
+      agent: expect.objectContaining(attributed),
+    });
+  });
+
+  it("fails Stop when a completed tool origin cannot be saved", async () => {
+    const base = session("origin-save-fails", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+    reply(base, 1, [
+      { id: "use-Read", name: "Read", input: { file_path: join(alpha, "seed.txt") } },
+    ]);
+
+    const [recordName] = recordFiles(base.session_id);
+    expect(recordName).toBeDefined();
+    const path = join(recordDir(base.session_id), recordName!);
+    const permissions = statSync(path).mode & 0o777;
+    chmodSync(path, permissions & ~0o222);
+    try {
+      await stop(base);
+      expect(hookLog()).toContain("Could not save tool use-Read's repository origin before Stop");
+      expect(service.created.some((run) => run.name === "Claude" || run.name === "Agent")).toBe(
+        false,
+      );
+    } finally {
+      chmodSync(path, permissions);
+    }
+  });
+
+  it("retries a model reconstruction after its run record cannot be saved", async () => {
+    const base = session("run-record-save-fails", alpha);
+    await prompt(base);
+    reply(base);
+
+    const stateFile = join(sandbox.root, "state.json");
+    const before = getSessionState(loadState(stateFile), base.session_id);
+    const rootRunId = before.current_turn_run_id;
+    expect(rootRunId).toBeDefined();
+    const [recordName] = recordFiles(base.session_id);
+    expect(recordName).toBeDefined();
+    const path = join(recordDir(base.session_id), recordName!);
+    const permissions = statSync(path).mode & 0o777;
+
+    chmodSync(path, permissions & ~0o222);
+    try {
+      await stop(base);
+      expect(hookLog()).toContain("Could not add to the turn record");
+      expect(hookLog()).toContain("Could not capture shared Claude LLM run");
+      expect(service.created.some((run) => run.name === "Claude")).toBe(false);
+      const failed = getSessionState(loadState(stateFile), base.session_id);
+      expect(failed.current_turn_run_id).toBe(rootRunId);
+      expect(failed.last_line).toBe(before.last_line);
+      expect(service.updated.some((run) => run.id === rootRunId)).toBe(false);
+    } finally {
+      chmodSync(path, permissions);
+    }
+
+    await stop(base);
+
+    expect(await waitFor(() => createdMetadataAll(base.session_id, "Claude").length === 1)).toBe(
+      true,
+    );
+    expect(service.created.filter((run) => run.name === "Claude Code Turn")).toEqual([
+      expect.objectContaining({ id: rootRunId }),
+    ]);
+    expect(
+      await waitFor(() => service.updated.some((run) => run.id === rootRunId && run.end_time)),
+    ).toBe(true);
+    expect(
+      getSessionState(loadState(stateFile), base.session_id).current_turn_run_id,
+    ).toBeUndefined();
+  });
+
+  it("does not upload a full model run when its active root record is missing", async () => {
+    const base = session("missing-active-root-record", alpha);
+    await prompt(base);
+    reply(base);
+
+    const stateFile = join(sandbox.root, "state.json");
+    const before = getSessionState(loadState(stateFile), base.session_id);
+    const rootRunId = before.current_turn_run_id;
+    expect(rootRunId).toBeDefined();
+    const [recordName] = recordFiles(base.session_id);
+    expect(recordName).toBeDefined();
+    const path = join(recordDir(base.session_id), recordName!);
+    const savedPath = `${path}.saved`;
+    renameSync(path, savedPath);
+    try {
+      await stop(base);
+      expect(service.created.some((run) => run.name === "Claude")).toBe(false);
+      expect(getSessionState(loadState(stateFile), base.session_id).current_turn_run_id).toBe(
+        rootRunId,
+      );
+    } finally {
+      renameSync(savedPath, path);
+    }
+
+    await stop(base);
+    expect(await waitFor(() => createdMetadataAll(base.session_id, "Claude").length > 0)).toBe(
+      true,
+    );
+  });
+
+  it("drops a held model reconstruction if its native turn record disappears", async () => {
+    const base = session("deleted-native-turn-record", plain);
+    const held = service.holdNextUploadNamed("Read");
+    const stateFile = join(sandbox.root, "state.json");
+    const reconstructionStore = createCaptureStore(
+      join(sandbox.root, SHARED_ENGINE_STORAGE_DIRECTORY, "reconstruction-v1"),
+    );
+    let path: string | undefined;
+    let savedPath: string | undefined;
+    try {
+      await prompt(base);
+      await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
+      await held.entered;
+      reply(base);
+      const rootRunId = getSessionState(loadState(stateFile), base.session_id).current_turn_run_id;
+      expect(rootRunId).toBeDefined();
+      await stop(base);
+
+      const job = (
+        await reconstructionStore.enumerate(CLAUDE_CODE_INTEGRATION, base.session_id)
+      ).find(({ record }) => record.eventId.endsWith(CLAUDE_RUN_RECONSTRUCTION_EVENT_SUFFIX));
+      expect(job).toBeDefined();
+      path = turnRecordPath(stateFile, base.session_id, rootRunId!);
+      savedPath = `${path}.saved`;
+      expect(existsSync(path)).toBe(true);
+      renameSync(path, savedPath);
+      held.release();
+
+      const deadline = Date.now() + 20_000;
+      let outcome: Awaited<ReturnType<typeof reconstructionStore.readOutcome>> | undefined;
+      while (Date.now() < deadline) {
+        outcome = await reconstructionStore.readOutcome(
+          job!.record,
+          job!.record.destinationFingerprint,
+        );
+        if (outcome.status === "settled") break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(outcome).toMatchObject({ status: "settled", receipt: { outcome: "dropped" } });
+      expect(service.created.some((run) => run.name === "Claude")).toBe(false);
+    } finally {
+      held.release();
+      if (path && savedPath && existsSync(savedPath)) renameSync(savedPath, path);
+    }
+  });
+
+  it("keeps a turn running when a completed tool has no Git result", async () => {
+    const base = session("origin-has-no-git-result", plain);
+    await prompt(base);
+    await tool(base, "Read", { file_path: join(plain, "notes.txt") });
+    reply(base, 1, [
+      { id: "use-Read", name: "Read", input: { file_path: join(plain, "notes.txt") } },
+    ]);
+    await stop(base);
+
+    expect(await waitFor(() => createdMetadataAll(base.session_id, "Claude").length > 0)).toBe(
+      true,
+    );
+    expect(
+      createdMetadataAll(base.session_id, "Claude").every(
+        (metadata) => !Object.hasOwn(metadata, "repository_name"),
+      ),
+    ).toBe(true);
+  });
+
+  it("reuses a resolved tool origin for later model and Agent reconstructions", () => {
+    const path = turnRecordPath(join(sandbox.root, "state.json"), "origin-cache", "root");
+    const origin = "account";
+    recordRun({
+      path,
+      run: {
+        id: "root",
+        name: "turn",
+        run_type: "chain",
+        trace_id: "root",
+        dotted_order: "root",
+        extra: { metadata: {} },
+      },
+      tracing: "full",
+      origin,
+      root: true,
+    });
+    recordRun({
+      path,
+      run: {
+        id: "read-run",
+        name: "Read",
+        run_type: "tool",
+        trace_id: "root",
+        parent_run_id: "root",
+        dotted_order: "root.read",
+        extra: { metadata: {} },
+      },
+      tracing: "full",
+      origin,
+      toolUseId: "use-read",
+    });
+    recordToolOrigin(path, origin, "full", {
+      toolUseId: "use-read",
+      toolName: "Read",
+      order: 0,
+      origin: { path: join(alpha, "seed.txt"), cwd: plain, namedAPath: true },
+    });
+
+    let resolutions = 0;
+    const resolve = () => {
+      resolutions++;
+      return {
+        repository_name: "acme/a",
+        repository_provider: "github",
+        repository_url: "https://github.com/acme/a",
+        git_branch: "trunk-a",
+        git_commit_sha: "aaaa",
+        ls_attribution_identifier: "Alpha Owner",
+      };
+    };
+    const first = turnAttributionWithToolOrigins(readTurnRecord(path)!, resolve);
+    const second = turnAttributionWithToolOrigins(readTurnRecord(path)!, resolve);
+
+    expect(first).toMatchObject({ repository_name: "acme/a", git_branch: "trunk-a" });
+    expect(second).toEqual(first);
+    expect(resolutions).toBe(1);
+  });
+
+  it("keeps saved tool order ahead of timestamp order", () => {
+    const path = turnRecordPath(join(sandbox.root, "state.json"), "origin-order", "root");
+    const origin = "account";
+    recordRun({
+      path,
+      run: {
+        id: "root",
+        name: "turn",
+        run_type: "chain",
+        trace_id: "root",
+        dotted_order: "root",
+        extra: { metadata: {} },
+      },
+      tracing: "full",
+      origin,
+      root: true,
+    });
+    recordRun({
+      path,
+      run: {
+        id: "read-run",
+        name: "Read",
+        run_type: "tool",
+        trace_id: "root",
+        parent_run_id: "root",
+        dotted_order: "root.z",
+        extra: { metadata: { repository_name: "acme/a" } },
+      },
+      tracing: "full",
+      origin,
+      toolUseId: "use-read",
+    });
+    recordRun({
+      path,
+      run: {
+        id: "write-run",
+        name: "Write",
+        run_type: "tool",
+        trace_id: "root",
+        parent_run_id: "root",
+        dotted_order: "root.a",
+        extra: { metadata: { repository_name: "acme/b" } },
+      },
+      tracing: "full",
+      origin,
+      toolUseId: "use-write",
+    });
+    recordToolOrigin(path, origin, "full", {
+      toolUseId: "use-read",
+      toolName: "Read",
+      order: 0,
+      origin: { path: join(alpha, "seed.txt"), cwd: plain, namedAPath: true },
+    });
+    recordToolOrigin(path, origin, "full", {
+      toolUseId: "use-write",
+      toolName: "Write",
+      order: 1,
+      origin: { path: join(beta, "seed.txt"), cwd: plain, namedAPath: true },
+    });
+
+    expect(turnAttributionWithToolOrigins(readTurnRecord(path)!)).toMatchObject({
+      repository_name: "acme/a",
+    });
+  });
+
+  it("does not let an unrecorded tool origin outrank captured children", () => {
+    const path = turnRecordPath(join(sandbox.root, "state.json"), "origin-captured", "root");
+    const origin = "account";
+    recordRun({
+      path,
+      run: {
+        id: "root",
+        name: "turn",
+        run_type: "chain",
+        trace_id: "root",
+        dotted_order: "root",
+        extra: { metadata: {} },
+      },
+      tracing: "full",
+      origin,
+      root: true,
+    });
+    recordRun({
+      path,
+      run: {
+        id: "write-run",
+        name: "Write",
+        run_type: "tool",
+        trace_id: "root",
+        parent_run_id: "root",
+        dotted_order: "root.a",
+        extra: { metadata: { repository_name: "acme/b" } },
+      },
+      tracing: "full",
+      origin,
+      toolUseId: "use-write",
+    });
+    recordToolOrigin(path, origin, "full", {
+      toolUseId: "use-read",
+      toolName: "Read",
+      order: 0,
+      origin: { path: join(alpha, "seed.txt"), cwd: plain, namedAPath: true },
+    });
+
+    expect(
+      turnAttributionWithToolOrigins(readTurnRecord(path)!, () => ({ repository_name: "acme/a" })),
+    ).toMatchObject({ repository_name: "acme/b" });
+  });
+
+  it("does not reuse a later same-name tool run for an earlier origin", () => {
+    const path = turnRecordPath(join(sandbox.root, "state.json"), "origin-same-name", "root");
+    const origin = "account";
+    recordRun({
+      path,
+      run: {
+        id: "root",
+        name: "turn",
+        run_type: "chain",
+        trace_id: "root",
+        dotted_order: "root",
+        extra: { metadata: {} },
+      },
+      tracing: "full",
+      origin,
+      root: true,
+    });
+    recordRun({
+      path,
+      run: {
+        id: "later-read-run",
+        name: "Read",
+        run_type: "tool",
+        trace_id: "root",
+        parent_run_id: "root",
+        dotted_order: "root.a",
+        extra: { metadata: { repository_name: "acme/b" } },
+      },
+      tracing: "full",
+      origin,
+      toolUseId: "use-read-later",
+    });
+    recordToolOrigin(path, origin, "full", {
+      toolUseId: "use-read-earlier",
+      toolName: "Read",
+      order: 0,
+      origin: { path: join(alpha, "seed.txt"), cwd: plain, namedAPath: true },
+    });
+    recordToolOrigin(path, origin, "full", {
+      toolUseId: "use-read-later",
+      toolName: "Read",
+      order: 1,
+      origin: { path: join(beta, "seed.txt"), cwd: plain, namedAPath: true },
+    });
+
+    const resolvedPaths: string[] = [];
+    turnAttributionWithToolOrigins(readTurnRecord(path)!, (_base, toolOrigin) => {
+      resolvedPaths.push(toolOrigin.path ?? "");
+      return {
+        repository_name: toolOrigin.path === join(alpha, "seed.txt") ? "acme/a" : "acme/b",
+      };
+    });
+
+    const record = readTurnRecord(path)!;
+    expect(resolvedPaths).toEqual([join(alpha, "seed.txt")]);
+    expect(record.toolOrigins[0]?.resolvedMetadata).toEqual({ repository_name: "acme/a" });
+    expect(record.children[0]?.toolUseId).toBe("use-read-later");
+  });
+
   // Catches a sub-task and everything under it being built from what the session knew
   // at the start, so the Task, the subagent and its model calls arrive with no author.
   it("gives a sub-task and the runs beneath it the repository and the author", async () => {
@@ -140,8 +617,8 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     expect(await waitFor(() => service.created.some((run) => run.name === "Agent"))).toBe(true);
     expect(createdMetadataOf(base.session_id, "Agent")).toMatchObject(attributed);
     expect(
-      await waitFor(() =>
-        createdMetadataOf(base.session_id, "Explore Subagent").repository_name === "acme/a",
+      await waitFor(
+        () => createdMetadataOf(base.session_id, "Explore Subagent").repository_name === "acme/a",
       ),
     ).toBe(true);
     expect(createdMetadataOf(base.session_id, "Explore Subagent")).toMatchObject(attributed);
@@ -210,9 +687,6 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     expect(metadataOf("Claude Code Turn")).toMatchObject(attributed);
   });
 
-  // Catches the turn that reports a background agent back being built from the session's
-  // own folder, which has no repository, so it and its model call are the two runs in the
-  // trace with nothing on them.
   it("labels the turn that reports a background agent back", async () => {
     const base = session("background-notify", plain);
     await prompt(base);
@@ -232,10 +706,34 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
       git_branch: "trunk-a",
       ls_attribution_identifier: "Alpha Owner",
     };
-    const turns = createdMetadataAll(base.session_id, "Claude Code Turn");
+    const turns = service.created.filter(
+      (run) =>
+        run.name === "Claude Code Turn" && run.extra?.metadata?.thread_id === base.session_id,
+    );
     expect(turns).toHaveLength(2);
-    expect(turns.at(-1)).toMatchObject(attributed);
-    expect(createdMetadataAll(base.session_id, "Claude").at(-1)).toMatchObject(attributed);
+    const secondTurn = turns.find((run) => run.extra?.metadata?.turn_number === 2)!;
+    const models = () =>
+      service.created.filter(
+        (run) =>
+          run.name === "Claude" &&
+          run.extra?.metadata?.thread_id === base.session_id &&
+          run.extra?.metadata?.ls_agent_type === "root",
+      );
+    expect(await waitFor(() => models().length === 2)).toBe(true);
+    expect(models()).toHaveLength(2);
+    const secondModel = models().find((run) => run.parent_run_id === secondTurn.id);
+    expect(secondModel).toBeDefined();
+    expect(secondModel?.extra?.metadata).toMatchObject(attributed);
+
+    expect(
+      await waitFor(() => {
+        const metadata = { ...secondTurn.extra?.metadata };
+        for (const update of service.updated.filter((run) => run.id === secondTurn.id)) {
+          Object.assign(metadata, update.extra?.metadata);
+        }
+        return Object.entries(attributed).every(([key, value]) => metadata[key] === value);
+      }),
+    ).toBe(true);
   });
 
   // Catches the same gap on the other route: a killed agent's run is never posted open,

@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
 
 import { metadataAfterFill, reconcileTurn, turnAttribution } from "./reconcile.js";
 import { inAlpha, inBeta, record, recorded } from "./fixtures/turn-record-sandbox.js";
@@ -93,6 +96,21 @@ describe("letting go of a turn", () => {
     replicas: undefined,
     watch: { failure: () => undefined },
   };
+
+  it("leaves shared child closure to the shared engine while settling legacy children", async () => {
+    const updateRun = vi.fn(async (_id: string, _run: unknown) => {});
+    const shared = { ...recorded("shared", bare), shared: true, open: true };
+    const legacy = { ...recorded("legacy", bare), open: true };
+    const turn = record(bare, [shared, legacy], {
+      path: join(mkdtempSync(join(tmpdir(), "claude-shared-reconcile-")), "turn.jsonl"),
+    });
+    turn.root!.shared = true;
+
+    await expect(
+      reconcileTurn({ ...nothingUploads, record: turn, client: { updateRun } as never }),
+    ).resolves.toBe(true);
+    expect(updateRun.mock.calls.map((args) => args[0])).toEqual(["legacy"]);
+  });
 
   // Catches a turn nobody ever closed being kept on disk for good, since the age limit sat
   // behind the check for a close that never comes. No other test leaves a turn unfinished.

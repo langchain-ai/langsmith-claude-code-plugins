@@ -94,6 +94,7 @@ export async function finalizeNotificationChain(opts: {
             : "Subagent killed"
           : undefined,
         captureSharedRun: opts.captureSharedRun,
+        nativeTurnRecordRunId: launchingTurnId,
       });
     } catch (err) {
       logger.error(`Failed to close Agent tool run for ${agentId}: ${err}`);

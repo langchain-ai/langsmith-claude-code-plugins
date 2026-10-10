@@ -1,5 +1,5 @@
 import { createCaptureStore } from "@langchain/plugins-base/storage/capture";
-import { CaptureWakeError, createTracingEngine } from "@langchain/plugins-base/tracing";
+import { createTracingEngine, readSavedCaptureWake } from "@langchain/plugins-base/tracing";
 import { buildCodingAgentMetadata } from "@langchain/plugins-base/metadata";
 import type {
   ReconstructionJob,
@@ -15,17 +15,20 @@ import type {
   PreparedRunSubmission,
 } from "@langchain/plugins-base/tracing/upload";
 import type { CodingAgentMetadataOptions } from "@langchain/plugins-base/metadata";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   CLAUDE_CODE_INTEGRATION,
+  CLAUDE_RUN_RECONSTRUCTION_EVENT_SUFFIX,
+  CLAUDE_RUN_SNAPSHOT_EVENT_SUFFIX,
+  CLAUDE_RUN_SNAPSHOT_SOURCE_SEPARATOR,
   CLAUDE_SETTLEMENT_EVENT_KIND,
   CLAUDE_TOOL_RECONSTRUCTION_EVENT_SUFFIX,
   CLAUDE_TOOL_SNAPSHOT_EVENT_SUFFIX,
+  REPOSITORY_NAME_KEY,
   PINNED_REPOSITORY_KEYS,
   REPOSITORY_METADATA_KEYS,
   SHARED_ENGINE_STORAGE_DIRECTORY,
   TRUSTED_INTEGRATION_VERSION,
-  TURN_RECORD_SUFFIX,
 } from "./constants.js";
 import type { Config } from "./config.js";
 import { queueOrigin } from "./queue.js";
@@ -35,26 +38,40 @@ import {
   listTurnRecords,
   readTurnRecord,
   recordDelivered,
+  recordRun,
   recordResolvedMetadata,
+  recordResolvedToolOriginMetadata,
   turnRecordDir,
+  turnRecordPath,
 } from "./turn-record.js";
+import { metadataAfterFill, turnAttributionFromOrderedChildren } from "./reconcile.js";
 import { loadConfig } from "./config.js";
+import { legacyRouteForSession } from "./legacy-import.js";
 import type {
+  ClaudeRunReconstructionContext,
   ClaudeToolReconstructionInput,
   ClaudeTracingEngineContext,
 } from "./models/tracing-engine.js";
 import { warn } from "./logger.js";
 import { settledRepositoryMetadata } from "./repo-attribution.js";
-import type { TracingMode } from "./types.js";
+import type { RecordedRun, TracingMode, TurnRecord } from "./types.js";
 
 export function createClaudeTracingSession(
   config: Config,
   cwd: string,
   sessionId: string,
+  projectName?: string,
 ): ClaudeTracingEngineContext | undefined {
-  const writerOptions = writerOptionsForConfig(config);
+  const projectConfig = projectName === undefined ? config : { ...config, project: projectName };
+  const writerOptions = writerOptionsForConfig(projectConfig);
   if (!writerOptions) return undefined;
   const writer = createLangSmithUploadWriter(writerOptions);
+  const runReconstructionContext = {
+    project: projectConfig.project,
+    recordOrigin: queueOrigin(projectConfig),
+    stateFilePath: projectConfig.stateFilePath,
+    sessionId,
+  };
   const storageRoot = join(dirname(config.stateFilePath), SHARED_ENGINE_STORAGE_DIRECTORY);
   const captureStore = createCaptureStore(storageRoot);
   const engine = createTracingEngine({
@@ -64,40 +81,84 @@ export function createClaudeTracingSession(
   });
   const session = engine.forSession({
     sessionId,
-    resolveScope: () => {
-      const current = loadConfig({ cwd, deferGit: true });
-      const options = writerOptionsForConfig(current);
-      if (!options)
+    resolveScope: () => resolveClaudeScope(cwd, sessionId, projectName),
+    scheduleWake: () => launchQueueFlusher(cwd, sessionId, projectName),
+    reconstruct: (job) => reconstructClaudeJob(job, runReconstructionContext),
+    backgroundRecovery: {
+      optionsForSession: (recoveredSessionId) => {
+        const current = loadConfig({ cwd, deferGit: true });
+        const origin = queueOrigin(current);
+        const route = legacyRouteForSession(current.stateFilePath, recoveredSessionId, origin);
+        if (!route) throw new Error(`Could not find a saved route for ${recoveredSessionId}`);
+        const recovered = loadConfig({ cwd: route.cwd, deferGit: true });
+        if (queueOrigin(recovered) !== origin)
+          throw new Error(
+            `Saved route for ${recoveredSessionId} belongs to another LangSmith account`,
+          );
         return {
-          integration: CLAUDE_CODE_INTEGRATION,
-          sessionId,
-          accountFingerprint: "unavailable",
+          resolveScope: () => resolveClaudeScope(route.cwd, recoveredSessionId, route.projectName),
+          scheduleWake: () => launchQueueFlusher(route.cwd, recoveredSessionId, route.projectName),
+          reconstruct: (job) =>
+            reconstructClaudeJob(job, {
+              project: route.projectName,
+              recordOrigin: queueOrigin(recovered),
+              stateFilePath: recovered.stateFilePath,
+              sessionId: recoveredSessionId,
+            }),
         };
-      try {
-        return {
-          integration: CLAUDE_CODE_INTEGRATION,
-          sessionId,
-          accountFingerprint: createLangSmithUploadWriter(options).accountFingerprint,
-        };
-      } catch {
-        return {
-          integration: CLAUDE_CODE_INTEGRATION,
-          sessionId,
-          accountFingerprint: "unavailable",
-        };
-      }
+      },
+      onReport: (result) => {
+        if (result.status === "partial" || result.status === "failed") {
+          warn(`Shared session recovery was incomplete: ${JSON.stringify(result)}`);
+        }
+      },
     },
-    scheduleWake: () => launchQueueFlusher(cwd, sessionId),
-    reconstruct: reconstructClaudeTool,
   });
   return {
     accountFingerprint: writer.accountFingerprint,
     captureStore,
     destinations: writer.destinations,
+    project: projectConfig.project,
+    recordOrigin: queueOrigin(projectConfig),
+    stateFilePath: projectConfig.stateFilePath,
     session,
     sessionId,
     storageRoot,
   };
+}
+
+async function reconstructClaudeJob(
+  job: ReconstructionJob,
+  context: ClaudeRunReconstructionContext,
+): Promise<ReconstructionResult> {
+  return job.eventId.endsWith(CLAUDE_RUN_RECONSTRUCTION_EVENT_SUFFIX)
+    ? reconstructClaudeRun(job, context)
+    : reconstructClaudeTool(job);
+}
+
+function resolveClaudeScope(cwd: string, sessionId: string, projectName?: string) {
+  const current = loadConfig({ cwd, deferGit: true });
+  const scoped = projectName === undefined ? current : { ...current, project: projectName };
+  const options = writerOptionsForConfig(scoped);
+  if (!options)
+    return {
+      integration: CLAUDE_CODE_INTEGRATION,
+      sessionId,
+      accountFingerprint: "unavailable",
+    };
+  try {
+    return {
+      integration: CLAUDE_CODE_INTEGRATION,
+      sessionId,
+      accountFingerprint: createLangSmithUploadWriter(options).accountFingerprint,
+    };
+  } catch {
+    return {
+      integration: CLAUDE_CODE_INTEGRATION,
+      sessionId,
+      accountFingerprint: "unavailable",
+    };
+  }
 }
 
 export async function captureClaudeRun(
@@ -108,21 +169,39 @@ export async function captureClaudeRun(
     const result = await context.session.capture(input);
     return result.status === "published" || result.status === "duplicate";
   } catch (err) {
-    if (!(err instanceof CaptureWakeError)) throw err;
-    const record = err.captureResult.record;
     if (
-      record.integration === CLAUDE_CODE_INTEGRATION &&
-      record.sessionId === context.sessionId &&
-      record.turnId === input.turnId &&
-      record.eventId === input.eventId &&
-      record.runId === input.submission.run.id &&
-      record.destinationFingerprint === context.accountFingerprint
+      await readSavedCaptureWake(err, {
+        store: context.captureStore,
+        integration: CLAUDE_CODE_INTEGRATION,
+        sessionId: context.sessionId,
+        turnId: input.turnId,
+        eventId: input.eventId,
+        runId: input.submission.run.id,
+        destinationFingerprint: context.accountFingerprint,
+      })
     ) {
       warn(`Shared capture was saved but its worker wake failed: ${err}`);
       return true;
     }
     throw err;
   }
+}
+
+export async function captureClaudeRunWithReconstruction(
+  context: ClaudeTracingEngineContext,
+  input: LifecycleCaptureInput,
+  nativeTurnRecordRunId?: string,
+): Promise<boolean> {
+  const source = input.submission;
+  const run = source.run;
+  if (
+    source.operation === "post" &&
+    source.privacyMode === "full" &&
+    (run.run_type === "llm" || (run.run_type === "tool" && run.name === "Agent"))
+  ) {
+    return queueClaudeRunReconstruction(context, input, nativeTurnRecordRunId);
+  }
+  return captureClaudeRun(context, input);
 }
 
 export async function sharedClaudeChildRunIds(
@@ -206,11 +285,14 @@ export async function queueClaudeToolReconstruction(
         sourceAgeStartedAtMs: startTime,
         submission,
         attributionContext: {
-          toolOrigin: {
-            ...(input.origin.path === undefined ? {} : { path: input.origin.path }),
-            ...(input.origin.cwd === undefined ? {} : { cwd: input.origin.cwd }),
-            namedAPath: input.origin.namedAPath,
-          },
+          toolOrigin:
+            input.privacyMode === "full"
+              ? {
+                  ...(input.origin.path === undefined ? {} : { path: input.origin.path }),
+                  ...(input.origin.cwd === undefined ? {} : { cwd: input.origin.cwd }),
+                  namedAPath: input.origin.namedAPath,
+                }
+              : { namedAPath: false },
           ...(input.privacyMode === "full" && input.pinnedRepositoryKeys !== undefined
             ? { pinnedRepositoryKeys: [...input.pinnedRepositoryKeys] }
             : {}),
@@ -224,9 +306,102 @@ export async function queueClaudeToolReconstruction(
       throw new Error(`Could not queue completed tool ${input.run.id}: ${queued.status}`);
     }
   } catch (err) {
-    if (!isSavedReconstructionWake(err, context, reconstruction)) throw err;
+    if (!(await context.session.readSavedReconstructionWake(err, reconstruction))) throw err;
     warn(`Completed tool ${input.run.id} was saved but its worker wake failed: ${err}`);
   }
+}
+
+export async function queueClaudeRunReconstruction(
+  context: ClaudeTracingEngineContext,
+  input: LifecycleCaptureInput,
+  nativeTurnRecordRunId?: string,
+): Promise<boolean> {
+  const source = input.submission;
+  if (
+    source.operation !== "post" ||
+    source.privacyMode !== "full" ||
+    (source.run.run_type !== "llm" &&
+      !(source.run.run_type === "tool" && source.run.name === "Agent"))
+  ) {
+    return false;
+  }
+  const run = source.run;
+  const rootRunId = input.turnEvidence.rootRunId;
+  if (
+    typeof nativeTurnRecordRunId !== "string" ||
+    nativeTurnRecordRunId.length === 0 ||
+    typeof rootRunId !== "string" ||
+    typeof run.trace_id !== "string" ||
+    typeof run.dotted_order !== "string" ||
+    run.trace_id !== rootRunId ||
+    !input.turnEvidence.childRunIds.includes(run.id) ||
+    typeof run.parent_run_id !== "string"
+  ) {
+    return false;
+  }
+  const turnPath = turnRecordPath(context.stateFilePath, context.sessionId, nativeTurnRecordRunId);
+  const turn = readTurnRecord(turnPath);
+  if (!turn || turn.origin !== context.recordOrigin || turn.root?.run_id !== nativeTurnRecordRunId)
+    return false;
+
+  const sourceRef = claudeRunSnapshotSourceRef(nativeTurnRecordRunId, run.id);
+  const reconstruction: ReconstructionJobInput = {
+    turnId: input.turnId,
+    eventId: `${run.id}${CLAUDE_RUN_RECONSTRUCTION_EVENT_SUFFIX}`,
+    sourceRefs: [sourceRef],
+    privacyMode: "full",
+    turnEvidence: input.turnEvidence,
+    sourceSnapshots: [
+      {
+        sourceRef,
+        sourceAgeStartedAtMs: runStartTime(run.start_time, run.id),
+        submission: source,
+      },
+    ],
+  };
+  const metadata = buildCodingAgentMetadata(source.metadata);
+  if (
+    !recordRun({
+      path: turnPath,
+      run: { ...run, project_name: context.project, extra: { metadata } },
+      tracing: "full",
+      origin: context.recordOrigin,
+      shared: true,
+    })
+  ) {
+    return false;
+  }
+
+  try {
+    const queued = await context.session.queueReconstruction(reconstruction);
+    if (queued.status !== "published" && queued.status !== "duplicate") {
+      throw new Error(`Could not queue run ${run.id}: ${queued.status}`);
+    }
+  } catch (err) {
+    if (!(await context.session.readSavedReconstructionWake(err, reconstruction))) throw err;
+    warn(`Run ${run.id} was saved but its worker wake failed: ${err}`);
+  }
+  return true;
+}
+
+function runStartTime(value: unknown, runId: string): number {
+  const startTime =
+    typeof value === "number" ? value : typeof value === "string" ? Date.parse(value) : Number.NaN;
+  if (!Number.isSafeInteger(startTime) || startTime < 0)
+    throw new TypeError(`Run ${runId} has an invalid start time`);
+  return startTime;
+}
+
+function claudeRunSnapshotSourceRef(nativeTurnRecordRunId: string, runId: string): string {
+  return `${nativeTurnRecordRunId}${CLAUDE_RUN_SNAPSHOT_SOURCE_SEPARATOR}${runId}${CLAUDE_RUN_SNAPSHOT_EVENT_SUFFIX}`;
+}
+
+function nativeTurnRecordRunIdFromSourceRef(sourceRef: string): string | undefined {
+  if (!sourceRef.endsWith(CLAUDE_RUN_SNAPSHOT_EVENT_SUFFIX)) return undefined;
+  const identity = sourceRef.slice(0, -CLAUDE_RUN_SNAPSHOT_EVENT_SUFFIX.length);
+  const separator = identity.indexOf(CLAUDE_RUN_SNAPSHOT_SOURCE_SEPARATOR);
+  if (separator <= 0 || separator === identity.length - 1) return undefined;
+  return identity.slice(0, separator);
 }
 
 function runSnapshotForMode(
@@ -247,18 +422,20 @@ export async function acknowledgeClaudeSharedDeliveries(
 ): Promise<void> {
   const recordDirectory = turnRecordDir(config.stateFilePath, sessionId);
   const origin = queueOrigin(config);
-  for (const path of listTurnRecords(recordDirectory)) {
+  const paths = listTurnRecords(recordDirectory);
+  if (paths.length === 0) return;
+  const captures = await context.captureStore.enumerate(CLAUDE_CODE_INTEGRATION, sessionId);
+  for (const path of paths) {
     const turn = readTurnRecord(path);
     if (!turn || turn.origin !== origin) continue;
-    const turnId = turn.root?.run_id ?? basename(path).slice(0, -TURN_RECORD_SUFFIX.length);
     const recordedRuns = [...(turn.root ? [turn.root] : []), ...turn.children];
-    const captures = await context.captureStore.enumerate(CLAUDE_CODE_INTEGRATION, sessionId);
     for (const run of recordedRuns) {
       if (!run.shared) continue;
       const matching = captures
         .filter(
           ({ record }) =>
-            record.turnId === turnId &&
+            record.integration === CLAUDE_CODE_INTEGRATION &&
+            record.sessionId === sessionId &&
             record.runId === run.run_id &&
             record.destinationFingerprint === context.accountFingerprint &&
             (record.eventId === run.run_id || record.eventKind === CLAUDE_SETTLEMENT_EVENT_KIND),
@@ -266,9 +443,9 @@ export async function acknowledgeClaudeSharedDeliveries(
         .sort((left, right) => left.capturedAtMs - right.capturedAtMs);
       for (const { record } of matching) {
         const scope = {
-          integration: CLAUDE_CODE_INTEGRATION,
-          sessionId,
-          turnId,
+          integration: record.integration,
+          sessionId: record.sessionId,
+          turnId: record.turnId,
           eventId: record.eventId,
         };
         const outcomes = await Promise.all(
@@ -292,29 +469,31 @@ export async function acknowledgeClaudeSharedDeliveries(
           break;
         }
       }
-      if (
-        turn.root?.run_id !== run.run_id &&
-        !turn.delivered.has(run.run_id) &&
-        matching.some(({ record }) => record.eventId === run.run_id)
-      ) {
-        const scope = {
-          integration: CLAUDE_CODE_INTEGRATION,
-          sessionId,
-          turnId,
-          eventId: run.run_id,
-        };
-        const outcomes = await Promise.all(
-          context.destinations.map((destination) =>
-            context.captureStore.readOutcome(scope, destination.id),
-          ),
+      if (turn.root?.run_id !== run.run_id && !turn.delivered.has(run.run_id)) {
+        const postedCapture = matching.find(
+          ({ record }) => record.eventId === run.run_id && record.runId === run.run_id,
         );
-        if (
-          outcomes.length > 0 &&
-          outcomes.every(
-            (outcome) => outcome.status === "settled" && outcome.receipt.outcome === "delivered",
-          )
-        ) {
-          recordDelivered(turn.path, run.run_id);
+        if (postedCapture) {
+          const { record } = postedCapture;
+          const scope = {
+            integration: record.integration,
+            sessionId: record.sessionId,
+            turnId: record.turnId,
+            eventId: record.eventId,
+          };
+          const outcomes = await Promise.all(
+            context.destinations.map((destination) =>
+              context.captureStore.readOutcome(scope, destination.id),
+            ),
+          );
+          if (
+            outcomes.length > 0 &&
+            outcomes.every(
+              (outcome) => outcome.status === "settled" && outcome.receipt.outcome === "delivered",
+            )
+          ) {
+            recordDelivered(turn.path, run.run_id);
+          }
         }
       }
     }
@@ -433,6 +612,9 @@ async function reconstructClaudeTool(job: ReconstructionJob): Promise<Reconstruc
     throw new Error("Claude tool snapshot does not match its reconstruction job");
   }
   const attributionContext = snapshot.attributionContext;
+  if (job.privacyMode === "metadata") {
+    return { status: "ready", outputs: [{ eventId: run.id, sourceRef, submission: source }] };
+  }
   if (!attributionContext) throw new Error("Claude tool attribution context is missing");
   const baseWithPins = withPinnedRepositoryKeys(
     source.metadata.base,
@@ -460,6 +642,174 @@ async function reconstructClaudeTool(job: ReconstructionJob): Promise<Reconstruc
   };
 }
 
+function reconstructClaudeRun(
+  job: ReconstructionJob,
+  context: ClaudeRunReconstructionContext,
+): ReconstructionResult {
+  if (job.sourceRefs.length !== 1 || job.sourceSnapshots?.length !== 1)
+    throw new Error("Claude run reconstruction needs one source snapshot");
+  const [sourceRef] = job.sourceRefs;
+  const nativeTurnRecordRunId = nativeTurnRecordRunIdFromSourceRef(sourceRef!);
+  const snapshot = job.sourceSnapshots[0]!;
+  const source = snapshot.submission;
+  if (source.operation !== "post") throw new Error("Claude run source snapshots must be posts");
+  const run = source.run;
+  if (
+    job.privacyMode !== "full" ||
+    source.privacyMode !== "full" ||
+    nativeTurnRecordRunId === undefined ||
+    snapshot.sourceRef !== sourceRef ||
+    sourceRef !== claudeRunSnapshotSourceRef(nativeTurnRecordRunId, run.id) ||
+    job.eventId !== `${run.id}${CLAUDE_RUN_RECONSTRUCTION_EVENT_SUFFIX}` ||
+    (run.run_type !== "llm" && !(run.run_type === "tool" && run.name === "Agent")) ||
+    typeof run.trace_id !== "string" ||
+    typeof run.dotted_order !== "string" ||
+    run.trace_id !== job.turnEvidence.rootRunId ||
+    !job.turnEvidence.childRunIds.includes(run.id)
+  ) {
+    throw new Error("Claude run snapshot does not match its reconstruction job");
+  }
+  const turn = readTurnRecord(
+    turnRecordPath(context.stateFilePath, context.sessionId, nativeTurnRecordRunId),
+  );
+  if (
+    !turn ||
+    turn.origin !== context.recordOrigin ||
+    turn.root?.run_id !== nativeTurnRecordRunId
+  ) {
+    throw new Error("Claude native turn record is missing or invalid");
+  }
+  const attribution = turnAttributionWithToolOrigins(turn);
+  const sourceMetadata = buildCodingAgentMetadata(source.metadata);
+  const recorded: RecordedRun = {
+    run_id: run.id,
+    ...(run.parent_run_id === undefined ? {} : { parent_run_id: run.parent_run_id }),
+    trace_id: run.trace_id,
+    dotted_order: run.dotted_order,
+    name: run.name,
+    run_type: run.run_type,
+    tracing: "full",
+    metadata: sourceMetadata,
+  };
+  const filled = attribution ? metadataAfterFill(recorded, attribution) : undefined;
+  const additions = Object.fromEntries(
+    REPOSITORY_METADATA_KEYS.flatMap((key) =>
+      sourceMetadata[key] === undefined && typeof filled?.[key] === "string"
+        ? [[key, filled[key]]]
+        : [],
+    ),
+  );
+  const submission: PreparedRunSubmission =
+    Object.keys(additions).length === 0
+      ? source
+      : {
+          ...source,
+          metadata: {
+            ...source.metadata,
+            base: { ...source.metadata.base, ...additions },
+          },
+        };
+  return {
+    status: "ready",
+    outputs: [
+      {
+        eventId: run.id,
+        sourceRef,
+        submission,
+      },
+    ],
+  };
+}
+
+export function turnAttributionWithToolOrigins(
+  record: TurnRecord,
+  resolveOrigin: typeof settledRepositoryMetadata = settledRepositoryMetadata,
+) {
+  const matched = new Set<string>();
+  const toolChildren = [];
+  const missingToolRuns = [];
+  for (const toolOrigin of record.toolOrigins) {
+    const captured = recordedToolForOrigin(record, toolOrigin, matched);
+    if (captured) matched.add(captured.run_id);
+    const capturedMetadata = repositoryMetadata(captured?.metadata);
+    if (capturedMetadata[REPOSITORY_NAME_KEY] !== undefined) {
+      if (captured) toolChildren.push(captured);
+      continue;
+    }
+    let resolvedMetadata = toolOrigin.resolvedMetadata;
+    if (resolvedMetadata === undefined) {
+      const base = withPinnedRepositoryKeys(record.root?.metadata, toolOrigin.pinnedRepositoryKeys);
+      resolvedMetadata = repositoryMetadata(resolveOrigin(base, toolOrigin.origin));
+      if (
+        !recordResolvedToolOriginMetadata(
+          record.path,
+          record.origin,
+          toolOrigin.toolUseId,
+          resolvedMetadata,
+        )
+      ) {
+        throw new Error(`Could not save the resolved origin for tool ${toolOrigin.toolUseId}`);
+      }
+    }
+    const metadata = { ...resolvedMetadata, ...capturedMetadata };
+    if (captured) {
+      toolChildren.push({
+        ...captured,
+        metadata: { ...captured.metadata, ...metadata },
+      });
+    } else if (Object.keys(metadata).length > 0) {
+      missingToolRuns.push({
+        run_id: `origin-${toolOrigin.toolUseId}`,
+        parent_run_id: record.root?.run_id,
+        trace_id: record.root?.trace_id ?? record.root?.run_id ?? "",
+        dotted_order: `${record.root?.dotted_order ?? "0"}.${String(toolOrigin.order).padStart(12, "0")}`,
+        name: toolOrigin.toolName,
+        run_type: "tool",
+        tracing: "full" as const,
+        metadata,
+      });
+    }
+  }
+  const remainingChildren = record.children
+    .filter((child) => !matched.has(child.run_id))
+    .sort((left, right) => (left.dotted_order < right.dotted_order ? -1 : 1));
+  return turnAttributionFromOrderedChildren(record, [
+    ...toolChildren,
+    ...remainingChildren,
+    ...missingToolRuns,
+  ]);
+}
+
+function repositoryMetadata(metadata: Record<string, unknown> | undefined): Record<string, string> {
+  return Object.fromEntries(
+    REPOSITORY_METADATA_KEYS.flatMap((key) =>
+      typeof metadata?.[key] === "string" && metadata[key].length > 0
+        ? [[key, metadata[key] as string]]
+        : [],
+    ),
+  );
+}
+
+function recordedToolForOrigin(
+  record: TurnRecord,
+  origin: TurnRecord["toolOrigins"][number],
+  alreadyMatched: ReadonlySet<string>,
+): RecordedRun | undefined {
+  const byId = record.children.find(
+    (child) => child.run_type === "tool" && child.toolUseId === origin.toolUseId,
+  );
+  if (byId && !alreadyMatched.has(byId.run_id)) return byId;
+  return record.children
+    .filter(
+      (child) =>
+        child.run_type === "tool" &&
+        child.toolUseId === undefined &&
+        !alreadyMatched.has(child.run_id) &&
+        (child.name === origin.toolName || child.metadata.ls_tool_name === origin.toolName),
+    )
+    .sort((left, right) => (left.dotted_order < right.dotted_order ? -1 : 1))[0];
+}
+
 function withPinnedRepositoryKeys(
   base: Record<string, unknown> | undefined,
   keys: readonly string[] | undefined,
@@ -468,26 +818,4 @@ function withPinnedRepositoryKeys(
   const result = { ...base };
   Object.defineProperty(result, PINNED_REPOSITORY_KEYS, { value: new Set(keys) });
   return result;
-}
-
-function isSavedReconstructionWake(
-  error: unknown,
-  context: ClaudeTracingEngineContext,
-  input: ReconstructionJobInput,
-): error is CaptureWakeError {
-  if (!(error instanceof CaptureWakeError)) return false;
-  const record = error.captureResult.record;
-  const payload = isRecord(record.normalizedPayload) ? record.normalizedPayload : undefined;
-  const sourceRefs = payload?.sourceRefs;
-  return (
-    record.integration === CLAUDE_CODE_INTEGRATION &&
-    record.sessionId === context.sessionId &&
-    record.turnId === input.turnId &&
-    record.eventId === input.eventId &&
-    record.destinationFingerprint === context.accountFingerprint &&
-    payload?.privacyMode === input.privacyMode &&
-    Array.isArray(sourceRefs) &&
-    sourceRefs.length === input.sourceRefs.length &&
-    sourceRefs.every((reference, index) => reference === input.sourceRefs[index])
-  );
 }

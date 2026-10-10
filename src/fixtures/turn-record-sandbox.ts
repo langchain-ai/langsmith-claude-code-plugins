@@ -55,6 +55,7 @@ export function record(
       run_type: "chain",
     },
     children,
+    toolOrigins: [],
     closed: true,
     delivered: new Set(children.map((child) => child.run_id)),
     fixed: new Set(),

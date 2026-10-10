@@ -15,19 +15,36 @@ const INFO = {
   batch_ingest_config: { use_multipart_endpoint: true, size_limit: 100 },
 };
 
+function createUploadHold(name: string) {
+  let enter = () => {};
+  let release = () => {};
+  const entered = new Promise<void>((resolve) => (enter = resolve));
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  return { name, entered, gate, enter, release };
+}
+
 export function fakeLangSmith(rules: FakeLangSmithRules = {}) {
   let server: Server | undefined;
   const seen: WireRun[] = [];
+  const started: WireRun[] = [];
   const attempted: WireRun[] = [];
+  let uploadHold = createUploadHold("");
   const service = {
     fail: false,
     failOnce: undefined as { action: WireRun["action"]; id: string } | undefined,
     delayMs: 0,
     /** Refuse only the requests whose body mentions this, so one run can fail on its own. */
     refuse: "",
+    holdNextUploadNamed(name: string) {
+      uploadHold = createUploadHold(name);
+      return { entered: uploadHold.entered, release: uploadHold.release };
+    },
     endpoint: "",
     get attempts() {
       return [...attempted];
+    },
+    get started() {
+      return [...started];
     },
     get created() {
       return seen.filter((wire) => wire.action === "post").map((wire) => wire.run);
@@ -37,11 +54,14 @@ export function fakeLangSmith(rules: FakeLangSmithRules = {}) {
     },
     reset() {
       seen.length = 0;
+      started.length = 0;
       attempted.length = 0;
       service.fail = false;
       service.failOnce = undefined;
       service.delayMs = 0;
       service.refuse = "";
+      uploadHold.release();
+      uploadHold = createUploadHold("");
     },
     async listen() {
       server = createServer((request, response) => {
@@ -49,10 +69,20 @@ export function fakeLangSmith(rules: FakeLangSmithRules = {}) {
         request.on("data", (chunk) => chunks.push(chunk as Buffer));
         request.on("end", () => {
           const body = Buffer.concat(chunks).toString("utf8");
-          const answer = () => {
+          const answer = async () => {
             response.setHeader("content-type", "application/json");
             if (request.url?.includes("/info")) return response.end(JSON.stringify(INFO));
             const writes = wireRuns(request.url ?? "", request.method ?? "POST", body);
+            started.push(...writes);
+            const hold = uploadHold;
+            if (
+              hold.name &&
+              writes.some((wire) => wire.action === "post" && wire.run.name === hold.name)
+            ) {
+              uploadHold = createUploadHold("");
+              hold.enter();
+              await hold.gate;
+            }
             attempted.push(...writes);
             const failedOnce = service.failOnce;
             const shouldFailOnce =
@@ -86,8 +116,8 @@ export function fakeLangSmith(rules: FakeLangSmithRules = {}) {
             response.writeHead(202);
             response.end("{}");
           };
-          if (service.delayMs > 0) setTimeout(answer, service.delayMs);
-          else answer();
+          if (service.delayMs > 0) setTimeout(() => void answer(), service.delayMs);
+          else void answer();
         });
       });
       await new Promise<void>((resolve) => server?.listen(0, "127.0.0.1", resolve));
@@ -136,12 +166,46 @@ export function turnLines(options: {
   model: string;
   prompt: string;
   reply: string;
+  toolCalls?: Array<{
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    agentId?: string;
+  }>;
 }): string {
   const now = new Date().toISOString();
-  const { turn, model, prompt, reply } = options;
+  const { turn, model, prompt, reply, toolCalls = [] } = options;
   return (
     [
       { type: "user", message: { role: "user", content: prompt } },
+      ...(toolCalls.length === 0
+        ? []
+        : [
+            {
+              type: "assistant",
+              message: {
+                id: `m${turn}-tools`,
+                role: "assistant",
+                model,
+                stop_reason: "tool_use",
+                usage: { input_tokens: 1, output_tokens: 1 },
+                content: toolCalls.map(({ id, name, input }) => ({
+                  type: "tool_use",
+                  id,
+                  name,
+                  input,
+                })),
+              },
+            },
+            ...toolCalls.map(({ id, agentId }) => ({
+              type: "user",
+              message: {
+                role: "user",
+                content: [{ type: "tool_result", tool_use_id: id, content: "ok" }],
+              },
+              ...(agentId === undefined ? {} : { toolUseResult: { agentId } }),
+            })),
+          ]),
       {
         type: "assistant",
         message: {

@@ -45,7 +45,8 @@ import { debug, error } from "./logger.js";
 import { flushPendingTraces, traceWorkflowStage } from "./langsmith.js";
 import type { TaskRunEntry } from "./langsmith.js";
 import { getSessionState, loadState } from "./state.js";
-import type { SessionState } from "./types.js";
+import { turnRecordPath } from "./turn-record.js";
+import type { SessionState, TurnRecordTarget } from "./types.js";
 import type { ClaudeSharedRunCapture } from "./models/tracing-engine.js";
 
 /** The tool name that launches a dynamic workflow. */
@@ -118,6 +119,7 @@ export async function handleWorkflowSubagentStop(opts: {
   project: string;
   customMetadata?: Record<string, unknown>;
   captureSharedRun?: ClaudeSharedRunCapture;
+  recordOrigin?: string;
 }): Promise<void> {
   const runId = workflowRunIdFromPath(opts.agentTranscriptPath);
   if (!runId) {
@@ -139,6 +141,14 @@ export async function handleWorkflowSubagentStop(opts: {
   const launchingTurnId = deferred?.parent_run_id as string | undefined;
   const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : undefined;
   const parentTraceId = (deferred?.trace_id as string | undefined) ?? ss.current_trace_id;
+  const record: TurnRecordTarget | undefined =
+    launchingTurnId && opts.recordOrigin
+      ? {
+          path: turnRecordPath(opts.stateFilePath, opts.sessionId, launchingTurnId),
+          origin: opts.recordOrigin,
+          runId: launchingTurnId,
+        }
+      : undefined;
 
   try {
     await traceWorkflowStage({
@@ -160,6 +170,7 @@ export async function handleWorkflowSubagentStop(opts: {
       runtimeVersion: launchingTurn?.runtime_version ?? ss.runtime_version,
       turnId: launchingTurn?.turn_id,
       turnNumber: launchingTurn?.turn_number ?? ss.current_turn_number,
+      record,
       captureSharedRun: opts.captureSharedRun,
     });
     debug(`Traced workflow stage ${opts.agentId} under Workflow run ${entry.run_id}`);

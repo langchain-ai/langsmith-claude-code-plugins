@@ -14,7 +14,7 @@ import {
   completedToolUseIds,
   turnToolInputs,
 } from "../transcript.js";
-import { awaitsTheTurn, turnScopedMetadata } from "../repo-attribution.js";
+import { awaitsTheTurn, toolOrigin, turnScopedMetadata } from "../repo-attribution.js";
 import { log, warn, debug, error } from "../logger.js";
 import {
   loadState,
@@ -32,11 +32,20 @@ import {
   flushPendingTraces,
 } from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
+import { buildCodingAgentMetadata } from "@langchain/plugins-base/metadata";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { startQueueFlusher } from "../utils/detach.js";
-import { readTurnRecord, recordRun, recordTurnClosed, turnRecordPath } from "../turn-record.js";
+import {
+  readTurnRecord,
+  recordRun,
+  recordToolOrigin,
+  recordTurnClosed,
+  turnRecordPath,
+} from "../turn-record.js";
 import { queueOrigin } from "../queue.js";
+import { pinnedRepositoryKeys } from "../config.js";
+import type { Config } from "../config.js";
 import { everyChildLanded, settledFromTurn, settledTurnMetadata } from "../reconcile.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { MUTED_TRACE_CONTENT } from "../privacy.js";
@@ -44,17 +53,65 @@ import {
   CLAUDE_CODE_INTEGRATION,
   CLAUDE_TURN_CLOSURE_EVENT_SUFFIX,
   CLAUDE_TURN_PROGRESS_EVENT_SUFFIX,
+  PINNED_REPOSITORY_KEYS,
   USER_PROMPT_TURN_NAME,
 } from "../constants.js";
 import { codingAgentMetadata, codingAgentMetadataOptions } from "../metadata.js";
 import {
   captureClaudeRun,
+  captureClaudeRunWithReconstruction,
   createClaudeTracingSession,
+  queueClaudeRunReconstruction,
   sharedClaudeChildRunIds,
 } from "../tracing-engine.js";
 import type { TaskRunEntry } from "../langsmith.js";
-import type { StopHookInput } from "../types.js";
+import type { SessionState, StopHookInput, TracingMode, Turn } from "../types.js";
 import type { ClaudeSharedRunCapture } from "../models/tracing-engine.js";
+
+function recordCompletedToolOrigins(
+  path: string,
+  origin: string,
+  turn: Turn,
+  config: Config,
+  sessionId: string,
+  sessionState: SessionState,
+  tracing: TracingMode,
+  cwd: string,
+): string | undefined {
+  const completed = new Set(completedToolUseIds([turn]));
+  const pinnedKeys = Object.hasOwn(config.customMetadata ?? {}, PINNED_REPOSITORY_KEYS)
+    ? [...pinnedRepositoryKeys(config.customMetadata)].sort()
+    : undefined;
+  let order = 0;
+  for (const tool of turn.llmCalls.flatMap((call) => call.toolCalls)) {
+    if (!completed.has(tool.tool_use.id)) {
+      order++;
+      continue;
+    }
+    const toolMode = resolveTurnTracingMode(
+      config,
+      sessionId,
+      sessionState.tool_tracing_modes?.[tool.tool_use.id],
+      tracing,
+    );
+    if (
+      !recordToolOrigin(path, origin, toolMode, {
+        toolUseId: tool.tool_use.id,
+        toolName: tool.tool_use.name,
+        order,
+        origin: toolOrigin(tool.tool_use.input, cwd),
+        ...(toolMode === "full" && pinnedKeys !== undefined
+          ? { pinnedRepositoryKeys: pinnedKeys }
+          : {}),
+      })
+    ) {
+      warn(`Could not record the origin for tool ${tool.tool_use.id}`);
+      return tool.tool_use.id;
+    }
+    order++;
+  }
+  return undefined;
+}
 
 export async function main(): Promise<void> {
   const startTime = Date.now();
@@ -69,7 +126,7 @@ export async function main(): Promise<void> {
   debug(`Stop hook started, session=${input.session_id}`);
 
   // Hand the queued tool runs to a detached uploader, off this turn's response path.
-  startQueueFlusher(input.cwd, input.session_id);
+  startQueueFlusher(input.cwd, input.session_id, config.project);
 
   // Skip recursive hook calls.
   if (input.stop_hook_active) {
@@ -198,10 +255,99 @@ export async function main(): Promise<void> {
     ? {
         path: turnRecordPath(config.stateFilePath, input.session_id, currentRunId),
         origin: queueOrigin(config),
+        runId: currentRunId,
       }
     : undefined;
+  const closingTurn = turns[turns.length - 1];
+  const existingTurnRecord = currentTurnRecord ? readTurnRecord(currentTurnRecord.path) : undefined;
+  const currentRecordIsValid =
+    currentRunId !== undefined &&
+    existingTurnRecord !== undefined &&
+    existingTurnRecord?.origin === currentTurnRecord?.origin &&
+    existingTurnRecord.root?.run_id === currentRunId;
+  if (currentRunId !== undefined && currentTracing === "full" && !currentRecordIsValid) {
+    error(`Cannot finish full-tracing turn ${currentRunId} without its native turn record`);
+    return;
+  }
+  if (currentTurnRecord && existingTurnRecord && closingTurn && currentRecordIsValid) {
+    const failedToolOriginId = recordCompletedToolOrigins(
+      currentTurnRecord.path,
+      currentTurnRecord.origin,
+      closingTurn,
+      config,
+      input.session_id,
+      sessionState,
+      currentTracing,
+      input.cwd,
+    );
+    if (failedToolOriginId)
+      throw new Error(`Could not save tool ${failedToolOriginId}'s repository origin before Stop`);
+  }
   const captureSharedRun: ClaudeSharedRunCapture | undefined = engine
-    ? (capture) => captureClaudeRun(engine, capture)
+    ? async (capture, nativeTurnRecordRunId) => {
+        const source = capture.submission;
+        const run = capture.submission.run;
+        if (
+          source.operation === "post" &&
+          source.privacyMode === "full" &&
+          run.run_type === "chain" &&
+          run.name === USER_PROMPT_TURN_NAME &&
+          run.id === capture.turnEvidence.rootRunId
+        ) {
+          const rootRunId = run.id;
+          if (nativeTurnRecordRunId !== rootRunId) return false;
+          if (currentRunId !== undefined) return false;
+          const path = turnRecordPath(config.stateFilePath, input.session_id, rootRunId);
+          const record = readTurnRecord(path);
+          if (
+            record &&
+            (record.origin !== engine.recordOrigin || record.root?.run_id !== rootRunId)
+          ) {
+            return false;
+          }
+          if (!(await captureClaudeRun(engine, capture))) return false;
+          if (
+            !record &&
+            !recordRun({
+              path,
+              run: {
+                ...run,
+                project_name: config.project,
+                extra: { metadata: buildCodingAgentMetadata(source.metadata) },
+              },
+              tracing: "full",
+              origin: engine.recordOrigin,
+              shared: true,
+              root: true,
+              routing: { cwd: input.cwd },
+            })
+          ) {
+            return false;
+          }
+          const failedToolOriginId = closingTurn
+            ? recordCompletedToolOrigins(
+                path,
+                engine.recordOrigin,
+                closingTurn,
+                config,
+                input.session_id,
+                sessionState,
+                currentTracing,
+                input.cwd,
+              )
+            : undefined;
+          if (failedToolOriginId) return false;
+          return true;
+        }
+        if (
+          source.operation === "post" &&
+          source.privacyMode === "full" &&
+          (run.run_type === "llm" || (run.run_type === "tool" && run.name === "Agent"))
+        ) {
+          return queueClaudeRunReconstruction(engine, capture, nativeTurnRecordRunId);
+        }
+        return captureClaudeRunWithReconstruction(engine, capture, nativeTurnRecordRunId);
+      }
     : undefined;
   const getSharedChildRunIds = engine
     ? (turnId: string, rootRunId: string, recorded?: readonly string[]) =>
@@ -252,6 +398,7 @@ export async function main(): Promise<void> {
       tracedTurns++;
     } catch (err) {
       error(`Failed to trace turn ${turnNum}: ${err}`);
+      return;
     }
   }
 
@@ -264,7 +411,6 @@ export async function main(): Promise<void> {
   const mergedTaskRunMap = { ...freshSession.task_run_map, ...allTaskRunMaps };
 
   const lastTurnId = turns[turns.length - 1]?.promptId;
-  const closingTurn = turns[turns.length - 1];
   const closingTurnTools = closingTurn ? turnToolInputs(closingTurn) : [];
   const turnMetadataBase = turnScopedMetadata(sessionMetadata, closingTurnTools, input.cwd);
   const recordedTurn = currentTurnRecord ? readTurnRecord(currentTurnRecord.path) : undefined;
@@ -448,7 +594,11 @@ export async function main(): Promise<void> {
     const record = readTurnRecord(turnRecord);
     const everythingIn = !record || everyChildLanded(record);
     const settled = settledTurnMetadata(turnMetadata, record);
-    leaveTurnOpen = !everythingIn && awaitsTheTurn(settled);
+    const undeliveredChildren =
+      record?.children.filter((child) => !record.delivered.has(child.run_id)) ?? [];
+    const sharedSettlementOwnsPendingChildren =
+      record?.root?.shared === true && undeliveredChildren.every((child) => child.shared);
+    leaveTurnOpen = !everythingIn && awaitsTheTurn(settled) && !sharedSettlementOwnsPendingChildren;
     const rootCapture = engine
       ? await engine.captureStore.read({
           integration: CLAUDE_CODE_INTEGRATION,
@@ -649,6 +799,7 @@ export async function main(): Promise<void> {
         shared: rootUsesSharedEngine,
         root: true,
         closesAt: leaveTurnOpen ? new Date().toISOString() : undefined,
+        routing: { cwd: input.cwd },
       });
     }
     if (turnClosureCaptured) recordTurnClosed(turnRecord, lastTurnId);
@@ -682,7 +833,7 @@ export async function main(): Promise<void> {
     });
   }
 
-  startQueueFlusher(input.cwd, input.session_id);
+  startQueueFlusher(input.cwd, input.session_id, config.project);
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
   log(`Processed ${tracedTurns} turns in ${duration}s`);

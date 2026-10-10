@@ -105,15 +105,25 @@ vi.mock("../utils/detach.js", () => ({
 }));
 vi.mock("../tracing-engine.js", async (original) => {
   const tracingEngine = await original<typeof import("../tracing-engine.js")>();
+  const beforeCapture = async () => {
+    if (h.captureFalse) {
+      h.captureFalse = false;
+      return false;
+    }
+    if (h.event === "PostToolUse" || h.event === "Stop") await h.beforePost?.();
+    return true;
+  };
   return {
     ...tracingEngine,
     captureClaudeRun: async (...args: Parameters<typeof tracingEngine.captureClaudeRun>) => {
-      if (h.captureFalse) {
-        h.captureFalse = false;
-        return false;
-      }
-      if (h.event === "PostToolUse" || h.event === "Stop") await h.beforePost?.();
+      if (!(await beforeCapture())) return false;
       return tracingEngine.captureClaudeRun(...args);
+    },
+    captureClaudeRunWithReconstruction: async (
+      ...args: Parameters<typeof tracingEngine.captureClaudeRunWithReconstruction>
+    ) => {
+      if (!(await beforeCapture())) return false;
+      return tracingEngine.captureClaudeRunWithReconstruction(...args);
     },
   };
 });
@@ -270,7 +280,11 @@ async function hook(name: keyof typeof HOOK_EVENT_BY_NAME, extra: Record<string,
 async function drainSharedEngine() {
   const context = await sharedEngineContext();
   if (!context) return;
-  await context.session.drain();
+  const { initHook } = await import("../utils/hook-init.js");
+  const config = initHook("/repo");
+  if (!config) return;
+  const { drainClaudeSession } = await import("../tracing-engine.js");
+  await drainClaudeSession(context, config, String(h.input.session_id));
 }
 
 async function sharedEngineContext() {
@@ -281,17 +295,22 @@ async function sharedEngineContext() {
   return createClaudeTracingSession(config, "/repo", String(h.input.session_id));
 }
 function topology() {
-  return h.operations.map(({ action, config: c }) => ({
-    action,
-    id: c.id,
-    name: c.name,
-    type: c.run_type,
-    parent: c.parent_run_id,
-    trace: c.trace_id,
-    order: c.dotted_order,
-    start: c.start_time,
-    end: c.end_time,
-  }));
+  const runs = new Map<string, Record<string, unknown>>();
+  for (const { config: c } of h.operations) {
+    if (typeof c.id !== "string") continue;
+    const previous = runs.get(c.id) ?? {};
+    runs.set(c.id, {
+      id: c.id,
+      name: c.name ?? previous.name,
+      type: c.run_type ?? previous.type,
+      parent: c.parent_run_id ?? previous.parent,
+      trace: c.trace_id ?? previous.trace,
+      order: c.dotted_order ?? previous.order,
+      start: c.start_time ?? previous.start,
+      end: c.end_time ?? previous.end,
+    });
+  }
+  return [...runs.values()].sort((left, right) => String(left.id).localeCompare(String(right.id)));
 }
 function expectPrivate(operations = h.operations) {
   expect(JSON.stringify(operations)).not.toContain(privateText);
@@ -854,16 +873,30 @@ describe("privacy propagation without lifecycle changes", () => {
   it.each(["full", "metadata"] as const)(
     "missing current mode preserves the matching open turn's %s snapshot",
     async (mode) => {
-      reset(mode === "full" ? "metadata" : "full");
-      legacyParent();
-      h.state.session.open_turns = {
-        "legacy-root": {
-          run_id: "legacy-root",
-          tracing: mode,
-          stop_seen: false,
-          agent_ids: [],
-        },
-      };
+      reset("full");
+      if (mode === "full") {
+        await hook("prompt");
+        const runId = h.state.session.current_turn_run_id!;
+        delete h.state.session.current_turn_tracing;
+        h.state.session.open_turns = {
+          [runId]: {
+            run_id: runId,
+            tracing: mode,
+            stop_seen: false,
+            agent_ids: [],
+          },
+        };
+      } else {
+        legacyParent();
+        h.state.session.open_turns = {
+          "legacy-root": {
+            run_id: "legacy-root",
+            tracing: mode,
+            stop_seen: false,
+            agent_ids: [],
+          },
+        };
+      }
       await hook("pre");
       await hook("post");
       await hook("precompact", { trigger: "auto" });
@@ -995,6 +1028,7 @@ describe("privacy propagation without lifecycle changes", () => {
   it("missing current snapshots default full and private tool replay does not demote its turn", async () => {
     reset("full");
     await hook("prompt");
+    const rootRunId = h.state.session.current_turn_run_id!;
     delete h.state.session.current_turn_tracing;
     await hook("pre", { tool_use_id: "default-full" });
     expect(h.state.session.tool_tracing_modes?.["default-full"]).toBe("full");
@@ -1005,12 +1039,28 @@ describe("privacy propagation without lifecycle changes", () => {
     const from = h.operations.length;
     await hook("stop");
     const replay = h.operations.slice(from);
-    expectPrivate(replay.filter((op) => op.config.run_type === "tool"));
-    expect(
-      replay
-        .filter((op) => op.config.run_type !== "tool")
-        .every((op) => !op.config.extra?.metadata?.ls_tracing_mode),
-    ).toBe(true);
+    const capturedToolRunIds = new Set(
+      h.operations
+        .filter((op) => op.action === "post" && op.config.run_type === "tool")
+        .map((op) => op.config.id),
+    );
+    expect(capturedToolRunIds.size).toBeGreaterThan(0);
+    const privateToolPost = h.operations.find(
+      (op) =>
+        op.action === "post" &&
+        op.config.run_type === "tool" &&
+        op.config.extra?.metadata?.ls_tracing_mode === "metadata",
+    );
+    expect(privateToolPost).toBeDefined();
+    const privateToolRunId = privateToolPost?.config.id;
+    expect(capturedToolRunIds.has(privateToolRunId)).toBe(true);
+    const privateToolReplay = replay.filter((op) => op.config.id === privateToolRunId);
+    expect(privateToolReplay.length).toBeGreaterThan(0);
+    expectPrivate(privateToolReplay);
+    const parentModelReplay = replay.filter((op) => !capturedToolRunIds.has(op.config.id));
+    expect(parentModelReplay.some((op) => op.config.id === rootRunId)).toBe(true);
+    expect(parentModelReplay.some((op) => op.config.run_type === "llm")).toBe(true);
+    expect(parentModelReplay.every((op) => !op.config.extra?.metadata?.ls_tracing_mode)).toBe(true);
     expect(h.errors).toEqual([]);
   });
 
@@ -1149,29 +1199,56 @@ describe("privacy propagation without lifecycle changes", () => {
       expect(h.errors).toEqual([]);
       const context = await sharedEngineContext();
       const captures = await context!.captureStore.enumerate(CLAUDE_CODE_INTEGRATION, "session");
+      if (mode === "full") {
+        const { listTurnRecords, readTurnRecord, turnRecordDir } =
+          await import("../turn-record.js");
+        const nativeTurns = listTurnRecords(turnRecordDir(h.queueState, "session"))
+          .map(readTurnRecord)
+          .filter((turn) => turn !== undefined);
+        const crossTurnChildren = nativeTurns.flatMap((turn) =>
+          turn.children.flatMap((child) => {
+            const capture = captures.find(
+              ({ record }) =>
+                record.eventId === child.run_id &&
+                record.runId === child.run_id &&
+                record.destinationFingerprint === context!.accountFingerprint,
+            );
+            return capture && capture.record.turnId !== turn.root?.run_id ? [{ turn, child }] : [];
+          }),
+        );
+        expect(crossTurnChildren.length).toBeGreaterThan(0);
+        expect(crossTurnChildren.every(({ turn, child }) => turn.delivered.has(child.run_id))).toBe(
+          true,
+        );
+      }
       const capturedTopology = captures
-        .map(({ record }) => {
+        .sort((left, right) => left.record.capturedAtMs - right.record.capturedAtMs)
+        .reduce((runs, { record }) => {
           const payload = record.normalizedPayload as Record<string, any>;
           const run = payload.run as Record<string, any>;
           const patch = payload.patch as Record<string, any> | undefined;
-          return {
-            action: payload.operation,
+          const previous = runs.get(run.id);
+          runs.set(run.id, {
             id: run.id,
-            name: run.name,
-            type: run.run_type,
-            parent: run.parent_run_id,
-            trace: run.trace_id,
-            order: run.dotted_order,
-            start: run.start_time,
-            end: run.end_time ?? patch?.values?.end_time,
-          };
-        })
-        .sort((left, right) =>
-          `${left.id}:${left.action}`.localeCompare(`${right.id}:${right.action}`),
-        );
-      expect(capturedTopology.some(({ name }) => name === "Agent")).toBe(true);
-      expect(capturedTopology.some(({ name }) => name === "Explore Subagent")).toBe(true);
-      topologies.push(capturedTopology);
+            name: run.name ?? previous?.name,
+            type: run.run_type ?? previous?.type,
+            parent: run.parent_run_id ?? previous?.parent,
+            trace: run.trace_id ?? previous?.trace,
+            order: run.dotted_order ?? previous?.order,
+            start: run.start_time ?? previous?.start,
+            end: run.end_time ?? patch?.values?.end_time ?? previous?.end,
+          });
+          return runs;
+        }, new Map<string, Record<string, any>>());
+      const finalTopology = [...capturedTopology.values()].sort((left, right) =>
+        left.id.localeCompare(right.id),
+      );
+      const completedRoots = finalTopology.filter(({ name }) => name === "Claude Code Turn");
+      expect(completedRoots.length).toBeGreaterThan(0);
+      expect(completedRoots.every(({ end }) => end !== undefined)).toBe(true);
+      expect(finalTopology.some(({ name }) => name === "Agent")).toBe(true);
+      expect(finalTopology.some(({ name }) => name === "Explore Subagent")).toBe(true);
+      topologies.push(finalTopology);
       const serializedCaptures = JSON.stringify(captures.map(({ record }) => record));
       if (mode === "metadata") {
         expectPrivate();
@@ -1261,6 +1338,7 @@ describe("privacy propagation without lifecycle changes", () => {
       // Start a fresh turn with the intended workflow launch mode.
       h.policy = mode;
       await hook("prompt");
+      const workflowRootId = h.state.session.current_turn_run_id!;
       await hook("pre", { tool_name: "Workflow" });
       await hook("post", {
         tool_name: "Workflow",
@@ -1279,6 +1357,30 @@ describe("privacy propagation without lifecycle changes", () => {
         agent_type: "workflow-subagent",
         agent_transcript_path: "/workflows/wf_test/agent-stage",
       });
+      const context = await sharedEngineContext();
+      const captures = await context!.captureStore.enumerate(CLAUDE_CODE_INTEGRATION, "session");
+      const stageChain = captures.find(({ record }) => {
+        const payload = record.normalizedPayload as Record<string, any>;
+        return payload.run?.name === "Workflow step" && payload.run?.trace_id === workflowRootId;
+      });
+      const stageChainId = (stageChain?.record.normalizedPayload as Record<string, any>)?.run?.id;
+      const stageLlm = captures.find(({ record }) => {
+        const run = (record.normalizedPayload as Record<string, any>).run;
+        return run?.run_type === "llm" && run?.parent_run_id === stageChainId;
+      });
+      const { readTurnRecord, turnRecordPath } = await import("../turn-record.js");
+      const workflowRecord = readTurnRecord(
+        turnRecordPath(h.queueState, "session", workflowRootId),
+      );
+      expect(
+        Boolean(
+          stageLlm &&
+          workflowRecord?.children.some(
+            (child) =>
+              child.run_id === (stageLlm.record.normalizedPayload as Record<string, any>).run.id,
+          ),
+        ),
+      ).toBe(mode === "full");
       await hook("prompt", { prompt: "workflow-task " + privateText });
       h.messages = transcript(undefined, "workflow-task " + privateText);
       await hook("stop");

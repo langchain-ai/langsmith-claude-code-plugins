@@ -28,7 +28,7 @@ import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { readRuntimeVersion } from "../transcript.js";
 import {
-  captureClaudeRun,
+  captureClaudeRunWithReconstruction,
   createClaudeTracingSession,
   sharedClaudeChildRunIds,
 } from "../tracing-engine.js";
@@ -86,7 +86,8 @@ export async function main(): Promise<void> {
   );
   const engine = createClaudeTracingSession(config, input.cwd, input.session_id);
   const captureSharedRun: ClaudeSharedRunCapture | undefined = engine
-    ? (capture) => captureClaudeRun(engine, capture)
+    ? (capture, nativeTurnRecordRunId) =>
+        captureClaudeRunWithReconstruction(engine, capture, nativeTurnRecordRunId)
     : undefined;
   const getSharedChildRunIds = engine
     ? (turnId: string, rootRunId: string, recorded?: readonly string[]) =>
@@ -127,6 +128,7 @@ export async function main(): Promise<void> {
             sessionState.current_turn_run_id,
           ),
           origin: queueOrigin(config),
+          runId: sessionState.current_turn_run_id,
         },
         captureSharedRun,
         getSharedChildRunIds,
@@ -164,6 +166,7 @@ export async function main(): Promise<void> {
         runtimeVersion,
         wasOpen: true, // subagent_done ⇒ SubagentStop posted it open
         captureSharedRun,
+        nativeTurnRecordRunId: launchingTurnId,
       });
       debug(`Closed open Agent tool run ${agentId} on session end`);
     } catch (err) {
@@ -231,7 +234,7 @@ export async function main(): Promise<void> {
   // not fire and the cleanup runs we just closed would never reach LangSmith.
   await flushPendingTraces();
 
-  startQueueFlusher(input.cwd, input.session_id);
+  startQueueFlusher(input.cwd, input.session_id, config.project);
 
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);

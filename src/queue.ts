@@ -213,7 +213,7 @@ export function queueIdleMs(dir: string, now: number = Date.now()): number {
 }
 
 /** When a record was queued, read from the entry name the queue sorts by. */
-function queuedAtMs(queueId: string): number | undefined {
+export function queuedAtMs(queueId: string): number | undefined {
   const queuedAt = Number(queueId.slice(0, QUEUE_ID_TIME_WIDTH));
   return Number.isFinite(queuedAt) && queuedAt > 0 ? queuedAt : undefined;
 }

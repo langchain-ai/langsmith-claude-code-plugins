@@ -94,10 +94,25 @@ export function hook(
  * The reply Claude Code writes down once a turn is over. It must arrive after the
  * prompt hook, which skips to the end of whatever the transcript already holds.
  */
-export function reply(base: { transcript_path: string }, turn = 1): void {
+export function reply(
+  base: { transcript_path: string },
+  turn = 1,
+  toolCalls: Array<{
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    agentId?: string;
+  }> = [],
+): void {
   writeFileSync(
     base.transcript_path,
-    turnLines({ turn, model: "claude-sonnet-4-5-20250929", prompt: "go", reply: "done" }),
+    turnLines({
+      turn,
+      model: "claude-sonnet-4-5-20250929",
+      prompt: "go",
+      reply: "done",
+      toolCalls,
+    }),
   );
 }
 

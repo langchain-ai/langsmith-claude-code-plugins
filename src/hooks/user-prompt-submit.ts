@@ -41,6 +41,7 @@ import { createRunTree } from "../privacy.js";
 import { loadConfig } from "../config.js";
 import {
   captureClaudeRun,
+  captureClaudeRunWithReconstruction,
   createClaudeTracingSession,
   sharedClaudeChildRunIds,
 } from "../tracing-engine.js";
@@ -141,7 +142,8 @@ export async function main(): Promise<void> {
   );
   const engine = createClaudeTracingSession(config, input.cwd, input.session_id);
   const captureSharedRun: ClaudeSharedRunCapture | undefined = engine
-    ? (capture) => captureClaudeRun(engine, capture)
+    ? (capture, nativeTurnRecordRunId) =>
+        captureClaudeRunWithReconstruction(engine, capture, nativeTurnRecordRunId)
     : undefined;
   const getSharedChildRunIds = engine
     ? (turnId: string, rootRunId: string, recorded?: readonly string[]) =>
@@ -150,7 +152,8 @@ export async function main(): Promise<void> {
 
   const state = loadState(config.stateFilePath);
   // Sweep once at the start, for folders other sessions left behind long enough ago to be safe.
-  if (state[input.session_id] === undefined) startQueueFlusher(input.cwd, input.session_id);
+  if (state[input.session_id] === undefined)
+    startQueueFlusher(input.cwd, input.session_id, config.project);
   const sessionState = getSessionState(state, input.session_id);
   const turnMode = getThreadTracingMode(
     config.stateFilePath,
@@ -218,6 +221,7 @@ export async function main(): Promise<void> {
             sessionState.current_turn_run_id,
           ),
           origin: queueOrigin(config),
+          runId: sessionState.current_turn_run_id,
         },
         error: supersededNotificationAgentId
           ? "Superseded by a newer task-notification"
@@ -276,6 +280,7 @@ export async function main(): Promise<void> {
         shared: true,
         root: true,
         ...(turn.leave_open ? { closesAt: new Date().toISOString() } : {}),
+        routing: { cwd: input.cwd },
       });
       recordTurnClosed(recordPath, turn.turn_id);
       await atomicUpdateState(config.stateFilePath, (s) => {
@@ -421,6 +426,7 @@ export async function main(): Promise<void> {
     origin: queueOrigin(config),
     root: true,
     shared: engine !== undefined,
+    routing: { cwd: input.cwd },
   });
 
   debug(`Created initial run ${runId} for turn ${turnNum}`);

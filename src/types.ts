@@ -8,6 +8,8 @@ import type {
   CodingAgentMetadataOptions as SharedCodingAgentMetadataOptions,
 } from "@langchain/plugins-base/metadata";
 import type { GIT_MARKERS, PINNED_REPOSITORY_KEYS, TURN_RECORD_LINE } from "./constants.js";
+import type { NativeRunRouting } from "./models/native-routing.js";
+import type { ClaudeRecordedToolOrigin } from "./models/tracing-engine.js";
 
 export type TracingMode = "full" | "metadata";
 export type LSAgentType = CodingAgentAgentType;
@@ -376,6 +378,7 @@ export interface QueuedRun {
 
 export interface RecordedRun {
   run_id: string;
+  toolUseId?: string;
   parent_run_id?: string;
   trace_id: string;
   dotted_order: string;
@@ -387,11 +390,17 @@ export interface RecordedRun {
   tracing: TracingMode;
   shared?: boolean;
   open?: boolean;
+  routing?: NativeRunRouting;
   metadata: Record<string, unknown>;
 }
 
 export type TurnRecordLine =
   | { k: typeof TURN_RECORD_LINE.run; root?: boolean; origin?: string; run: RecordedRun }
+  | {
+      k: typeof TURN_RECORD_LINE.toolOrigin;
+      origin?: string;
+      toolOrigin: ClaudeRecordedToolOrigin;
+    }
   | { k: typeof TURN_RECORD_LINE.closed; turn_id?: string }
   | { k: typeof TURN_RECORD_LINE.delivered; id: string }
   | { k: typeof TURN_RECORD_LINE.reconciled; id: string };
@@ -399,6 +408,7 @@ export type TurnRecordLine =
 export interface TurnRecordTarget {
   path: string;
   origin: string;
+  runId: string;
 }
 
 export interface TurnRecord {
@@ -406,6 +416,7 @@ export interface TurnRecord {
   origin: string;
   root?: RecordedRun;
   children: RecordedRun[];
+  toolOrigins: ClaudeRecordedToolOrigin[];
   turnId?: string;
   closed: boolean;
   delivered: Set<string>;

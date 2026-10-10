@@ -313,27 +313,30 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     };
     const rootInputs = { messages: [{ role: "user", content: userContent }] };
     if (captureSharedRun) {
-      const captured = await captureSharedRun({
-        turnId: turnRunId,
-        eventId: turnRunId,
-        submission: {
-          operation: "post",
-          integration: CLAUDE_CODE_INTEGRATION,
-          privacyMode: tracing,
-          metadata: metadataOptionsForTurn(rootMetadataInput, filledForTheTurn),
-          privacyContext: { status: "running" },
-          run: {
-            id: turnRunId,
-            name: USER_PROMPT_TURN_NAME,
-            run_type: "chain",
-            inputs: rootInputs,
-            start_time: turn.userTimestamp,
-            trace_id: traceId,
-            dotted_order: parentDottedOrder,
+      const captured = await captureSharedRun(
+        {
+          turnId: turnRunId,
+          eventId: turnRunId,
+          submission: {
+            operation: "post",
+            integration: CLAUDE_CODE_INTEGRATION,
+            privacyMode: tracing,
+            metadata: metadataOptionsForTurn(rootMetadataInput, filledForTheTurn),
+            privacyContext: { status: "running" },
+            run: {
+              id: turnRunId,
+              name: USER_PROMPT_TURN_NAME,
+              run_type: "chain",
+              inputs: rootInputs,
+              start_time: turn.userTimestamp,
+              trace_id: traceId,
+              dotted_order: parentDottedOrder,
+            },
           },
+          turnEvidence: { rootRunId: turnRunId, childRunIds: [], closureState: "open" },
         },
-        turnEvidence: { rootRunId: turnRunId, childRunIds: [], closureState: "open" },
-      });
+        turnRunId,
+      );
       if (!captured) throw new Error(`Could not capture shared Claude Turn run ${turnRunId}`);
     } else {
       const runTree = createRunTree(
@@ -572,34 +575,37 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
       extra: { metadata: closedAssistantMetadata },
     };
     if (captureSharedRun) {
-      const captured = await captureSharedRun({
-        turnId: traceId ?? turnRunId,
-        eventId: assistantRunId,
-        submission: {
-          operation: "post",
-          integration: CLAUDE_CODE_INTEGRATION,
-          privacyMode: tracing,
-          metadata: closedAssistantMetadataOptions,
-          privacyContext: { status: "completed" },
-          run: {
-            id: assistantRunId,
-            name: ASSISTANT_RUN_NAME,
-            run_type: "llm",
-            inputs: assistantInputs,
-            outputs: { messages: [{ role: "assistant", content: assistantContent }] },
-            start_time: llmCall.startTime,
-            end_time: assistantEndTime,
-            parent_run_id: turnRunId,
-            trace_id: traceId,
-            dotted_order: assistantDottedOrder,
+      const captured = await captureSharedRun(
+        {
+          turnId: traceId ?? turnRunId,
+          eventId: assistantRunId,
+          submission: {
+            operation: "post",
+            integration: CLAUDE_CODE_INTEGRATION,
+            privacyMode: tracing,
+            metadata: closedAssistantMetadataOptions,
+            privacyContext: { status: "completed" },
+            run: {
+              id: assistantRunId,
+              name: ASSISTANT_RUN_NAME,
+              run_type: "llm",
+              inputs: assistantInputs,
+              outputs: { messages: [{ role: "assistant", content: assistantContent }] },
+              start_time: llmCall.startTime,
+              end_time: assistantEndTime,
+              parent_run_id: turnRunId,
+              trace_id: traceId,
+              dotted_order: assistantDottedOrder,
+            },
+          },
+          turnEvidence: {
+            rootRunId: traceId ?? turnRunId,
+            childRunIds: [assistantRunId],
+            closureState: "open",
           },
         },
-        turnEvidence: {
-          rootRunId: traceId ?? turnRunId,
-          childRunIds: [assistantRunId],
-          closureState: "open",
-        },
-      });
+        record?.runId ?? (shouldCreateTurn ? turnRunId : undefined),
+      );
       if (!captured) throw new Error(`Could not capture shared Claude LLM run ${assistantRunId}`);
       sharedChildRunIds.add(assistantRunId);
     } else {
@@ -1256,34 +1262,37 @@ export async function tracePendingSubagents(options: {
         const agentOutputs = { output: deferred.outputs ?? {} };
         const agentEndTime = keepAgentToolRunOpen ? undefined : subagentEndTime;
         if (captureSharedRun) {
-          const captured = await captureSharedRun({
-            turnId: parentTraceId,
-            eventId: parentToolRunId,
-            submission: {
-              operation: "post",
-              integration: CLAUDE_CODE_INTEGRATION,
-              privacyMode: tracing,
-              metadata: metadataOptionsForTurn(agentMetadataInput, filledForTheTurn),
-              privacyContext: { status: keepAgentToolRunOpen ? "running" : "completed" },
-              run: {
-                id: parentToolRunId,
-                name: "Agent",
-                run_type: "tool",
-                inputs: agentInputs,
-                outputs: agentOutputs,
-                start_time: subagentStartTime,
-                ...(agentEndTime === undefined ? {} : { end_time: agentEndTime }),
-                parent_run_id: deferred.parent_run_id as string,
-                trace_id: deferred.trace_id as string,
-                dotted_order: agentToolDottedOrder,
+          const captured = await captureSharedRun(
+            {
+              turnId: parentTraceId,
+              eventId: parentToolRunId,
+              submission: {
+                operation: "post",
+                integration: CLAUDE_CODE_INTEGRATION,
+                privacyMode: tracing,
+                metadata: metadataOptionsForTurn(agentMetadataInput, filledForTheTurn),
+                privacyContext: { status: keepAgentToolRunOpen ? "running" : "completed" },
+                run: {
+                  id: parentToolRunId,
+                  name: "Agent",
+                  run_type: "tool",
+                  inputs: agentInputs,
+                  outputs: agentOutputs,
+                  start_time: subagentStartTime,
+                  ...(agentEndTime === undefined ? {} : { end_time: agentEndTime }),
+                  parent_run_id: deferred.parent_run_id as string,
+                  trace_id: deferred.trace_id as string,
+                  dotted_order: agentToolDottedOrder,
+                },
+              },
+              turnEvidence: {
+                rootRunId: parentTraceId,
+                childRunIds: [parentToolRunId],
+                closureState: "open",
               },
             },
-            turnEvidence: {
-              rootRunId: parentTraceId,
-              childRunIds: [parentToolRunId],
-              closureState: "open",
-            },
-          });
+            record?.runId,
+          );
           if (!captured)
             throw new Error(`Could not capture shared Claude Agent run ${parentToolRunId}`);
         } else {
@@ -1490,6 +1499,7 @@ export async function traceWorkflowStage(opts: {
   runtimeVersion?: string;
   turnId?: string;
   turnNumber?: number;
+  record?: TurnRecordTarget;
   captureSharedRun?: ClaudeSharedRunCapture;
 }): Promise<void> {
   if (!client && !replicas) {
@@ -1532,6 +1542,7 @@ export async function traceWorkflowStage(opts: {
     runtimeVersion: opts.runtimeVersion,
     turnId: opts.turnId,
     turnNumber: opts.turnNumber,
+    record: opts.record,
     captureSharedRun: opts.captureSharedRun,
   });
 }
@@ -1562,6 +1573,7 @@ export async function closeAgentToolRun(options: {
   /** Optional error/status to stamp on the run (e.g. "Subagent killed"). */
   error?: string;
   captureSharedRun?: ClaudeSharedRunCapture;
+  nativeTurnRecordRunId?: string;
 }): Promise<void> {
   if (!client && !replicas)
     throw new Error("LangSmith client not initialized — call initTracing() first");
@@ -1653,12 +1665,15 @@ export async function closeAgentToolRun(options: {
             ...(options.error ? { error: options.error } : {}),
           },
         };
-    const captured = await options.captureSharedRun({
-      turnId: rootRunId,
-      eventId: options.wasOpen ? `${runId}${CLAUDE_AGENT_CLOSURE_EVENT_SUFFIX}` : runId,
-      submission,
-      turnEvidence: { rootRunId, childRunIds: [runId], closureState: "open" },
-    });
+    const captured = await options.captureSharedRun(
+      {
+        turnId: rootRunId,
+        eventId: options.wasOpen ? `${runId}${CLAUDE_AGENT_CLOSURE_EVENT_SUFFIX}` : runId,
+        submission,
+        turnEvidence: { rootRunId, childRunIds: [runId], closureState: "open" },
+      },
+      options.nativeTurnRecordRunId,
+    );
     if (!captured) throw new Error(`Could not capture shared Claude Agent closure ${runId}`);
     return;
   }

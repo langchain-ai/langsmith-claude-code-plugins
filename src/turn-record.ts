@@ -15,20 +15,28 @@ import {
   statSync,
   unlinkSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import {
   PRIVATE_DIR_MODE,
   PRIVATE_FILE_MODE,
+  REPOSITORY_METADATA_KEYS,
   RECORDED_RUN_FALLBACK_TYPE,
   TURN_RECORD_DIR_NAME,
   TURN_RECORD_LINE,
   TURN_RECORD_MAX_BYTES,
   TURN_RECORD_SUFFIX,
+  TURN_RECORD_TOOL_ORIGIN_FIELDS,
+  TURN_RECORD_TOOL_ORIGIN_KEYS,
+  TURN_RECORD_VALIDATION_LIMITS,
 } from "./constants.js";
 import { listStoredSessions, safeName, storeDir, storeRoot } from "./utils/session-store.js";
 import { runConfigForMode } from "./privacy.js";
 import { debug, warn } from "./logger.js";
 import type { RecordedRun, TracingMode, TurnRecord, TurnRecordLine } from "./types.js";
+import type { NativeRunRouting } from "./models/native-routing.js";
+import type { RecordRunOptions } from "./models/turn-record.js";
+import type { ClaudeRecordedToolOrigin } from "./models/tracing-engine.js";
+import { isValidOriginPath, isValidRecordOrigin } from "./utils/validation/origin.js";
 
 export const turnRecordRoot = (stateFilePath: string): string =>
   storeRoot(stateFilePath, TURN_RECORD_DIR_NAME);
@@ -77,16 +85,81 @@ function append(path: string, line: TurnRecordLine): boolean {
   }
 }
 
+function validResolvedToolOriginMetadata(value: unknown): value is Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.entries(value as Record<string, unknown>).every(
+    ([key, item]) =>
+      (REPOSITORY_METADATA_KEYS as readonly string[]).includes(key) &&
+      typeof item === "string" &&
+      item.length <= TURN_RECORD_VALIDATION_LIMITS.resolvedMetadataValueLength,
+  );
+}
+
+function isClaudeRecordedToolOrigin(value: unknown): value is ClaudeRecordedToolOrigin {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  if (
+    Object.keys(candidate).some(
+      (key) => !(TURN_RECORD_TOOL_ORIGIN_KEYS as readonly string[]).includes(key),
+    ) ||
+    typeof candidate.toolUseId !== "string" ||
+    candidate.toolUseId.length === 0 ||
+    candidate.toolUseId.length > TURN_RECORD_VALIDATION_LIMITS.toolUseIdLength ||
+    typeof candidate.toolName !== "string" ||
+    candidate.toolName.length === 0 ||
+    candidate.toolName.length > TURN_RECORD_VALIDATION_LIMITS.toolNameLength ||
+    !Number.isSafeInteger(candidate.order) ||
+    (candidate.order as number) < 0 ||
+    !candidate.origin ||
+    typeof candidate.origin !== "object" ||
+    Array.isArray(candidate.origin)
+  ) {
+    return false;
+  }
+  const origin = candidate.origin as Record<string, unknown>;
+  if (
+    Object.keys(origin).some(
+      (key) => !(TURN_RECORD_TOOL_ORIGIN_FIELDS as readonly string[]).includes(key),
+    ) ||
+    typeof origin.namedAPath !== "boolean" ||
+    (origin.path !== undefined && !isValidOriginPath(origin.path)) ||
+    (origin.cwd !== undefined && !isValidOriginPath(origin.cwd))
+  ) {
+    return false;
+  }
+  if (
+    candidate.pinnedRepositoryKeys !== undefined &&
+    (!Array.isArray(candidate.pinnedRepositoryKeys) ||
+      !candidate.pinnedRepositoryKeys.every(
+        (key) =>
+          typeof key === "string" && (REPOSITORY_METADATA_KEYS as readonly string[]).includes(key),
+      ))
+  ) {
+    return false;
+  }
+  if (candidate.resolvedMetadata === undefined) return true;
+  return validResolvedToolOriginMetadata(candidate.resolvedMetadata);
+}
+
 function recordedRun(
   run: Record<string, unknown>,
   tracing: TracingMode,
   shared: boolean,
+  routing?: NativeRunRouting,
+  toolUseId?: string,
 ): RecordedRun | undefined {
   const safe = runConfigForMode(run, tracing);
   const extra = safe.extra as { metadata?: Record<string, unknown> } | undefined;
-  if (typeof safe.id !== "string" || typeof safe.dotted_order !== "string") return undefined;
+  if (
+    typeof safe.id !== "string" ||
+    typeof safe.dotted_order !== "string" ||
+    (routing !== undefined &&
+      (typeof routing.cwd !== "string" || !routing.cwd.trim() || !isAbsolute(routing.cwd)))
+  )
+    return undefined;
   return {
     run_id: safe.id,
+    ...(toolUseId === undefined ? {} : { toolUseId }),
     parent_run_id: typeof safe.parent_run_id === "string" ? safe.parent_run_id : undefined,
     trace_id: typeof safe.trace_id === "string" ? safe.trace_id : safe.id,
     dotted_order: safe.dotted_order,
@@ -97,20 +170,19 @@ function recordedRun(
     end_time: typeof safe.end_time === "string" ? safe.end_time : undefined,
     tracing,
     ...(shared ? { shared: true } : {}),
+    ...(routing === undefined ? {} : { routing }),
     metadata: JSON.parse(JSON.stringify(extra?.metadata ?? {})) as Record<string, unknown>,
   };
 }
 
-export function recordRun(options: {
-  path: string;
-  run: Record<string, unknown>;
-  tracing: TracingMode;
-  origin: string;
-  shared?: boolean;
-  root?: boolean;
-  closesAt?: string;
-}): boolean {
-  const run = recordedRun(options.run, options.tracing, options.shared ?? false);
+export function recordRun(options: RecordRunOptions): boolean {
+  const run = recordedRun(
+    options.run,
+    options.tracing,
+    options.shared ?? false,
+    options.routing,
+    options.toolUseId,
+  );
   if (!run) return false;
   if (options.closesAt) {
     run.open = true;
@@ -121,6 +193,49 @@ export function recordRun(options: {
     root: options.root,
     origin: options.origin,
     run,
+  });
+}
+
+export function recordToolOrigin(
+  path: string,
+  origin: string,
+  tracing: TracingMode,
+  toolOrigin: ClaudeRecordedToolOrigin,
+): boolean {
+  if (tracing !== "full") return true;
+  if (!isValidRecordOrigin(origin) || !isClaudeRecordedToolOrigin(toolOrigin)) return false;
+  return append(path, { k: TURN_RECORD_LINE.toolOrigin, origin, toolOrigin });
+}
+
+function sameMetadata(
+  left: Record<string, string> | undefined,
+  right: Record<string, string>,
+): boolean {
+  if (left === undefined) return false;
+  const leftEntries = Object.entries(left ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  const rightEntries = Object.entries(right).sort(([a], [b]) => a.localeCompare(b));
+  return JSON.stringify(leftEntries) === JSON.stringify(rightEntries);
+}
+
+export function recordResolvedToolOriginMetadata(
+  path: string,
+  origin: string,
+  toolUseId: string,
+  metadata: Record<string, string>,
+): boolean {
+  if (!isValidRecordOrigin(origin) || !validResolvedToolOriginMetadata(metadata)) return false;
+  const record = readTurnRecord(path);
+  if (!record || record.origin !== origin) return false;
+  const toolOrigin = record.toolOrigins.find((candidate) => candidate.toolUseId === toolUseId);
+  if (!toolOrigin) return false;
+  if (sameMetadata(toolOrigin.resolvedMetadata, metadata)) return true;
+  return append(path, {
+    k: TURN_RECORD_LINE.toolOrigin,
+    origin,
+    toolOrigin: {
+      ...toolOrigin,
+      resolvedMetadata: { ...toolOrigin.resolvedMetadata, ...metadata },
+    },
   });
 }
 
@@ -186,11 +301,13 @@ export function readTurnRecord(path: string): TurnRecord | undefined {
     path,
     origin: "",
     children: [],
+    toolOrigins: [],
     closed: false,
     delivered: new Set(),
     fixed: new Set(),
   };
   const byId = new Map<string, RecordedRun>();
+  const originsByToolUseId = new Map<string, ClaudeRecordedToolOrigin>();
   for (const line of contents.split("\n")) {
     if (!line) continue;
     let parsed: TurnRecordLine;
@@ -203,6 +320,14 @@ export function readTurnRecord(path: string): TurnRecord | undefined {
       if (parsed.root) record.root = parsed.run;
       else byId.set(parsed.run.run_id, parsed.run);
       if (parsed.origin) record.origin = parsed.origin;
+    } else if (
+      parsed.k === TURN_RECORD_LINE.toolOrigin &&
+      isClaudeRecordedToolOrigin(parsed.toolOrigin) &&
+      (parsed.origin === undefined || isValidRecordOrigin(parsed.origin)) &&
+      (!parsed.origin || !record.origin || parsed.origin === record.origin)
+    ) {
+      if (parsed.origin) record.origin = parsed.origin;
+      originsByToolUseId.set(parsed.toolOrigin.toolUseId, parsed.toolOrigin);
     } else if (parsed.k === TURN_RECORD_LINE.closed) {
       record.closed = true;
       record.turnId = parsed.turn_id;
@@ -213,6 +338,9 @@ export function readTurnRecord(path: string): TurnRecord | undefined {
     }
   }
   record.children = [...byId.values()];
+  record.toolOrigins = [...originsByToolUseId.values()].sort(
+    (left, right) => left.order - right.order,
+  );
   return record;
 }
 
