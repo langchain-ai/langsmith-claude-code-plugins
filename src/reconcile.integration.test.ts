@@ -121,7 +121,9 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     const base = session("model-born-outside", plain);
     await prompt(base);
     await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
-    reply(base);
+    reply(base, 1, [
+      { id: "use-Read", name: "Read", input: { file_path: join(alpha, "seed.txt") } },
+    ]);
     await stop(base);
 
     expect(
@@ -606,7 +608,9 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
     await subagent(base, "agent-7");
     await task(base, "agent-7");
-    reply(base);
+    reply(base, 1, [
+      { id: "use-Read", name: "Read", input: { file_path: join(alpha, "seed.txt") } },
+    ]);
     await stop(base);
 
     const attributed = {
@@ -645,7 +649,9 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     // The uploader works the repository out, so wait for that call to land before the
     // interrupted turn asks the record where it worked.
     expect(await waitFor(() => service.created.some((run) => run.name === "Read"))).toBe(true);
-    reply(base);
+    reply(base, 1, [
+      { id: "use-Read", name: "Read", input: { file_path: join(alpha, "seed.txt") } },
+    ]);
     await prompt(base);
 
     expect(await waitFor(() => createdMetadataAll(base.session_id, "Claude").length > 0)).toBe(
@@ -666,7 +672,9 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
     expect(await waitFor(() => metadataOf("Read").repository_name === "acme/a")).toBe(true);
     await task(base, "agent-bg1");
-    reply(base);
+    reply(base, 1, [
+      { id: "use-Read", name: "Read", input: { file_path: join(alpha, "seed.txt") } },
+    ]);
     await stop(base);
 
     // The agent finishes in the background, so its run is posted open here.
@@ -700,7 +708,15 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
     await tool(base, "Read", { file_path: join(alpha, "seed.txt") });
     expect(await waitFor(() => metadataOf("Read").repository_name === "acme/a")).toBe(true);
     await task(base, "agent-bg3");
-    reply(base);
+    reply(base, 1, [
+      { id: "use-Read", name: "Read", input: { file_path: join(alpha, "seed.txt") } },
+      {
+        id: "use-agent-bg3",
+        name: "Task",
+        input: { prompt: "go and look" },
+        agentId: "agent-bg3",
+      },
+    ]);
     await stop(base);
 
     await subagent(base, "agent-bg3");
@@ -726,11 +742,14 @@ describe("settling a turn's repository and author", { timeout: 120_000 }, () => 
           run.extra?.metadata?.thread_id === base.session_id &&
           run.extra?.metadata?.ls_agent_type === "root",
       );
-    expect(await waitFor(() => models().length === 2)).toBe(true);
-    expect(models()).toHaveLength(2);
-    const secondModel = models().find((run) => run.parent_run_id === secondTurn.id);
-    expect(secondModel).toBeDefined();
-    expect(secondModel?.extra?.metadata).toMatchObject(attributed);
+    expect(
+      await waitFor(
+        () => models().filter((run) => run.parent_run_id === secondTurn.id).length === 1,
+      ),
+    ).toBe(true);
+    const secondModels = models().filter((run) => run.parent_run_id === secondTurn.id);
+    expect(secondModels).toHaveLength(1);
+    expect(secondModels[0].extra?.metadata).toMatchObject(attributed);
 
     expect(
       await waitFor(() => {
