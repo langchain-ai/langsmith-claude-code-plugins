@@ -10,7 +10,12 @@ mkdirSync(home);
 mkdirSync(temporary);
 const allowed = new Set(["path", "pathext", "systemroot", "windir", "comspec", "lang"]);
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key.toLowerCase())));
-Object.assign(env, { HOME: home, USERPROFILE: home, TMPDIR: temporary, TMP: temporary, TEMP: temporary });
+Object.assign(env, { CI: "1", HOME: home, USERPROFILE: home, TMPDIR: temporary, TMP: temporary, TEMP: temporary });
+if (process.platform === "darwin") {
+  const built = spawnSync(process.execPath, ["node_modules/@langchain/plugins-base/dist/cli.js", "build"], { env, stdio: "inherit" });
+  if (built.error) throw built.error;
+  if (built.status !== 0) process.exit(built.status ?? 1);
+}
 const result = spawnSync(process.execPath, ["node_modules/vitest/vitest.mjs", "run", "--reporter=verbose", "--testTimeout=30000"], { env, stdio: "inherit" });
 if (result.error) throw result.error;
 process.exitCode = result.status ?? 1;
