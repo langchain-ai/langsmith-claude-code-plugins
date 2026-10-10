@@ -2,6 +2,10 @@ name: Engine Validation
 
 on:
   workflow_dispatch:
+    inputs:
+      lifecycle_only:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,3 +33,6 @@ jobs:
       - run: pnpm build
       - run: git diff --exit-code -- bundle/ plugins/langsmith-gateway/bundle/
       - run: node .github/scripts/test-engine.mjs
+        if: ${{ !inputs.lifecycle_only }}
+      - run: node .github/scripts/test-engine.mjs src/hooks/mute-lifecycle.integration.test.ts
+        if: ${{ inputs.lifecycle_only }}

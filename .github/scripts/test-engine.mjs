@@ -16,7 +16,7 @@ if (process.platform === "darwin") {
   if (built.error) throw built.error;
   if (built.status !== 0) process.exit(built.status ?? 1);
 }
-const result = spawnSync(process.execPath, ["node_modules/vitest/vitest.mjs", "run", "--reporter=verbose", "--testTimeout=30000"], { env, stdio: "inherit" });
+const result = spawnSync(process.execPath, ["node_modules/vitest/vitest.mjs", "run", ...process.argv.slice(2), "--reporter=verbose", "--testTimeout=30000"], { env, stdio: "inherit" });
 if (result.error) throw result.error;
 process.exitCode = result.status ?? 1;
 
