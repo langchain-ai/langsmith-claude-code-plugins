@@ -9,7 +9,7 @@ mkdirSync(home);
 const allowed = new Set(["path", "pathext", "systemroot", "windir", "comspec"]);
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key.toLowerCase())));
 Object.assign(env, { CI: "1", HOME: home, USERPROFILE: home, TMPDIR: root, TMP: root, TEMP: root });
-for (const args of [["node_modules/typescript/bin/tsc"], ["esbuild.config.mjs"], ["node_modules/vitest/vitest.mjs", "run", "src/packaging.test.ts", "--reporter=verbose"]]) {
+for (const args of [["node_modules/typescript/bin/tsc"], ["esbuild.config.mjs"], ["node_modules/vitest/vitest.mjs", "run", "src/proxy", "--reporter=verbose"]]) {
   const result = spawnSync(process.execPath, args, { env, stdio: "inherit" });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
