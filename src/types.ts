@@ -3,20 +3,12 @@
  */
 
 import type { RunTree } from "langsmith";
-import type {
-  CodingAgentAgentType,
-  CodingAgentMetadataOptions as SharedCodingAgentMetadataOptions,
-} from "@langchain/plugins-base/metadata";
 import type { GIT_MARKERS, PINNED_REPOSITORY_KEYS } from "./constants.js";
 import type { NativeRunRouting } from "./models/native-routing.js";
 import type { ClaudeRecordedToolOrigin } from "./models/tracing-engine.js";
 
 export type TracingMode = "full" | "metadata";
-export type LSAgentType = CodingAgentAgentType;
-export type CodingAgentMetadataOptions = Omit<
-  SharedCodingAgentMetadataOptions,
-  "integration" | "integrationVersion" | "threadId"
-> & { sessionId: string };
+export type { CodingAgentMetadataOptions, LSAgentType } from "./models/metadata.js";
 
 // ─── Hook Input Types ───────────────────────────────────────────────────────
 

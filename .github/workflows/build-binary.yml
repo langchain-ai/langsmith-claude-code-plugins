@@ -20,7 +20,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: langchain-ai/langsmith-plugin-binary/.github/workflows/build-binary.yml@a4717ea037918cb976ee30b25403ac82411d6454
+    uses: langchain-ai/langsmith-plugin-binary/.github/workflows/build-binary.yml@336ecc347acb0e7c2839ca065ea69862b43ceb66
     secrets:
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
       APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}

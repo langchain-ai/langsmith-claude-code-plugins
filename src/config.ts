@@ -9,10 +9,16 @@ import { homedir, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import type { RunTreeConfig } from "langsmith";
 import type { CommonRedactRule } from "@langchain/plugins-base/settings";
+import {
+  CODING_AGENT_PURPOSE,
+  CODING_AGENT_SCHEMA_VERSION,
+  CODING_AGENT_V1_CONTRACT,
+} from "@langchain/plugins-base/metadata";
 import { debug, error } from "./logger.js";
 import { execSync } from "node:child_process";
 import {
   GIT_LOCATION_ENV_KEYS,
+  CLAUDE_CODE_INTEGRATION,
   NO_PINNED_KEYS,
   NOT_A_REPOSITORY,
   PINNED_REPOSITORY_KEYS,
@@ -374,10 +380,10 @@ export function loadConfig(options?: { cwd?: string; deferGit?: boolean }): Conf
 
   // coding-agent-v1 static identity literals + versions, merged onto every run.
   const contractMetadata: Record<string, unknown> = {
-    ls_agent_purpose: "coding",
-    ls_integration: "claude-code",
-    ls_agent_runtime: "Claude Code",
-    ls_trace_schema_version: "coding-agent-v1",
+    ls_agent_purpose: CODING_AGENT_PURPOSE,
+    ls_integration: CLAUDE_CODE_INTEGRATION,
+    ls_agent_runtime: CODING_AGENT_V1_CONTRACT.runtimeNames[CLAUDE_CODE_INTEGRATION],
+    ls_trace_schema_version: CODING_AGENT_SCHEMA_VERSION,
     cwd,
   };
   if (LS_INTEGRATION_VERSION) {

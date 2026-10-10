@@ -4,9 +4,9 @@ import {
 } from "@langchain/plugins-base/metadata";
 import type { CodingAgentMetadataOptions as SharedCodingAgentMetadataOptions } from "@langchain/plugins-base/metadata";
 import { CLAUDE_CODE_INTEGRATION, TRUSTED_INTEGRATION_VERSION } from "./constants.js";
-import type { CodingAgentMetadataOptions as NativeCodingAgentMetadataOptions } from "./types.js";
+import type { CodingAgentMetadataOptions as NativeCodingAgentMetadataOptions } from "./models/metadata.js";
 
-export type { CodingAgentMetadataOptions, LSAgentType } from "./types.js";
+export type { CodingAgentMetadataOptions, LSAgentType } from "./models/metadata.js";
 export { trustedCodingAgentMetadata };
 
 export function codingAgentMetadataOptions(
