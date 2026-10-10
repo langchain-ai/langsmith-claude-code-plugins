@@ -24,6 +24,7 @@ import {
   uploads,
   useQueueSandbox,
   waitFor,
+  waitForUploaders,
 } from "./fixtures/queue-sandbox.js";
 
 describe("the detached upload queue", { timeout: 60_000 }, () => {
@@ -135,6 +136,7 @@ describe("the detached upload queue", { timeout: 60_000 }, () => {
     queueRunByHand("Tool0", { origin: currentQueueOrigin() });
     await stopTurn("s1");
     expect(await waitFor(() => (queued("s1")[0]?.attempts ?? 0) >= 1)).toBe(true);
+    expect(await waitForUploaders()).toBe(true);
     uploads.fail = false;
     await newSession("s2");
     await toolCall(1, "s2");

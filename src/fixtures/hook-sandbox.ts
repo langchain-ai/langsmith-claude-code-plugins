@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { withWindowsProcessEnvironment } from "./process-environment.js";
 import { createServer, type Server } from "node:http";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -108,7 +109,7 @@ export function spawnHook(options: {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [bundle, options.event], {
       cwd: options.cwd,
-      env: options.env,
+      env: withWindowsProcessEnvironment(options.env),
     });
     let stderr = "";
     child.stderr.setEncoding("utf-8");

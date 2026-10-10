@@ -65,13 +65,17 @@ export function useQueueSandbox(): void {
   });
 
   afterEach(async () => {
-    const pids = [
-      ...readLog(join(home, "hook.log")).matchAll(/Started detached queue flusher \(pid (\d+)\)/g),
-    ].map((match) => Number(match[1]));
-    expect(await waitFor(() => pids.every((pid) => !processIsRunning(pid)))).toBe(true);
+    expect(await waitForUploaders()).toBe(true);
     await service.close();
     rmSync(home, { recursive: true, force: true });
   });
+}
+
+export function waitForUploaders(): Promise<boolean> {
+  const pids = [
+    ...readLog(join(home, "hook.log")).matchAll(/Started detached queue flusher \(pid (\d+)\)/g),
+  ].map((match) => Number(match[1]));
+  return waitFor(() => pids.every((pid) => !processIsRunning(pid)));
 }
 
 function processIsRunning(pid: number): boolean {
@@ -87,6 +91,7 @@ function env() {
   return {
     PATH: process.env.PATH ?? "",
     HOME: home,
+    USERPROFILE: home,
     TRACE_TO_LANGSMITH: "true",
     CC_LANGSMITH_DEBUG: "true",
     CC_LANGSMITH_API_KEY: "test-key",

@@ -558,7 +558,7 @@ describe("file-fed privacy and routing", () => {
         allowedOrigins.add(new URL(replicaApi).origin);
         try {
           vi.stubEnv("HOME", home);
-          vi.stubEnv("USERPROFILE", undefined);
+          vi.stubEnv("USERPROFILE", home);
           vi.stubEnv("LANGSMITH_API_KEY", undefined);
           vi.stubEnv("LANGSMITH_ENDPOINT", undefined);
           vi.stubEnv("STATE_FILE", join(home, "state.json"));
@@ -684,7 +684,7 @@ describe("file-fed privacy and routing", () => {
       const home = mkdtempSync(join(tmpdir(), "file-privacy-"));
       try {
         vi.stubEnv("HOME", home);
-        vi.stubEnv("USERPROFILE", undefined);
+        vi.stubEnv("USERPROFILE", home);
         vi.stubEnv("LANGSMITH_API_KEY", undefined);
         vi.stubEnv("LANGSMITH_ENDPOINT", undefined);
         mkdirSync(join(home, ".claude"));

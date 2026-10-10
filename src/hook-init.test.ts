@@ -50,7 +50,7 @@ describe("initHook", () => {
     userPath = join(home, ".claude", "langsmith.json");
     userRootPath = join(home, ".langsmith-plugins.json");
     process.env.HOME = home;
-    delete process.env.USERPROFILE;
+    process.env.USERPROFILE = home;
     vi.spyOn(process, "cwd").mockReturnValue(cwd);
     delete process.env.CC_LANGSMITH_API_KEY;
     delete process.env.LANGSMITH_API_KEY;

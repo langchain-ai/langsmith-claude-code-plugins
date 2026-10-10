@@ -98,7 +98,9 @@ vi.mock("../config.js", async (original) => ({
   }),
 }));
 vi.mock("../utils/detach.js", () => ({
-  launchQueueFlusher: async () => 1,
+  launchQueueFlusher: async () => {
+    throw new Error("Synthetic worker held for manual drain");
+  },
   startQueueFlusher: () => {},
 }));
 vi.mock("../tracing-engine.js", async (original) => {
