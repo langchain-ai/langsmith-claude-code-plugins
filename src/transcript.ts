@@ -3,7 +3,7 @@
  * messages into Turns (user prompt → LLM calls → tool results).
  */
 
-import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync, constants, fstatSync, openSync, readSync, closeSync } from "node:fs";
 import type {
   TranscriptMessage,
   AssistantMessage,
@@ -30,37 +30,39 @@ export function readTranscript(
   filePath: string,
   afterLine: number = -1,
 ): { messages: TranscriptMessage[]; lastLine: number } {
-  let size: number;
+  let fd: number;
   try {
-    size = statSync(filePath).size;
+    fd = openSync(filePath, constants.O_RDONLY | constants.O_NONBLOCK);
   } catch {
     return { messages: [], lastLine: afterLine };
   }
-
-  // For small-to-moderate files, read the whole thing (simple, fast).
-  if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync(filePath, "utf-8");
-    const lines = raw.split("\n").filter((l) => l.trim() !== "");
-
-    const messages: TranscriptMessage[] = [];
-    let lastLine = afterLine;
-
-    for (let i = 0; i < lines.length; i++) {
-      lastLine = i;
-      if (i <= afterLine) continue;
-      try {
-        messages.push(JSON.parse(lines[i]) as TranscriptMessage);
-      } catch {
-        // Skip malformed lines.
-      }
-    }
-    return { messages, lastLine };
-  }
-
-  // Large file: stream through in chunks to avoid loading everything at once.
-  // We still need accurate line indices, but we only parse lines after afterLine.
-  const fd = openSync(filePath, "r");
   try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) return { messages: [], lastLine: afterLine };
+    const size = stat.size;
+
+    // For small-to-moderate files, read the whole thing (simple, fast).
+    if (size <= MAX_FULL_READ_BYTES) {
+      const raw = readFileSync(fd, "utf-8");
+      const lines = raw.split("\n").filter((l) => l.trim() !== "");
+
+      const messages: TranscriptMessage[] = [];
+      let lastLine = afterLine;
+
+      for (let i = 0; i < lines.length; i++) {
+        lastLine = i;
+        if (i <= afterLine) continue;
+        try {
+          messages.push(JSON.parse(lines[i]) as TranscriptMessage);
+        } catch {
+          // Skip malformed lines.
+        }
+      }
+      return { messages, lastLine };
+    }
+
+    // Large file: stream through in chunks to avoid loading everything at once.
+    // We still need accurate line indices, but we only parse lines after afterLine.
     const chunkSize = 2 * 1024 * 1024; // 2 MB
     const buf = Buffer.alloc(chunkSize);
     const messages: TranscriptMessage[] = [];
@@ -120,45 +122,46 @@ export function readTranscript(
  * Counts newlines in streaming chunks to avoid loading large files into memory.
  */
 export function getTranscriptEndLine(filePath: string): number {
+  let fd: number | undefined;
   try {
-    const size = statSync(filePath).size;
+    fd = openSync(filePath, constants.O_RDONLY | constants.O_NONBLOCK);
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) return -1;
+    const size = stat.size;
     if (size === 0) return -1;
 
     // Small files: simple read.
     if (size <= MAX_FULL_READ_BYTES) {
-      const raw = readFileSync(filePath, "utf-8");
+      const raw = readFileSync(fd, "utf-8");
       const lines = raw.split("\n").filter((l) => l.trim() !== "");
       return lines.length > 0 ? lines.length - 1 : -1;
     }
 
     // Large files: count non-empty lines by streaming chunks.
-    const fd = openSync(filePath, "r");
-    try {
-      const chunkSize = 1024 * 1024; // 1 MB
-      const buf = Buffer.alloc(chunkSize);
-      let lineCount = 0;
-      let bytesRead: number;
-      let pos = 0;
-      let partial = "";
+    const chunkSize = 1024 * 1024; // 1 MB
+    const buf = Buffer.alloc(chunkSize);
+    let lineCount = 0;
+    let bytesRead: number;
+    let pos = 0;
+    let partial = "";
 
-      while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
-        const chunk = partial + buf.toString("utf-8", 0, bytesRead);
-        partial = "";
-        const lines = chunk.split("\n");
-        partial = lines.pop() ?? "";
-        for (const line of lines) {
-          if (line.trim() !== "") lineCount++;
-        }
-        pos += bytesRead;
+    while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
+      const chunk = partial + buf.toString("utf-8", 0, bytesRead);
+      partial = "";
+      const lines = chunk.split("\n");
+      partial = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.trim() !== "") lineCount++;
       }
-      if (partial.trim() !== "") lineCount++;
-
-      return lineCount > 0 ? lineCount - 1 : -1;
-    } finally {
-      closeSync(fd);
+      pos += bytesRead;
     }
+    if (partial.trim() !== "") lineCount++;
+
+    return lineCount > 0 ? lineCount - 1 : -1;
   } catch {
     return -1;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
 }
 

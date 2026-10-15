@@ -1,4 +1,4 @@
-import { lstatSync, readFileSync, statSync } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
 
 /** Canonical langsmith.json contract. Keep this module dependency-free across adapters. */
 export interface CommonReplica {
@@ -162,8 +162,9 @@ export function parseCommonConfig(value: unknown): CommonConfigResult {
 
 /** Follow readable symlinks, but never read directories/devices/FIFOs. Only true ENOENT is absent. */
 export function readCommonConfigFile(path: string): CommonConfigResult {
+  let fd: number;
   try {
-    if (!statSync(path).isFile()) return invalid();
+    fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       try {
@@ -177,9 +178,12 @@ export function readCommonConfigFile(path: string): CommonConfigResult {
     return invalid();
   }
   try {
-    return parseCommonConfig(JSON.parse(readFileSync(path, "utf8")));
+    if (!fstatSync(fd).isFile()) return invalid();
+    return parseCommonConfig(JSON.parse(readFileSync(fd, "utf8")));
   } catch {
     return invalid();
+  } finally {
+    closeSync(fd);
   }
 }
 

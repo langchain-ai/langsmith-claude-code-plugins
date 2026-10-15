@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   COMMON_BOOLEAN_SETTINGS,
   mergeCommonConfig,
@@ -16,6 +16,39 @@ vi.mock("node:fs", { spy: true });
 
 const restrictive = { enabled: false, defaultMuted: true };
 afterEach(() => vi.restoreAllMocks());
+beforeEach(async () => {
+  const actual = await vi.importActual<typeof fs>("node:fs");
+  for (const name of ["openSync", "fstatSync", "readFileSync", "closeSync", "lstatSync"] as const) {
+    vi.mocked(fs[name]).mockImplementation(actual[name] as never);
+  }
+});
+
+describe("read-only config opens", () => {
+  it("never creates a missing config or changes existing permissions", () => {
+    const dir = fs.mkdtempSync(join(tmpdir(), "readonly-config-"));
+    const path = join(dir, "config.json");
+    try {
+      expect(readCommonConfigFile(path).status).toBe("absent");
+      expect(fs.existsSync(path)).toBe(false);
+      fs.writeFileSync(path, "{}", { mode: 0o600 });
+      const mode = fs.statSync(path).mode;
+      expect(readCommonConfigFile(path).status).toBe("valid");
+      expect(fs.statSync(path).mode).toBe(mode);
+      expect(fs.readFileSync(path, "utf8")).toBe("{}");
+      const flags = vi.mocked(fs.openSync).mock.calls.at(-1)?.[1];
+      expect(flags).toBe(fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+      expect(
+        Number(flags) &
+          (fs.constants.O_CREAT |
+            fs.constants.O_TRUNC |
+            fs.constants.O_WRONLY |
+            fs.constants.O_RDWR),
+      ).toBe(0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("canonical common schema fixtures", () => {
   it.each([null, [], true, false, 1, "", "{}"])("rejects nonobjects: %j", (value) => {
@@ -290,7 +323,7 @@ describe("filesystem fixtures", () => {
     expect(readCommonConfigFile(dir)).toMatchObject({ status: "invalid", common: restrictive });
   });
 
-  it.skipIf(process.platform === "win32")("rejects FIFO without opening/blocking", () => {
+  it.skipIf(process.platform === "win32")("rejects FIFO without reading/blocking", () => {
     const path = setup();
     execFileSync("mkfifo", [path]);
     expect(readCommonConfigFile(path)).toMatchObject({ status: "invalid", common: restrictive });
@@ -322,13 +355,41 @@ describe("filesystem fixtures", () => {
 
   it.each(["EACCES", "EPERM", "EIO", "ENOTDIR"])("restricts stat failure %s", (code) => {
     const path = setup();
-    vi.spyOn(fs, "statSync").mockImplementation(() => {
+    fs.writeFileSync(path, "{}");
+    vi.spyOn(fs, "fstatSync").mockImplementation(() => {
       throw Object.assign(new Error("SECRET"), { code });
     });
     expect(readCommonConfigFile(path)).toMatchObject({ status: "invalid", common: restrictive });
   });
 
-  it("stat ENOENT plus inaccessible lstat is not absence", () => {
+  it("reads the checked descriptor even when its path is replaced", async () => {
+    const path = setup();
+    fs.writeFileSync(path, '{"enabled":false}');
+    const { fstatSync: realFstat } = await vi.importActual<typeof fs>("node:fs");
+    const closed = vi.spyOn(fs, "closeSync");
+    vi.spyOn(fs, "fstatSync").mockImplementationOnce((...args) => {
+      const stat = realFstat(...args);
+      fs.renameSync(path, join(dir, "original"));
+      fs.writeFileSync(path, '{"enabled":true}');
+      return stat;
+    });
+    expect(readCommonConfigFile(path)).toMatchObject({
+      status: "valid",
+      common: { enabled: false },
+    });
+    expect(closed).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes a rejected nonregular descriptor without reading it", () => {
+    setup();
+    const closed = vi.spyOn(fs, "closeSync");
+    const read = vi.spyOn(fs, "readFileSync");
+    expect(readCommonConfigFile(dir)).toMatchObject({ status: "invalid", common: restrictive });
+    expect(read).not.toHaveBeenCalled();
+    expect(closed).toHaveBeenCalledTimes(1);
+  });
+
+  it("open ENOENT plus inaccessible lstat is not absence", () => {
     const path = setup();
     vi.spyOn(fs, "lstatSync").mockImplementation(() => {
       throw Object.assign(new Error("SECRET"), { code: "EACCES" });

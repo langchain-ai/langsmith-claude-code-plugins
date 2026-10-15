@@ -648,7 +648,7 @@ var binary = defineBinaryTarget({
 import { readFileSync as readFileSync3 } from "node:fs";
 
 // dist/src/shared-config.js
-import { lstatSync, readFileSync, statSync } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
 var COMMON_BOOLEAN_SETTINGS = {
   enabled: { default: false, restrictive: false },
   defaultMuted: { default: false, restrictive: true }
@@ -758,9 +758,9 @@ function parseCommonConfig(value) {
   return { status: "valid", common, raw: value, diagnostics };
 }
 function readCommonConfigFile(path3) {
+  let fd;
   try {
-    if (!statSync(path3).isFile())
-      return invalid();
+    fd = openSync(path3, constants.O_RDONLY | constants.O_NONBLOCK);
   } catch (error2) {
     if (error2.code === "ENOENT") {
       try {
@@ -774,9 +774,13 @@ function readCommonConfigFile(path3) {
     return invalid();
   }
   try {
-    return parseCommonConfig(JSON.parse(readFileSync(path3, "utf8")));
+    if (!fstatSync(fd).isFile())
+      return invalid();
+    return parseCommonConfig(JSON.parse(readFileSync(fd, "utf8")));
   } catch {
     return invalid();
+  } finally {
+    closeSync(fd);
   }
 }
 function resolveField(sources, field) {
@@ -816,7 +820,7 @@ import { homedir as homedir2, userInfo } from "node:os";
 import { join as join2, resolve } from "node:path";
 
 // dist/src/logger.js
-import { appendFileSync, mkdirSync, statSync as statSync2, renameSync } from "node:fs";
+import { appendFileSync, mkdirSync, statSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
 var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
@@ -827,7 +831,7 @@ function initLogger(debug2) {
 }
 function rotateIfNeeded() {
   try {
-    if (statSync2(LOG_FILE).size >= MAX_LOG_BYTES) {
+    if (statSync(LOG_FILE).size >= MAX_LOG_BYTES) {
       renameSync(LOG_FILE, `${LOG_FILE}.1`);
     }
   } catch {
@@ -13876,20 +13880,20 @@ function expandHome(path3) {
 }
 
 // dist/src/queue.js
-import { mkdirSync as mkdirSync6, readFileSync as readFileSync7, readdirSync as readdirSync3, statSync as statSync5, unlinkSync as unlinkSync4 } from "node:fs";
+import { mkdirSync as mkdirSync6, readFileSync as readFileSync7, readdirSync as readdirSync3, statSync as statSync4, unlinkSync as unlinkSync4 } from "node:fs";
 import { join as join5 } from "node:path";
 import { createHmac, randomUUID as randomUUID2 } from "node:crypto";
 
 // dist/src/utils/atomic-file.js
-import { openSync, writeSync, closeSync, renameSync as renameSync5 } from "node:fs";
+import { openSync as openSync2, writeSync, closeSync as closeSync2, renameSync as renameSync5 } from "node:fs";
 import { randomUUID } from "node:crypto";
 function publishByRename(path3, contents, tempSuffix, mode) {
   const temp = `${path3}.${randomUUID()}${tempSuffix}`;
-  const fd = openSync(temp, "wx", mode);
+  const fd = openSync2(temp, "wx", mode);
   try {
     writeSync(fd, contents);
   } finally {
-    closeSync(fd);
+    closeSync2(fd);
   }
   renameSync5(temp, path3);
 }
@@ -14101,7 +14105,7 @@ function createRunTree(config, mode = "full") {
 }
 
 // dist/src/turn-record.js
-import { appendFileSync as appendFileSync2, existsSync as existsSync3, mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync as readdirSync2, statSync as statSync4, unlinkSync as unlinkSync3 } from "node:fs";
+import { appendFileSync as appendFileSync2, existsSync as existsSync3, mkdirSync as mkdirSync5, readFileSync as readFileSync6, readdirSync as readdirSync2, statSync as statSync3, unlinkSync as unlinkSync3 } from "node:fs";
 import { dirname as dirname4, join as join4 } from "node:path";
 var turnRecordRoot = (stateFilePath) => storeRoot(stateFilePath, TURN_RECORD_DIR_NAME);
 var turnRecordDir = (stateFilePath, sessionId) => storeDir(stateFilePath, TURN_RECORD_DIR_NAME, sessionId);
@@ -14121,7 +14125,7 @@ function recordsIdleMs(dir, now = Date.now()) {
   let newest = 0;
   for (const path3 of listTurnRecords(dir)) {
     try {
-      newest = Math.max(newest, statSync4(path3).mtimeMs);
+      newest = Math.max(newest, statSync3(path3).mtimeMs);
     } catch {
     }
   }
@@ -14190,7 +14194,7 @@ function recordReconciled(path3, runId) {
 function readTurnRecord(path3) {
   let contents;
   try {
-    if (statSync4(path3).size > TURN_RECORD_MAX_BYTES) {
+    if (statSync3(path3).size > TURN_RECORD_MAX_BYTES) {
       warn(`Dropping a turn record too large to be real: ${path3}`);
       discardTurnRecord(path3);
       return void 0;
@@ -14368,7 +14372,7 @@ function discardEmptyQueue(dir, now = Date.now()) {
 }
 function queueIdleMs(dir, now = Date.now()) {
   try {
-    return now - statSync5(dir).mtimeMs;
+    return now - statSync4(dir).mtimeMs;
   } catch {
     return 0;
   }
@@ -14518,7 +14522,7 @@ async function reconcileAndClear(options) {
 import { isAbsolute as isAbsolute2 } from "node:path";
 
 // dist/src/repo-attribution-paths.js
-import { existsSync as existsSync4, statSync as statSync6 } from "node:fs";
+import { existsSync as existsSync4, statSync as statSync5 } from "node:fs";
 import { dirname as dirname5, isAbsolute, join as join6, resolve as resolve2 } from "node:path";
 function toolPathFromInput(toolInput, sessionCwd) {
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
@@ -14549,7 +14553,7 @@ function nearestExistingDirectory(path3) {
     if (reachedFilesystemRoot)
       return void 0;
     try {
-      if (statSync6(current).isDirectory())
+      if (statSync5(current).isDirectory())
         return current;
     } catch {
     }
@@ -14558,7 +14562,7 @@ function nearestExistingDirectory(path3) {
 }
 function gitMarkerAt(directory) {
   try {
-    return statSync6(join6(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
+    return statSync5(join6(directory, GIT_DIRECTORY_NAME)).isDirectory() ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
   } catch {
     return GIT_MARKERS.NOTHING_HERE;
   }
@@ -14746,7 +14750,7 @@ function watchUploads(client2) {
 }
 
 // dist/src/utils/file-lock.js
-import { readFileSync as readFileSync8, writeFileSync as writeFileSync4, linkSync, mkdirSync as mkdirSync7, openSync as openSync2, closeSync as closeSync2, unlinkSync as unlinkSync5 } from "node:fs";
+import { readFileSync as readFileSync8, writeFileSync as writeFileSync4, linkSync, mkdirSync as mkdirSync7, openSync as openSync3, closeSync as closeSync3, unlinkSync as unlinkSync5 } from "node:fs";
 import { dirname as dirname6 } from "node:path";
 import { randomUUID as randomUUID3 } from "node:crypto";
 var LOCK_TIMEOUT_MS = 5e3;
@@ -14763,8 +14767,8 @@ async function acquireLock(stateFilePath) {
   mkdirSync7(dirname6(stateFilePath), { recursive: true });
   while (Date.now() < deadline) {
     try {
-      const fd = openSync2(lock, "wx", PRIVATE_FILE_MODE);
-      closeSync2(fd);
+      const fd = openSync3(lock, "wx", PRIVATE_FILE_MODE);
+      closeSync3(fd);
       return;
     } catch {
       await sleep3(LOCK_RETRY_MS);
@@ -15101,33 +15105,36 @@ function resolveTurnTracingMode(config, sessionId, ...snapshots) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync10, statSync as statSync7, fstatSync, openSync as openSync3, readSync, closeSync as closeSync3 } from "node:fs";
+import { readFileSync as readFileSync10, constants as constants2, fstatSync as fstatSync2, openSync as openSync4, readSync, closeSync as closeSync4 } from "node:fs";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 function readTranscript(filePath, afterLine = -1) {
-  let size;
+  let fd;
   try {
-    size = statSync7(filePath).size;
+    fd = openSync4(filePath, constants2.O_RDONLY | constants2.O_NONBLOCK);
   } catch {
     return { messages: [], lastLine: afterLine };
   }
-  if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync10(filePath, "utf-8");
-    const lines = raw.split("\n").filter((l) => l.trim() !== "");
-    const messages = [];
-    let lastLine = afterLine;
-    for (let i = 0; i < lines.length; i++) {
-      lastLine = i;
-      if (i <= afterLine)
-        continue;
-      try {
-        messages.push(JSON.parse(lines[i]));
-      } catch {
-      }
-    }
-    return { messages, lastLine };
-  }
-  const fd = openSync3(filePath, "r");
   try {
+    const stat3 = fstatSync2(fd);
+    if (!stat3.isFile())
+      return { messages: [], lastLine: afterLine };
+    const size = stat3.size;
+    if (size <= MAX_FULL_READ_BYTES) {
+      const raw = readFileSync10(fd, "utf-8");
+      const lines = raw.split("\n").filter((l) => l.trim() !== "");
+      const messages2 = [];
+      let lastLine2 = afterLine;
+      for (let i = 0; i < lines.length; i++) {
+        lastLine2 = i;
+        if (i <= afterLine)
+          continue;
+        try {
+          messages2.push(JSON.parse(lines[i]));
+        } catch {
+        }
+      }
+      return { messages: messages2, lastLine: lastLine2 };
+    }
     const chunkSize = 2 * 1024 * 1024;
     const buf = Buffer.alloc(chunkSize);
     const messages = [];
@@ -15168,53 +15175,56 @@ function readTranscript(filePath, afterLine = -1) {
     }
     return { messages, lastLine };
   } finally {
-    closeSync3(fd);
+    closeSync4(fd);
   }
 }
 function getTranscriptEndLine(filePath) {
+  let fd;
   try {
-    const size = statSync7(filePath).size;
+    fd = openSync4(filePath, constants2.O_RDONLY | constants2.O_NONBLOCK);
+    const stat3 = fstatSync2(fd);
+    if (!stat3.isFile())
+      return -1;
+    const size = stat3.size;
     if (size === 0)
       return -1;
     if (size <= MAX_FULL_READ_BYTES) {
-      const raw = readFileSync10(filePath, "utf-8");
+      const raw = readFileSync10(fd, "utf-8");
       const lines = raw.split("\n").filter((l) => l.trim() !== "");
       return lines.length > 0 ? lines.length - 1 : -1;
     }
-    const fd = openSync3(filePath, "r");
-    try {
-      const chunkSize = 1024 * 1024;
-      const buf = Buffer.alloc(chunkSize);
-      let lineCount = 0;
-      let bytesRead;
-      let pos = 0;
-      let partial = "";
-      while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
-        const chunk = partial + buf.toString("utf-8", 0, bytesRead);
-        partial = "";
-        const lines = chunk.split("\n");
-        partial = lines.pop() ?? "";
-        for (const line of lines) {
-          if (line.trim() !== "")
-            lineCount++;
-        }
-        pos += bytesRead;
+    const chunkSize = 1024 * 1024;
+    const buf = Buffer.alloc(chunkSize);
+    let lineCount = 0;
+    let bytesRead;
+    let pos = 0;
+    let partial = "";
+    while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
+      const chunk = partial + buf.toString("utf-8", 0, bytesRead);
+      partial = "";
+      const lines = chunk.split("\n");
+      partial = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.trim() !== "")
+          lineCount++;
       }
-      if (partial.trim() !== "")
-        lineCount++;
-      return lineCount > 0 ? lineCount - 1 : -1;
-    } finally {
-      closeSync3(fd);
+      pos += bytesRead;
     }
+    if (partial.trim() !== "")
+      lineCount++;
+    return lineCount > 0 ? lineCount - 1 : -1;
   } catch {
     return -1;
+  } finally {
+    if (fd !== void 0)
+      closeSync4(fd);
   }
 }
 function readRuntimeVersion(filePath) {
   let fd;
   try {
-    fd = openSync3(filePath, "r");
-    const size = fstatSync(fd).size;
+    fd = openSync4(filePath, "r");
+    const size = fstatSync2(fd).size;
     if (size === 0)
       return void 0;
     const window2 = 64 * 1024;
@@ -15236,7 +15246,7 @@ function readRuntimeVersion(filePath) {
   } catch {
   } finally {
     if (fd !== void 0)
-      closeSync3(fd);
+      closeSync4(fd);
   }
   return void 0;
 }

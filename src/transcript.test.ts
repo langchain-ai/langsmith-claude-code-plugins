@@ -1,4 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import * as fs from "node:fs";
+
+vi.mock("node:fs", { spy: true });
+
+afterEach(() => vi.restoreAllMocks());
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -23,13 +28,66 @@ import type {
 
 let tmpDir: string;
 
-beforeEach(() => {
+beforeEach(async () => {
+  const actual = await vi.importActual<typeof fs>("node:fs");
+  for (const name of ["openSync", "fstatSync", "readFileSync", "closeSync"] as const) {
+    vi.mocked(fs[name]).mockImplementation(actual[name] as never);
+  }
   tmpDir = join(tmpdir(), `transcript-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   mkdirSync(tmpDir, { recursive: true });
 });
 
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe("transcript descriptor safety", () => {
+  it.each([false, true])(
+    "keeps the checked file after pathname replacement (streaming=%s)",
+    async (streaming) => {
+      const path = writeJsonl("original.jsonl", [{ original: true }]);
+      const replacement = writeJsonl("replacement.jsonl", [{ replacement: true }, { extra: true }]);
+      const { fstatSync: fstat } = await vi.importActual<typeof fs>("node:fs");
+      vi.spyOn(fs, "fstatSync").mockImplementation((fd) => {
+        const stat = fstat(fd);
+        fs.renameSync(replacement, path);
+        return streaming ? Object.assign(stat, { size: 51 * 1024 * 1024 }) : stat;
+      });
+      const close = vi.spyOn(fs, "closeSync");
+      expect(readTranscript(path)).toEqual({ messages: [{ original: true }], lastLine: 0 });
+      expect(close).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([false, true])(
+    "counts the checked file after pathname replacement (streaming=%s)",
+    async (streaming) => {
+      const path = writeJsonl("original.jsonl", [{ original: true }]);
+      const replacement = writeJsonl("replacement.jsonl", [{ replacement: true }, { extra: true }]);
+      const { fstatSync: fstat } = await vi.importActual<typeof fs>("node:fs");
+      vi.spyOn(fs, "fstatSync").mockImplementation((fd) => {
+        const stat = fstat(fd);
+        fs.renameSync(replacement, path);
+        return streaming ? Object.assign(stat, { size: 51 * 1024 * 1024 }) : stat;
+      });
+      const close = vi.spyOn(fs, "closeSync");
+      expect(getTranscriptEndLine(path)).toBe(0);
+      expect(close).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("closes descriptors for nonregular files and read failures", () => {
+    const path = writeJsonl("original.jsonl", []);
+    const close = vi.spyOn(fs, "closeSync");
+    expect(readTranscript(tmpDir)).toEqual({ messages: [], lastLine: -1 });
+    expect(getTranscriptEndLine(tmpDir)).toBe(-1);
+    vi.spyOn(fs, "readFileSync").mockImplementation(() => {
+      throw new Error("read failed");
+    });
+    expect(() => readTranscript(path)).toThrow("read failed");
+    expect(getTranscriptEndLine(path)).toBe(-1);
+    expect(close).toHaveBeenCalledTimes(4);
+  });
 });
 
 function writeJsonl(filename: string, lines: object[]): string {
