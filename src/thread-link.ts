@@ -18,7 +18,10 @@ function terminalLink(url: string): string {
  */
 export async function describeThreadLinks(config: Config, sessionId: string): Promise<string> {
   if (!config.enabled) {
-    return "LangSmith tracing is disabled. Enable it and send a prompt first.";
+    return (
+      config.managedConfigProblem ??
+      "LangSmith tracing is disabled. Enable it and send a prompt first."
+    );
   }
 
   // Replicas replace the main project rather than adding to it, matching RunTree.postRun.

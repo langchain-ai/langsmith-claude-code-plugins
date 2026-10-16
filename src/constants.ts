@@ -151,7 +151,14 @@ const LEGACY_FLUSH_LOCK_FILE = new RegExp(
   `^[\\w.-]+\\.flush\\.lock(\\.${LEGACY_UUID}\\.lock\\.staging)?$`,
 );
 
+const LOCKED_RUNS_ENDPOINTS_WARNING =
+  "Ignored CC_LANGSMITH_RUNS_ENDPOINTS because the managed config locks replicas.";
+const LOCKED_REDACT_EXTRA_WARNING =
+  "Ignored CC_LANGSMITH_REDACT_EXTRA because the managed config locks redact_extra_rules.";
+
 export {
+  LOCKED_RUNS_ENDPOINTS_WARNING,
+  LOCKED_REDACT_EXTRA_WARNING,
   LEGACY_MAX_AGE_MS,
   LEGACY_EMPTY_FOLDER_IDLE_MS,
   LEGACY_SWEEP_WARNING,

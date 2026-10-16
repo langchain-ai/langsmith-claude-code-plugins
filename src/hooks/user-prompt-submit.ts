@@ -64,7 +64,9 @@ export async function main(): Promise<void> {
         reason = `Thread tracing ${command === "mute" ? "muted (metadata-only)" : "unmuted (full content)"}. Preference saved for the next turn; the current turn is unchanged.`;
         // Filesystem warnings stay in this local, blocked response, never tracing.
         if (result?.warning) reason += ` Warning: ${result.warning}.`;
-        if (!commandConfig.enabled) {
+        if (commandConfig.managedConfigProblem) {
+          reason += ` ${commandConfig.managedConfigProblem}`;
+        } else if (!commandConfig.enabled) {
           reason += " Master tracing is disabled; this preference does not enable it.";
         } else if (
           !commandConfig.apiKey &&

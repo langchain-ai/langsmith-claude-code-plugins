@@ -10,6 +10,7 @@ export const LOG_FILE =
   process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
 
 let debugEnabled = false;
+const warned = new Set<string>();
 
 export function initLogger(debug: boolean): void {
   debugEnabled = debug;
@@ -31,6 +32,7 @@ function write(level: string, message: string): void {
   const line = `${timestamp} [${level}] ${message}\n`;
   try {
     rotateIfNeeded();
+    mkdirSync(dirname(LOG_FILE), { recursive: true });
     appendFileSync(LOG_FILE, line);
   } catch {
     // Best-effort logging — don't crash the hook.
@@ -43,6 +45,12 @@ export function log(message: string): void {
 
 export function warn(message: string): void {
   write("WARN", message);
+}
+
+export function warnOnce(message: string): void {
+  if (warned.has(message)) return;
+  warned.add(message);
+  warn(message);
 }
 
 export function error(message: string): void {

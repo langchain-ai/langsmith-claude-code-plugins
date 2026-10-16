@@ -290,6 +290,18 @@ describe("actual UserPromptSubmit command prefix", () => {
     },
   );
 
+  it("names the managed config problem instead of the master switch", async () => {
+    mocks.config.mockReturnValue({
+      stateFilePath: state,
+      apiKey: "test",
+      enabled: false,
+      managedConfigProblem: "Managed config is broken",
+    });
+    const reason = await submit("/langsmith-tracing:mute");
+    expect(reason).toContain("Managed config is broken");
+    expect(reason).not.toContain("Master tracing is disabled");
+  });
+
   it.each(["mute", "unmute", "trace"] as const)(
     "handles the actual %s command definition body without a model turn",
     async (command) => {

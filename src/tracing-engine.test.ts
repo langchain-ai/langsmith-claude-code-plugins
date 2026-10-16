@@ -287,6 +287,7 @@ describe("a turn's settlement", () => {
 
     expect(fill(own).base).toEqual({
       ls_attribution_identifier: "me",
+      ls_git_repo: "acme/child",
       repository_name: "acme/child",
     });
   });

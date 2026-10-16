@@ -1,13 +1,26 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { readCommonConfigFiles, type CommonConfigResult } from "@langchain/plugins-base/settings";
 import { loadConfig } from "./config.js";
 import { execFileSync } from "node:child_process";
 
 vi.mock("node:child_process", { spy: true });
 vi.mock("node:fs", { spy: true });
 vi.mock("node:os", { spy: true });
+vi.mock("@langchain/plugins-base/settings", { spy: true });
+
+const { readCommonConfigFiles: readFiles } = await vi.importActual<
+  typeof import("@langchain/plugins-base/settings")
+>("@langchain/plugins-base/settings");
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -584,6 +597,62 @@ describe("loadConfig", () => {
         git_branch: "feature/my-branch",
         git_commit_sha: "deadbeefcafe1234",
       });
+    });
+  });
+
+  describe("managed config", () => {
+    function lock(managed: CommonConfigResult) {
+      vi.mocked(readCommonConfigFiles).mockImplementation((options) => ({
+        ...readFiles(options),
+        managed,
+      }));
+    }
+
+    const warnings = (message: string) =>
+      vi.mocked(appendFileSync).mock.calls.filter(([, line]) => String(line).includes(message));
+
+    it("lets locked replicas beat CC_LANGSMITH_RUNS_ENDPOINTS and warns once", () => {
+      lock({ status: "valid", common: { replicas: [] }, diagnostics: [] });
+      process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([
+        { apiUrl: "https://other.example" },
+      ]);
+      expect(loadConfig({ cwd }).replicas).toEqual([]);
+      expect(loadConfig({ cwd }).replicas).toEqual([]);
+      expect(warnings("Ignored CC_LANGSMITH_RUNS_ENDPOINTS")).toHaveLength(1);
+    });
+
+    it("lets locked redaction rules beat CC_LANGSMITH_REDACT_EXTRA", () => {
+      lock({
+        status: "valid",
+        common: { redact_extra_rules: [{ pattern: "x" }] },
+        diagnostics: [],
+      });
+      process.env.CC_LANGSMITH_REDACT_EXTRA = "[]";
+      expect(loadConfig({ cwd }).redactExtraRules).toEqual([{ pattern: "x" }]);
+      expect(warnings("Ignored CC_LANGSMITH_REDACT_EXTRA")).toHaveLength(1);
+    });
+
+    it("turns tracing off when the engine rejects the managed file", () => {
+      lock({ status: "invalid", common: {}, diagnostics: ["managed config problem"] });
+      process.env.TRACE_TO_LANGSMITH = "true";
+      expect(loadConfig({ cwd })).toMatchObject({
+        enabled: false,
+        managedConfigProblem: "managed config problem",
+      });
+    });
+
+    it("reports no admin-file problem for a valid file with warnings", () => {
+      lock({ status: "valid", common: { redact: true }, diagnostics: ["ignored keys"] });
+      expect(loadConfig({ cwd }).managedConfigProblem).toBeUndefined();
+    });
+
+    it("logs each engine warning once across loads", () => {
+      lock({ status: "invalid", common: {}, diagnostics: ["managed config test warning"] });
+      loadConfig({ cwd });
+      loadConfig({ cwd });
+      expect(warnings("managed config test warning")).toHaveLength(1);
+      const [[logFile]] = warnings("managed config test warning");
+      expect(mkdirSync).toHaveBeenCalledWith(dirname(String(logFile)), { recursive: true });
     });
   });
 });

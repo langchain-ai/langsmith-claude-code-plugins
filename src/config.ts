@@ -8,10 +8,12 @@ import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import type { RunTreeConfig } from "langsmith";
 import type { StringNodeRule } from "langsmith/anonymizer";
-import { debug, error } from "./logger.js";
+import { debug, error, warnOnce } from "./logger.js";
 import { getGitInfo, getRepoName, getRepoUrl } from "@langchain/plugins-base/git";
 import {
   BOOLEAN_SETTINGS,
+  LOCKED_REDACT_EXTRA_WARNING,
+  LOCKED_RUNS_ENDPOINTS_WARNING,
   NO_PINNED_KEYS,
   PINNED_REPOSITORY_KEYS,
   REPOSITORY_METADATA_KEYS,
@@ -177,11 +179,21 @@ export function loadConfig(options?: { cwd?: string; deferGit?: boolean }): Conf
         // Environment rules retain the existing tolerant parser.
       },
       defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" },
+      managed: files.managed,
     },
     { envFirst: true },
   );
   // Environment replicas retain their SDK format, including legacy tuples.
+  for (const line of common.diagnostics) warnOnce(line);
+  if (common.locked.includes("replicas")) {
+    if (providedReplicas !== undefined) warnOnce(LOCKED_RUNS_ENDPOINTS_WARNING);
+    replicas = toSdkReplicas(common.replicas);
+  }
   if (replicas === undefined) replicas = toSdkReplicas(common.replicas);
+  if (common.locked.includes("redact_extra_rules")) {
+    if (providedExtra !== undefined) warnOnce(LOCKED_REDACT_EXTRA_WARNING);
+    redactExtraRules = common.redact_extra_rules;
+  }
   redactExtraRules ??= common.redact_extra_rules;
   customMetadata = common.metadata;
 
@@ -231,5 +243,8 @@ export function loadConfig(options?: { cwd?: string; deferGit?: boolean }): Conf
     customMetadata,
     redact: common.redact,
     redactExtraRules,
+    ...(files.managed.status === "invalid" && {
+      managedConfigProblem: files.managed.diagnostics[0],
+    }),
   };
 }

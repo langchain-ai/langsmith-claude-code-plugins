@@ -557,6 +557,7 @@ export interface Config {
   redact: boolean;
   /** From CC_LANGSMITH_REDACT_EXTRA or the config file. */
   redactExtraRules?: StringNodeRule[];
+  managedConfigProblem?: string;
 }
 
 export type BooleanSetting = keyof typeof BOOLEAN_SETTINGS;

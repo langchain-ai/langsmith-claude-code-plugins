@@ -81,6 +81,22 @@ Every setting has a key you can write in the config file and a variable you can 
 
 Unless you turn `redact` off, secrets are stripped before anything is uploaded, covering API keys, JWTs, PEM blocks and common `NAME=value`, `Authorization` and URL-credential shapes. That is not a guarantee that what you upload is safe to share.
 
+### Lock settings for a whole machine
+
+An admin, usually through MDM, can lock `api_url`, `replicas`, `redact` and `redact_extra_rules` in `~/.langsmith-plugins/managed.json`, which beats every file and shell variable above. The file only counts when root owns both it and its folder and neither is a symlink or writable by anyone else. If it's there but fails those checks or can't be read, tracing turns off with a warning in the plugin's log until an admin fixes it. This works on macOS and Linux only for now.
+
+```bash
+sudo mkdir /Users/<name>/.langsmith-plugins
+echo '{"api_url": "https://your-langsmith.example.com", "replicas": [], "redact": true}' | sudo tee /Users/<name>/.langsmith-plugins/managed.json
+sudo chown -R root:wheel /Users/<name>/.langsmith-plugins
+sudo chmod 755 /Users/<name>/.langsmith-plugins
+sudo chmod 644 /Users/<name>/.langsmith-plugins/managed.json
+sudo chmod -R -N /Users/<name>/.langsmith-plugins
+sudo chflags schg /Users/<name>/.langsmith-plugins
+```
+
+`chmod -N` strips any extra access rules the plugin can't see, and `chflags schg` stops anything from renaming the folder, since the user owns their home folder. On Linux use `/home/<name>` and `root:root`, skip the `chmod -N` line and use `chattr +i` instead of `chflags schg`. Locking `api_url` alone also locks `replicas` to none, so list any replicas you want in the file. To change the file later, clear the flag first with `chflags noschg` or `chattr -i`.
+
 ## When nothing shows up
 
 - **No runs at all.** Check the plugin is installed and enabled in `/plugin`, and that tracing is switched on. A `TRACE_TO_LANGSMITH` in your shell overrides whatever the files say.
