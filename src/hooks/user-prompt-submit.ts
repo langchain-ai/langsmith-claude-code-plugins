@@ -38,7 +38,13 @@ import {
   setThreadTracingMode,
   getThreadTracingMode,
 } from "../tracing-policy.js";
-import type { UserPromptSubmitHookInput } from "../types.js";
+import { queueClosing } from "../closing-queue.js";
+import type {
+  Config,
+  InterruptedClosingInput,
+  QueuedClosing,
+  UserPromptSubmitHookInput,
+} from "../types.js";
 
 export async function main(): Promise<void> {
   const hookStartTime = Date.now();
@@ -121,7 +127,10 @@ export async function main(): Promise<void> {
   // be rejected by LangSmith's ±24h timestamp window) when state is lost due to
   // file deletion, corruption, or session pruning.
   let interruptedLastLine = sessionState.last_line;
-  if (interruptedLastLine === -1 && input.transcript_path) {
+  const awaitingUploader =
+    Boolean(sessionState.current_turn_run_id) ||
+    Object.keys(sessionState.queued_closings ?? {}).length > 0;
+  if (interruptedLastLine === -1 && !awaitingUploader && input.transcript_path) {
     const transcriptPath = expandHome(input.transcript_path)!;
     const endLine = getTranscriptEndLine(transcriptPath);
     if (endLine > 0) {
@@ -131,10 +140,8 @@ export async function main(): Promise<void> {
   }
 
   // If there's a stale turn run, the previous turn was interrupted (Stop never fired).
-  // Trace the interrupted turn's content then close the parent run.
-  let interruptedTurnsTraced = 0;
-  let consumedToolUseIds: string[] = [];
-
+  // The uploader traces its content and closes it; this turn counts it now.
+  let countedTurns = sessionState.turn_count;
   if (sessionState.current_turn_run_id) {
     // A stale current_turn_run_id means the previous turn's Stop never fired. The
     // usual cause is a user interrupt — but it also happens when several background
@@ -147,46 +154,22 @@ export async function main(): Promise<void> {
       `Closing stale turn ${sessionState.current_turn_run_id}` +
         (supersededNotificationAgentId ? " (superseded task-notification)" : " (interrupted)"),
     );
-    try {
-      const {
-        lastLine,
-        turnsTraced,
-        consumedToolUseIds: consumed,
-      } = await closeInterruptedTurn({
-        defaultMuted: config.defaultMuted,
-        sessionId: input.session_id,
-        sessionState,
-        transcriptPath: expandHome(input.transcript_path),
-        stateFilePath: config.stateFilePath,
-        customMetadata: config.customMetadata,
-        runtimeVersion,
-        approvalPolicy,
+    const { prompt: _prompt, ...closingInput } = input;
+    await queueClosing(
+      config,
+      "interrupted",
+      {
+        ...closingInput,
         error: supersededNotificationAgentId
           ? "Superseded by a newer task-notification"
           : "User interrupt",
-      });
-      interruptedLastLine = lastLine;
-      interruptedTurnsTraced = turnsTraced;
-      consumedToolUseIds = consumed ?? [];
-      if (supersededNotificationAgentId) {
-        await finalizeNotificationChain({
-          defaultMuted: config.defaultMuted,
-          stateFilePath: config.stateFilePath,
-          sessionId: input.session_id,
-          customMetadata: config.customMetadata,
-          runtimeVersion,
-          agentId: supersededNotificationAgentId,
-          // Carry the killed marker through this path too, in case the killed
-          // subagent's notification turn was itself superseded before its Stop.
-          interrupted: sessionState.current_notification_interrupted,
-        });
-      }
-    } catch (err) {
-      error(`Failed to close interrupted turn: ${err}`);
-    }
+      },
+      { transcriptCut: true },
+    );
+    countedTurns = Math.max(countedTurns, sessionState.current_turn_number ?? 0);
   }
 
-  const turnNum = sessionState.turn_count + interruptedTurnsTraced + 1;
+  const turnNum = countedTurns + 1;
 
   const startTime = new Date().toISOString();
   const runId = stableRunId(startTime, input.session_id, turnNum);
@@ -312,10 +295,8 @@ export async function main(): Promise<void> {
         // Persisted so the closing hooks can stamp them onto their runs.
         approval_policy: approvalPolicy,
         ...(runtimeVersion ? { runtime_version: runtimeVersion } : {}),
-        // Advance past the interrupted turn's messages so Stop doesn't re-trace them
-        last_line: interruptedLastLine,
-        ...advanceToolTracingProgress(ss, consumedToolUseIds, "transcript"),
-        turn_count: ss.turn_count + interruptedTurnsTraced,
+        last_line: Math.max(ss.last_line, interruptedLastLine),
+        turn_count: Math.max(ss.turn_count, countedTurns),
         // Clear this turn's stale data, but keep still-running background subagents
         // and any Agent tool runs left open awaiting their task-notification.
         task_run_map: preservedTaskRunMap,
@@ -330,4 +311,61 @@ export async function main(): Promise<void> {
 
   const duration = ((Date.now() - hookStartTime) / 1000).toFixed(1);
   debug(`UserPromptSubmit hook completed in ${duration}s`);
+}
+
+export async function closeInterruptedPrompt(
+  _id: string,
+  closing: QueuedClosing,
+  config: Config,
+): Promise<void> {
+  const input = closing.input as InterruptedClosingInput;
+  const sessionState = closing.session;
+  initTracing(config, input.cwd, input.session_id);
+  const transcriptPath = expandHome(input.transcript_path);
+  const runtimeVersion =
+    (transcriptPath ? readRuntimeVersion(transcriptPath) : undefined) ??
+    sessionState.runtime_version;
+  const supersededNotificationAgentId = sessionState.current_notification_agent_id;
+  try {
+    const { lastLine, turnsTraced, consumedToolUseIds } = await closeInterruptedTurn({
+      defaultMuted: config.defaultMuted,
+      sessionId: input.session_id,
+      sessionState,
+      transcriptPath,
+      stateFilePath: config.stateFilePath,
+      customMetadata: config.customMetadata,
+      runtimeVersion,
+      approvalPolicy: input.permission_mode,
+      error: input.error,
+      cutAtByte: closing.cut_bytes,
+    });
+    await atomicUpdateState(config.stateFilePath, (s) => {
+      const ss = getSessionState(s, input.session_id);
+      return {
+        ...s,
+        [input.session_id]: {
+          ...ss,
+          // Advance past the interrupted turn's messages so Stop doesn't re-trace them
+          last_line: Math.max(ss.last_line, lastLine),
+          ...advanceToolTracingProgress(ss, consumedToolUseIds ?? [], "transcript"),
+          turn_count: Math.max(ss.turn_count, sessionState.turn_count + turnsTraced),
+        },
+      };
+    });
+    if (supersededNotificationAgentId) {
+      await finalizeNotificationChain({
+        defaultMuted: config.defaultMuted,
+        stateFilePath: config.stateFilePath,
+        sessionId: input.session_id,
+        customMetadata: config.customMetadata,
+        runtimeVersion,
+        agentId: supersededNotificationAgentId,
+        // Carry the killed marker through this path too, in case the killed
+        // subagent's notification turn was itself superseded before its Stop.
+        interrupted: sessionState.current_notification_interrupted,
+      });
+    }
+  } catch (err) {
+    error(`Failed to close interrupted turn: ${err}`);
+  }
 }

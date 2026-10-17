@@ -1,32 +1,5 @@
-/**
- * SubagentStop hook handler.
- *
- * Invoked when a Claude Code subagent finishes (including when aborted).
- *
- * A dynamic-workflow stage (`agent_type: "workflow-subagent"`) is handled up
- * front by {@link handleWorkflowSubagentStop}: it wasn't launched via the Task
- * tool, so it nests under its open Workflow run (correlated by the run_id in its
- * transcript path) rather than a per-agent Agent run.
- *
- * Otherwise, two cases, discriminated by whether PostToolUse has already
- * recorded the Agent tool run in `task_run_map`:
- *
- *  1. SYNCHRONOUS subagent — SubagentStop fires *before* the Task tool returns,
- *     so PostToolUse hasn't recorded the Agent tool run yet. We can't trace it
- *     here (no parent run to nest under), so we queue it in
- *     `pending_subagent_traces` for the Stop hook, which runs after PostToolUse.
- *     The Stop hook traces it and completes the launching turn.
- *
- *  2. ASYNC (background) subagent — the Task tool returned at launch, so
- *     PostToolUse already recorded the Agent tool run. We trace it now, nested
- *     under its *launching* turn's trace (recovered from task_run_map, not the
- *     session's current turn — a newer turn may be active). We leave the Agent
- *     tool run *open* and the launching turn *deferred*: Claude emits a
- *     `<task-notification>` turn next, which nests under this Agent run, so it
- *     can't be closed until that turn completes. The notification turn's Stop
- *     (via finalizeNotificationChain) closes the Agent run and the launching
- *     turn; SessionEnd is the backstop if no notification ever arrives.
- */
+// A workflow stage nests under its Workflow run and a synchronous subagent waits for Stop, while a
+// background subagent goes to the uploader and stays open until its notification turn closes it.
 
 import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { debug, error } from "../logger.js";
@@ -39,7 +12,8 @@ import { initTracing } from "../tracing-engine.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
-import type { SubagentStopHookInput, OpenTurn } from "../types.js";
+import { queueClosing } from "../closing-queue.js";
+import type { Config, OpenTurn, QueuedClosing, SubagentStopHookInput } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: SubagentStopHookInput = await readStdin();
@@ -56,21 +30,8 @@ export async function main(): Promise<void> {
     return;
   }
 
-  initTracing(config, input.cwd, input.session_id);
-
-  // Dynamic-workflow stage: not launched via the Task tool (so it's absent from
-  // task_run_map), it nests under its open Workflow run instead. Handled
-  // separately; the workflow's own task-notification finalizes the run.
   if (input.agent_type === WORKFLOW_SUBAGENT_TYPE) {
-    await handleWorkflowSubagentStop({
-      defaultMuted: config.defaultMuted,
-      sessionId: input.session_id,
-      agentId: input.agent_id,
-      agentType: input.agent_type,
-      agentTranscriptPath,
-      stateFilePath: config.stateFilePath,
-      customMetadata: config.customMetadata,
-    });
+    await queueClosing(config, "subagent-stop", input);
     return;
   }
 
@@ -102,6 +63,40 @@ export async function main(): Promise<void> {
     debug(`Queued subagent ${input.agent_id} for Stop hook (Agent tool run not recorded yet)`);
     return;
   }
+
+  await queueClosing(config, "subagent-stop", input);
+}
+
+export async function traceStoppedSubagent(
+  _id: string,
+  closing: QueuedClosing,
+  config: Config,
+): Promise<void> {
+  const input = closing.input as SubagentStopHookInput;
+  const agentTranscriptPath = expandHome(input.agent_transcript_path)!;
+
+  initTracing(config, input.cwd, input.session_id);
+
+  // Dynamic-workflow stage: not launched via the Task tool (so it's absent from
+  // task_run_map), it nests under its open Workflow run instead. Handled
+  // separately; the workflow's own task-notification finalizes the run.
+  if (input.agent_type === WORKFLOW_SUBAGENT_TYPE) {
+    await handleWorkflowSubagentStop({
+      defaultMuted: config.defaultMuted,
+      sessionId: input.session_id,
+      agentId: input.agent_id,
+      agentType: input.agent_type,
+      agentTranscriptPath,
+      stateFilePath: config.stateFilePath,
+      customMetadata: config.customMetadata,
+    });
+    return;
+  }
+
+  const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
+  const taskRunMap = sessionState.task_run_map ?? {};
+  const taskRunInfo = taskRunMap[input.agent_id];
+  if (!taskRunInfo) return;
 
   // Case 2: async (background) subagent. Recover the launching turn's trace
   // context from the deferred Agent tool run so the subagent nests under the

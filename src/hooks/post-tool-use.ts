@@ -19,10 +19,10 @@ import { initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
-import { settledRepositoryMetadata, toolOrigin } from "../repo-attribution.js";
+import { toolOrigin } from "../repo-attribution.js";
 import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
-import { captureRun, captureToolRun, initTracing } from "../tracing-engine.js";
+import { captureToolRun, initTracing } from "../tracing-engine.js";
 import { stableRunId } from "../utils/ids/run-id.js";
 import type { PostToolUseHookInput } from "../types.js";
 
@@ -30,7 +30,7 @@ export async function main(): Promise<void> {
   const input: PostToolUseHookInput = await readStdin();
   if (!isPayloadForHook(input, "PostToolUse")) return;
 
-  const config = initHook(input.cwd, { deferGit: true });
+  const config = initHook(input.cwd);
   if (!config) return;
 
   // Subagent tool calls are traced by the Stop hook from the transcript.
@@ -96,7 +96,7 @@ export async function main(): Promise<void> {
       `Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`,
     );
     initTracing(config, input.cwd, input.session_id);
-    await captureRun(
+    await captureToolRun(
       {
         id: toolRunId,
         name: "Workflow",
@@ -109,7 +109,7 @@ export async function main(): Promise<void> {
         dotted_order: toolDottedOrder,
         metadata: codingAgentMetadata({
           sessionId: input.session_id,
-          base: settledRepositoryMetadata(config.customMetadata, origin),
+          base: config.customMetadata,
           turnNumber: sessionState.current_turn_number,
           runtimeVersion: sessionState.runtime_version,
           agentType: "root",
@@ -118,6 +118,8 @@ export async function main(): Promise<void> {
         }),
       },
       tracing,
+      parentRunId,
+      origin,
     );
   } else {
     initTracing(config, input.cwd, input.session_id);

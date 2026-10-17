@@ -9,7 +9,6 @@ import { join } from "node:path";
 import type { RunTreeConfig } from "langsmith";
 import type { StringNodeRule } from "langsmith/anonymizer";
 import { debug, error } from "./logger.js";
-import { getRepositoryMetadata } from "@langchain/plugins-base/git";
 import {
   REPOSITORY_METADATA_KEYS,
   withBothGitMetadataNames,
@@ -77,7 +76,7 @@ export function resolveStateFilePath(): string {
   return process.env.STATE_FILE ?? join(homedir(), ...STATE_FILE_DEFAULT);
 }
 
-export function loadConfig(options?: { cwd?: string; deferGit?: boolean }): Config {
+export function loadConfig(options?: { cwd?: string }): Config {
   const cwd = options?.cwd ?? process.cwd();
   const homeDir = homedir();
   const stateFilePath = resolveStateFilePath();
@@ -201,11 +200,8 @@ export function loadConfig(options?: { cwd?: string; deferGit?: boolean }): Conf
     identityMetadata.anthropic_user_id = anthropicUserId;
   }
 
-  // Attach git repo metadata if available, to attribute runs to a specific codebase.
-  const repoMetadata = options?.deferGit ? {} : getRepositoryMetadata(cwd);
-
   const pinned = REPOSITORY_METADATA_KEYS.filter((key) => customMetadata?.[key] !== undefined);
-  customMetadata = { cwd, ...identityMetadata, ...repoMetadata, ...customMetadata };
+  customMetadata = { cwd, ...identityMetadata, ...customMetadata };
   // Carried privately so per-tool attribution can leave these alone; spreading drops it.
   Object.defineProperty(customMetadata, PINNED_REPOSITORY_KEYS, { value: new Set<string>(pinned) });
 

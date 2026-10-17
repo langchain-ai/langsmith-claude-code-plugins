@@ -529,28 +529,6 @@ describe("loadConfig", () => {
     });
   });
 
-  it("inserts the repository name into customMetadata beside the user's own fields", () => {
-    const url = "https://github.com/langchain-ai/example.git";
-    vi.mocked(execFileSync).mockImplementation(() => {
-      return [["origin", url + " (fetch)"].join("\t"), ["origin", url + " (push)"].join("\t")].join(
-        "\n",
-      );
-    });
-
-    process.env.CC_LANGSMITH_METADATA = JSON.stringify({
-      pr_url: "https://github.com/org/repo/pull/42",
-      pr_author: "octocat",
-    });
-
-    const config = loadConfig({ cwd: __dirname });
-    expect(config.customMetadata).toMatchObject({
-      pr_url: "https://github.com/org/repo/pull/42",
-      pr_author: "octocat",
-      ls_git_repo: "langchain-ai/example",
-      ls_repo_provider: "github",
-    });
-  });
-
   it("gives both names of a field the value the person set under either one", () => {
     const url = "https://github.com/langchain-ai/example.git";
     vi.mocked(execFileSync).mockImplementation(() => `origin\t${url} (fetch)`);
@@ -576,27 +554,6 @@ describe("loadConfig", () => {
       expect(config.customMetadata).toMatchObject({
         user_id: "hashed-123",
         anthropic_user_id: "hashed-123", // DEPRECATED compat alias
-      });
-    });
-
-    it("derives ls_git_repo_url + ls_git_branch + ls_git_commit_hash", () => {
-      vi.mocked(execFileSync).mockImplementation((_file: string, args?: readonly string[]) => {
-        const command = args?.join(" ") ?? "";
-        if (command.includes("remote -v")) {
-          const url = "git@github.com:langchain-ai/example.git";
-          return [`origin\t${url} (fetch)`, `origin\t${url} (push)`].join("\n");
-        }
-        if (command.includes("abbrev-ref")) return "feature/my-branch\n";
-        if (command.includes("rev-parse HEAD")) return "deadbeefcafe1234\n";
-        return "";
-      });
-      const config = loadConfig({ cwd: __dirname });
-      expect(config.customMetadata).toMatchObject({
-        ls_git_repo: "langchain-ai/example",
-        ls_repo_provider: "github",
-        ls_git_repo_url: "https://github.com/langchain-ai/example",
-        ls_git_branch: "feature/my-branch",
-        ls_git_commit_hash: "deadbeefcafe1234",
       });
     });
   });

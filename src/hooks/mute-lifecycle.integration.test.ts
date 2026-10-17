@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HookEventName, TracingMode, TracingState, TranscriptMessage } from "../types.js";
 import { tracingPolicyPath } from "../tracing-policy.js";
+import { STOP_FLUSH_WAIT_MS } from "../constants.js";
 
 // Exercise the real hooks, grouping, run builders, background registration and
 // finalization. Only I/O/SDK transport is replaced; privacy projection is real.
@@ -21,6 +22,8 @@ const h = vi.hoisted(() => ({
   beforePost: undefined as undefined | (() => void | Promise<void>),
   event: "" as string,
   errors: [] as unknown[],
+  readAt: 0,
+  endLine: -1,
 }));
 vi.mock("langsmith", () => ({
   Client: class {
@@ -65,8 +68,16 @@ vi.mock("../tracing-engine.js", async () => {
     captureRun,
     captureToolRun: (run: Record<string, any>, mode: TracingMode, rootRunId: string) =>
       captureRun(run, mode, rootRunId),
+    queueJob: async () => {},
   };
 });
+vi.mock("../repo-attribution.js", async (original) => ({
+  ...(await original<typeof import("../repo-attribution.js")>()),
+  sessionScopedMetadata: (base?: Record<string, unknown>) => ({
+    ...base,
+    ls_git_repo: "acme/session",
+  }),
+}));
 vi.mock("../utils/stdin.js", () => ({ readStdin: async () => h.input }));
 vi.mock("../utils/hook-init.js", () => ({
   initHook: () => ({
@@ -115,11 +126,12 @@ vi.mock("../state.js", async (original) => {
 });
 vi.mock("../transcript.js", async (original) => ({
   ...(await original<typeof import("../transcript.js")>()),
-  readTranscript: (path: string) => ({
-    messages: path.includes("agent-") ? h.agentMessages : h.messages,
-    lastLine: 10,
-  }),
-  getTranscriptEndLine: () => -1,
+  readTranscript: (path: string, afterLine = -1) => {
+    h.readAt = performance.now();
+    if (h.endLine >= 0 && afterLine >= h.endLine) return { messages: [], lastLine: afterLine };
+    return { messages: path.includes("agent-") ? h.agentMessages : h.messages, lastLine: 10 };
+  },
+  getTranscriptEndLine: () => h.endLine,
   readRuntimeVersion: () => "test-runtime",
 }));
 
@@ -182,6 +194,7 @@ function reset(mode: TracingMode) {
   h.agentMessages = transcript();
   h.errors = [];
   h.beforePost = undefined;
+  h.endLine = -1;
 }
 const HOOK_EVENT_BY_NAME = {
   prompt: "UserPromptSubmit",
@@ -194,7 +207,11 @@ const HOOK_EVENT_BY_NAME = {
   failure: "StopFailure",
   end: "SessionEnd",
 } satisfies Record<string, HookEventName>;
-async function hook(name: string, extra: Record<string, unknown> = {}) {
+async function hook(
+  name: string,
+  extra: Record<string, unknown> = {},
+  { closings = true }: { closings?: boolean } = {},
+) {
   h.input = {
     session_id: "session",
     cwd: "/repo",
@@ -213,6 +230,12 @@ async function hook(name: string, extra: Record<string, unknown> = {}) {
   vi.resetModules();
   const { HOOK_HANDLERS } = await import("./registry.js");
   await HOOK_HANDLERS[event]();
+  if (closings) await uploader();
+}
+async function uploader() {
+  const { runQueuedClosings } = await import("../engine-closings.js");
+  const { initHook } = await import("../utils/hook-init.js");
+  await runQueuedClosings(initHook()!, "session");
 }
 function topology() {
   return h.operations.map(({ action, config: c }) => ({
@@ -393,6 +416,147 @@ describe("configured default lifecycle", () => {
   );
 });
 
+describe("closing hooks hand their work to the uploader", () => {
+  const patched = (id?: string) =>
+    h.operations.find((op) => op.action === "patch" && op.config.id === id);
+  const queuedKinds = () => Object.values(h.state.session.queued_closings!).map((c) => c.kind);
+  const syncAgent = async (options?: { closings: boolean }) => {
+    const task = { tool_use_id: "task", tool_name: "Task" };
+    await hook("pre", task, options);
+    const agent = { agent_id: "sync-agent", agent_type: "Explore", agent_transcript_path: "/a" };
+    await hook("agent", agent, options);
+    const response = { agentId: "sync-agent", content: privateText };
+    await hook("post", { ...task, tool_response: response }, options);
+    h.messages = transcript({ id: "task", name: "Task", agentId: "sync-agent" });
+  };
+
+  it("Stop builds nothing while Claude Code waits, and a fast next prompt neither interrupts nor skips it", async () => {
+    reset("full");
+    await hook("prompt");
+    const first = h.state.session.current_turn_run_id;
+    h.messages = transcript();
+    await hook("stop", {}, { closings: false });
+    expect(h.operations).toHaveLength(1);
+    expect(h.state.session.current_turn_run_id).toBeUndefined();
+    h.endLine = 10;
+    await hook("prompt", {}, { closings: false });
+    expect(h.state.session.current_turn_number).toBe(2);
+    expect(queuedKinds()).toEqual(["stop"]);
+
+    const started = performance.now();
+    await uploader();
+    expect(h.readAt - started).toBeGreaterThanOrEqual(STOP_FLUSH_WAIT_MS - 5);
+    expect(patched(first)?.config).toMatchObject({ outputs: expect.anything() });
+    expect(patched(first)?.config.error).toBeUndefined();
+    expect(h.operations.map((op) => op.config.name)).toContain("Claude");
+    expect(h.state.session.queued_closings).toEqual({});
+    expect(h.errors).toEqual([]);
+  });
+
+  it("an interrupted turn is counted at once and later closed with the session's repository", async () => {
+    reset("full");
+    await hook("prompt");
+    const interrupted = h.state.session.current_turn_run_id;
+    h.messages = transcript();
+    await hook("prompt", {}, { closings: false });
+    expect(h.state.session.current_turn_number).toBe(2);
+    expect(queuedKinds()).toEqual(["interrupted"]);
+    await uploader();
+    expect(patched(interrupted)?.config.extra.metadata).toMatchObject({
+      ls_git_repo: "acme/session",
+    });
+  });
+
+  it.each(["stop", "prompt"] as const)(
+    "a synchronous subagent is still traced when the next prompt beats the uploader (%s)",
+    async (closingHook) => {
+      reset("full");
+      await hook("prompt");
+      await syncAgent();
+      if (closingHook === "stop") await hook("stop", {}, { closings: false });
+      await hook("prompt", {}, { closings: false });
+      await uploader();
+      expect(h.errors).toEqual([]);
+      expect(h.operations.map((op) => `${op.action} ${op.config.name}`)).toEqual(
+        expect.arrayContaining(["post Agent", "post Explore Subagent"]),
+      );
+    },
+  );
+
+  it("a background subagent that finishes before its notification turn reaches the uploader still closes", async () => {
+    reset("full");
+    await hook("prompt");
+    const launch = h.state.session.current_turn_run_id;
+    const input = { tool_use_id: "task", tool_name: "Task" };
+    await hook("pre", input);
+    await hook("post", { ...input, tool_response: { agentId: "bg", status: "async_launched" } });
+    h.messages = transcript({ id: "task", name: "Task", agentId: "bg" });
+    await hook("stop");
+    await hook(
+      "agent",
+      {
+        agent_id: "bg",
+        agent_type: "Explore",
+        agent_transcript_path: "/agent-bg",
+      },
+      { closings: false },
+    );
+    await hook(
+      "prompt",
+      { prompt: "<task-notification>bg done</task-notification>" },
+      { closings: false },
+    );
+    h.messages = transcript(undefined, "<task-notification>bg done</task-notification>");
+    await hook("stop", {}, { closings: false });
+    await uploader();
+
+    expect(h.state.session.task_run_map).toEqual({});
+    expect(h.state.session.open_turns).toEqual({});
+    expect(patched(launch)).toBeDefined();
+    expect(h.errors).toEqual([]);
+  });
+
+  it("an interrupted turn's queued closing leaves the next turn's synchronous subagent alone", async () => {
+    reset("full");
+    await hook("prompt");
+    h.messages = transcript();
+    await hook("prompt", {}, { closings: false });
+    const next = h.state.session.current_trace_id;
+    await syncAgent({ closings: false });
+    await uploader();
+    await hook("stop");
+
+    const subagents = h.operations.filter((op) => op.config.name === "Explore Subagent");
+    expect(subagents.map((op) => op.config.trace_id)).toEqual([next]);
+  });
+
+  it("a session resumed before its queued SessionEnd runs keeps its new turn open", async () => {
+    reset("full");
+    await hook("prompt");
+    h.messages = transcript();
+    await hook("stop", {}, { closings: false });
+    await hook("end", {}, { closings: false });
+    await hook("prompt", {}, { closings: false });
+    const resumed = h.state.session.current_turn_run_id;
+    await uploader();
+
+    expect(h.operations.filter((op) => op.config.id === resumed)).toHaveLength(1);
+    expect(h.state.session.current_turn_run_id).toBe(resumed);
+    expect(h.errors).toEqual([]);
+  });
+
+  it("a Stop closing rerun after a crash past its read position still closes the turn", async () => {
+    reset("full");
+    await hook("prompt");
+    const turn = h.state.session.current_turn_run_id;
+    h.messages = transcript();
+    await hook("stop", {}, { closings: false });
+    h.endLine = h.state.session.last_line = 10;
+    await uploader();
+    expect(patched(turn)).toBeDefined();
+  });
+});
+
 describe("tool privacy snapshot reclamation", () => {
   it.each(["Bash", "Agent", "Workflow"])(
     "reclaims completed %s IDs after Stop, not Post",
@@ -492,12 +656,12 @@ describe("tool privacy snapshot reclamation", () => {
     h.messages = transcript({ id: "tool", name: "Bash" });
     h.beforePost = async () => {
       h.beforePost = undefined;
-      await hook("post");
-      expect(h.state.session.tool_tracing_progress).toEqual({ tool: "post" });
+      await hook("stop", {}, { closings: false });
     };
-    await hook("stop");
+    await hook("post");
     expect(h.state.session.tool_tracing_modes).toEqual({});
     expect(h.state.session.tool_tracing_progress).toEqual({});
+    expect(h.operations.filter((op) => op.config.name === "Bash")).toHaveLength(1);
     expectPrivate();
     expect(h.errors).toEqual([]);
   });
@@ -1073,8 +1237,10 @@ describe("privacy propagation without lifecycle changes", () => {
       h.messages = transcript();
       h.policy = mode === "full" ? "metadata" : "full";
       const from = h.operations.length;
-      await hook("prompt"); // closes the prior snapshot before creating the next
-      if (mode === "metadata") expectPrivate(h.operations.slice(from, -1));
+      await hook("prompt"); // queues closing the prior snapshot, then creates the next
+      const next = h.state.session.current_turn_run_id;
+      if (mode === "metadata")
+        expectPrivate(h.operations.slice(from).filter(({ config }) => config.id !== next));
       h.policy = mode;
       await hook("precompact", { trigger: "manual" });
       h.policy = mode === "full" ? "metadata" : "full";

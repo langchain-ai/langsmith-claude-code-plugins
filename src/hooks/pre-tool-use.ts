@@ -18,7 +18,7 @@ export async function main(): Promise<void> {
   const input: PreToolUseHookInput = await readStdin();
   if (!isPayloadForHook(input, "PreToolUse")) return;
 
-  const config = initHook(input.cwd, { deferGit: true });
+  const config = initHook(input.cwd);
   if (!config) return;
 
   const startTime = Date.now();

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { writeFileSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -104,6 +104,41 @@ describe("readTranscript", () => {
     expect(messages).toHaveLength(2);
     expect(lastLine).toBe(1);
   });
+
+  it.each([
+    ["read whole", Number.MAX_SAFE_INTEGER],
+    ["streamed", 0],
+  ])(
+    "when %s, keeps a closing turn's late lines but stops at the next prompt after the cut, even across a split character",
+    async (_, fullReadBytes) => {
+      vi.resetModules();
+      vi.doMock("./constants.js", async (original) => ({
+        ...(await original<typeof import("./constants.js")>()),
+        MAX_FULL_READ_BYTES: fullReadBytes,
+      }));
+      const { readTranscript: read } = await import("./transcript.js");
+      const first = [0, 1, 2]
+        .map((pad) => makeUser("x".repeat(pad) + "\u4e2d".repeat(800_000)))
+        .find((line) => (Buffer.from(JSON.stringify(line))[2 * 1024 * 1024] & 0xc0) === 0x80)!;
+      const before = writeJsonl("cut.jsonl", [first, makeAssistant("msg_1", "a")]);
+      const cut = statSync(before).size;
+      const path = writeJsonl("cut.jsonl", [
+        first,
+        makeAssistant("msg_1", "a"),
+        makeAssistant("msg_2", "late"),
+        makeUser("Next"),
+        makeAssistant("msg_3", "c"),
+      ]);
+
+      const { messages, lastLine } = read(path, -1, cut);
+
+      expect(messages.map((m) => m.type)).toEqual(["user", "assistant", "assistant"]);
+      expect(messages[0]).toEqual(first);
+      expect(lastLine).toBe(2);
+      expect(read(path, -1).messages).toHaveLength(5);
+      vi.doUnmock("./constants.js");
+    },
+  );
 
   it("skips lines up to afterLine", () => {
     const path = writeJsonl("test.jsonl", [
