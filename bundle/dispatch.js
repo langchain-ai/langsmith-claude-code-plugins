@@ -21304,21 +21304,27 @@ async function captureInto(context, run, mode, rootRunId, operation) {
   }));
 }
 function captureInput(run, mode, rootRunId, operation, sessionId, afterPost) {
+  const after = [
+    ...afterPost ? [run.id] : [],
+    ...namesItsTurn(run, rootRunId, operation) ? [rootRunId] : []
+  ];
   return {
     turnId: rootRunId,
     eventId: `${RUN_EVENT_PREFIXES[operation]}${run.id}`,
     submission: runSubmission(run, mode, operation),
     turnEvidence: runTurnEvidence(run, rootRunId),
-    ...afterPost ? {
-      dependencies: [
-        {
-          integration: LS_INTEGRATION,
-          sessionId,
-          turnId: rootRunId,
-          eventId: `${POST_EVENT_PREFIX}${run.id}`
-        }
-      ]
-    } : {}
+    ...after.length > 0 ? { dependencies: after.map((runId) => postScope(sessionId, rootRunId, runId)) } : {}
+  };
+}
+function namesItsTurn(run, rootRunId, operation) {
+  return operation === "post" && run.id !== rootRunId && run.parent_run_id === rootRunId;
+}
+function postScope(sessionId, turnId, runId) {
+  return {
+    integration: LS_INTEGRATION,
+    sessionId,
+    turnId,
+    eventId: `${POST_EVENT_PREFIX}${runId}`
   };
 }
 function runSubmission(run, mode, operation) {
@@ -21992,6 +21998,7 @@ async function settleToolRuns(job) {
     outputs: (job.sourceSnapshots ?? []).map(({ sourceRef, submission, attributionContext }) => ({
       eventId: `${POST_EVENT_PREFIX}${submission.run.id}`,
       sourceRef,
+      ...submission.run.parent_run_id === job.turnId ? { dependencies: [postScope(job.sessionId, job.turnId, job.turnId)] } : {},
       submission: {
         ...submission,
         metadata: {

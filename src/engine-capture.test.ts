@@ -56,6 +56,14 @@ describe("captureInput", () => {
     ]);
   });
 
+  it("names its turn's saved post as the parent so the engine skips scanning the session", () => {
+    const child = captureInput(run({ parent_run_id: "turn" }), "full", "turn", "post", "s1", false);
+
+    expect(child.dependencies).toEqual([
+      { integration: "claude-code", sessionId: "s1", turnId: "turn", eventId: "post:turn" },
+    ]);
+  });
+
   it("marks a patch as an error when the run failed", () => {
     const input = captureInput(run({ error: "boom" }), "full", "turn", "patch", "s1", false);
 

@@ -9,6 +9,7 @@ import type {
   CodingAgentMetadataOptions,
 } from "@langchain/plugins-base/metadata";
 import type { PluginSession } from "@langchain/plugins-base/plugin";
+import type { LifecycleCaptureInput } from "@langchain/plugins-base/tracing/lifecycle";
 import type { RecordedRun, TurnRecord } from "@langchain/plugins-base/tracing/settlement";
 import type { BOOLEAN_SETTINGS, HOOK_EVENT_NAMES, PINNED_REPOSITORY_KEYS } from "./constants.js";
 
@@ -215,6 +216,8 @@ export interface ClaudeRun {
 }
 
 export type RunOperation = "post" | "patch";
+
+export type CaptureDependency = NonNullable<LifecycleCaptureInput["dependencies"]>[number];
 
 export interface ClaudeTracingSession extends PluginSession {
   destinations: readonly { id: string }[];

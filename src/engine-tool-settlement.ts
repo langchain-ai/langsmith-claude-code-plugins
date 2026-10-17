@@ -7,6 +7,7 @@ import { POST_EVENT_PREFIX, TOOL_SETTLEMENT_EVENT_PREFIX } from "./constants.js"
 import {
   captureInto,
   posted,
+  postScope,
   runSubmission,
   runTurnEvidence,
   saveOrWarn,
@@ -55,6 +56,9 @@ export async function settleToolRuns(job: ReconstructionJob): Promise<Reconstruc
     outputs: (job.sourceSnapshots ?? []).map(({ sourceRef, submission, attributionContext }) => ({
       eventId: `${POST_EVENT_PREFIX}${submission.run.id}`,
       sourceRef,
+      ...(submission.run.parent_run_id === job.turnId
+        ? { dependencies: [postScope(job.sessionId, job.turnId, job.turnId)] }
+        : {}),
       submission: {
         ...submission,
         metadata: {

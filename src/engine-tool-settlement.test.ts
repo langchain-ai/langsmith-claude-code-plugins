@@ -88,13 +88,15 @@ describe("captureToolRun", () => {
 });
 
 describe("settleToolRuns", () => {
-  const job = (attributionContext?: unknown) =>
+  const job = (attributionContext?: unknown, parent?: string) =>
     ({
+      turnId: "turn",
+      sessionId: "s1",
       sourceSnapshots: [
         {
           sourceRef: "tool-1",
           submission: {
-            run: { id: "tool-1" },
+            run: { id: "tool-1", parent_run_id: parent },
             metadata: { integration: "claude-code", base: { cwd: "/work" } },
           },
           attributionContext,
@@ -118,6 +120,25 @@ describe("settleToolRuns", () => {
         },
       ],
     });
+  });
+
+  it("names the turn's saved post as the parent of a tool run under that turn", async () => {
+    settled.mockReturnValue(undefined);
+
+    const underTurn = await settleToolRuns(job(undefined, "turn"));
+    const ownTurn = await settleToolRuns(job(undefined, "elsewhere"));
+
+    expect(underTurn).toMatchObject({
+      outputs: [
+        {
+          dependencies: [
+            { integration: "claude-code", sessionId: "s1", turnId: "turn", eventId: "post:turn" },
+          ],
+        },
+      ],
+    });
+    expect(ownTurn).toMatchObject({ outputs: [expect.not.objectContaining({ dependencies: [] })] });
+    expect(JSON.stringify(ownTurn)).not.toContain("dependencies");
   });
 
   it("keeps the original metadata when nothing could be settled", async () => {
