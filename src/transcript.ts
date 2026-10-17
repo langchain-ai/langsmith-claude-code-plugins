@@ -4,6 +4,7 @@
  */
 
 import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
+import { StringDecoder } from "node:string_decoder";
 import { MAX_FULL_READ_BYTES } from "./constants.js";
 import type {
   TranscriptMessage,
@@ -24,7 +25,16 @@ import type {
 export function readTranscript(
   filePath: string,
   afterLine: number = -1,
+  cutAtByte?: number,
 ): { messages: TranscriptMessage[]; lastLine: number } {
+  const endsBeforeCut = (offset: number, line: string): boolean => {
+    if (cutAtByte === undefined || offset < cutAtByte) return false;
+    try {
+      return isHumanMessage(JSON.parse(line) as TranscriptMessage);
+    } catch {
+      return true;
+    }
+  };
   let size: number;
   try {
     size = statSync(filePath).size;
@@ -35,16 +45,22 @@ export function readTranscript(
   // For small-to-moderate files, read the whole thing (simple, fast).
   if (size <= MAX_FULL_READ_BYTES) {
     const raw = readFileSync(filePath, "utf-8");
-    const lines = raw.split("\n").filter((l) => l.trim() !== "");
 
     const messages: TranscriptMessage[] = [];
     let lastLine = afterLine;
+    let i = -1;
+    let offset = 0;
 
-    for (let i = 0; i < lines.length; i++) {
+    for (const line of raw.split("\n")) {
+      const lineOffset = offset;
+      offset += Buffer.byteLength(line) + 1;
+      if (line.trim() === "") continue;
+      i++;
+      if (i > afterLine && endsBeforeCut(lineOffset, line)) break;
       lastLine = i;
       if (i <= afterLine) continue;
       try {
-        messages.push(JSON.parse(lines[i]) as TranscriptMessage);
+        messages.push(JSON.parse(line) as TranscriptMessage);
       } catch {
         // Skip malformed lines.
       }
@@ -64,9 +80,12 @@ export function readTranscript(
     let partial = ""; // leftover from previous chunk
     let bytesRead: number;
     let pos = 0;
+    let offset = 0;
+    let cut = false;
+    const decoder = new StringDecoder("utf-8");
 
-    while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
-      const chunk = partial + buf.toString("utf-8", 0, bytesRead);
+    while (!cut && (bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
+      const chunk = partial + decoder.write(buf.subarray(0, bytesRead));
       partial = "";
       const lines = chunk.split("\n");
 
@@ -74,8 +93,14 @@ export function readTranscript(
       partial = lines.pop() ?? "";
 
       for (const line of lines) {
+        const lineOffset = offset;
+        offset += Buffer.byteLength(line) + 1;
         const trimmed = line.trim();
         if (trimmed === "") continue;
+        if (lineIndex + 1 > afterLine && endsBeforeCut(lineOffset, trimmed)) {
+          cut = true;
+          break;
+        }
         lineIndex++;
         lastLine = lineIndex;
         if (lineIndex <= afterLine) continue;
@@ -89,7 +114,11 @@ export function readTranscript(
     }
 
     // Handle final partial line (if file doesn't end with newline).
-    if (partial.trim() !== "") {
+    if (
+      !cut &&
+      partial.trim() !== "" &&
+      !(lineIndex + 1 > afterLine && endsBeforeCut(offset, partial.trim()))
+    ) {
       lineIndex++;
       lastLine = lineIndex;
       if (lineIndex > afterLine) {

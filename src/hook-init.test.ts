@@ -15,6 +15,7 @@ vi.mock("./logger.js", () => ({
   initLogger: vi.fn(),
 }));
 
+import { execFileSync } from "node:child_process";
 import { HOOK_EVENT_NAMES } from "./constants.js";
 import { initHook } from "./utils/hook-init.js";
 import { readStdin } from "./utils/stdin.js";
@@ -117,6 +118,15 @@ describe("initHook", () => {
       expect(error).not.toHaveBeenCalled();
     },
   );
+
+  it("never asks git about the repository while Claude Code waits", () => {
+    process.env.TRACE_TO_LANGSMITH = "true";
+    process.env.CC_LANGSMITH_API_KEY = "test-key";
+    vi.mocked(execFileSync).mockReturnValue("origin\thttps://github.com/acme/x.git (fetch)\n");
+
+    expect(initHook(cwd)!.customMetadata).not.toHaveProperty("ls_git_repo");
+    expect(execFileSync).not.toHaveBeenCalled();
+  });
 
   it("returns config when API key is set", () => {
     process.env.TRACE_TO_LANGSMITH = "true";

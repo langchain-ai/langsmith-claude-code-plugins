@@ -10,12 +10,12 @@ import { debug, error } from "../logger.js";
 import { generateDottedOrderSegment } from "../langsmith.js";
 import { captureRun, initTracing } from "../tracing-engine.js";
 import { stableRunId } from "../utils/ids/run-id.js";
-import { loadState, atomicUpdateState, getSessionState } from "../state.js";
+import { queueClosing } from "../closing-queue.js";
 import { initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata } from "../metadata.js";
-import type { PostCompactHookInput } from "../types.js";
+import type { Config, PostCompactHookInput, QueuedClosing } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: PostCompactHookInput = await readStdin();
@@ -26,12 +26,22 @@ export async function main(): Promise<void> {
 
   debug(`PostCompact hook started, session=${input.session_id}, trigger=${input.trigger}`);
 
+  await queueClosing(config, "post-compact", input, {
+    reset: () => ({ compaction_start_time: undefined, compaction_tracing: undefined }),
+  });
+}
+
+export async function traceCompaction(
+  _id: string,
+  closing: QueuedClosing,
+  config: Config,
+): Promise<void> {
+  const input = closing.input as PostCompactHookInput;
+  const sessionState = closing.session;
+
   initTracing(config, input.cwd, input.session_id);
 
-  const state = loadState(config.stateFilePath);
-  const sessionState = getSessionState(state, input.session_id);
-
-  const endTime = new Date().toISOString();
+  const endTime = new Date(closing.at).toISOString();
   const startTime = sessionState.compaction_start_time
     ? new Date(sessionState.compaction_start_time).toISOString()
     : endTime;
@@ -83,17 +93,4 @@ export async function main(): Promise<void> {
   } catch (err) {
     error(`Failed to create compaction run: ${err}`);
   }
-
-  // Clear compaction_start_time from state
-  await atomicUpdateState(config.stateFilePath, (s) => {
-    const ss = getSessionState(s, input.session_id);
-    return {
-      ...s,
-      [input.session_id]: {
-        ...ss,
-        compaction_start_time: undefined,
-        compaction_tracing: undefined,
-      },
-    };
-  });
 }

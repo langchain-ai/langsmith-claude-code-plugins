@@ -2,7 +2,8 @@ import { buildCodingAgentMetadata } from "@langchain/plugins-base/metadata";
 import type { CodingAgentMetadataOptions } from "@langchain/plugins-base/metadata";
 import { settledTurnMetadata } from "@langchain/plugins-base/tracing/settlement";
 import { TRACING_NOT_STARTED_MESSAGE } from "./constants.js";
-import { captureInto } from "./engine-capture.js";
+import type { ReconstructionJobInput } from "@langchain/plugins-base/tracing/reconstruction";
+import { captureInto, saveOrWarn } from "./engine-capture.js";
 import { openSession } from "./engine-session.js";
 import { captureToolRun as captureToolRunInto } from "./engine-tool-settlement.js";
 import { readEngineTurn } from "./engine-turn-record.js";
@@ -24,13 +25,8 @@ function started(): ClaudeTracingSession {
   return active;
 }
 
-export function initTracing(
-  config: Config,
-  cwd: string,
-  sessionId: string,
-  startupWaitMs?: number,
-): void {
-  active = openSession(config, cwd, sessionId, startupWaitMs);
+export function initTracing(config: Config, cwd: string, sessionId: string): void {
+  active = openSession(config, cwd, sessionId);
 }
 
 export async function captureRun(
@@ -49,6 +45,15 @@ export async function captureToolRun(
   origin: ToolOrigin,
 ): Promise<void> {
   await captureToolRunInto(started(), run, mode, rootRunId, origin);
+}
+
+export async function queueJob(input: ReconstructionJobInput): Promise<void> {
+  const { session } = started();
+  await saveOrWarn(
+    input.eventId,
+    () => session.queueReconstruction(input),
+    (err) => session.readSavedReconstructionWake(err, input),
+  );
 }
 
 export async function settledFromTurn(

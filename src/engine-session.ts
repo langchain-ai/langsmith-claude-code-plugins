@@ -1,4 +1,5 @@
 import { dirname, join } from "node:path";
+import type { PluginSessionOptions } from "@langchain/plugins-base/plugin";
 import { launchDetachedWorker, openPluginSession } from "@langchain/plugins-base/plugin";
 import { createLangSmithUploadWriter } from "@langchain/plugins-base/tracing/upload";
 import { loadConfig } from "./config.js";
@@ -17,7 +18,7 @@ export function openSession(
   config: Config,
   cwd: string,
   sessionId: string,
-  startupWaitMs?: number,
+  reconstruct: PluginSessionOptions["reconstruct"] = settleToolRuns,
 ): ClaudeTracingSession {
   const writer = writerOptions(config);
   const storageRoot = join(dirname(config.stateFilePath), ENGINE_STORAGE_DIR_NAME);
@@ -26,10 +27,9 @@ export function openSession(
     integration: LS_INTEGRATION,
     sessionId,
     writer,
-    currentWriter: () => writerOptions(loadConfig({ cwd, deferGit: true })),
+    currentWriter: () => writerOptions(loadConfig({ cwd })),
     scheduleWake: (id) => launchDetachedWorker([ENGINE_WORKER_ARG, cwd, id], { storageRoot }),
-    reconstruct: settleToolRuns,
-    startupWaitMs,
+    reconstruct,
     onRecoveryReport: (report) => {
       if (RECOVERY_REPORT_PROBLEM_STATUSES.includes(report.status)) {
         warn(`Could not upload every older session: ${JSON.stringify(report)}`);

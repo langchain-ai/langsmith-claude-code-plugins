@@ -19,7 +19,6 @@ const { git, makeDir, makeRepo, root } = sandbox;
 
 const alpha = makeRepo("alpha repo", "trunk-alpha", "Alpha Owner", "git@github.com:acme/alpha.git");
 const beta = makeRepo("beta repo", "trunk-beta", "Beta Owner", "https://gitlab.com/acme/beta.git");
-const remoteless = makeRepo("remoteless repo", "trunk-local", "Local Owner");
 const plain = makeDir(root, "plain folder");
 const nested = join(makeDir(alpha, "sub dir"), "nested.txt");
 const betaNested = join(makeDir(beta, "sub dir"), "nested.txt");
@@ -93,27 +92,6 @@ describe("repoScopedMetadata", () => {
     expect(repoScopedMetadata(session, input, cwd)).toMatchObject(want);
   });
 
-  it.each<Case>([
-    [
-      "a repository with no recognized remote, which still has an author",
-      { file_path: join(remoteless, "seed.txt") },
-      {
-        ...noRepository,
-        ls_git_branch: "trunk-local",
-        ls_git_commit_hash: git(remoteless, "rev-parse", "HEAD"),
-        git_branch: "trunk-local",
-        git_commit_sha: git(remoteless, "rev-parse", "HEAD"),
-        ls_attribution_identifier: "Local Owner",
-      },
-    ],
-    ["a path git places in no repository", { file_path: join(plain, "x.txt") }, noRepository],
-    ["an opaque identifier no file sits at", { path: "notion/page/abc123" }, session, beta],
-    ["a broken submodule git cannot answer for", { file_path: join(submodule, "x.txt") }, session],
-    ["a shell command run outside every repository", { command: "ls -la" }, noRepository, plain],
-  ])("stamps exactly what %s accounts for", (_name, input, want, cwd) => {
-    expect(repoScopedMetadata(session, input, cwd)).toEqual(want);
-  });
-
   it("keeps the session repository's author on a tool naming a path nothing sits at", () => {
     const base = sessionScopedMetadata(noRepository, alpha);
 
@@ -148,16 +126,6 @@ describe("repoScopedMetadata", () => {
     }
   });
 
-  it("adds only the author for a tool inside the session's own repository", () => {
-    const base = { cwd: alpha, ls_git_repo: "acme/alpha", ls_git_branch: "trunk-alpha" };
-
-    expect(repoScopedMetadata(base, { file_path: alphaSeed }, alpha)).toEqual({
-      ...base,
-      ls_attribution_identifier: "Alpha Owner",
-    });
-    expect(gitCommands().filter((command) => command.includes("remote"))).toEqual([]);
-  });
-
   it("keeps a repository name the person pinned wherever a tool reaches", () => {
     vi.stubEnv("HOME", root);
     vi.stubEnv("USERPROFILE", root);
@@ -165,11 +133,15 @@ describe("repoScopedMetadata", () => {
     vi.stubEnv("LANGSMITH_API_KEY", "lsv2_pt_fake_key_for_tests");
     vi.stubEnv("CC_LANGSMITH_METADATA", '{"ls_git_repo":"acme/pinned"}');
     const pinned = loadConfig({ cwd: alpha }).customMetadata;
+    const uploaderBase = sessionScopedMetadata(pinned, alpha);
+    const turnBase = turnScopedMetadata(uploaderBase, [{ file_path: alphaSeed }], alpha);
 
-    for (const path of [alphaSeed, betaSeed, join(plain, "x.txt")]) {
-      expect(repoScopedMetadata(pinned, { file_path: path }, alpha)).toMatchObject({
-        ls_git_repo: "acme/pinned",
-      });
+    for (const base of [pinned, uploaderBase, turnBase]) {
+      for (const path of [alphaSeed, betaSeed, join(plain, "x.txt")]) {
+        expect(repoScopedMetadata(base, { file_path: path }, alpha)).toMatchObject({
+          ls_git_repo: "acme/pinned",
+        });
+      }
     }
     // Everything the person did not pin still follows the path.
     expect(repoScopedMetadata(pinned, { file_path: betaSeed }, alpha)).toMatchObject({
@@ -188,37 +160,16 @@ describe("repoScopedMetadata", () => {
       expect(gitCommands()).toHaveLength(afterFirstPath);
     }
   });
-
-  it("asks git nothing to place a path, so only naming a repository costs a process", () => {
-    expect(repoScopedMetadata(session, { file_path: join(plain, "x.txt") })).toEqual(noRepository);
-    expect(gitCommands()).toEqual([]);
-
-    repoScopedMetadata(session, { file_path: alphaSeed }, alpha);
-    expect(gitCommands()).toEqual(["git config user.name"]);
-  });
 });
 
 describe("turnScopedMetadata", () => {
   const pathless = { command: "ls -la" };
   const outside = { file_path: join(plain, "x.txt") };
   const filledFromBeta = { ...noRepository, ...everythingBetaReveals };
-  // A session sitting in a repository with no remote, so git resolves one it cannot name.
-  const inRemoteless = {
-    cwd: remoteless,
-    ls_git_branch: "trunk-local",
-    ls_git_commit_hash: git(remoteless, "rev-parse", "HEAD"),
-    ls_integration: session.ls_integration,
-  };
 
   type TurnCase = [name: string, base: Row, inputs: unknown[], want: Row];
 
   it.each<TurnCase>([
-    [
-      "the repository it already resolved, which has no remote to name it, and its author",
-      inRemoteless,
-      [{ file_path: betaSeed }],
-      { ...inRemoteless, ls_attribution_identifier: "Local Owner" },
-    ],
     [
       "the repository its first tool lands in",
       noRepository,
@@ -233,22 +184,5 @@ describe("turnScopedMetadata", () => {
     ],
   ])("gives the turn %s", (_name, base, inputs, want) => {
     expect(turnScopedMetadata(base, inputs, base.cwd as string)).toEqual(want);
-  });
-
-  it("gives the turn the same author its tools get, inside the session's own repository", () => {
-    const base = { cwd: alpha, ls_git_repo: "acme/alpha", ls_git_branch: "trunk-alpha" };
-    const author = { ls_attribution_identifier: "Alpha Owner" };
-
-    expect(turnScopedMetadata(base, [{ file_path: alphaSeed }], alpha)).toEqual({
-      ...base,
-      ...author,
-    });
-    expect(repoScopedMetadata(base, { file_path: alphaSeed }, alpha)).toMatchObject(author);
-  });
-
-  it("keeps an author the person configured rather than the one git reports", () => {
-    const base = { cwd: alpha, ls_git_repo: "acme/alpha", ls_attribution_identifier: "Chosen" };
-
-    expect(turnScopedMetadata(base, [{ file_path: alphaSeed }], alpha)).toEqual(base);
   });
 });

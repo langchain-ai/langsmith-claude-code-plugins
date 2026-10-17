@@ -344,7 +344,44 @@ export interface SessionState {
    *  two runs *last* finalizes the agent; this is the notification side's "done"
    *  marker for that join. */
   notification_done_agents?: string[];
+  queued_closings?: Record<string, QueuedClosing>;
 }
+
+export type ClosingKind =
+  | "stop"
+  | "stop-failure"
+  | "session-end"
+  | "interrupted"
+  | "subagent-stop"
+  | "post-compact";
+
+export type InterruptedClosingInput = Omit<UserPromptSubmitHookInput, "prompt"> & {
+  error: string;
+};
+
+export type ClosingInput =
+  | StopHookInput
+  | StopFailureHookInput
+  | SessionEndHookInput
+  | InterruptedClosingInput
+  | SubagentStopHookInput
+  | PostCompactHookInput;
+
+export interface QueuedClosing {
+  kind: ClosingKind;
+  at: number;
+  cut_bytes?: number;
+  input: ClosingInput;
+  session: SessionState;
+}
+
+export interface ClosingOptions {
+  reset?: (session: SessionState) => Partial<SessionState>;
+  skip?: (session: SessionState) => boolean;
+  transcriptCut?: boolean;
+}
+
+export type ClosingHandler = (id: string, closing: QueuedClosing, config: Config) => Promise<void>;
 
 /**
  * Completion context for a turn whose background subagents are still in flight.

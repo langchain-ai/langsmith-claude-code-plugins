@@ -31,11 +31,12 @@ import { readStdin } from "../utils/stdin.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { initTracing, settledFromTurn } from "../tracing-engine.js";
 import { MUTED_TRACE_CONTENT } from "@langchain/plugins-base/privacy";
-import type { StopHookInput, TaskRunEntry } from "../types.js";
+import { queueClosing, turnClosedReset } from "../closing-queue.js";
+import { STOP_FLUSH_WAIT_MS } from "../constants.js";
+import { setTimeout as delay } from "node:timers/promises";
+import type { Config, QueuedClosing, StopHookInput, TaskRunEntry } from "../types.js";
 
 export async function main(): Promise<void> {
-  const startTime = Date.now();
-
   // Read hook input from stdin.
   const input: StopHookInput = await readStdin();
   if (!isPayloadForHook(input, "Stop")) return;
@@ -58,11 +59,33 @@ export async function main(): Promise<void> {
     return;
   }
 
+  await queueClosing(config, "stop", input, { reset: turnClosedReset, transcriptCut: true });
+}
+
+export async function closeStoppedTurn(
+  _id: string,
+  closing: QueuedClosing,
+  config: Config,
+): Promise<void> {
+  const input = closing.input as StopHookInput;
+  const startTime = closing.at;
+  const transcriptPath = expandHome(input.transcript_path)!;
+
   initTracing(config, input.cwd, input.session_id);
 
   // Load state and read new messages.
-  const state = loadState(config.stateFilePath);
-  const sessionState = getSessionState(state, input.session_id);
+  const live = getSessionState(loadState(config.stateFilePath), input.session_id);
+  const sessionState = {
+    ...closing.session,
+    last_line: Math.max(closing.session.last_line, live.last_line),
+    task_run_map: { ...closing.session.task_run_map, ...live.task_run_map },
+    traced_tool_use_ids: [
+      ...new Set([
+        ...(closing.session.traced_tool_use_ids ?? []),
+        ...(live.traced_tool_use_ids ?? []),
+      ]),
+    ],
+  };
 
   debug(`Last line: ${sessionState.last_line}, turn count: ${sessionState.turn_count}`);
 
@@ -72,25 +95,15 @@ export async function main(): Promise<void> {
 
   // Wait briefly for the transcript writer to flush. Stop fires as soon as the
   // model finishes generating, but the JSONL file write may still be in flight.
-  await new Promise((r) => setTimeout(r, 200));
+  await delay(Math.max(0, startTime + STOP_FLUSH_WAIT_MS - Date.now()));
 
-  const { messages, lastLine } = readTranscript(transcriptPath, sessionState.last_line);
-  if (messages.length === 0) {
+  const { messages, lastLine } = readTranscript(
+    transcriptPath,
+    sessionState.last_line,
+    closing.cut_bytes,
+  );
+  if (messages.length === 0 && !sessionState.current_turn_run_id) {
     debug("No new messages");
-    // Clear stale current_turn_run_id so the next invocation doesn't try to complete it.
-    if (sessionState.current_turn_run_id) {
-      await atomicUpdateState(config.stateFilePath, (s) => {
-        const ss = getSessionState(s, input.session_id);
-        return {
-          ...s,
-          [input.session_id]: {
-            ...ss,
-            current_turn_run_id: undefined,
-            current_turn_tracing: undefined,
-          },
-        };
-      });
-    }
     return;
   }
 
@@ -129,7 +142,7 @@ export async function main(): Promise<void> {
       const syntheticStart = sessionState.last_tool_end_time
         ? new Date(sessionState.last_tool_end_time).toISOString()
         : (lastLlm.toolCalls[lastLlm.toolCalls.length - 1].result?.timestamp ?? lastLlm.endTime);
-      const syntheticEnd = new Date(startTime).toISOString(); // startTime = Date.now() at top of Stop hook
+      const syntheticEnd = new Date(startTime).toISOString(); // startTime = when the Stop hook fired
       lastTurn.llmCalls.push({
         content: [{ type: "text", text: input.last_assistant_message }],
         model: lastLlm.model,
@@ -200,8 +213,7 @@ export async function main(): Promise<void> {
     }
   }
 
-  // Re-read state so we pick up writes from SubagentStop and PostToolUse
-  // that may have landed while we were tracing the main transcript.
+  // Re-read state so we pick up PostToolUse writes that may have landed after the Stop hook.
   const freshState = loadState(config.stateFilePath);
   const freshSession = getSessionState(freshState, input.session_id);
 
@@ -213,10 +225,10 @@ export async function main(): Promise<void> {
   const closingTurnTools = closingTurn ? turnToolInputs(closingTurn) : [];
   const turnMetadata = turnScopedMetadata(sessionMetadata, closingTurnTools, input.cwd);
 
-  // Process any pending subagent traces queued by SubagentStop. These are
+  // Process the pending subagent traces SubagentStop had queued when Stop fired. These are
   // synchronous subagents whose SubagentStop fired before PostToolUse recorded
   // the Agent tool run, so they were queued for us to trace here instead.
-  const pendingSubagents = freshSession.pending_subagent_traces || [];
+  const pendingSubagents = sessionState.pending_subagent_traces || [];
   const processedAgentIds = new Set<string>();
   if (pendingSubagents.length > 0) {
     debug(`Processing ${pendingSubagents.length} pending subagent trace(s)`);
@@ -225,7 +237,7 @@ export async function main(): Promise<void> {
       sessionId: input.session_id,
       pendingSubagents,
       taskRunMap: mergedTaskRunMap,
-      parentTraceId: freshSession.current_trace_id,
+      parentTraceId: sessionState.current_trace_id,
       customMetadata: sessionMetadata,
       runtimeVersion,
       turnId: lastTurnId,
@@ -287,8 +299,8 @@ export async function main(): Promise<void> {
     const updatedState = updateSessionState(
       latestState,
       input.session_id,
-      savedLastLine,
-      latestSession.turn_count + tracedTurns,
+      Math.max(latestSession.last_line, savedLastLine),
+      Math.max(latestSession.turn_count, sessionState.turn_count + tracedTurns),
       // Merge any late PostToolUse writes with our traced entries. allTaskRunMaps
       // wins on conflicts since it has the fully resolved data from traceTurn.
       { ...latestSession.task_run_map, ...allTaskRunMaps },
@@ -303,10 +315,8 @@ export async function main(): Promise<void> {
       );
     }
 
-    // Read the notification marker inside the lock so claiming + clearing it is
-    // atomic with the completion decision.
-    const notifAgentId = latestSession.current_notification_agent_id;
-    const notifInterrupted = latestSession.current_notification_interrupted ?? false;
+    const notifAgentId = sessionState.current_notification_agent_id;
+    const notifInterrupted = sessionState.current_notification_interrupted ?? false;
 
     // Drop the sync subagents we just traced from the queue.
     s.pending_subagent_traces = (latestSession.pending_subagent_traces ?? []).filter(
@@ -359,17 +369,6 @@ export async function main(): Promise<void> {
       }
     }
     s.open_turns = openTurns;
-
-    // The main loop is done with this turn regardless; clear so the next
-    // UserPromptSubmit doesn't mistake a deferred turn for an interrupted one.
-    s.current_turn_run_id = undefined;
-    s.current_turn_tracing = undefined;
-    // Consume the notification markers; the finalize below (or the deferred
-    // open_turns entry) now owns them.
-    s.current_notification_agent_id = undefined;
-    s.current_notification_interrupted = undefined;
-    s.traced_tool_use_ids = [];
-    s.tool_start_times = {};
     return pruneOldSessions(updatedState);
   });
 

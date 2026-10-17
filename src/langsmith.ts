@@ -507,6 +507,7 @@ export async function closeInterruptedTurn(options: {
   turn?: OpenTurn;
   /** Root-run error/status message. Defaults to "User interrupt". */
   error?: string;
+  cutAtByte?: number;
 }): Promise<{ lastLine: number; turnsTraced: number; consumedToolUseIds?: string[] }> {
   const {
     sessionId,
@@ -557,6 +558,7 @@ export async function closeInterruptedTurn(options: {
       const { messages, lastLine: newLastLine } = readTranscript(
         transcriptPath,
         sessionState.last_line,
+        options.cutAtByte,
       );
       if (messages.length > 0) {
         const turns = groupIntoTurns(messages);
@@ -587,11 +589,11 @@ export async function closeInterruptedTurn(options: {
     }
   }
 
-  // Re-read state to pick up any task_run_map / pending_subagent_traces written by
-  // async PostToolUse / SubagentStop hooks after the snapshot was taken.
+  // Re-read state to pick up any task_run_map entries written by async PostToolUse
+  // hooks after the snapshot was taken.
   const freshSession = getSessionState(loadState(stateFilePath), sessionId);
   taskRunMap = { ...taskRunMap, ...freshSession.task_run_map };
-  const pendingSubagents = freshSession.pending_subagent_traces ?? [];
+  const pendingSubagents = sessionState.pending_subagent_traces ?? [];
 
   // Trace any pending subagents queued by SubagentStop.
   if (pendingSubagents.length > 0) {

@@ -20,11 +20,11 @@ import {
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { initTracing } from "../tracing-engine.js";
-import { SESSION_END_STARTUP_WAIT_MS } from "../constants.js";
+import { queueClosing } from "../closing-queue.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { readRuntimeVersion } from "../transcript.js";
-import type { SessionEndHookInput } from "../types.js";
+import type { Config, QueuedClosing, SessionEndHookInput, SessionState } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: SessionEndHookInput = await readStdin();
@@ -35,8 +35,46 @@ export async function main(): Promise<void> {
 
   debug(`SessionEnd hook: session=${input.session_id}, reason=${input.reason}`);
 
-  const state = loadState(config.stateFilePath);
-  const sessionState = getSessionState(state, input.session_id);
+  const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
+  if (hasOpenWork(sessionState)) {
+    await queueClosing(config, "session-end", input, { transcriptCut: true });
+    return;
+  }
+  debug("No open turn run — nothing to close");
+  await atomicUpdateState(config.stateFilePath, (s) => {
+    const ss = s[input.session_id];
+    if (!ss) return s;
+    return {
+      ...s,
+      [input.session_id]: { ...ss, tool_tracing_modes: {}, tool_tracing_progress: {} },
+    };
+  });
+}
+
+function hasOpenWork(sessionState: SessionState): boolean {
+  return Boolean(
+    Object.keys(sessionState.queued_closings ?? {}).length > 0 ||
+    sessionState.current_turn_run_id ||
+    Object.keys(sessionState.open_turns ?? {}).length > 0 ||
+    Object.values(sessionState.task_run_map ?? {}).some((e) => e.subagent_done),
+  );
+}
+
+export async function closeEndedSession(
+  _id: string,
+  closing: QueuedClosing,
+  config: Config,
+): Promise<void> {
+  const input = closing.input as SessionEndHookInput;
+  const ended = closing.session;
+  const live = getSessionState(loadState(config.stateFilePath), input.session_id);
+  const resumed = live.current_turn_run_id !== ended.current_turn_run_id;
+  const sessionState = {
+    ...live,
+    current_turn_run_id: resumed ? undefined : live.current_turn_run_id,
+    open_turns: onlyKnown(live.open_turns, ended.open_turns),
+    task_run_map: onlyKnown(live.task_run_map, ended.task_run_map),
+  };
 
   const openTurns = sessionState.open_turns ?? {};
   // Agent tool runs left open awaiting a task-notification that never arrived:
@@ -45,23 +83,8 @@ export async function main(): Promise<void> {
   const openAgentRuns = Object.entries(sessionState.task_run_map ?? {}).filter(
     ([, e]) => e.subagent_done,
   );
-  const hasOpenTurns = Object.keys(openTurns).length > 0;
-  const hasOpenAgentRuns = openAgentRuns.length > 0;
 
-  if (!sessionState.current_turn_run_id && !hasOpenTurns && !hasOpenAgentRuns) {
-    debug("No open turn run — nothing to close");
-    await atomicUpdateState(config.stateFilePath, (s) => {
-      const ss = s[input.session_id];
-      if (!ss) return s;
-      return {
-        ...s,
-        [input.session_id]: { ...ss, tool_tracing_modes: {}, tool_tracing_progress: {} },
-      };
-    });
-    return;
-  }
-
-  initTracing(config, input.cwd, input.session_id, SESSION_END_STARTUP_WAIT_MS);
+  initTracing(config, input.cwd, input.session_id);
 
   const expandedTranscript = expandHome(input.transcript_path);
   const runtimeVersion =
@@ -84,6 +107,7 @@ export async function main(): Promise<void> {
         customMetadata: config.customMetadata,
         runtimeVersion,
         approvalPolicy: sessionState.approval_policy,
+        cutAtByte: closing.cut_bytes,
       });
       lastLine = res.lastLine;
       turnsTraced = res.turnsTraced;
@@ -165,12 +189,26 @@ export async function main(): Promise<void> {
 
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);
+    const counted = {
+      last_line: Math.max(ss.last_line, lastLine),
+      turn_count: ss.turn_count + turnsTraced,
+    };
+    if (resumed) {
+      return {
+        ...s,
+        [input.session_id]: {
+          ...ss,
+          ...counted,
+          task_run_map: withoutKeys(ss.task_run_map, sessionState.task_run_map),
+          open_turns: withoutKeys(ss.open_turns, sessionState.open_turns),
+        },
+      };
+    }
     return {
       ...s,
       [input.session_id]: {
         ...ss,
-        last_line: lastLine,
-        turn_count: ss.turn_count + turnsTraced,
+        ...counted,
         current_turn_tracing: undefined,
         current_turn_run_id: undefined,
         current_trace_id: undefined,
@@ -191,4 +229,18 @@ export async function main(): Promise<void> {
   });
 
   debug(`Session end cleanup complete (reason=${input.reason})`);
+}
+
+function onlyKnown<T>(
+  entries: Record<string, T> | undefined,
+  known: Record<string, unknown> | undefined,
+): Record<string, T> {
+  return Object.fromEntries(Object.entries(entries ?? {}).filter(([key]) => key in (known ?? {})));
+}
+
+function withoutKeys<T>(
+  entries: Record<string, T> | undefined,
+  removed: Record<string, unknown>,
+): Record<string, T> {
+  return Object.fromEntries(Object.entries(entries ?? {}).filter(([key]) => !(key in removed)));
 }

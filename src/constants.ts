@@ -14,7 +14,9 @@ const CAPTURE_SAVED_STATUSES: readonly string[] = ["published", "duplicate"];
 const WORKER_STOP_STATUSES: readonly string[] = ["dropped", "retry-exhausted", "scope-mismatch"];
 const RECOVERY_REPORT_PROBLEM_STATUSES: readonly string[] = ["partial", "failed"];
 const TRACING_NOT_STARTED_MESSAGE = "Tracing has not started for this hook";
-const SESSION_END_STARTUP_WAIT_MS = 500;
+const CLOSING_EVENT_PREFIX = "closing:";
+const CLOSING_PRIVACY_MODE = "metadata" as const;
+const STOP_FLUSH_WAIT_MS = 200;
 const RUN_CONTEXT_FIELDS = [
   "id",
   "name",
@@ -170,7 +172,9 @@ export {
   WORKER_STOP_STATUSES,
   RECOVERY_REPORT_PROBLEM_STATUSES,
   TRACING_NOT_STARTED_MESSAGE,
-  SESSION_END_STARTUP_WAIT_MS,
+  CLOSING_EVENT_PREFIX,
+  CLOSING_PRIVACY_MODE,
+  STOP_FLUSH_WAIT_MS,
   RUN_CONTEXT_FIELDS,
   RUN_PATCH_FIELDS,
   RUN_SNAPSHOT_FIELDS,

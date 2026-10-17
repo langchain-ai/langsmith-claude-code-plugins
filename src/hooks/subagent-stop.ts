@@ -39,7 +39,8 @@ import { initTracing } from "../tracing-engine.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
-import type { SubagentStopHookInput, OpenTurn } from "../types.js";
+import { queueClosing } from "../closing-queue.js";
+import type { Config, OpenTurn, QueuedClosing, SubagentStopHookInput } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: SubagentStopHookInput = await readStdin();
@@ -56,21 +57,8 @@ export async function main(): Promise<void> {
     return;
   }
 
-  initTracing(config, input.cwd, input.session_id);
-
-  // Dynamic-workflow stage: not launched via the Task tool (so it's absent from
-  // task_run_map), it nests under its open Workflow run instead. Handled
-  // separately; the workflow's own task-notification finalizes the run.
   if (input.agent_type === WORKFLOW_SUBAGENT_TYPE) {
-    await handleWorkflowSubagentStop({
-      defaultMuted: config.defaultMuted,
-      sessionId: input.session_id,
-      agentId: input.agent_id,
-      agentType: input.agent_type,
-      agentTranscriptPath,
-      stateFilePath: config.stateFilePath,
-      customMetadata: config.customMetadata,
-    });
+    await queueClosing(config, "subagent-stop", input);
     return;
   }
 
@@ -102,6 +90,40 @@ export async function main(): Promise<void> {
     debug(`Queued subagent ${input.agent_id} for Stop hook (Agent tool run not recorded yet)`);
     return;
   }
+
+  await queueClosing(config, "subagent-stop", input);
+}
+
+export async function traceStoppedSubagent(
+  _id: string,
+  closing: QueuedClosing,
+  config: Config,
+): Promise<void> {
+  const input = closing.input as SubagentStopHookInput;
+  const agentTranscriptPath = expandHome(input.agent_transcript_path)!;
+
+  initTracing(config, input.cwd, input.session_id);
+
+  // Dynamic-workflow stage: not launched via the Task tool (so it's absent from
+  // task_run_map), it nests under its open Workflow run instead. Handled
+  // separately; the workflow's own task-notification finalizes the run.
+  if (input.agent_type === WORKFLOW_SUBAGENT_TYPE) {
+    await handleWorkflowSubagentStop({
+      defaultMuted: config.defaultMuted,
+      sessionId: input.session_id,
+      agentId: input.agent_id,
+      agentType: input.agent_type,
+      agentTranscriptPath,
+      stateFilePath: config.stateFilePath,
+      customMetadata: config.customMetadata,
+    });
+    return;
+  }
+
+  const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
+  const taskRunMap = sessionState.task_run_map ?? {};
+  const taskRunInfo = taskRunMap[input.agent_id];
+  if (!taskRunInfo) return;
 
   // Case 2: async (background) subagent. Recover the launching turn's trace
   // context from the deferred Agent tool run so the subagent nests under the

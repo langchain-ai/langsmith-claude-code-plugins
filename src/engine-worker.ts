@@ -1,13 +1,14 @@
 import { WORKER_STOP_STATUSES } from "./constants.js";
+import { reconstructJob } from "./engine-closings.js";
 import { importLegacyRuns } from "./engine-legacy.js";
 import { openSession } from "./engine-session.js";
 import { warn } from "./logger.js";
 import { initHook } from "./utils/hook-init.js";
 
 export async function runEngineWorker(cwd: string, sessionId: string | undefined): Promise<void> {
-  const config = initHook(cwd, { deferGit: true });
+  const config = initHook(cwd);
   if (!config || !sessionId) return;
-  const result = await openSession(config, cwd, sessionId).session.drain();
+  const result = await openSession(config, cwd, sessionId, reconstructJob(config)).session.drain();
   if (WORKER_STOP_STATUSES.includes(result)) {
     warn(`The uploader for ${sessionId} stopped with ${result}`);
   }
