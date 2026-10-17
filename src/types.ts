@@ -592,27 +592,6 @@ export interface Config {
 
 export type BooleanSetting = keyof typeof BOOLEAN_SETTINGS;
 
-export interface StatePatchOperation {
-  path: string[];
-  set?: unknown;
-  unset?: boolean;
-  add?: unknown[];
-  remove?: unknown[];
-}
-
-export interface StatePatchEntry {
-  session: string;
-  removed?: boolean;
-  operations?: StatePatchOperation[];
-}
-
-export type StatePatch = StatePatchEntry[];
-
-export interface PendingStatePatches {
-  files: string[];
-  patches: StatePatch[];
-}
-
 export interface LegacyQueueEntry {
   tracing: TracingMode;
   origin: string;

@@ -53,27 +53,7 @@ const PINNED_REPOSITORY_KEYS = Symbol("pinned repository metadata keys");
 
 const NO_PINNED_KEYS: ReadonlySet<string> = new Set();
 
-const STATE_TEMP_SUFFIX = ".state.tmp";
-const STATE_LOCK_RELEASE_WARNING = "Could not release the shared state lock";
-const STATE_LOCK_BUSY_WARNING =
-  "Another process holds the state lock, so state updates in this hook are saved for the next lock holder";
-
-const STATE_LOCK_WAIT_MS = 1000;
-const STATE_LOCK_PROBE_MS = 200;
-const STATE_LOCK_BUSY_MEMORY_MS = 30_000;
-const PENDING_STATE_DIR_SUFFIX = ".pending";
-const PENDING_STATE_FILE_SUFFIX = ".json";
-const PENDING_STATE_TEMP_SUFFIX = ".pending.tmp";
-const PENDING_STATE_ABANDONED_MS = 60_000;
-const PENDING_STATE_TIME_WIDTH = 13;
-const PENDING_STATE_SEQUENCE_WIDTH = 6;
-const PENDING_STATE_WRITE_ATTEMPTS = 3;
-
 const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-/** Owner-only since these files hold trace content. */
-const PRIVATE_DIR_MODE = 0o700;
-const PRIVATE_FILE_MODE = 0o600;
 
 /** Argument that runs the background uploader instead of a hook handler. */
 const ENGINE_WORKER_ARG = "--engine-worker";
@@ -186,21 +166,6 @@ export {
   NO_PINNED_KEYS,
   STATE_FILE_DEFAULT,
   GH_LOGIN_MARKER_FILE,
-  STATE_TEMP_SUFFIX,
-  STATE_LOCK_RELEASE_WARNING,
-  STATE_LOCK_BUSY_WARNING,
-  STATE_LOCK_WAIT_MS,
-  STATE_LOCK_PROBE_MS,
-  STATE_LOCK_BUSY_MEMORY_MS,
-  PENDING_STATE_DIR_SUFFIX,
-  PENDING_STATE_FILE_SUFFIX,
-  PENDING_STATE_TEMP_SUFFIX,
-  PENDING_STATE_ABANDONED_MS,
-  PENDING_STATE_TIME_WIDTH,
-  PENDING_STATE_SEQUENCE_WIDTH,
-  PENDING_STATE_WRITE_ATTEMPTS,
   SESSION_MAX_AGE_MS,
-  PRIVATE_DIR_MODE,
-  PRIVATE_FILE_MODE,
   ENGINE_WORKER_ARG,
 };
