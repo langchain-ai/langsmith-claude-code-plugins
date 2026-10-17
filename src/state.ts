@@ -3,34 +3,22 @@
  * transcript so the Stop hook only processes new messages.
  */
 
-import { readFileSync } from "node:fs";
-import {
-  PRIVATE_FILE_MODE,
-  SESSION_MAX_AGE_MS,
-  STATE_LOCK_PROBE_MS,
-  STATE_LOCK_WAIT_MS,
-  STATE_TEMP_SUFFIX,
-} from "./constants.js";
-import { publishByRename } from "./utils/atomic-file.js";
-import { withStateFileLock } from "./state-lock.js";
-import {
-  applyPatches,
-  diffState,
-  hasRecentPending,
-  readPending,
-  removePending,
-  writePending,
-} from "./state-pending.js";
+import { createStateStore, pruneStateEntries } from "@langchain/plugins-base/storage";
+import { SESSION_MAX_AGE_MS } from "./constants.js";
+import { warn } from "./logger.js";
 import type { TracingState, SessionState } from "./types.js";
 
-/** Published by rename, since readers load state without the lock and must never see a half-written file. */
-function publishState(stateFilePath: string, state: TracingState): void {
-  publishByRename(
-    stateFilePath,
-    JSON.stringify(state, null, 2),
-    STATE_TEMP_SUFFIX,
-    PRIVATE_FILE_MODE,
-  );
+type SessionStore = ReturnType<typeof createStateStore<SessionState>>;
+
+const stores = new Map<string, SessionStore>();
+
+function storeFor(stateFilePath: string): SessionStore {
+  let store = stores.get(stateFilePath);
+  if (!store) {
+    store = createStateStore<SessionState>({ path: stateFilePath, warn });
+    stores.set(stateFilePath, store);
+  }
+  return store;
 }
 
 /**
@@ -43,35 +31,13 @@ export async function atomicUpdateState(
   stateFilePath: string,
   fn: (state: TracingState) => TracingState,
 ): Promise<void> {
-  const waitMs = hasRecentPending(stateFilePath) ? STATE_LOCK_PROBE_MS : STATE_LOCK_WAIT_MS;
-  const ran = await withStateFileLock(
-    stateFilePath,
-    () => {
-      const { files, patches } = readPending(stateFilePath);
-      publishState(stateFilePath, fn(applyPatches(readStateFile(stateFilePath), patches)));
-      removePending(stateFilePath, files);
-    },
-    waitMs,
-  );
-  if (ran) return;
-  const before = loadState(stateFilePath);
-  writePending(stateFilePath, diffState(before, fn(before)));
+  await storeFor(stateFilePath).update(fn);
 }
 
 // ─── State helpers ──────────────────────────────────────────────────────────
 
-function readStateFile(stateFilePath: string): TracingState {
-  try {
-    const raw = readFileSync(stateFilePath, "utf-8");
-    return JSON.parse(raw) as TracingState;
-  } catch {
-    return {};
-  }
-}
-
 export function loadState(stateFilePath: string): TracingState {
-  const { patches } = readPending(stateFilePath);
-  return applyPatches(readStateFile(stateFilePath), patches);
+  return storeFor(stateFilePath).read();
 }
 
 export function getSessionState(state: TracingState, sessionId: string): SessionState {
@@ -120,15 +86,7 @@ export function advanceToolTracingProgress(
  * no risk of replaying old messages.
  */
 export function pruneOldSessions(state: TracingState, now: number = Date.now()): TracingState {
-  const cutoff = now - SESSION_MAX_AGE_MS;
-  const pruned: TracingState = {};
-  for (const [sessionId, session] of Object.entries(state)) {
-    const updatedMs = session.updated ? new Date(session.updated).getTime() : 0;
-    if (updatedMs >= cutoff) {
-      pruned[sessionId] = session;
-    }
-  }
-  return pruned;
+  return pruneStateEntries(state, SESSION_MAX_AGE_MS, now);
 }
 
 export function updateSessionState(

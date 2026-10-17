@@ -1701,14 +1701,285 @@ import { readFileSync as readFileSync3, renameSync as renameSync2 } from "node:f
 // node_modules/.pnpm/@langchain+plugins-base@htt_ba6b85d002fef7d3a44681cadfb9ea26/node_modules/@langchain/plugins-base/dist/utils/files/publish.js
 import { closeSync, openSync, renameSync, writeSync } from "node:fs";
 import { randomUUID as randomUUID4 } from "node:crypto";
+function publishByRename(path3, contents, tempSuffix, mode) {
+  const temp = `${path3}.${randomUUID4()}${tempSuffix}`;
+  const fd = openSync(temp, "wx", mode);
+  try {
+    writeSync(fd, contents);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(temp, path3);
+}
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_ba6b85d002fef7d3a44681cadfb9ea26/node_modules/@langchain/plugins-base/dist/storage/state-constants.js
+var STATE_TEMP_SUFFIX = ".state.tmp";
 var STATE_CORRUPT_SUFFIX = ".corrupt";
+var STATE_FILE_ENCODING = "utf-8";
+var STATE_LOCK_RELEASE_WARNING = "Could not release the shared state lock";
+var STATE_LOCK_BUSY_WARNING = "Another process holds the state lock, so state updates in this hook are saved for the next lock holder";
 var STATE_CORRUPT_WARNING = `State was unreadable; started over and kept the old file as ${STATE_CORRUPT_SUFFIX}`;
+var STATE_LOCK_WAIT_MS = 1e3;
+var STATE_LOCK_PROBE_MS = 200;
+var STATE_LOCK_BUSY_MEMORY_MS = 3e4;
+var PENDING_STATE_DIR_SUFFIX = ".pending";
+var PENDING_STATE_FILE_SUFFIX = ".json";
+var PENDING_STATE_TEMP_SUFFIX = ".pending.tmp";
+var PENDING_STATE_ABANDONED_MS = 6e4;
+var PENDING_STATE_TIME_WIDTH = 13;
+var PENDING_STATE_SEQUENCE_WIDTH = 6;
+var PENDING_STATE_WRITE_ATTEMPTS = 3;
+var STATE_PRIVATE_DIR_MODE = 448;
+var STATE_PRIVATE_FILE_MODE = 384;
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_ba6b85d002fef7d3a44681cadfb9ea26/node_modules/@langchain/plugins-base/dist/storage/state-pending.js
 import { mkdirSync, readdirSync, readFileSync as readFileSync2, rmdirSync, rmSync, statSync } from "node:fs";
 import { join as join3 } from "node:path";
+var sequence = 0;
+var same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+function diffValue(path3, before, after, operations) {
+  if (same(before, after))
+    return;
+  if (isPlainRecord(before) && isPlainRecord(after)) {
+    for (const key of Object.keys(before)) {
+      if (before[key] !== void 0 && after[key] === void 0) {
+        operations.push({ path: [...path3, key], unset: true });
+      }
+    }
+    for (const [key, value] of Object.entries(after)) {
+      if (value !== void 0)
+        diffValue([...path3, key], before[key], value, operations);
+    }
+  } else if (Array.isArray(before) && Array.isArray(after)) {
+    const kept = new Set(after.map((item) => JSON.stringify(item)));
+    const known = new Set(before.map((item) => JSON.stringify(item)));
+    const add = after.filter((item) => !known.has(JSON.stringify(item)));
+    const remove = before.filter((item) => !kept.has(JSON.stringify(item)));
+    operations.push({ path: path3, add, remove });
+  } else {
+    operations.push({ path: path3, set: after });
+  }
+}
+function diffState(before, after) {
+  const patch = [];
+  for (const session of Object.keys(before)) {
+    if (!Object.hasOwn(after, session))
+      patch.push({ session, removed: true });
+  }
+  for (const [session, next] of Object.entries(after)) {
+    const operations = [];
+    if (Object.hasOwn(before, session))
+      diffValue([], before[session], next, operations);
+    else
+      operations.push({ path: [], set: next });
+    if (operations.length > 0)
+      patch.push({ session, operations });
+  }
+  return patch;
+}
+function applyOperation(root, operation) {
+  const { path: path3 } = operation;
+  if (path3.length === 0)
+    return operation.set;
+  const [key, ...rest] = path3;
+  const node = isPlainRecord(root) ? { ...root } : {};
+  if (rest.length > 0) {
+    node[key] = applyOperation(node[key], { ...operation, path: rest });
+  } else if (operation.unset) {
+    delete node[key];
+  } else if (operation.add || operation.remove) {
+    node[key] = mergeList(node[key], operation);
+  } else {
+    node[key] = operation.set;
+  }
+  return node;
+}
+function mergeList(current, operation) {
+  const removed = new Set((operation.remove ?? []).map((item) => JSON.stringify(item)));
+  const list = (Array.isArray(current) ? current : []).filter((item) => !removed.has(JSON.stringify(item)));
+  const present = new Set(list.map((item) => JSON.stringify(item)));
+  for (const item of operation.add ?? []) {
+    if (!present.has(JSON.stringify(item)))
+      list.push(item);
+  }
+  return list;
+}
+function applyPatches(state, patches) {
+  let result = state;
+  for (const patch of patches) {
+    for (const entry of patch) {
+      if (entry.removed) {
+        result = Object.fromEntries(Object.entries(result).filter(([id]) => id !== entry.session));
+        continue;
+      }
+      let session = result[entry.session];
+      for (const operation of entry.operations ?? [])
+        session = applyOperation(session, operation);
+      result = { ...result, [entry.session]: session };
+    }
+  }
+  return result;
+}
+var pendingDirectory = (stateFilePath) => `${stateFilePath}${PENDING_STATE_DIR_SUFFIX}`;
+function names(directory) {
+  try {
+    return readdirSync(directory);
+  } catch {
+    return [];
+  }
+}
+function writePending(stateFilePath, patch) {
+  if (patch.length === 0)
+    return;
+  const directory = pendingDirectory(stateFilePath);
+  const time = String(Date.now()).padStart(PENDING_STATE_TIME_WIDTH, "0");
+  const order = String(sequence++).padStart(PENDING_STATE_SEQUENCE_WIDTH, "0");
+  const file = join3(directory, `${time}-${order}-${process.pid}${PENDING_STATE_FILE_SUFFIX}`);
+  for (let attempt = 1; ; attempt++) {
+    try {
+      mkdirSync(directory, { recursive: true, mode: STATE_PRIVATE_DIR_MODE });
+      publishByRename(file, JSON.stringify(patch), PENDING_STATE_TEMP_SUFFIX, STATE_PRIVATE_FILE_MODE);
+      return;
+    } catch (error2) {
+      if (attempt >= PENDING_STATE_WRITE_ATTEMPTS)
+        throw error2;
+    }
+  }
+}
+function readPending(stateFilePath) {
+  const directory = pendingDirectory(stateFilePath);
+  const files = [];
+  const patches = [];
+  for (const name of names(directory).filter((n2) => n2.endsWith(PENDING_STATE_FILE_SUFFIX)).toSorted()) {
+    const file = join3(directory, name);
+    files.push(file);
+    try {
+      patches.push(JSON.parse(readFileSync2(file, "utf-8")));
+    } catch {
+      continue;
+    }
+  }
+  return { files, patches };
+}
+function hasRecentPending(stateFilePath) {
+  const directory = pendingDirectory(stateFilePath);
+  return names(directory).some((name) => {
+    try {
+      return name.endsWith(PENDING_STATE_FILE_SUFFIX) && Date.now() - statSync(join3(directory, name)).mtimeMs < STATE_LOCK_BUSY_MEMORY_MS;
+    } catch {
+      return false;
+    }
+  });
+}
+function removePending(stateFilePath, files) {
+  const directory = pendingDirectory(stateFilePath);
+  for (const file of files)
+    rmSync(file, { force: true });
+  for (const name of names(directory)) {
+    if (name.endsWith(PENDING_STATE_FILE_SUFFIX))
+      continue;
+    const file = join3(directory, name);
+    try {
+      if (Date.now() - statSync(file).mtimeMs > PENDING_STATE_ABANDONED_MS)
+        rmSync(file, { force: true });
+    } catch {
+      continue;
+    }
+  }
+  if (names(directory).length > 0)
+    return;
+  try {
+    rmdirSync(directory);
+  } catch {
+    return;
+  }
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_ba6b85d002fef7d3a44681cadfb9ea26/node_modules/@langchain/plugins-base/dist/storage/state-store.js
+function createStateStore(options) {
+  const { path: path3 } = options;
+  const warn2 = options.warn ?? console.warn;
+  function read() {
+    const { patches } = readPending(path3);
+    return applyPatches(readStateFile(path3), patches);
+  }
+  async function update(fn) {
+    const waitMs = hasRecentPending(path3) ? STATE_LOCK_PROBE_MS : STATE_LOCK_WAIT_MS;
+    const ran = await withStateFileLock(path3, warn2, () => {
+      const { files, patches } = readPending(path3);
+      const current = readStateFile(path3, () => setAsideCorruptState(path3, warn2));
+      publishState(path3, fn(applyPatches(current, patches)));
+      removePending(path3, files);
+    }, waitMs);
+    if (ran)
+      return;
+    const before = read();
+    writePending(path3, diffState(before, fn(before)));
+  }
+  return { read, update };
+}
+function pruneStateEntries(state, maxAgeMs, now = Date.now()) {
+  const cutoff = now - maxAgeMs;
+  const pruned = {};
+  for (const [id, entry] of Object.entries(state)) {
+    const updatedMs = entry.updated ? new Date(entry.updated).getTime() : 0;
+    if (updatedMs >= cutoff) {
+      Object.defineProperty(pruned, id, {
+        value: entry,
+        writable: true,
+        enumerable: true,
+        configurable: true
+      });
+    }
+  }
+  return pruned;
+}
+function readStateFile(path3, onUnparseable) {
+  let raw;
+  try {
+    raw = readFileSync3(path3, STATE_FILE_ENCODING);
+  } catch {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    return isPlainRecord(parsed) ? parsed : {};
+  } catch {
+    onUnparseable?.();
+    return {};
+  }
+}
+function setAsideCorruptState(path3, warn2) {
+  try {
+    renameSync2(path3, `${path3}${STATE_CORRUPT_SUFFIX}`);
+  } catch {
+  }
+  warn2(STATE_CORRUPT_WARNING);
+}
+function publishState(path3, state) {
+  publishByRename(path3, JSON.stringify(state, null, 2), STATE_TEMP_SUFFIX, STATE_PRIVATE_FILE_MODE);
+}
+async function withStateFileLock(path3, warn2, callback, waitMs) {
+  let lock;
+  try {
+    lock = await acquireCompatibleDirectoryFileLock(path3, { timeoutMs: waitMs });
+  } catch (error2) {
+    if (!(error2 instanceof FileLockTimeoutError))
+      throw error2;
+    warn2(STATE_LOCK_BUSY_WARNING);
+    return false;
+  }
+  try {
+    await callback();
+  } finally {
+    try {
+      await lock.release();
+    } catch (error2) {
+      warn2(`${STATE_LOCK_RELEASE_WARNING}: ${error2}`);
+    }
+  }
+  return true;
+}
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_ba6b85d002fef7d3a44681cadfb9ea26/node_modules/@langchain/plugins-base/dist/storage/capture/paths.js
 import { createHash } from "node:crypto";
@@ -21171,22 +21442,7 @@ var CURSOR_VERSION_FIELD = "cursor_version";
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
 var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
-var STATE_TEMP_SUFFIX2 = ".state.tmp";
-var STATE_LOCK_RELEASE_WARNING2 = "Could not release the shared state lock";
-var STATE_LOCK_BUSY_WARNING2 = "Another process holds the state lock, so state updates in this hook are saved for the next lock holder";
-var STATE_LOCK_WAIT_MS2 = 1e3;
-var STATE_LOCK_PROBE_MS2 = 200;
-var STATE_LOCK_BUSY_MEMORY_MS2 = 3e4;
-var PENDING_STATE_DIR_SUFFIX2 = ".pending";
-var PENDING_STATE_FILE_SUFFIX2 = ".json";
-var PENDING_STATE_TEMP_SUFFIX2 = ".pending.tmp";
-var PENDING_STATE_ABANDONED_MS2 = 6e4;
-var PENDING_STATE_TIME_WIDTH2 = 13;
-var PENDING_STATE_SEQUENCE_WIDTH2 = 6;
-var PENDING_STATE_WRITE_ATTEMPTS2 = 3;
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
-var PRIVATE_DIR_MODE = 448;
-var PRIVATE_FILE_MODE = 384;
 var ENGINE_WORKER_ARG = "--engine-worker";
 var STATE_FILE_DEFAULT = [".claude", "state", "langsmith_state.json"];
 var GH_LOGIN_MARKER_FILE = "langsmith_gh_login.json";
@@ -22011,245 +22267,20 @@ async function settleToolRuns(job) {
 }
 
 // dist/src/state.js
-import { readFileSync as readFileSync12 } from "node:fs";
-
-// dist/src/utils/atomic-file.js
-import { openSync as openSync4, writeSync as writeSync3, closeSync as closeSync4, renameSync as renameSync7 } from "node:fs";
-import { randomUUID as randomUUID7 } from "node:crypto";
-function publishByRename2(path3, contents, tempSuffix, mode) {
-  const temp = `${path3}.${randomUUID7()}${tempSuffix}`;
-  const fd = openSync4(temp, "wx", mode);
-  try {
-    writeSync3(fd, contents);
-  } finally {
-    closeSync4(fd);
+var stores = /* @__PURE__ */ new Map();
+function storeFor(stateFilePath) {
+  let store = stores.get(stateFilePath);
+  if (!store) {
+    store = createStateStore({ path: stateFilePath, warn });
+    stores.set(stateFilePath, store);
   }
-  renameSync7(temp, path3);
-}
-
-// dist/src/state-lock.js
-async function withStateFileLock(stateFilePath, callback, waitMs) {
-  let lock;
-  try {
-    lock = await acquireCompatibleDirectoryFileLock(stateFilePath, { timeoutMs: waitMs });
-  } catch (error2) {
-    if (!(error2 instanceof FileLockTimeoutError))
-      throw error2;
-    warn(STATE_LOCK_BUSY_WARNING2);
-    return false;
-  }
-  try {
-    await callback();
-  } finally {
-    await releaseStateLock(lock);
-  }
-  return true;
-}
-async function releaseStateLock(lock) {
-  try {
-    await lock.release();
-  } catch (error2) {
-    warn(`${STATE_LOCK_RELEASE_WARNING2}: ${error2}`);
-  }
-}
-
-// dist/src/state-pending.js
-import { mkdirSync as mkdirSync7, readdirSync as readdirSync2, readFileSync as readFileSync11, rmdirSync as rmdirSync2, rmSync as rmSync2, statSync as statSync7 } from "node:fs";
-import { join as join20 } from "node:path";
-
-// dist/src/utils/records.js
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// dist/src/state-pending.js
-var sequence = 0;
-var same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
-function diffValue(path3, before, after, operations) {
-  if (same(before, after))
-    return;
-  if (isRecord(before) && isRecord(after)) {
-    for (const key of Object.keys(before)) {
-      if (before[key] !== void 0 && after[key] === void 0) {
-        operations.push({ path: [...path3, key], unset: true });
-      }
-    }
-    for (const [key, value] of Object.entries(after)) {
-      if (value !== void 0)
-        diffValue([...path3, key], before[key], value, operations);
-    }
-  } else if (Array.isArray(before) && Array.isArray(after)) {
-    const kept = new Set(after.map((item) => JSON.stringify(item)));
-    const known = new Set(before.map((item) => JSON.stringify(item)));
-    const add = after.filter((item) => !known.has(JSON.stringify(item)));
-    const remove = before.filter((item) => !kept.has(JSON.stringify(item)));
-    operations.push({ path: path3, add, remove });
-  } else {
-    operations.push({ path: path3, set: after });
-  }
-}
-function diffState2(before, after) {
-  const patch = [];
-  for (const session of Object.keys(before)) {
-    if (!Object.hasOwn(after, session))
-      patch.push({ session, removed: true });
-  }
-  for (const [session, next] of Object.entries(after)) {
-    const operations = [];
-    if (Object.hasOwn(before, session))
-      diffValue([], before[session], next, operations);
-    else
-      operations.push({ path: [], set: next });
-    if (operations.length > 0)
-      patch.push({ session, operations });
-  }
-  return patch;
-}
-function applyOperation(root, operation) {
-  const { path: path3 } = operation;
-  if (path3.length === 0)
-    return operation.set;
-  const [key, ...rest] = path3;
-  const node = isRecord(root) ? { ...root } : {};
-  if (rest.length > 0) {
-    node[key] = applyOperation(node[key], { ...operation, path: rest });
-  } else if (operation.unset) {
-    delete node[key];
-  } else if (operation.add || operation.remove) {
-    node[key] = mergeList(node[key], operation);
-  } else {
-    node[key] = operation.set;
-  }
-  return node;
-}
-function mergeList(current, operation) {
-  const removed = new Set((operation.remove ?? []).map((item) => JSON.stringify(item)));
-  const list = (Array.isArray(current) ? current : []).filter((item) => !removed.has(JSON.stringify(item)));
-  const present = new Set(list.map((item) => JSON.stringify(item)));
-  for (const item of operation.add ?? []) {
-    if (!present.has(JSON.stringify(item)))
-      list.push(item);
-  }
-  return list;
-}
-function applyPatches2(state, patches) {
-  let result = state;
-  for (const patch of patches) {
-    for (const entry of patch) {
-      if (entry.removed) {
-        result = Object.fromEntries(Object.entries(result).filter(([id]) => id !== entry.session));
-        continue;
-      }
-      let session = result[entry.session];
-      for (const operation of entry.operations ?? [])
-        session = applyOperation(session, operation);
-      result = { ...result, [entry.session]: session };
-    }
-  }
-  return result;
-}
-var pendingDirectory = (stateFilePath) => `${stateFilePath}${PENDING_STATE_DIR_SUFFIX2}`;
-function names(directory) {
-  try {
-    return readdirSync2(directory);
-  } catch {
-    return [];
-  }
-}
-function writePending2(stateFilePath, patch) {
-  if (patch.length === 0)
-    return;
-  const directory = pendingDirectory(stateFilePath);
-  const time = String(Date.now()).padStart(PENDING_STATE_TIME_WIDTH2, "0");
-  const order = String(sequence++).padStart(PENDING_STATE_SEQUENCE_WIDTH2, "0");
-  const file = join20(directory, `${time}-${order}-${process.pid}${PENDING_STATE_FILE_SUFFIX2}`);
-  for (let attempt = 1; ; attempt++) {
-    try {
-      mkdirSync7(directory, { recursive: true, mode: PRIVATE_DIR_MODE });
-      publishByRename2(file, JSON.stringify(patch), PENDING_STATE_TEMP_SUFFIX2, PRIVATE_FILE_MODE);
-      return;
-    } catch (error2) {
-      if (attempt >= PENDING_STATE_WRITE_ATTEMPTS2)
-        throw error2;
-    }
-  }
-}
-function readPending2(stateFilePath) {
-  const directory = pendingDirectory(stateFilePath);
-  const files = [];
-  const patches = [];
-  for (const name of names(directory).filter((n2) => n2.endsWith(PENDING_STATE_FILE_SUFFIX2)).sort()) {
-    const file = join20(directory, name);
-    files.push(file);
-    try {
-      patches.push(JSON.parse(readFileSync11(file, "utf-8")));
-    } catch {
-      continue;
-    }
-  }
-  return { files, patches };
-}
-function hasRecentPending2(stateFilePath) {
-  const directory = pendingDirectory(stateFilePath);
-  return names(directory).some((name) => {
-    try {
-      return name.endsWith(PENDING_STATE_FILE_SUFFIX2) && Date.now() - statSync7(join20(directory, name)).mtimeMs < STATE_LOCK_BUSY_MEMORY_MS2;
-    } catch {
-      return false;
-    }
-  });
-}
-function removePending2(stateFilePath, files) {
-  const directory = pendingDirectory(stateFilePath);
-  for (const file of files)
-    rmSync2(file, { force: true });
-  for (const name of names(directory)) {
-    if (name.endsWith(PENDING_STATE_FILE_SUFFIX2))
-      continue;
-    const file = join20(directory, name);
-    try {
-      if (Date.now() - statSync7(file).mtimeMs > PENDING_STATE_ABANDONED_MS2)
-        rmSync2(file, { force: true });
-    } catch {
-      continue;
-    }
-  }
-  if (names(directory).length > 0)
-    return;
-  try {
-    rmdirSync2(directory);
-  } catch {
-    return;
-  }
-}
-
-// dist/src/state.js
-function publishState(stateFilePath, state) {
-  publishByRename2(stateFilePath, JSON.stringify(state, null, 2), STATE_TEMP_SUFFIX2, PRIVATE_FILE_MODE);
+  return store;
 }
 async function atomicUpdateState(stateFilePath, fn) {
-  const waitMs = hasRecentPending2(stateFilePath) ? STATE_LOCK_PROBE_MS2 : STATE_LOCK_WAIT_MS2;
-  const ran = await withStateFileLock(stateFilePath, () => {
-    const { files, patches } = readPending2(stateFilePath);
-    publishState(stateFilePath, fn(applyPatches2(readStateFile(stateFilePath), patches)));
-    removePending2(stateFilePath, files);
-  }, waitMs);
-  if (ran)
-    return;
-  const before = loadState(stateFilePath);
-  writePending2(stateFilePath, diffState2(before, fn(before)));
-}
-function readStateFile(stateFilePath) {
-  try {
-    const raw = readFileSync12(stateFilePath, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
+  await storeFor(stateFilePath).update(fn);
 }
 function loadState(stateFilePath) {
-  const { patches } = readPending2(stateFilePath);
-  return applyPatches2(readStateFile(stateFilePath), patches);
+  return storeFor(stateFilePath).read();
 }
 function getSessionState(state, sessionId) {
   return state[sessionId] ?? {
@@ -22275,15 +22306,7 @@ function advanceToolTracingProgress(session, ids, phase) {
   return { tool_tracing_modes: modes, tool_tracing_progress: progress };
 }
 function pruneOldSessions(state, now = Date.now()) {
-  const cutoff = now - SESSION_MAX_AGE_MS;
-  const pruned = {};
-  for (const [sessionId, session] of Object.entries(state)) {
-    const updatedMs = session.updated ? new Date(session.updated).getTime() : 0;
-    if (updatedMs >= cutoff) {
-      pruned[sessionId] = session;
-    }
-  }
-  return pruned;
+  return pruneStateEntries(state, SESSION_MAX_AGE_MS, now);
 }
 function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, currentTurnRunId) {
   const existingSession = state[sessionId] ?? {
@@ -22308,6 +22331,13 @@ function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, c
 // dist/src/tracing-policy.js
 import { mkdir as mkdir6 } from "node:fs/promises";
 import { dirname as dirname15 } from "node:path";
+
+// dist/src/utils/records.js
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/src/tracing-policy.js
 function isMode(value) {
   return value === "full" || value === "metadata";
 }
@@ -22361,7 +22391,7 @@ function resolveTurnTracingMode(config, sessionId, ...snapshots) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync13, statSync as statSync8, fstatSync as fstatSync2, openSync as openSync5, readSync, closeSync as closeSync5 } from "node:fs";
+import { readFileSync as readFileSync11, statSync as statSync7, fstatSync as fstatSync2, openSync as openSync4, readSync, closeSync as closeSync4 } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 function readTranscript(filePath, afterLine = -1, cutAtByte) {
   const endsBeforeCut = (offset, line) => {
@@ -22375,12 +22405,12 @@ function readTranscript(filePath, afterLine = -1, cutAtByte) {
   };
   let size;
   try {
-    size = statSync8(filePath).size;
+    size = statSync7(filePath).size;
   } catch {
     return { messages: [], lastLine: afterLine };
   }
   if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync13(filePath, "utf-8");
+    const raw = readFileSync11(filePath, "utf-8");
     const messages = [];
     let lastLine = afterLine;
     let i = -1;
@@ -22403,7 +22433,7 @@ function readTranscript(filePath, afterLine = -1, cutAtByte) {
     }
     return { messages, lastLine };
   }
-  const fd = openSync5(filePath, "r");
+  const fd = openSync4(filePath, "r");
   try {
     const chunkSize = 2 * 1024 * 1024;
     const buf = Buffer.alloc(chunkSize);
@@ -22454,20 +22484,20 @@ function readTranscript(filePath, afterLine = -1, cutAtByte) {
     }
     return { messages, lastLine };
   } finally {
-    closeSync5(fd);
+    closeSync4(fd);
   }
 }
 function getTranscriptEndLine(filePath) {
   try {
-    const size = statSync8(filePath).size;
+    const size = statSync7(filePath).size;
     if (size === 0)
       return -1;
     if (size <= MAX_FULL_READ_BYTES) {
-      const raw = readFileSync13(filePath, "utf-8");
+      const raw = readFileSync11(filePath, "utf-8");
       const lines = raw.split("\n").filter((l) => l.trim() !== "");
       return lines.length > 0 ? lines.length - 1 : -1;
     }
-    const fd = openSync5(filePath, "r");
+    const fd = openSync4(filePath, "r");
     try {
       const chunkSize = 1024 * 1024;
       const buf = Buffer.alloc(chunkSize);
@@ -22490,7 +22520,7 @@ function getTranscriptEndLine(filePath) {
         lineCount++;
       return lineCount > 0 ? lineCount - 1 : -1;
     } finally {
-      closeSync5(fd);
+      closeSync4(fd);
     }
   } catch {
     return -1;
@@ -22499,7 +22529,7 @@ function getTranscriptEndLine(filePath) {
 function readRuntimeVersion(filePath) {
   let fd;
   try {
-    fd = openSync5(filePath, "r");
+    fd = openSync4(filePath, "r");
     const size = fstatSync2(fd).size;
     if (size === 0)
       return void 0;
@@ -22522,7 +22552,7 @@ function readRuntimeVersion(filePath) {
   } catch {
   } finally {
     if (fd !== void 0)
-      closeSync5(fd);
+      closeSync4(fd);
   }
   return void 0;
 }
@@ -22719,7 +22749,7 @@ function skillNameFromTool(toolName, toolInput) {
 }
 
 // dist/src/engine-session.js
-import { dirname as dirname16, join as join21 } from "node:path";
+import { dirname as dirname16, join as join20 } from "node:path";
 
 // dist/src/engine-writer.js
 function writerOptions(config) {
@@ -22746,7 +22776,7 @@ function writerReplica(replica) {
 // dist/src/engine-session.js
 function openSession(config, cwd, sessionId, reconstruct = settleToolRuns) {
   const writer = writerOptions(config);
-  const storageRoot = join21(dirname16(config.stateFilePath), ENGINE_STORAGE_DIR_NAME);
+  const storageRoot = join20(dirname16(config.stateFilePath), ENGINE_STORAGE_DIR_NAME);
   const context = openPluginSession({
     storageRoot,
     integration: LS_INTEGRATION,
@@ -23542,10 +23572,10 @@ async function finalizeNotificationChain(opts) {
 }
 
 // dist/src/closing-queue.js
-import { randomUUID as randomUUID8 } from "node:crypto";
-import { statSync as statSync9 } from "node:fs";
+import { randomUUID as randomUUID7 } from "node:crypto";
+import { statSync as statSync8 } from "node:fs";
 async function queueClosing(config, kind, input, options = {}) {
-  const id = randomUUID8();
+  const id = randomUUID7();
   const at = Date.now();
   const cut = options.transcriptCut ? transcriptSize(input.transcript_path) : void 0;
   let queued = false;
@@ -23588,7 +23618,7 @@ function transcriptSize(path3) {
   if (!expanded)
     return void 0;
   try {
-    return statSync9(expanded).size;
+    return statSync8(expanded).size;
   } catch {
     return void 0;
   }
@@ -24660,13 +24690,13 @@ async function runQueuedClosings(workerConfig, sessionId) {
 
 // dist/src/legacy-import.js
 import { createHmac } from "node:crypto";
-import { basename as basename4, dirname as dirname17, join as join22 } from "node:path";
+import { basename as basename4, dirname as dirname17, join as join21 } from "node:path";
 
 // dist/src/utils/files.js
-import { lstatSync as lstatSync3, readdirSync as readdirSync3, readFileSync as readFileSync14, rmdirSync as rmdirSync3, unlinkSync as unlinkSync3 } from "node:fs";
+import { lstatSync as lstatSync3, readdirSync as readdirSync2, readFileSync as readFileSync12, rmdirSync as rmdirSync2, unlinkSync as unlinkSync3 } from "node:fs";
 function listDirectory(path3) {
   try {
-    return readdirSync3(path3).sort();
+    return readdirSync2(path3).sort();
   } catch {
     return [];
   }
@@ -24690,14 +24720,14 @@ function removeFile2(path3) {
 }
 function removeEmptyFolder(path3) {
   try {
-    rmdirSync3(path3);
+    rmdirSync2(path3);
   } catch {
     return;
   }
 }
 function readText(path3) {
   try {
-    return readFileSync14(path3, "utf-8");
+    return readFileSync12(path3, "utf-8");
   } catch {
     return "";
   }
@@ -24716,7 +24746,7 @@ function legacyRuns(config) {
   const root = dirname17(config.stateFilePath);
   const scan = { runs: [], settled: [], unreadable: [] };
   const { runs } = scan;
-  for (const [sessionId, file] of legacyFiles(join22(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
+  for (const [sessionId, file] of legacyFiles(join21(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
     const entry = readJson(readText(file));
     if (!entry?.run)
       scan.unreadable.push(file);
@@ -24733,7 +24763,7 @@ function legacyRuns(config) {
       run: { ...run, metadata: legacyOptions(base ?? {}, sessionId, "tool") }
     });
   }
-  for (const [sessionId, file] of legacyFiles(join22(root, TURN_RECORD_DIR_NAME), LEGACY_TURN_FILE)) {
+  for (const [sessionId, file] of legacyFiles(join21(root, TURN_RECORD_DIR_NAME), LEGACY_TURN_FILE)) {
     const record = readTurnRecord(file);
     if (!record.root || !record.closed || record.origin !== origin)
       continue;
@@ -24797,7 +24827,7 @@ function legacyOptions(metadata, sessionId, runType) {
 function legacyFiles(root, pattern) {
   if (!entryInfo(root)?.isDirectory())
     return [];
-  return listDirectory(root).filter((sessionId) => entryInfo(join22(root, sessionId))?.isDirectory()).flatMap((sessionId) => listDirectory(join22(root, sessionId)).map((name) => [sessionId, join22(root, sessionId, name)]).filter(([, file]) => pattern.test(basename4(file)) && entryInfo(file)?.isFile()));
+  return listDirectory(root).filter((sessionId) => entryInfo(join21(root, sessionId))?.isDirectory()).flatMap((sessionId) => listDirectory(join21(root, sessionId)).map((name) => [sessionId, join21(root, sessionId, name)]).filter(([, file]) => pattern.test(basename4(file)) && entryInfo(file)?.isFile()));
 }
 function readTurnRecord(path3) {
   const record = {
@@ -24831,7 +24861,7 @@ function readTurnRecord(path3) {
 }
 
 // dist/src/legacy-sweep.js
-import { join as join23, dirname as dirname18 } from "node:path";
+import { join as join22, dirname as dirname18 } from "node:path";
 function idleMs(info, now) {
   return info ? now - info.mtimeMs : 0;
 }
@@ -24846,7 +24876,7 @@ function mayAgeOut(name, path3, removable) {
 }
 function sweepSession(path3, removable, now) {
   const aged = listDirectory(path3).filter((name) => {
-    const entry = join23(path3, name);
+    const entry = join22(path3, name);
     return mayAgeOut(name, entry, removable) && removeIfOld(entry, now);
   }).length;
   if (aged > 0 || idleMs(entryInfo(path3), now) >= LEGACY_EMPTY_FOLDER_IDLE_MS) {
@@ -24859,7 +24889,7 @@ function sweepFolder(path3, removable, now) {
     return 0;
   let aged = 0;
   for (const name of listDirectory(path3)) {
-    const entry = join23(path3, name);
+    const entry = join22(path3, name);
     if (entryInfo(entry)?.isDirectory())
       aged += sweepSession(entry, removable, now);
     else if (LEGACY_FLUSH_LOCK_FILE.test(name))
@@ -24870,7 +24900,7 @@ function sweepFolder(path3, removable, now) {
 }
 function sweepLegacyLeftovers(stateFilePath, removable, now = Date.now()) {
   const root = dirname18(stateFilePath);
-  return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join23(root, folder), removable, now), 0);
+  return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join22(root, folder), removable, now), 0);
 }
 
 // dist/src/engine-legacy.js
