@@ -20,7 +20,13 @@ import {
   RUN_SNAPSHOT_FIELDS,
 } from "./constants.js";
 import { warn } from "./logger.js";
-import type { ClaudeRun, ClaudeTracingSession, RunOperation, TracingMode } from "./types.js";
+import type {
+  CaptureDependency,
+  ClaudeRun,
+  ClaudeTracingSession,
+  RunOperation,
+  TracingMode,
+} from "./types.js";
 import { cloneJson } from "./utils/clone.js";
 
 export async function saveOrWarn(
@@ -74,23 +80,31 @@ export function captureInput(
   sessionId: string,
   afterPost: boolean,
 ): LifecycleCaptureInput {
+  const after = [
+    ...(afterPost ? [run.id] : []),
+    ...(namesItsTurn(run, rootRunId, operation) ? [rootRunId] : []),
+  ];
   return {
     turnId: rootRunId,
     eventId: `${RUN_EVENT_PREFIXES[operation]}${run.id}`,
     submission: runSubmission(run, mode, operation),
     turnEvidence: runTurnEvidence(run, rootRunId),
-    ...(afterPost
-      ? {
-          dependencies: [
-            {
-              integration: LS_INTEGRATION,
-              sessionId,
-              turnId: rootRunId,
-              eventId: `${POST_EVENT_PREFIX}${run.id}`,
-            },
-          ],
-        }
+    ...(after.length > 0
+      ? { dependencies: after.map((runId) => postScope(sessionId, rootRunId, runId)) }
       : {}),
+  };
+}
+
+export function namesItsTurn(run: ClaudeRun, rootRunId: string, operation: RunOperation): boolean {
+  return operation === "post" && run.id !== rootRunId && run.parent_run_id === rootRunId;
+}
+
+export function postScope(sessionId: string, turnId: string, runId: string): CaptureDependency {
+  return {
+    integration: LS_INTEGRATION,
+    sessionId,
+    turnId,
+    eventId: `${POST_EVENT_PREFIX}${runId}`,
   };
 }
 
