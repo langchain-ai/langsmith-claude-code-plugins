@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGitSandbox } from "./fixtures/git-sandbox.js";
+import { noManagedConfigEnv } from "./fixtures/no-managed-config-env.js";
 import { waitFor } from "./fixtures/wait-for.js";
 import { USER_PROMPT_TURN_NAME } from "./constants.js";
 
@@ -63,6 +64,7 @@ async function hook(
       ...sandbox.env,
       ...(home ? { HOME: home, USERPROFILE: home } : {}),
       PATH: process.env.PATH ?? "",
+      ...noManagedConfigEnv(),
       ...extraEnv,
       TRACE_TO_LANGSMITH: "true",
       LANGSMITH_API_KEY: "lsv2_pt_fake_key_for_tests",

@@ -593,7 +593,7 @@ var require_dist = __commonJS({
   }
 });
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/errors.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/errors.js
 function describe(error2) {
   return error2 instanceof Error ? error2.message : String(error2);
 }
@@ -607,7 +607,7 @@ function failureStatus(error2) {
   return typeof status === "number" ? status : void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/constants.js
 var POLICY_LOCK_TIMEOUT_MS = 2e3;
 var POLICY_LOCK_TIMEOUT_ERROR = "Timed out waiting for tracing preference lock";
 var POLICY_LOCK_TIMEOUT_MESSAGE = "Retry; if it persists, remove the lock only after confirming no preference writer is running.";
@@ -645,7 +645,7 @@ var POLICY_PARSE_RESULT_MESSAGE = "A policy parser must return a policy";
 var HOOK_OPTIONS_INVALID_MESSAGE = "Hook options need a hooks table and onHookError and onUnknown callbacks";
 var HOOK_ERROR_HANDLER_WARNING = "The hook error handler failed:";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/hook-command.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/hook-command.js
 async function dispatchHookCommand(argv, options) {
   assertHookOptions(options);
   const [argument, ...rest] = argv;
@@ -680,17 +680,17 @@ function reportHookError(name, error2, options) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/policy-file.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/policy-file.js
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import { open, rename as rename3, unlink as unlink3 } from "node:fs/promises";
 import { dirname as dirname4 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/files/cleanup.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/files/cleanup.js
 import { rmdir, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/constants.js
 var FILE_MISSING_CODE = "ENOENT";
 var PROCESS_MISSING_CODE = "ESRCH";
 var PROCESS_CHECK_SIGNAL = 0;
@@ -703,7 +703,7 @@ var DIRECTORY_NOT_EMPTY_CODE = "ENOTEMPTY";
 var INVALID_ARGUMENT_CODE = "EINVAL";
 var TEMPLATE_PLACEHOLDER = /\{(\w+)\}/gu;
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/files/cleanup-constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/files/cleanup-constants.js
 var CLEANUP_IGNORED_DIRECTORY_CODES = [
   FILE_MISSING_CODE,
   DIRECTORY_NOT_EMPTY_CODE,
@@ -713,7 +713,7 @@ var CLEANUP_IGNORED_DIRECTORY_CODES = [
   FILE_ACCESS_DENIED_CODE
 ];
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/files/cleanup.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/files/cleanup.js
 async function removeFileIfPresent(path3) {
   try {
     await unlink(path3);
@@ -746,7 +746,7 @@ async function removeEmptyAncestors(directory, root) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/constants.js
 var FILE_LOCK_CLAIM_VERSION = 1;
 var FILE_LOCK_CLAIM_EXTENSION = ".json";
 var FILE_LOCK_DIRECTORY_SUFFIX = ".claims";
@@ -807,19 +807,19 @@ var STORAGE_ENGINE_FILE_PATTERNS = [
 ];
 var STORAGE_CLAIM_FILE = new RegExp(`^${STORAGE_UUID}\\.json$`, "u");
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/lock-folders.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/lock-folders.js
 async function removeEmptyLockFolders(lockPath, root) {
   await removeEmptyAncestors(`${lockPath}${FILE_LOCK_DIRECTORY_SUFFIX}`, root);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/file-lock.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/file-lock.js
 import { chmod, link, lstat as lstat2, mkdir as mkdir2, readFile as readFile2, readdir, rename as rename2, writeFile as writeFile2 } from "node:fs/promises";
 import { performance as performance4 } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID as randomUUID2 } from "node:crypto";
 import { dirname as dirname3, join as join2, resolve as resolve2 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/constants.js
 var CAPTURE_JOBS_DIRECTORY = "jobs";
 var CAPTURE_SESSIONS_DIRECTORY = "sessions";
 var CAPTURE_TURNS_DIRECTORY = "turns";
@@ -864,7 +864,7 @@ var CAPTURE_FILE_EXTENSION = ".json";
 var CAPTURE_LOCK_EXTENSION = ".lock";
 var CAPTURE_STORAGE_DIRECTORY_MESSAGE = "Capture directory must be turns or jobs";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/utils/serialization.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/utils/serialization.js
 function canonicalJson(value) {
   const result = JSON.stringify(canonicalValue(value, /* @__PURE__ */ new Set()));
   if (result === void 0)
@@ -916,7 +916,7 @@ function canonicalValue(value, seen) {
   return result;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/validation/objects.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/validation/objects.js
 function isPlainRecord(value) {
   return value !== null && typeof value === "object" && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
 }
@@ -996,7 +996,7 @@ function parseJsonObject(contents, message) {
   return value;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/errors.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/errors.js
 import { resolve } from "node:path";
 var FileLockTimeoutError = class extends Error {
   blockedPath;
@@ -1019,7 +1019,7 @@ var StorageNotWritableError = class extends Error {
   }
 };
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/file-lock-heartbeat.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/file-lock-heartbeat.js
 import { utimes } from "node:fs/promises";
 var heartbeats = /* @__PURE__ */ new Map();
 function startHeartbeat(path3, id) {
@@ -1039,13 +1039,13 @@ function warnUnlessMissing(error2) {
     console.warn(FILE_LOCK_HEARTBEAT_WARNING, describe(error2));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/legacy-gate.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/legacy-gate.js
 import { lstat, mkdir, readFile, rename, rmdir as rmdir2, writeFile } from "node:fs/promises";
 import { performance as performance3 } from "node:perf_hooks";
 import { randomUUID } from "node:crypto";
 import { dirname as dirname2, join } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/file-lock-support.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/file-lock-support.js
 import { unlink as unlink2 } from "node:fs/promises";
 import { performance as performance2 } from "node:perf_hooks";
 function processIsAlive(pid) {
@@ -1084,7 +1084,7 @@ function waitForNextScan(deadline, blockedPath) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, Math.min(FILE_LOCK_POLL_INTERVAL_MS, remaining)));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/legacy-gate.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/legacy-gate.js
 async function createLegacyGate(gatePath) {
   await mkdir(gatePath, { mode: FILE_LOCK_DIRECTORY_MODE });
   const stat3 = await lstat(gatePath);
@@ -1247,7 +1247,7 @@ async function reclaimLegacyGate(gatePath, filePath, tryAcquire) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/file-lock.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/file-lock.js
 function parseClaim(value, id) {
   if (!isPlainRecord(value))
     return void 0;
@@ -1571,7 +1571,7 @@ async function withFileLock(filePath, callback, options) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/policy-file.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/policy-file.js
 function readPolicyFile(path3, options) {
   let raw;
   try {
@@ -1685,20 +1685,20 @@ function findLockTimeout(error2) {
   return error2.errors.map(findLockTimeout).find((found) => found !== void 0);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/errors.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/errors.js
 var CaptureRecordInvalidError = class extends Error {
 };
 var CaptureRecordVersionError = class extends Error {
 };
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/capture-store.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/capture-store.js
 import { lstat as lstat6 } from "node:fs/promises";
 import { basename as basename2, dirname as dirname7, join as join8, resolve as resolve5 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/state-store.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/state-store.js
 import { readFileSync as readFileSync3, renameSync as renameSync2 } from "node:fs";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/files/publish.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/files/publish.js
 import { closeSync, openSync, renameSync, writeSync } from "node:fs";
 import { randomUUID as randomUUID4 } from "node:crypto";
 function publishByRename(path3, contents, tempSuffix, mode) {
@@ -1712,7 +1712,7 @@ function publishByRename(path3, contents, tempSuffix, mode) {
   renameSync(temp, path3);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/state-constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/state-constants.js
 var STATE_TEMP_SUFFIX = ".state.tmp";
 var STATE_CORRUPT_SUFFIX = ".corrupt";
 var STATE_FILE_ENCODING = "utf-8";
@@ -1732,7 +1732,7 @@ var PENDING_STATE_WRITE_ATTEMPTS = 3;
 var STATE_PRIVATE_DIR_MODE = 448;
 var STATE_PRIVATE_FILE_MODE = 384;
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/state-pending.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/state-pending.js
 import { mkdirSync, readdirSync, readFileSync as readFileSync2, rmdirSync, rmSync, statSync } from "node:fs";
 import { join as join3 } from "node:path";
 var sequence = 0;
@@ -1895,7 +1895,7 @@ function removePending(stateFilePath, files) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/state-store.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/state-store.js
 function createStateStore(options) {
   const { path: path3 } = options;
   const warn2 = options.warn ?? console.warn;
@@ -1981,7 +1981,7 @@ async function withStateFileLock(path3, warn2, callback, waitMs) {
   return true;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/paths.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/paths.js
 import { createHash } from "node:crypto";
 import { resolve as resolve3, join as join4 } from "node:path";
 function validateIntegration(value) {
@@ -2039,7 +2039,7 @@ function recordLockPath(root, scope) {
   return `${path3.slice(0, -CAPTURE_FILE_EXTENSION.length)}${CAPTURE_LOCK_EXTENSION}`;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/utils/atomic-file.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/utils/atomic-file.js
 import { constants as fsConstants } from "node:fs";
 import { chmod as chmod2, link as link2, lstat as lstat3, mkdir as mkdir3, open as open2, rename as rename4, unlink as unlink4 } from "node:fs/promises";
 import { dirname as dirname5, isAbsolute, join as join5, relative, sep } from "node:path";
@@ -2227,7 +2227,7 @@ async function syncDirectory(path3) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/files/private-directory.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/files/private-directory.js
 import { lstat as lstat4, readdir as readdir2 } from "node:fs/promises";
 import { isAbsolute as isAbsolute2, join as join6, relative as relative2, resolve as resolve4, sep as sep2 } from "node:path";
 async function listPrivateDirectory(root, directory) {
@@ -2263,7 +2263,7 @@ async function lstatDirectory(path3) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/scope.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/scope.js
 function scopeOf(value) {
   return {
     integration: value.integration,
@@ -2276,21 +2276,21 @@ function scopeKey(scope) {
   return JSON.stringify([scope.integration, scope.sessionId, scope.turnId, scope.eventId]);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/compare.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/compare.js
 function compareText(left, right) {
   if (left === right)
     return 0;
   return left < right ? -1 : 1;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/order.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/order.js
 function compareCaptureOrder(left, right) {
   if (left.capturedAtMs !== right.capturedAtMs)
     return left.capturedAtMs < right.capturedAtMs ? -1 : 1;
   return compareText(left.eventId, right.eventId);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/utils/digest.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/utils/digest.js
 import { createHash as createHash2 } from "node:crypto";
 function captureContentDigest(record) {
   const content = { ...record };
@@ -2301,7 +2301,7 @@ function captureContentDigest(record) {
   return createHash2("sha256").update(canonicalJson(content)).digest("hex");
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/markers.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/markers.js
 import { lstat as lstat5 } from "node:fs/promises";
 import { basename, dirname as dirname6, join as join7 } from "node:path";
 function markerPath(root, scope) {
@@ -2446,7 +2446,7 @@ async function removeOldMarkers(root, directory, modifiedBeforeMs) {
   return removed;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/capture-store.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/capture-store.js
 function createCaptureStore(root, directory = CAPTURE_TURNS_DIRECTORY) {
   const storageRoot = { root: resolve5(root), directory };
   captureDirectory(storageRoot);
@@ -2876,17 +2876,17 @@ function failure(code, error2) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/format.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/format.js
 function fillTemplate(template, values) {
   return template.replace(TEMPLATE_PLACEHOLDER, (_match, key) => String(values[key]));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/account.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/account.js
 function isWaitingForOtherSetting(record, accountFingerprint) {
   return record.destinationFingerprint !== accountFingerprint && Object.keys(record.delivery?.outcomes ?? {}).length === 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/expiry.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/expiry.js
 function liveTurnSpans(captures) {
   const spans = /* @__PURE__ */ new Map();
   for (const { record, capturedAtMs } of captures) {
@@ -2940,12 +2940,12 @@ async function removeExpiredCaptures(options) {
   return dropped;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/background-worker/worker.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/background-worker/worker.js
 import { randomUUID as randomUUID6 } from "node:crypto";
 import { resolve as resolve7 } from "node:path";
 import { setTimeout as delay2 } from "node:timers/promises";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/background-worker/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/background-worker/constants.js
 var BACKGROUND_WORKER_LOCK_FILE = "worker";
 var BACKGROUND_WORKER_PENDING_FILE = "wake.pending";
 var BACKGROUND_WORKER_ACTIVE_PREFIX = "wake.active.";
@@ -2989,7 +2989,7 @@ var BACKGROUND_WORKER_FILE_PREFIX = "wake";
 var BACKGROUND_WORKER_SCOPED_FILE = /^wake-[0-9a-f]{64}\.(?:pending|launching|active\.[0-9a-f-]{36}(?:\.attempt\.[1-9]\d*)?\.json)$/u;
 var BACKGROUND_WORKER_SHARED_DIRECTORY = /^(?:turns|jobs|delivery\.claims|reconstruction\.claims|(?:worker|settlement)-[0-9a-f]{64}\.claims)$/u;
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/background-worker/paths.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/background-worker/paths.js
 import { join as join9, resolve as resolve6 } from "node:path";
 function validateWorkerScope(scope) {
   validateIntegration(scope.integration);
@@ -3023,13 +3023,13 @@ function scopedWorkerFileName(scope, name) {
   return name.startsWith(prefix) ? `${BACKGROUND_WORKER_FILE_PREFIX}.${name.slice(prefix.length)}` : void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/background-worker/utils/scope.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/background-worker/utils/scope.js
 async function matchesScope(resolveScope, expected) {
   const actual = await resolveScope();
   return actual.integration === expected.integration && actual.sessionId === expected.sessionId && actual.accountFingerprint === expected.accountFingerprint;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/background-worker/state.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/background-worker/state.js
 import { join as join10 } from "node:path";
 function assertPlainFile(entry, message) {
   if (!entry.isFile() || entry.isSymbolicLink())
@@ -3134,7 +3134,7 @@ function parseAttempt(contents, markerId, attempt) {
   return value;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/background-worker/worker.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/background-worker/worker.js
 function createBackgroundWorker(options) {
   validateOptions(options);
   const context = createWorkerContext(options);
@@ -3401,14 +3401,14 @@ async function readLaunch(storageRoot, scope) {
   return value;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/bridge.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/bridge.js
 import { join as join13, resolve as resolve9 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/stale-files.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/stale-files.js
 import { lstat as lstat7, readFile as readFile3, readdir as readdir3, rmdir as rmdir3 } from "node:fs/promises";
 import { basename as basename3, dirname as dirname8, join as join11 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/files/missing.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/files/missing.js
 function ifMissing(fallback) {
   return (error2) => {
     if (errorCode(error2) === FILE_MISSING_CODE)
@@ -3417,7 +3417,7 @@ function ifMissing(fallback) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/stale-files.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/stale-files.js
 async function removeStaleStorageFiles(root, folders, modifiedBeforeMs) {
   let removed = 0;
   for (const folder of folders)
@@ -3464,10 +3464,10 @@ function warnUnlessExpected(error2) {
     console.warn(STORAGE_STALE_DIRECTORY_WARNING, describe(error2));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/coordinator.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/coordinator.js
 import { join as join12, resolve as resolve8 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/constants.js
 var DELIVERY_RETRY_BASE_MS = 5e3;
 var DELIVERY_RETRY_BACKOFF_FACTOR = 2;
 var DELIVERY_RETRY_MAX_MS = 30 * 60 * 1e3;
@@ -3495,13 +3495,13 @@ var DELIVERY_DRAIN_LOCK = "delivery";
 var DELIVERY_DROPPED_DETAIL = "{eventId} for run {runId} on destination {destination} ({reason}){hint}";
 var DELIVERY_DEPENDENTS_DROPPED_WARNING = "Dropped trace work that depended on dropped work on destination {destination}: runs {runs}";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/retry-state.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/storage/capture/retry-state.js
 var PROCESS_STARTED_AT_MS = Date.now();
 function isWaitingForRetry(retry, now = Date.now()) {
   return retry !== void 0 && retry.notBeforeMs > now && !(retry.recordedAtMs !== void 0 && retry.recordedAtMs < PROCESS_STARTED_AT_MS);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/batch.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/batch.js
 function createBatch() {
   return { candidates: [], scopes: /* @__PURE__ */ new Set(), runIds: /* @__PURE__ */ new Set(), bytes: 0 };
 }
@@ -3521,10 +3521,10 @@ function joinBatch(batch, candidate) {
   batch.bytes += payloadBytes(candidate.entry.record);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/deliver.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/deliver.js
 import { setTimeout as delay3 } from "node:timers/promises";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/retry.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/retry.js
 function isRetryable(error2) {
   return error2?.retryable !== false;
 }
@@ -3544,7 +3544,7 @@ function nextRetry(previous, baseMs) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/outcomes.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/outcomes.js
 function emptyDestinationResult() {
   return { delivered: 0, dropped: 0, failed: 0, progressed: false };
 }
@@ -3624,7 +3624,7 @@ async function settleDroppedDependency(drainCache, candidate, destination, resul
   result.progressed = true;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/deliver.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/deliver.js
 async function trySend(context, destination, candidates) {
   const { policy, request } = context;
   const { writer } = request;
@@ -3695,7 +3695,7 @@ async function deliverBatch(context, destination, candidates) {
   return settleFailed(context, destination, candidates, error2);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/drain-cache.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/drain-cache.js
 function deliveryKey(scope, destination) {
   return JSON.stringify([scopeKey(scope), destination]);
 }
@@ -3760,7 +3760,7 @@ async function countPending(drainCache, entries, destinations) {
   return nextRetryAtMs === void 0 ? { count } : { count, nextRetryAtMs };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/drain.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/drain.js
 async function drainLocked(captureStore, integration, sessionId, policy, request, drainCache) {
   const captures = await captureStore.enumerate(integration, sessionId);
   const eligible = captures.filter(({ record }) => record.destinationFingerprint === request.writer.accountFingerprint);
@@ -3893,7 +3893,7 @@ async function dropPending(drainCache, candidate, reason) {
   return dropped;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/options.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/options.js
 function validateDrainRequest(request) {
   if (request.writer === null || typeof request.writer !== "object")
     throw new TypeError(DELIVERY_WRITER_REQUIRED_MESSAGE);
@@ -3951,7 +3951,7 @@ function resolvePolicy(policy) {
   return resolved;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/coordinator.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/delivery/coordinator.js
 async function drainUnderLock(context, request, drainCache) {
   const { captureStore, integration, sessionId, storageRoot, policy } = context;
   const sessionDirectory = await ensurePrivateDirectory(storageRoot, sessionSegments(identifierHash(sessionId)));
@@ -4017,7 +4017,7 @@ function createDeliveryCoordinator(options) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/constants.js
 var CODING_AGENT_SCHEMA_VERSION = "coding-agent-v1";
 var CODING_AGENT_PURPOSE = "coding";
 var GIT_METADATA_KEYS = {
@@ -4222,7 +4222,7 @@ var CODING_AGENT_ENVIRONMENT_METADATA_ENDPOINT_SUBSTRINGS = [
 var CODING_AGENT_REVISION_ID_VARIABLE = "LANGCHAIN_REVISION_ID";
 var CODING_AGENT_REVISION_ID_KEY = "revision_id";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/contract.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/contract.js
 function field(key, options = {}) {
   return { key, ...CODING_AGENT_FIELD_DEFAULTS, ...options };
 }
@@ -4346,7 +4346,7 @@ var CODING_AGENT_V1_CONTRACT = {
   integrationPolicies: CODING_AGENT_INTEGRATION_POLICIES
 };
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/git-names.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/git-names.js
 function withBothGitMetadataNames(metadata) {
   const both = { ...metadata };
   for (const role of Object.keys(GIT_METADATA_KEYS)) {
@@ -4359,7 +4359,7 @@ function withBothGitMetadataNames(metadata) {
   return both;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/validation.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/validation.js
 function metadataFieldTypeIssue(field4, value) {
   const matchesType = field4.type === "string" ? typeof value === "string" && value.length > 0 : field4.type === "integer" ? typeof value === "number" && Number.isSafeInteger(value) && value >= 1 : isPlainRecord(value);
   if (!matchesType)
@@ -4405,7 +4405,7 @@ function normalizeProviderMetadata(value, integration, runType) {
   return Object.fromEntries(Object.entries(value).filter(([key, entry]) => entry !== void 0 && !issues.has(key)));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/builder.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/builder.js
 function buildCodingAgentMetadata(options) {
   const policy = CODING_AGENT_INTEGRATION_POLICIES[options.integration];
   const identity = {
@@ -4473,7 +4473,7 @@ function trustedCodingAgentMetadata(metadata) {
   return metadata?.[TRUSTED_METADATA];
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/runtime.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/runtime.js
 function forwardsEnvironmentVariable(name, value, environmentMetadata) {
   return typeof value === "string" && environmentMetadata.prefixes.some((prefix) => name.startsWith(prefix)) && !environmentMetadata.excluded.includes(name) && ![...environmentMetadata.sensitiveSubstrings, ...environmentMetadata.endpointSubstrings].some((part) => name.toLowerCase().includes(part));
 }
@@ -4499,7 +4499,7 @@ function buildCodingAgentRuntimeMetadata(options) {
   return { runtime, metadata };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/privacy.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/privacy.js
 function projectCodingAgentMetadata(metadata, integration, status) {
   const safe = {};
   for (const [key, value] of Object.entries(metadata ?? {})) {
@@ -4521,7 +4521,7 @@ function metadataForMode(metadata, integration, mode = "full", status) {
   return projectCodingAgentMetadata(source, integration, status);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/provenance.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/metadata/provenance.js
 function prepareCodingAgentMetadataProvenance(value, integration, mode, status = "running") {
   const source = requirePlainRecord(value, "Run metadata");
   const declaredIntegration = ownDataField(source, "integration");
@@ -17555,7 +17555,7 @@ var AsyncLocalStorageProvider = class {
 };
 var AsyncLocalStorageProviderSingleton = new AsyncLocalStorageProvider();
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/privacy/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/privacy/constants.js
 var MUTED_TRACE_CONTENT = "[LangSmith system notice: content omitted because tracing is muted.]";
 var METADATA_MODE_RUN_CONFIG_FIELDS = [
   "client",
@@ -17572,7 +17572,7 @@ var METADATA_MODE_RUN_CONFIG_FIELDS = [
   "distributedParentId"
 ];
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/privacy/run-tree.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/privacy/run-tree.js
 function mutedContent(role) {
   return { messages: [{ role, content: MUTED_TRACE_CONTENT }] };
 }
@@ -17682,7 +17682,8 @@ function preserveFullModePatchInputs(run) {
   return run;
 }
 function createCodingAgentRunTree(config, integration, mode = "full", privacyContext) {
-  const run = new RunTree(mode === "metadata" ? configForMetadataMode(config, integration, privacyContext) : config);
+  const routed = config.replicas === void 0 ? { ...config, replicas: [] } : config;
+  const run = new RunTree(mode === "metadata" ? configForMetadataMode(routed, integration, privacyContext) : routed);
   return mode === "metadata" ? protectRunTree(run, integration) : preserveFullModePatchInputs(run);
 }
 function survivingCodingAgentPatchFields(projectedRun, fields) {
@@ -17692,7 +17693,7 @@ function survivingCodingAgentPatchFields(projectedRun, fields) {
   });
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/constants.js
 var UPLOAD_ACCOUNT_FINGERPRINT_PREFIX = "account_";
 var UPLOAD_DESTINATION_ID_PREFIX = "destination_";
 var UPLOAD_FINGERPRINT_LENGTH = 32;
@@ -17761,7 +17762,7 @@ var UPLOAD_SAMPLING_HASH = "sha256";
 var UPLOAD_SAMPLING_BUCKET_BYTES = 6;
 var UPLOAD_DOTTED_ORDER_ROOT_ID = /^\d{8}T\d+Z([0-9a-f-]{36})/i;
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/client.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/client.js
 function createUploadClient(options) {
   const { apiKey, apiUrl, workspaceId, anonymizer, redactedFields } = options;
   return new Client({
@@ -17782,7 +17783,7 @@ function createUploadClient(options) {
   });
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/destination-identity.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/destination-identity.js
 import { createHash as createHash3 } from "node:crypto";
 function resolveUploadDestinationIdentities(options) {
   if (!Array.isArray(options.destinations) || options.destinations.length === 0) {
@@ -18120,7 +18121,7 @@ function createSecretAnonymizer(options) {
   return createAnonymizer(rules, { maxDepth: options?.maxDepth ?? 24 });
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/redaction.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/redaction.js
 function createUploadAnonymizer(enabled, extraRules) {
   if (!enabled)
     return void 0;
@@ -18150,7 +18151,7 @@ function normalizedRedactedFields(value) {
   return UPLOAD_REDACTED_FIELDS.filter((field4) => value.includes(field4));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/destinations.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/destinations.js
 function resolveUploadDestinations(options) {
   const resolved = resolveUploadDestinationIdentities(options);
   const destinations = resolved.destinations.map((destination) => {
@@ -18170,7 +18171,7 @@ function resolveUploadDestinations(options) {
   return { accountFingerprint: resolved.accountFingerprint, destinations };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/client-cache.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/client-cache.js
 function createUploadClientCache() {
   const clientsByMode = /* @__PURE__ */ new Map();
   return {
@@ -18189,7 +18190,7 @@ function createUploadClientCache() {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/errors.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/errors.js
 var UploadError = class extends Error {
   retryable;
   status;
@@ -18205,7 +18206,7 @@ function isAlreadyReceived(cause) {
   return failureStatus(cause) === UPLOAD_ALREADY_RECEIVED_STATUS && describe(cause).includes(UPLOAD_ALREADY_RECEIVED_MESSAGE);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/runtime-metadata.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/runtime-metadata.js
 function applyRuntimeMetadata(payload, privacyMode) {
   if (privacyMode !== "full")
     return;
@@ -18223,7 +18224,7 @@ function applyRuntimeMetadata(payload, privacyMode) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/replica-identifiers.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/replica-identifiers.js
 import { createHash as createHash4 } from "node:crypto";
 function contextForDestination(context, destination) {
   if (destination.sourceProjectName === void 0)
@@ -18267,7 +18268,7 @@ function remapReplicaDottedOrder(dottedOrder, projectName) {
   }).join(".");
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/replica-updates.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/replica-updates.js
 function applyReplicaPatchUpdates(payload, destination, privacyMode) {
   if (privacyMode !== "full" || destination.updates === void 0)
     return;
@@ -18294,7 +18295,7 @@ function mergeReplicaExtra(baseValue, updateValue) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/deadline.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/deadline.js
 async function withDeadline(work) {
   let timer;
   const expired = new Promise((_resolve, reject) => {
@@ -18307,7 +18308,7 @@ async function withDeadline(work) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/sampling.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/sampling.js
 import { createHash as createHash5 } from "node:crypto";
 function samplingRate(environment) {
   for (const name of UPLOAD_SAMPLING_RATE_VARIABLES) {
@@ -18330,7 +18331,7 @@ function traceIdOf(run) {
   return run.trace_id ?? UPLOAD_DOTTED_ORDER_ROOT_ID.exec(run.dotted_order ?? "")?.[1] ?? run.id;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/timestamps.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/timestamps.js
 function startTimeFromDottedOrder(dottedOrder) {
   if (typeof dottedOrder !== "string")
     return void 0;
@@ -18349,7 +18350,7 @@ function startTimeText(supplied, dottedOrder) {
   return startTimeFromDottedOrder(dottedOrder);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/upload.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/upload.js
 function createLangSmithUploadWriter(options) {
   const resolved = resolveUploadDestinations(options);
   const destinations = resolved.destinations.map(({ id }) => Object.freeze({ id }));
@@ -18602,11 +18603,11 @@ function validatePatch(submission) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/capture-wake-constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/capture-wake-constants.js
 var CAPTURE_WAKE_ERROR_NAME = "CaptureWakeError";
 var CAPTURE_WAKE_FAILURE_MESSAGE = "Trace work was saved but its worker could not start";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/capture-wake.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/capture-wake.js
 var CaptureWakeError = class extends Error {
   captureResult;
   constructor(captureResult, cause) {
@@ -18638,7 +18639,7 @@ async function readSavedCaptureWake(error2, options) {
   return saved !== void 0 && saved.capturedAtMs === record.capturedAtMs && captureContentDigest(saved) === captureContentDigest(record) ? { ...result, record: saved } : void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/constants.js
 var ROOT_RUN_EXECUTION_ORDER = 1;
 var DOTTED_ORDER_TIME_PREFIX_LENGTH = 18;
 var DOTTED_ORDER_SEGMENT_PATTERN = /^(\d{8}T\d{12}Z)([^.]+)$/u;
@@ -18676,7 +18677,7 @@ var LIFECYCLE_IDENTITY_FIELD_LABELS = [
   ["dotted_order", "Dotted order"]
 ];
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/readiness.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/readiness.js
 async function captureReadiness(scopes, destinations, readOutcome) {
   const pending = /* @__PURE__ */ new Set();
   const dropped = /* @__PURE__ */ new Set();
@@ -18696,7 +18697,7 @@ async function captureReadiness(scopes, destinations, readOutcome) {
   return pending.size > 0 ? { status: "pending", destinations: [...pending].toSorted() } : dropped.size > 0 ? { status: "dropped", destinations: [...dropped].toSorted() } : { status: "delivered", destinations: [] };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/closure.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/closure.js
 function deriveAttributionReadiness(value, integration) {
   const source = requirePlainRecord(value, "Prepared run submission");
   const metadata = prepareCodingAgentMetadataProvenance(requireOwnDataField(source, "metadata"), integration, "full");
@@ -18837,7 +18838,7 @@ function field2(value, key) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value[key] : void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/identity.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/identity.js
 function createRunIdentity(input) {
   const id = requireNonBlankString(input.id, "Run ID");
   const start_time = requireTimestamp(input.start_time);
@@ -18897,7 +18898,7 @@ function dottedOrderSegment(startTime, runId) {
   return `${precisionTime.replace(DOTTED_ORDER_STRIP_PATTERN, "")}${runId}`;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/projection.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/projection.js
 function projectPostSubmission(source, common, priorIdentity) {
   const { integration, privacyMode, redaction } = common;
   const run = canonicalIdentity(normalizedRunSnapshot(requireOwnDataField(source, "run")), priorIdentity);
@@ -19164,7 +19165,7 @@ function requiredText(source, key, name) {
   return requireNonBlankString(requireOwnDataField(source, key), name);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/projection.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/projection.js
 function projectCapture(record, integration) {
   const rawPayload = canonicalJsonObject(record.normalizedPayload, "Stored run payload");
   const submission = projectSubmission({ ...rawPayload, metadata: record.metadataProvenance }, integration);
@@ -19252,7 +19253,7 @@ function closureRank(state) {
   return state === "authoritative" ? 2 : state === "provisional" ? 1 : 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/constants.js
 var REPOSITORY_NAME_KEY = GIT_METADATA_KEYS.repository;
 var SETTLEMENT_EVENT_ID_PREFIX = "turn-settlement-";
 var SETTLEMENT_DROPPED_RUN_WARNING = "Trace work for run {runId} was dropped, so it is left out; the rest of its turn is still being finished.";
@@ -19260,7 +19261,7 @@ var SETTLEMENT_ATTRIBUTION_LOST_MESSAGE = "Settlement metadata could not preserv
 var SETTLEMENT_QUIET_TURN_MS = 2 * 60 * 60 * 1e3;
 var SETTLEMENT_NEVER_ENDED_WARNING = "Turn {turnId} never ended, so it was finished with the work saved for it; its root run may stay open.";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/recorded-run.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/recorded-run.js
 function recordRun(events) {
   const latest = events.at(-1);
   const run = latest.payload.run;
@@ -19303,10 +19304,10 @@ function mergeMetadataObject(previous, current) {
   return { ...previous, ...current };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/revision.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/revision.js
 import { createHash as createHash6 } from "node:crypto";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/source-order.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/source-order.js
 function uniqueScopes(scopes) {
   const unique = /* @__PURE__ */ new Map();
   for (const scope of scopes)
@@ -19408,7 +19409,7 @@ function report(turnId, status, reason, runIds = [], destinations = []) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/revision.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/revision.js
 function settlementEventId(turnId, runId, dependencies, rootRunId, childRunIds, attribution) {
   const revision = createHash6("sha256").update(JSON.stringify({
     turnId,
@@ -19421,7 +19422,7 @@ function settlementEventId(turnId, runId, dependencies, rootRunId, childRunIds, 
   return `${SETTLEMENT_EVENT_ID_PREFIX}${revision}`;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/run-state.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/run-state.js
 function hasCausalRunError(events) {
   let hasError = false;
   for (const { payload } of events) {
@@ -19453,7 +19454,7 @@ function retainedEndTime(events) {
   return endTime;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/settlement.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/settlement.js
 function attributionOf(metadata) {
   const carried = {};
   const named = withBothGitMetadataNames(metadata ?? {});
@@ -19496,7 +19497,7 @@ function settledTurnMetadata(base, record) {
   return missing.length === 0 ? base : { ...base, ...Object.fromEntries(missing) };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/settle-turn.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/settle-turn.js
 function unsettled(settlementReport) {
   return { report: settlementReport, patches: [], captured: 0 };
 }
@@ -19737,7 +19738,7 @@ async function settleOneTurn(turnId, events, generated, allByRunId, options) {
   return captureTurnPatches(state, requiredRunIds, currentByRunId, generated, options);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/pass.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/settlement/pass.js
 async function settleCapturedTurns(options) {
   if (options.destinations.length === 0)
     throw new TypeError("At least one settlement destination is required");
@@ -19799,7 +19800,7 @@ async function refreshSettlementProgress(work, destinations, readOutcome) {
   return { captured: work.progress.captured, turns };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/validation/snapshot.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/validation/snapshot.js
 function snapshotData(value) {
   return copySnapshot(value, /* @__PURE__ */ new WeakMap());
 }
@@ -19839,7 +19840,7 @@ function copySnapshot(value, copies) {
   return copy;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/turn-removal.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/turn-removal.js
 async function removeSettledTurns(options) {
   const known = new Set(options.knownScopes.map(turnEventKey));
   const removable = /* @__PURE__ */ new Map();
@@ -19906,7 +19907,7 @@ function field3(value, key) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value[key] : void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/bridge.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/bridge.js
 function createLifecycleBridge(options) {
   const context = createBridgeContext(options);
   return Object.freeze({
@@ -20259,10 +20260,10 @@ function restoreSubmission(record, integration) {
   return { ...projected.value.payload, metadata: projected.value.metadata };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/worker.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/worker.js
 import { join as join14, resolve as resolve10 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/constants.js
 var RECONSTRUCTION_DRAIN_LOCK = "reconstruction";
 var RECONSTRUCTION_RUN_ID_PREFIX = "reconstruction:";
 var RECONSTRUCTION_MAPPING_EVENT_ID_PREFIX = "reconstruction-map:";
@@ -20385,14 +20386,14 @@ var RECONSTRUCTION_LABEL_SOURCE_REF = "Source ref";
 var RECONSTRUCTION_LABEL_SOURCE_REF_FIELD = "source ref";
 var RECONSTRUCTION_SUBMISSION_INVALID_MESSAGE = "Reconstruction submission is invalid";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/known-keys.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/known-keys.js
 function assertKnownKeys(record, required, optional, message) {
   const keys = Object.keys(record);
   if (required.some((key) => !keys.includes(key)) || keys.some((key) => !required.includes(key) && !optional.includes(key)))
     throw new TypeError(message);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/job-validation.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/job-validation.js
 function readEventId(output, seen) {
   const eventId = requireNonBlankString(requireOwnDataField(output, "eventId"), RECONSTRUCTION_LABEL_EVENT_ID);
   validateIdentifier(eventId, RECONSTRUCTION_LABEL_EVENT_ID_FIELD);
@@ -20663,7 +20664,7 @@ function validateTurnEvidence(value) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/job-records.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/job-records.js
 function snapshotJob(job) {
   return Object.freeze({
     ...job,
@@ -20861,7 +20862,7 @@ function mappingScope(job) {
   return { ...scopeOf(job), eventId };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/job-processing.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/job-processing.js
 async function processJob(candidate, context) {
   const { job, scope } = candidate;
   const retry = candidate.entry.record.delivery?.retries[job.accountFingerprint];
@@ -20979,7 +20980,7 @@ async function recordTerminal(store, scope, accountFingerprint, outcome, reason)
   return result.status === "recorded";
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/worker.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/worker.js
 function createReconstructionWorker(options) {
   const integration = options.integration;
   const sessionId = requireNonBlankString(options.sessionId, "Session ID");
@@ -21134,7 +21135,7 @@ async function summarizePending(context) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/pass-results.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/pass-results.js
 function reconstructionPassResult(result) {
   if (result.status === "busy")
     return "retryable-failure";
@@ -21153,10 +21154,10 @@ function waitingOnBackoff(result) {
   return result.pending > 0 && result.nextRetryAtMs !== void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/options.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/options.js
 import { resolve as resolve11 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/constants.js
 var TRACING_ENGINE_FOREIGN_SESSION_MIN_AGE_MS = 2 * 60 * 60 * 1e3;
 var TRACING_ENGINE_BACKGROUND_RECOVERY_REPORT_ERROR = "Background recovery report callback failed";
 var TRACING_ENGINE_BACKGROUND_RECOVERY_SESSION_CALLBACK_ERROR = "Background recovery session callback is required";
@@ -21173,7 +21174,7 @@ var TRACING_ENGINE_STORAGE_ROOT_REQUIRED_MESSAGE = "A storage folder is required
 var TRACING_ENGINE_RECOVERY_SETTLEMENT_CONFLICT_MESSAGE = "Recovery settlement capture conflicts with the current source state";
 var TRACING_ENGINE_MISSING_SETTLEMENT_CAPTURE_MESSAGE = "A planned settlement capture is not saved yet";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/options.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/options.js
 function snapshotEngineOptions(options) {
   if (typeof options.storageRoot !== "string" || options.storageRoot.trim() === "")
     throw new TypeError(TRACING_ENGINE_STORAGE_ROOT_REQUIRED_MESSAGE);
@@ -21214,7 +21215,7 @@ function snapshotWriterOptions(options) {
   });
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/errors.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/errors.js
 var MissingSettlementCaptureError = class extends Error {
   constructor() {
     super(TRACING_ENGINE_MISSING_SETTLEMENT_CAPTURE_MESSAGE);
@@ -21222,7 +21223,7 @@ var MissingSettlementCaptureError = class extends Error {
   }
 };
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/recovery-settlement.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/recovery-settlement.js
 async function hasUnsettledRecoverySettlement(options) {
   try {
     const work = await settleCapturedTurns({
@@ -21265,7 +21266,7 @@ async function hasUnsettledRecoverySettlement(options) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/recovery.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/recovery.js
 function validateRecoveryRequest(request) {
   const now = request.now ?? Date.now();
   if (!Number.isSafeInteger(now) || !Number.isFinite(new Date(now).getTime()))
@@ -21413,7 +21414,7 @@ async function recoverTracingSessions(runtime, request, scopeGuard) {
   return { scheduled, failed };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/background-recovery.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/background-recovery.js
 function retryableFailure(error2) {
   return { status: "failed", message: describe(error2), retryable: true };
 }
@@ -21461,7 +21462,7 @@ async function runBackgroundRecovery(runtime, options, scopeGuard) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/retry-wait.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/retry-wait.js
 import { setTimeout as delay4 } from "node:timers/promises";
 async function drainThroughBackoff(drain) {
   let waitedMs = 0;
@@ -21482,7 +21483,7 @@ async function drainThroughBackoff(drain) {
   return result;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/engine.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/engine/engine.js
 function createTracingEngine(options) {
   const config = snapshotEngineOptions(options);
   const forSession = (sessionOptions) => createSession(config, snapshotSessionOptions(sessionOptions));
@@ -21601,12 +21602,12 @@ async function drainSession(context) {
   return result;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/identity.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/tracing/upload/identity.js
 function resolveUploadDestinationFingerprint(options) {
   return resolveUploadDestinationIdentities(options).accountFingerprint;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/session.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/session.js
 function openPluginSession(options) {
   const { storageRoot, integration, sessionId, writer } = options;
   const callbacks = (id) => ({
@@ -21646,28 +21647,28 @@ function fingerprintOf(writer) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/worker-launch.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/worker-launch.js
 import { spawn } from "node:child_process";
 import { closeSync as closeSync2, mkdirSync as mkdirSync4, openSync as openSync2, statSync as statSync3, writeSync as writeSync2 } from "node:fs";
 import { dirname as dirname9, join as join15 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/binary-runtime.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/binary-runtime.js
 function builtAsBinary() {
   return typeof LS_COMPILED_BINARY !== "undefined";
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/tls/system-certificates.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/tls/system-certificates.js
 import { readFileSync as readFileSync6, writeFileSync as writeFileSync3 } from "node:fs";
 import * as tls from "node:tls";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/tls/tls-constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/tls/tls-constants.js
 var EXTRA_CERTIFICATES_VARIABLE = "NODE_EXTRA_CA_CERTS";
 var SYSTEM_CERTIFICATE_STORE = "system";
 var CERTIFICATE_FILE_ENCODING = "utf8";
 var SYSTEM_CERTIFICATES_WARNING = "Uploads will not trust this computer's certificates:";
 var CERTIFICATE_PATTERN = /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g;
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/tls/system-certificates.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/tls/system-certificates.js
 function trustSystemCertificates(file, environment, readSystem = readSystemStore) {
   const existing = environment[EXTRA_CERTIFICATES_VARIABLE] || void 0;
   if (existing === file)
@@ -21703,7 +21704,7 @@ function readIfPresent(file) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/worker-launch.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/plugin/worker-launch.js
 function launchDetachedWorker(args, options = {}) {
   const root = options.storageRoot;
   const log2 = root === void 0 ? void 0 : openLog(join15(root, WORKER_LOG_FILE_NAME));
@@ -21754,15 +21755,15 @@ function logWarning(log2, warning) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/binary.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/binary.js
 import { arch as osArch, platform as osPlatform } from "node:os";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/constants.js
 var DEFAULT_PUBLISHED_TARGETS = {
   darwin: ["arm64", "x64"]
 };
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/target.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/target.js
 function resolveTarget(options) {
   for (const field4 of ["executableName", "repository", "userAgent"]) {
     if (typeof options[field4] !== "string" || options[field4].trim() === "") {
@@ -21784,7 +21785,7 @@ function releaseAssetName(target, platform, arch, version) {
   return `${target.executableName}-${platform}-${arch}-${version}`;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/binary.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/binary.js
 function defineBinaryTarget(options) {
   const target = resolveTarget(options);
   return {
@@ -21805,7 +21806,7 @@ var binary = defineBinaryTarget({
   releasesApiOverrideEnvVar: "CC_LANGSMITH_RELEASES_API"
 });
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/settings/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/settings/constants.js
 import { constants } from "node:fs";
 var COMMON_BOOLEAN_SETTINGS = {
   enabled: { default: false, restrictive: false },
@@ -21815,13 +21816,45 @@ var COMMON_CONFIG_FILE_NAME = "langsmith.json";
 var COMMON_CONFIG_OPEN_FLAGS = constants.O_RDONLY | (constants.O_NONBLOCK ?? 0);
 var COMMON_CONFIG_ROOT_FILE_NAME = "langsmith-plugins.json";
 var COMMON_CONFIG_USER_ROOT_FILE_NAME = ".langsmith-plugins.json";
+var MANAGED_CONFIG_DIRECTORY = ".langsmith-plugins";
+var MANAGED_CONFIG_FILE_NAME = "managed.json";
+var MANAGED_CONFIG_OPEN_FLAGS = COMMON_CONFIG_OPEN_FLAGS | (constants.O_NOFOLLOW ?? 0);
+var MANAGED_CONFIG_OWNER_UID = 0;
+var GROUP_OR_OTHERS_WRITE_BITS = 18;
+var MANAGED_CONFIG_OVERRIDE_SOURCES = [
+  "env",
+  "harness",
+  "root",
+  "user",
+  "userRoot"
+];
+var MANAGED_CONFIG_UNSAFE_OWNERSHIP = "Managed config for LangSmith is not owned by root, is writable by other users, or is a symlink. This session's trace will not be captured. Please contact an admin to troubleshoot.";
+var MANAGED_CONFIG_INVALID = "Managed config for LangSmith tracing is unreadable or invalid so this session's trace will not be captured. Contact an admin to troubleshoot.";
+var MANAGED_CONFIG_OVERRIDE_WARNING = "Ignored settings the managed config locks: {overrides}.";
+var MANAGED_CONFIG_OVERRIDE_FIELD_SEPARATOR = "; ";
+var MANAGED_CONFIG_OVERRIDE_SOURCE_SEPARATOR = ", ";
+var ACCOUNT_LOOKUP_TIMEOUT_MS = 2e3;
+var MACOS_ACCOUNT_LOOKUP = "/usr/bin/id";
+var MACOS_ACCOUNT_LOOKUP_ARGUMENTS = ["-P"];
+var MACOS_ACCOUNT_HOME_FIELD = 8;
+var LINUX_ACCOUNT_LIST_FILE = "/etc/passwd";
+var LINUX_ACCOUNT_LOOKUPS = ["/usr/bin/getent", "/bin/getent"];
+var LINUX_ACCOUNT_HOME_FIELD = 5;
+var ACCOUNT_ID_FIELD = 2;
+var ACCOUNT_FIELD_SEPARATOR = ":";
+var UTF8_BOM = /^\uFEFF/;
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/settings/common-config.js
-import { closeSync as closeSync3, fstatSync, lstatSync as lstatSync2, openSync as openSync3, readFileSync as readFileSync7 } from "node:fs";
-import { join as join16 } from "node:path";
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/settings/managed-config.js
+import { closeSync as closeSync3, fstatSync, lstatSync as lstatSync2, openSync as openSync3, readFileSync as readFileSync8 } from "node:fs";
+import { homedir } from "node:os";
+import { dirname as dirname10, join as join16 } from "node:path";
+
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/settings/utils/records.js
 function object(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/settings/parse.js
 function invalid(raw) {
   return {
     status: "invalid",
@@ -21831,6 +21864,9 @@ function invalid(raw) {
       "Invalid or unreadable common config; ordinary fields discarded, privacy switches restricted."
     ]
   };
+}
+function absent() {
+  return { status: "absent", common: {}, diagnostics: [] };
 }
 function parseReplica(value) {
   if (!object(value))
@@ -21923,59 +21959,220 @@ function parseCommonConfig(value) {
   }
   return { status: "valid", common, raw: value, diagnostics };
 }
-function readCommonConfigFile(path3) {
+
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/settings/utils/account-home.js
+import { execFileSync } from "node:child_process";
+import { readFileSync as readFileSync7 } from "node:fs";
+import { userInfo } from "node:os";
+import { isAbsolute as isAbsolute3 } from "node:path";
+var cachedBunHome;
+function accountHomeDirectory() {
+  if (process.versions.bun === void 0)
+    return nodeAccountHome();
+  cachedBunHome ??= { home: bunAccountHome() };
+  return cachedBunHome.home;
+}
+function bunAccountHome() {
+  const uid = process.getuid?.();
+  if (uid === void 0)
+    return void 0;
+  if (process.platform === "darwin")
+    return macosAccountHome(uid);
+  return linuxAccountHome(uid);
+}
+function nodeAccountHome() {
+  try {
+    return userInfo().homedir;
+  } catch {
+    return void 0;
+  }
+}
+function macosAccountHome(uid) {
+  const entry = runAccountLookup(MACOS_ACCOUNT_LOOKUP, [
+    ...MACOS_ACCOUNT_LOOKUP_ARGUMENTS,
+    String(uid)
+  ]);
+  return homeField(entry, MACOS_ACCOUNT_HOME_FIELD);
+}
+function linuxAccountHome(uid) {
+  const fromFile = accountListEntry(uid);
+  if (fromFile !== void 0)
+    return homeField(fromFile, LINUX_ACCOUNT_HOME_FIELD);
+  for (const lookup of LINUX_ACCOUNT_LOOKUPS) {
+    const entry = runAccountLookup(lookup, ["passwd", String(uid)]);
+    if (entry !== void 0)
+      return homeField(entry, LINUX_ACCOUNT_HOME_FIELD);
+  }
+  return void 0;
+}
+function accountListEntry(uid) {
+  let contents;
+  try {
+    contents = readFileSync7(LINUX_ACCOUNT_LIST_FILE, "utf8");
+  } catch {
+    return void 0;
+  }
+  for (const line of contents.split("\n")) {
+    if (line.split(ACCOUNT_FIELD_SEPARATOR)[ACCOUNT_ID_FIELD] === String(uid))
+      return line;
+  }
+  return void 0;
+}
+function runAccountLookup(command, args) {
+  try {
+    return execFileSync(command, args, {
+      encoding: "utf8",
+      timeout: ACCOUNT_LOOKUP_TIMEOUT_MS,
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+  } catch {
+    return void 0;
+  }
+}
+function homeField(entry, field4) {
+  const home = entry?.split(ACCOUNT_FIELD_SEPARATOR)[field4];
+  return home !== void 0 && isAbsolute3(home) ? home : void 0;
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/settings/managed-config.js
+function onlyOwnerCanChange(stats, ownerUid) {
+  return !stats.isSymbolicLink() && stats.uid === ownerUid && (stats.mode & GROUP_OR_OTHERS_WRITE_BITS) === 0;
+}
+function managedConfigPath() {
+  if (process.platform === "win32")
+    return void 0;
+  const accountHome = accountHomeDirectory() ?? homedir();
+  return join16(accountHome, MANAGED_CONFIG_DIRECTORY, MANAGED_CONFIG_FILE_NAME);
+}
+function rejectManagedConfig(diagnostic) {
+  return { status: "invalid", common: {}, diagnostics: [diagnostic] };
+}
+function readManagedConfigFile(options = {}) {
+  const path3 = options.path ?? managedConfigPath();
+  if (path3 === void 0)
+    return absent();
+  const ownerUid = options.ownerUid ?? MANAGED_CONFIG_OWNER_UID;
   let fd;
   try {
-    fd = openSync3(path3, COMMON_CONFIG_OPEN_FLAGS);
+    fd = openSync3(path3, MANAGED_CONFIG_OPEN_FLAGS);
   } catch (error2) {
-    if (error2.code === "ENOENT") {
-      try {
-        lstatSync2(path3);
-      } catch (lstatError) {
-        if (lstatError.code === "ENOENT") {
-          return absent();
-        }
-      }
-    }
-    return invalid();
+    const code = error2.code;
+    if (code === "ENOENT")
+      return absent();
+    return rejectManagedConfig(code === "ELOOP" ? MANAGED_CONFIG_UNSAFE_OWNERSHIP : MANAGED_CONFIG_INVALID);
   }
+  let raw;
   try {
-    if (!fstatSync(fd).isFile())
-      return invalid();
-    return parseCommonConfig(JSON.parse(readFileSync7(fd, "utf8")));
+    const file = fstatSync(fd);
+    if (!file.isFile())
+      return rejectManagedConfig(MANAGED_CONFIG_INVALID);
+    if ((options.checkOwnership ?? true) && !(onlyOwnerCanChange(file, ownerUid) && onlyOwnerCanChange(lstatSync2(dirname10(path3)), ownerUid))) {
+      return rejectManagedConfig(MANAGED_CONFIG_UNSAFE_OWNERSHIP);
+    }
+    raw = JSON.parse(readFileSync8(fd, "utf8").replace(UTF8_BOM, ""));
   } catch {
-    return invalid();
+    return rejectManagedConfig(MANAGED_CONFIG_INVALID);
   } finally {
     try {
       closeSync3(fd);
     } catch {
     }
   }
+  if (!object(raw))
+    return rejectManagedConfig(MANAGED_CONFIG_INVALID);
+  const parsed = parseCommonConfig(raw);
+  if (parsed.status === "invalid")
+    return rejectManagedConfig(MANAGED_CONFIG_INVALID);
+  return { status: "valid", common: parsed.common, diagnostics: parsed.diagnostics };
 }
-function absent() {
-  return { status: "absent", common: {}, diagnostics: [] };
+
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/settings/managed-lock.js
+import { isDeepStrictEqual } from "node:util";
+function lockedValues(common) {
+  const lock = { ...common };
+  if (lock.api_url !== void 0)
+    lock.replicas ??= [];
+  if (lock.redact_extra_rules !== void 0)
+    lock.redact ??= true;
+  return lock;
 }
-function readCommonConfigFiles(options) {
-  const { cwd, home, harnessDirectory } = options;
-  return {
-    harness: readCommonConfigFile(join16(cwd, harnessDirectory, COMMON_CONFIG_FILE_NAME)),
-    root: readCommonConfigFile(join16(cwd, COMMON_CONFIG_ROOT_FILE_NAME)),
-    user: home ? readCommonConfigFile(join16(home, harnessDirectory, COMMON_CONFIG_FILE_NAME)) : absent(),
-    userRoot: home ? readCommonConfigFile(join16(home, COMMON_CONFIG_USER_ROOT_FILE_NAME)) : absent()
-  };
+function lockedFields(lock) {
+  const fields = [];
+  for (const field4 of Object.keys(lock)) {
+    if (lock[field4] !== void 0)
+      fields.push(field4);
+  }
+  return fields;
 }
+function overridesLock(value, locked) {
+  if (!object(value) || !object(locked))
+    return !isDeepStrictEqual(value, locked);
+  for (const key of Object.keys(value)) {
+    if (Object.hasOwn(locked, key) && !isDeepStrictEqual(value[key], locked[key]))
+      return true;
+  }
+  return false;
+}
+function overridingSources(sources, field4, lock) {
+  const overriding = [];
+  for (const source of MANAGED_CONFIG_OVERRIDE_SOURCES) {
+    const value = sources[source]?.[field4];
+    if (value !== void 0 && overridesLock(value, lock[field4]))
+      overriding.push(source);
+  }
+  return overriding;
+}
+function overrideDiagnostics(sources, lock) {
+  const overrides = [];
+  for (const field4 of lockedFields(lock)) {
+    const overriding = overridingSources(sources, field4, lock);
+    if (overriding.length === 0)
+      continue;
+    overrides.push(`${field4} from ${overriding.join(MANAGED_CONFIG_OVERRIDE_SOURCE_SEPARATOR)}`);
+  }
+  if (overrides.length === 0)
+    return [];
+  const list = overrides.join(MANAGED_CONFIG_OVERRIDE_FIELD_SEPARATOR);
+  return [MANAGED_CONFIG_OVERRIDE_WARNING.replace("{overrides}", list)];
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/settings/utils/warnings.js
+var warned = /* @__PURE__ */ new Set();
+function warnOnce2(lines) {
+  for (const line of lines) {
+    if (warned.has(line))
+      continue;
+    warned.add(line);
+    console.warn(line);
+  }
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/settings/common-config.js
 function resolveField(sources, field4) {
   return sources.find((source) => source[field4] !== void 0)?.[field4];
 }
 function mergeCommonConfig(sources, options = {}) {
-  const { harness = {}, root = {}, user = {}, userRoot = {}, env = {}, defaults: defaults2 = {} } = sources;
+  const { harness = {}, root = {}, user = {}, userRoot = {}, env = {}, defaults: defaults2 = {}, managed = readManagedConfigFile() } = sources;
+  const lock = lockedValues(managed.common);
   const files = [harness, root, user, userRoot];
-  const precedence = [env, ...files, defaults2];
-  const switches = options.envFirst ? precedence : [...files, env, defaults2];
-  const merged = { enabled: false, defaultMuted: false, redact: true };
+  const precedence = [lock, env, ...files, defaults2];
+  const switches = options.envFirst ? precedence : [lock, ...files, env, defaults2];
+  const merged = {
+    enabled: false,
+    defaultMuted: false,
+    redact: true,
+    locked: lockedFields(lock),
+    diagnostics: [...managed.diagnostics, ...overrideDiagnostics(sources, lock)]
+  };
   for (const field4 of ["enabled", "defaultMuted"]) {
     merged[field4] = resolveField(switches, field4) ?? COMMON_BOOLEAN_SETTINGS[field4].default;
   }
+  if (managed.status === "invalid") {
+    merged.enabled = false;
+    if (managed.diagnostics[0] !== void 0)
+      merged.managedConfigProblem = managed.diagnostics[0];
+  }
+  warnOnce2(merged.diagnostics);
   merged.api_key = resolveField(precedence, "api_key");
   merged.api_url = resolveField(precedence, "api_url");
   merged.project = resolveField(precedence, "project");
@@ -21994,6 +22191,49 @@ function toSdkReplicas(replicas) {
     ...replica.project === void 0 ? {} : { projectName: replica.project },
     ...replica.updates === void 0 ? {} : { updates: replica.updates }
   }));
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/settings/config-files.js
+import { closeSync as closeSync4, fstatSync as fstatSync2, lstatSync as lstatSync3, openSync as openSync4, readFileSync as readFileSync9 } from "node:fs";
+import { join as join17 } from "node:path";
+function readCommonConfigFile(path3) {
+  let fd;
+  try {
+    fd = openSync4(path3, COMMON_CONFIG_OPEN_FLAGS);
+  } catch (error2) {
+    if (error2.code === "ENOENT") {
+      try {
+        lstatSync3(path3);
+      } catch (lstatError) {
+        if (lstatError.code === "ENOENT") {
+          return absent();
+        }
+      }
+    }
+    return invalid();
+  }
+  try {
+    if (!fstatSync2(fd).isFile())
+      return invalid();
+    return parseCommonConfig(JSON.parse(readFileSync9(fd, "utf8")));
+  } catch {
+    return invalid();
+  } finally {
+    try {
+      closeSync4(fd);
+    } catch {
+    }
+  }
+}
+function readCommonConfigFiles(options) {
+  const { cwd, home, harnessDirectory } = options;
+  return {
+    harness: readCommonConfigFile(join17(cwd, harnessDirectory, COMMON_CONFIG_FILE_NAME)),
+    root: readCommonConfigFile(join17(cwd, COMMON_CONFIG_ROOT_FILE_NAME)),
+    user: home ? readCommonConfigFile(join17(home, harnessDirectory, COMMON_CONFIG_FILE_NAME)) : absent(),
+    userRoot: home ? readCommonConfigFile(join17(home, COMMON_CONFIG_USER_ROOT_FILE_NAME)) : absent(),
+    managed: readManagedConfigFile(options.managed)
+  };
 }
 
 // dist/src/constants.js
@@ -22074,12 +22314,12 @@ var LS_INTEGRATION_VERSION = true ? "0.5.1" : process.env.CC_LANGSMITH_INTEGRATI
 
 // dist/src/logger.js
 import { appendFileSync, mkdirSync as mkdirSync5, statSync as statSync4, renameSync as renameSync5 } from "node:fs";
-import { dirname as dirname10 } from "node:path";
+import { dirname as dirname11 } from "node:path";
 var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
 var debugEnabled = false;
 function initLogger(debug2) {
   debugEnabled = debug2;
-  mkdirSync5(dirname10(LOG_FILE), { recursive: true });
+  mkdirSync5(dirname11(LOG_FILE), { recursive: true });
 }
 function rotateIfNeeded() {
   try {
@@ -22203,18 +22443,18 @@ function attributionReady(metadata) {
 }
 
 // dist/src/repo-attribution.js
-import { dirname as dirname14, join as join19 } from "node:path";
+import { dirname as dirname15, join as join20 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/attribution.js
-import { isAbsolute as isAbsolute3 } from "node:path";
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/attribution.js
+import { isAbsolute as isAbsolute4 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/paths.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/utils/paths.js
 import { statSync as statSync5 } from "node:fs";
-import { dirname as dirname11 } from "node:path";
+import { dirname as dirname12 } from "node:path";
 function nearestExistingDirectory(path3) {
   let current = path3;
   for (; ; ) {
-    const parent = dirname11(current);
+    const parent = dirname12(current);
     const reachedFilesystemRoot = parent === current;
     if (reachedFilesystemRoot)
       return void 0;
@@ -22227,11 +22467,11 @@ function nearestExistingDirectory(path3) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/github-login.js
-import { mkdirSync as mkdirSync6, readFileSync as readFileSync8, renameSync as renameSync6, writeFileSync as writeFileSync4 } from "node:fs";
-import { dirname as dirname12 } from "node:path";
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/github-login.js
+import { mkdirSync as mkdirSync6, readFileSync as readFileSync10, renameSync as renameSync6, writeFileSync as writeFileSync4 } from "node:fs";
+import { dirname as dirname13 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/constants.js
 var GIT_LOCATION_ENV_KEYS = [
   "GIT_DIR",
   "GIT_WORK_TREE",
@@ -22273,8 +22513,8 @@ var GH_LOGIN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
 var GH_LOGIN_NULL_OUTPUT = "null";
 var GH_LOGIN_RETRY_AFTER_MS = 24 * 60 * 60 * 1e3;
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/repository.js
-import { execFileSync } from "node:child_process";
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/repository.js
+import { execFileSync as execFileSync2 } from "node:child_process";
 import { resolve as resolve12 } from "node:path";
 function parseRepoName(remoteUrl) {
   const value = remoteUrl.trim();
@@ -22313,7 +22553,7 @@ function gitOutput(args, cwd) {
   const env = { ...process.env, LC_ALL: "C", LANG: "C" };
   for (const key of GIT_LOCATION_ENV_KEYS)
     delete env[key];
-  return execFileSync("git", args, {
+  return execFileSync2("git", args, {
     cwd,
     env,
     encoding: "utf-8",
@@ -22404,7 +22644,7 @@ function getRepositoryMetadata(cwd) {
   return withBothGitMetadataNames(metadata);
 }
 function githubLoginLookup() {
-  return execFileSync(GH_LOGIN_COMMAND, GH_LOGIN_ARGUMENTS, {
+  return execFileSync2(GH_LOGIN_COMMAND, GH_LOGIN_ARGUMENTS, {
     encoding: "utf-8",
     timeout: GH_LOGIN_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "ignore"]
@@ -22414,7 +22654,7 @@ function isGitHubLogin(printed) {
   return printed !== GH_LOGIN_NULL_OUTPUT && GH_LOGIN_PATTERN.test(printed);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/github-login.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/github-login.js
 function createGitHubLoginFallback(options) {
   const now = options.now ?? Date.now;
   const retryAfterMs = options.retryAfterMs ?? GH_LOGIN_RETRY_AFTER_MS;
@@ -22422,7 +22662,7 @@ function createGitHubLoginFallback(options) {
   let login;
   function failedRecently() {
     try {
-      const marker = JSON.parse(readFileSync8(options.markerPath, "utf-8"));
+      const marker = JSON.parse(readFileSync10(options.markerPath, "utf-8"));
       const failed = new Date(marker.failed).getTime();
       const since = now() - failed;
       return since >= 0 && since < retryAfterMs;
@@ -22432,7 +22672,7 @@ function createGitHubLoginFallback(options) {
   }
   function recordFailure2() {
     try {
-      mkdirSync6(dirname12(options.markerPath), { recursive: true });
+      mkdirSync6(dirname13(options.markerPath), { recursive: true });
       const partial = `${options.markerPath}.${process.pid}`;
       const marker = { failed: new Date(now()).toISOString() };
       writeFileSync4(partial, JSON.stringify(marker));
@@ -22458,11 +22698,11 @@ function createGitHubLoginFallback(options) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/paths.js
-import { readFileSync as readFileSync9, statSync as statSync6 } from "node:fs";
-import { dirname as dirname13, join as join17, resolve as resolve13 } from "node:path";
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/paths.js
+import { readFileSync as readFileSync11, statSync as statSync6 } from "node:fs";
+import { dirname as dirname14, join as join18, resolve as resolve13 } from "node:path";
 function gitMarkerAt(directory) {
-  const marker = join17(directory, GIT_DIRECTORY_NAME);
+  const marker = join18(directory, GIT_DIRECTORY_NAME);
   try {
     if (statSync6(marker).isDirectory())
       return GIT_MARKERS.REPOSITORY_ROOT;
@@ -22473,7 +22713,7 @@ function gitMarkerAt(directory) {
 }
 function pointsAtGitDirectory(directory, marker) {
   try {
-    const pointer = readFileSync9(marker, "utf-8").match(GIT_FILE_POINTER)?.[1];
+    const pointer = readFileSync11(marker, "utf-8").match(GIT_FILE_POINTER)?.[1];
     return pointer !== void 0 && statSync6(resolve13(directory, pointer)).isDirectory();
   } catch {
     return false;
@@ -22487,7 +22727,7 @@ function rootFromGitMarker(directory) {
       return current;
     if (marker === GIT_MARKERS.ONLY_GIT_CAN_SAY)
       return void 0;
-    const parent = dirname13(current);
+    const parent = dirname14(current);
     const reachedFilesystemRoot = parent === current;
     if (reachedFilesystemRoot)
       return null;
@@ -22495,7 +22735,7 @@ function rootFromGitMarker(directory) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@0.4.4_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/attribution.js
+// node_modules/.pnpm/@langchain+plugins-base@0.4.5_langsmith@0.10.11/node_modules/@langchain/plugins-base/dist/git/attribution.js
 function createRepositoryAttributor(options) {
   const rootByDirectory = /* @__PURE__ */ new Map();
   const attributionByRoot = /* @__PURE__ */ new Map();
@@ -22541,7 +22781,7 @@ function createRepositoryAttributor(options) {
     if (namedSomewhereNothingSits)
       return base;
     const path3 = origin.path ?? origin.cwd;
-    if (!path3 || !isAbsolute3(path3))
+    if (!path3 || !isAbsolute4(path3))
       return base;
     const root = rootForPath(path3);
     const gitCouldNotAnswer = root === void 0;
@@ -22600,16 +22840,16 @@ function withoutRepositoryKeys(base, pinned) {
 }
 
 // dist/src/config.js
-import { readFileSync as readFileSync10 } from "node:fs";
-import { homedir, userInfo } from "node:os";
-import { join as join18 } from "node:path";
+import { readFileSync as readFileSync12 } from "node:fs";
+import { homedir as homedir2, userInfo as userInfo2 } from "node:os";
+import { join as join19 } from "node:path";
 function readAnthropicUserId() {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE;
   if (!homeDir)
     return void 0;
-  const configPath = join18(homeDir, ".claude.json");
+  const configPath = join19(homeDir, ".claude.json");
   try {
-    const raw = readFileSync10(configPath, "utf-8");
+    const raw = readFileSync12(configPath, "utf-8");
     const parsed = JSON.parse(raw);
     const userId = parsed?.userID;
     if (typeof userId === "string" && userId.length > 0) {
@@ -22621,7 +22861,7 @@ function readAnthropicUserId() {
   return void 0;
 }
 function readLocalUsername() {
-  return userInfo().username;
+  return userInfo2().username;
 }
 function pinnedRepositoryKeys(metadata) {
   return metadata?.[PINNED_REPOSITORY_KEYS] ?? NO_PINNED_KEYS;
@@ -22638,11 +22878,11 @@ function envBoolean(field4) {
   return setting.restrictive;
 }
 function resolveStateFilePath() {
-  return process.env.STATE_FILE ?? join18(homedir(), ...STATE_FILE_DEFAULT);
+  return process.env.STATE_FILE ?? join19(homedir2(), ...STATE_FILE_DEFAULT);
 }
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
-  const homeDir = homedir();
+  const homeDir = homedir2();
   const stateFilePath = resolveStateFilePath();
   const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
   let replicas;
@@ -22713,14 +22953,15 @@ function loadConfig(options) {
       api_url: process.env.LANGSMITH_ENDPOINT,
       project: process.env.CC_LANGSMITH_PROJECT,
       metadata: customMetadata,
-      redact: process.env.CC_LANGSMITH_REDACT === void 0 ? void 0 : redact
-      // Environment rules retain the existing tolerant parser.
+      redact: process.env.CC_LANGSMITH_REDACT === void 0 ? void 0 : redact,
+      redact_extra_rules: redactExtraRules
     },
     defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" }
   }, { envFirst: true });
-  if (replicas === void 0)
+  if (replicas === void 0 || common.locked.includes("replicas")) {
     replicas = toSdkReplicas(common.replicas);
-  redactExtraRules ??= common.redact_extra_rules;
+  }
+  redactExtraRules = common.redact_extra_rules;
   customMetadata = common.metadata && withBothGitMetadataNames(common.metadata);
   const anthropicUserId = readAnthropicUserId();
   const localUsername = readLocalUsername();
@@ -22744,13 +22985,14 @@ function loadConfig(options) {
     replicas,
     customMetadata,
     redact: common.redact,
-    redactExtraRules
+    redactExtraRules,
+    ...common.managedConfigProblem === void 0 ? {} : { managedConfigProblem: common.managedConfigProblem }
   };
 }
 
 // dist/src/repo-attribution-paths.js
 import { existsSync as existsSync3 } from "node:fs";
-import { isAbsolute as isAbsolute4, resolve as resolve14 } from "node:path";
+import { isAbsolute as isAbsolute5, resolve as resolve14 } from "node:path";
 function toolPathFromInput(toolInput, sessionCwd) {
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
     return { namedAPath: false };
@@ -22762,9 +23004,9 @@ function toolPathFromInput(toolInput, sessionCwd) {
     if (typeof value !== "string" || value.length === 0)
       continue;
     namedAPath = true;
-    if (isAbsolute4(value))
+    if (isAbsolute5(value))
       return { path: value, namedAPath };
-    if (!sessionCwd || !isAbsolute4(sessionCwd))
+    if (!sessionCwd || !isAbsolute5(sessionCwd))
       continue;
     const resolved = resolve14(sessionCwd, value);
     if (existsSync3(resolved))
@@ -22777,7 +23019,7 @@ function toolPathFromInput(toolInput, sessionCwd) {
 var attributor;
 function repositoryAttributor() {
   attributor ??= createRepositoryAttributor({
-    githubLoginMarkerPath: join19(dirname14(resolveStateFilePath()), GH_LOGIN_MARKER_FILE)
+    githubLoginMarkerPath: join20(dirname15(resolveStateFilePath()), GH_LOGIN_MARKER_FILE)
   });
   return attributor;
 }
@@ -22917,7 +23159,7 @@ function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, c
 
 // dist/src/tracing-policy.js
 import { mkdir as mkdir6 } from "node:fs/promises";
-import { dirname as dirname15 } from "node:path";
+import { dirname as dirname16 } from "node:path";
 
 // dist/src/utils/records.js
 function isRecord(value) {
@@ -22965,7 +23207,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     throw new Error("A nonempty session ID and a full/metadata tracing mode are required");
   }
   const path3 = tracingPolicyPath(stateFilePath);
-  await mkdir6(dirname15(path3), { recursive: true });
+  await mkdir6(dirname16(path3), { recursive: true });
   return updatePolicyFile(path3, POLICY_FILE, (policy) => {
     policy.threads = { ...policy.threads, [sessionId]: mode };
   });
@@ -22978,7 +23220,7 @@ function resolveTurnTracingMode(config, sessionId, ...snapshots) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync11, statSync as statSync7, fstatSync as fstatSync2, openSync as openSync4, readSync, closeSync as closeSync4 } from "node:fs";
+import { readFileSync as readFileSync13, statSync as statSync7, fstatSync as fstatSync3, openSync as openSync5, readSync, closeSync as closeSync5 } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 function readTranscript(filePath, afterLine = -1, cutAtByte) {
   const endsBeforeCut = (offset, line) => {
@@ -22997,7 +23239,7 @@ function readTranscript(filePath, afterLine = -1, cutAtByte) {
     return { messages: [], lastLine: afterLine };
   }
   if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync11(filePath, "utf-8");
+    const raw = readFileSync13(filePath, "utf-8");
     const messages = [];
     let lastLine = afterLine;
     let i = -1;
@@ -23020,7 +23262,7 @@ function readTranscript(filePath, afterLine = -1, cutAtByte) {
     }
     return { messages, lastLine };
   }
-  const fd = openSync4(filePath, "r");
+  const fd = openSync5(filePath, "r");
   try {
     const chunkSize = 2 * 1024 * 1024;
     const buf = Buffer.alloc(chunkSize);
@@ -23071,7 +23313,7 @@ function readTranscript(filePath, afterLine = -1, cutAtByte) {
     }
     return { messages, lastLine };
   } finally {
-    closeSync4(fd);
+    closeSync5(fd);
   }
 }
 function getTranscriptEndLine(filePath) {
@@ -23080,11 +23322,11 @@ function getTranscriptEndLine(filePath) {
     if (size === 0)
       return -1;
     if (size <= MAX_FULL_READ_BYTES) {
-      const raw = readFileSync11(filePath, "utf-8");
+      const raw = readFileSync13(filePath, "utf-8");
       const lines = raw.split("\n").filter((l) => l.trim() !== "");
       return lines.length > 0 ? lines.length - 1 : -1;
     }
-    const fd = openSync4(filePath, "r");
+    const fd = openSync5(filePath, "r");
     try {
       const chunkSize = 1024 * 1024;
       const buf = Buffer.alloc(chunkSize);
@@ -23107,7 +23349,7 @@ function getTranscriptEndLine(filePath) {
         lineCount++;
       return lineCount > 0 ? lineCount - 1 : -1;
     } finally {
-      closeSync4(fd);
+      closeSync5(fd);
     }
   } catch {
     return -1;
@@ -23116,8 +23358,8 @@ function getTranscriptEndLine(filePath) {
 function readRuntimeVersion(filePath) {
   let fd;
   try {
-    fd = openSync4(filePath, "r");
-    const size = fstatSync2(fd).size;
+    fd = openSync5(filePath, "r");
+    const size = fstatSync3(fd).size;
     if (size === 0)
       return void 0;
     const window2 = 64 * 1024;
@@ -23139,7 +23381,7 @@ function readRuntimeVersion(filePath) {
   } catch {
   } finally {
     if (fd !== void 0)
-      closeSync4(fd);
+      closeSync5(fd);
   }
   return void 0;
 }
@@ -23336,7 +23578,7 @@ function skillNameFromTool(toolName, toolInput) {
 }
 
 // dist/src/engine-session.js
-import { dirname as dirname16, join as join20 } from "node:path";
+import { dirname as dirname17, join as join21 } from "node:path";
 
 // dist/src/engine-writer.js
 function writerOptions(config) {
@@ -23363,7 +23605,7 @@ function writerReplica(replica) {
 // dist/src/engine-session.js
 function openSession(config, cwd, sessionId, reconstruct = settleToolRuns) {
   const writer = writerOptions(config);
-  const storageRoot = join20(dirname16(config.stateFilePath), ENGINE_STORAGE_DIR_NAME);
+  const storageRoot = join21(dirname17(config.stateFilePath), ENGINE_STORAGE_DIR_NAME);
   const context = openPluginSession({
     storageRoot,
     integration: LS_INTEGRATION,
@@ -24735,7 +24977,7 @@ function terminalLink(url) {
 }
 async function describeThreadLinks(config, sessionId) {
   if (!config.enabled) {
-    return "LangSmith tracing is disabled. Enable it and send a prompt first.";
+    return config.managedConfigProblem ?? "LangSmith tracing is disabled. Enable it and send a prompt first.";
   }
   const destinations = config.replicas?.length ? config.replicas : [{}];
   const results = await Promise.all(destinations.map(async (replica) => {
@@ -24798,7 +25040,9 @@ async function main4() {
         reason = `Thread tracing ${command === "mute" ? "muted (metadata-only)" : "unmuted (full content)"}. Preference saved for the next turn; the current turn is unchanged.`;
         if (result?.warning)
           reason += ` Warning: ${result.warning}.`;
-        if (!commandConfig.enabled) {
+        if (commandConfig.managedConfigProblem) {
+          reason += ` ${commandConfig.managedConfigProblem}`;
+        } else if (!commandConfig.enabled) {
           reason += " Master tracing is disabled; this preference does not enable it.";
         } else if (!commandConfig.apiKey && (!commandConfig.replicas || commandConfig.replicas.length === 0)) {
           reason += " Tracing remains inactive until credentials are configured.";
@@ -24815,8 +25059,23 @@ async function main4() {
     return;
   }
   const config = initHook(input.cwd);
-  if (!config)
+  if (!config) {
+    const { managedConfigProblem, stateFilePath } = loadConfig({ cwd: input.cwd });
+    if (managedConfigProblem) {
+      let firstInSession = false;
+      await atomicUpdateState(stateFilePath, (s) => {
+        const ss = getSessionState(s, input.session_id);
+        if (ss.managed_notice_shown)
+          return s;
+        firstInSession = true;
+        const updated = (/* @__PURE__ */ new Date()).toISOString();
+        return { ...s, [input.session_id]: { ...ss, managed_notice_shown: true, updated } };
+      });
+      if (firstInSession)
+        console.log(JSON.stringify({ systemMessage: managedConfigProblem }));
+    }
     return;
+  }
   debug(`UserPromptSubmit hook started, session=${input.session_id}`);
   if (input.agent_id || input.agent_type) {
     debug("Skipping UserPromptSubmit for subagent \u2014 Stop hook handles tracing");
@@ -25277,10 +25536,10 @@ async function runQueuedClosings(workerConfig, sessionId) {
 
 // dist/src/legacy-import.js
 import { createHmac } from "node:crypto";
-import { basename as basename4, dirname as dirname17, join as join21 } from "node:path";
+import { basename as basename4, dirname as dirname18, join as join22 } from "node:path";
 
 // dist/src/utils/files.js
-import { lstatSync as lstatSync3, readdirSync as readdirSync2, readFileSync as readFileSync12, rmdirSync as rmdirSync2, unlinkSync as unlinkSync3 } from "node:fs";
+import { lstatSync as lstatSync4, readdirSync as readdirSync2, readFileSync as readFileSync14, rmdirSync as rmdirSync2, unlinkSync as unlinkSync3 } from "node:fs";
 function listDirectory(path3) {
   try {
     return readdirSync2(path3).sort();
@@ -25290,7 +25549,7 @@ function listDirectory(path3) {
 }
 function entryInfo(path3) {
   try {
-    return lstatSync3(path3);
+    return lstatSync4(path3);
   } catch {
     return void 0;
   }
@@ -25314,7 +25573,7 @@ function removeEmptyFolder(path3) {
 }
 function readText(path3) {
   try {
-    return readFileSync12(path3, "utf-8");
+    return readFileSync14(path3, "utf-8");
   } catch {
     return "";
   }
@@ -25330,10 +25589,10 @@ function readJson(text) {
 // dist/src/legacy-import.js
 function legacyRuns(config) {
   const origin = legacyOrigin(config);
-  const root = dirname17(config.stateFilePath);
+  const root = dirname18(config.stateFilePath);
   const scan = { runs: [], settled: [], unreadable: [] };
   const { runs } = scan;
-  for (const [sessionId, file] of legacyFiles(join21(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
+  for (const [sessionId, file] of legacyFiles(join22(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
     const entry = readJson(readText(file));
     if (!entry?.run)
       scan.unreadable.push(file);
@@ -25350,7 +25609,7 @@ function legacyRuns(config) {
       run: { ...run, metadata: legacyOptions(base ?? {}, sessionId, "tool") }
     });
   }
-  for (const [sessionId, file] of legacyFiles(join21(root, TURN_RECORD_DIR_NAME), LEGACY_TURN_FILE)) {
+  for (const [sessionId, file] of legacyFiles(join22(root, TURN_RECORD_DIR_NAME), LEGACY_TURN_FILE)) {
     const record = readTurnRecord(file);
     if (!record.root || !record.closed || record.origin !== origin)
       continue;
@@ -25414,7 +25673,7 @@ function legacyOptions(metadata, sessionId, runType) {
 function legacyFiles(root, pattern) {
   if (!entryInfo(root)?.isDirectory())
     return [];
-  return listDirectory(root).filter((sessionId) => entryInfo(join21(root, sessionId))?.isDirectory()).flatMap((sessionId) => listDirectory(join21(root, sessionId)).map((name) => [sessionId, join21(root, sessionId, name)]).filter(([, file]) => pattern.test(basename4(file)) && entryInfo(file)?.isFile()));
+  return listDirectory(root).filter((sessionId) => entryInfo(join22(root, sessionId))?.isDirectory()).flatMap((sessionId) => listDirectory(join22(root, sessionId)).map((name) => [sessionId, join22(root, sessionId, name)]).filter(([, file]) => pattern.test(basename4(file)) && entryInfo(file)?.isFile()));
 }
 function readTurnRecord(path3) {
   const record = {
@@ -25448,7 +25707,7 @@ function readTurnRecord(path3) {
 }
 
 // dist/src/legacy-sweep.js
-import { join as join22, dirname as dirname18 } from "node:path";
+import { join as join23, dirname as dirname19 } from "node:path";
 function idleMs(info, now) {
   return info ? now - info.mtimeMs : 0;
 }
@@ -25463,7 +25722,7 @@ function mayAgeOut(name, path3, removable) {
 }
 function sweepSession(path3, removable, now) {
   const aged = listDirectory(path3).filter((name) => {
-    const entry = join22(path3, name);
+    const entry = join23(path3, name);
     return mayAgeOut(name, entry, removable) && removeIfOld(entry, now);
   }).length;
   if (aged > 0 || idleMs(entryInfo(path3), now) >= LEGACY_EMPTY_FOLDER_IDLE_MS) {
@@ -25476,7 +25735,7 @@ function sweepFolder(path3, removable, now) {
     return 0;
   let aged = 0;
   for (const name of listDirectory(path3)) {
-    const entry = join22(path3, name);
+    const entry = join23(path3, name);
     if (entryInfo(entry)?.isDirectory())
       aged += sweepSession(entry, removable, now);
     else if (LEGACY_FLUSH_LOCK_FILE.test(name))
@@ -25486,8 +25745,8 @@ function sweepFolder(path3, removable, now) {
   return aged;
 }
 function sweepLegacyLeftovers(stateFilePath, removable, now = Date.now()) {
-  const root = dirname18(stateFilePath);
-  return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join22(root, folder), removable, now), 0);
+  const root = dirname19(stateFilePath);
+  return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join23(root, folder), removable, now), 0);
 }
 
 // dist/src/engine-legacy.js

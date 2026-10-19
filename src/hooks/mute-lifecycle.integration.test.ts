@@ -24,6 +24,7 @@ const h = vi.hoisted(() => ({
   errors: [] as unknown[],
   readAt: 0,
   endLine: -1,
+  managedProblem: undefined as string | undefined,
 }));
 vi.mock("langsmith", () => ({
   Client: class {
@@ -80,19 +81,27 @@ vi.mock("../repo-attribution.js", async (original) => ({
 }));
 vi.mock("../utils/stdin.js", () => ({ readStdin: async () => h.input }));
 vi.mock("../utils/hook-init.js", () => ({
-  initHook: () => ({
-    apiKey: "test",
-    project: "test",
-    stateFilePath: "/unused",
-    defaultMuted: h.defaultMuted,
-    redact: false,
-    customMetadata: { custom: "PRIVATE_MARKER", ls_model_name: "PRIVATE_MARKER" },
-  }),
+  initHook: () =>
+    h.managedProblem
+      ? null
+      : {
+          apiKey: "test",
+          project: "test",
+          stateFilePath: "/unused",
+          defaultMuted: h.defaultMuted,
+          redact: false,
+          customMetadata: { custom: "PRIVATE_MARKER", ls_model_name: "PRIVATE_MARKER" },
+        },
   expandHome: (path: string) => path,
 }));
 vi.mock("../config.js", async (original) => ({
   ...(await original<typeof import("../config.js")>()),
-  loadConfig: () => ({ stateFilePath: "/unused", apiKey: "test", enabled: true }),
+  loadConfig: () => ({
+    stateFilePath: "/unused",
+    apiKey: "test",
+    enabled: !h.managedProblem,
+    managedConfigProblem: h.managedProblem,
+  }),
 }));
 vi.mock("../tracing-policy.js", async (original) => {
   const policy = await original<typeof import("../tracing-policy.js")>();
@@ -195,6 +204,7 @@ function reset(mode: TracingMode) {
   h.errors = [];
   h.beforePost = undefined;
   h.endLine = -1;
+  h.managedProblem = undefined;
 }
 const HOOK_EVENT_BY_NAME = {
   prompt: "UserPromptSubmit",
@@ -451,6 +461,21 @@ describe("closing hooks hand their work to the uploader", () => {
     expect(h.operations.map((op) => op.config.name)).toContain("Claude");
     expect(h.state.session.queued_closings).toEqual({});
     expect(h.errors).toEqual([]);
+  });
+
+  it("shows a broken managed file's reason once per session without blocking the prompt", async () => {
+    reset("full");
+    h.managedProblem = "Managed config is broken";
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    await hook("prompt", {}, { closings: false });
+    await hook("prompt", { session_id: "next" }, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "Managed config is broken" },
+      { systemMessage: "Managed config is broken" },
+    ]);
+    expect(h.operations).toEqual([]);
+    output.mockRestore();
   });
 
   it("an interrupted turn is counted at once and later closed with the session's repository", async () => {

@@ -347,6 +347,7 @@ export interface SessionState {
    *  two runs *last* finalizes the agent; this is the notification side's "done"
    *  marker for that join. */
   notification_done_agents?: string[];
+  managed_notice_shown?: boolean;
   queued_closings?: Record<string, QueuedClosing>;
 }
 
@@ -588,6 +589,7 @@ export interface Config {
   redact: boolean;
   /** From CC_LANGSMITH_REDACT_EXTRA or the config file. */
   redactExtraRules?: StringNodeRule[];
+  managedConfigProblem?: string;
 }
 
 export type BooleanSetting = keyof typeof BOOLEAN_SETTINGS;

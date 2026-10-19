@@ -81,6 +81,10 @@ Every setting has a key you can write in the config file and a variable you can 
 
 Unless you turn `redact` off, secrets are stripped before anything is uploaded, covering API keys, JWTs, PEM blocks and common `NAME=value`, `Authorization` and URL-credential shapes. That is not a guarantee that what you upload is safe to share.
 
+### Lock settings with a managed file
+
+An admin can lock any of these settings for each user through a managed file, which overrides every other file and shell variable, at `~/.langsmith-plugins/managed.json` in each user's home. If that file is broken or not owned by root, tracing stops and Claude Code shows why once per session. See [the settings guide](https://github.com/langchain-ai/langsmith-plugin-binary/blob/main/docs/settings.md) to set it up.
+
 ## When nothing shows up
 
 - **No runs at all.** Check the plugin is installed and enabled in `/plugin`, and that tracing is switched on. A `TRACE_TO_LANGSMITH` in your shell overrides whatever the files say.

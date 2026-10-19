@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { binary } from "../binary-target.js";
 import { HOOK_EVENT_NAMES } from "../constants.js";
 import cursorHooks from "../fixtures/cursor-hooks.json" with { type: "json" };
+import { noManagedConfigEnv } from "../fixtures/no-managed-config-env.js";
 
 const EXECUTABLE_NAME = binary.target.executableName;
 
@@ -26,6 +27,7 @@ function dispatch(args: string[], prompt = "ordinary prompt", cwd = home, filler
     env: {
       HOME: home,
       PATH: "",
+      ...noManagedConfigEnv(),
       TRACE_TO_LANGSMITH: "false",
       STATE_FILE: join(home, "state.json"),
     },
@@ -68,7 +70,13 @@ describe("bundle/dispatch.js", () => {
   function dispatchPayload(event: string, payload: unknown, env: Record<string, string>) {
     return spawnSync(process.execPath, [bundle, event], {
       cwd: home,
-      env: { HOME: home, PATH: "", STATE_FILE: join(home, "state.json"), ...env },
+      env: {
+        HOME: home,
+        PATH: "",
+        STATE_FILE: join(home, "state.json"),
+        ...noManagedConfigEnv(),
+        ...env,
+      },
       input: JSON.stringify(payload),
       encoding: "utf8",
       timeout: 10000,
@@ -127,6 +135,7 @@ describe("bundle/dispatch.js", () => {
       env: {
         HOME: home,
         PATH: process.env.PATH ?? "",
+        ...noManagedConfigEnv(),
         TRACE_TO_LANGSMITH: "false",
         STATE_FILE: join(home, "state.json"),
       },
@@ -156,7 +165,7 @@ describe("bundle/dispatch.js", () => {
   it("logs and still exits 0 when a handler cannot read its input", () => {
     const result = spawnSync(process.execPath, [bundle, "PostToolUse"], {
       cwd: home,
-      env: { HOME: home, PATH: "", STATE_FILE: join(home, "state.json") },
+      env: { HOME: home, PATH: "", STATE_FILE: join(home, "state.json"), ...noManagedConfigEnv() },
       input: "not json",
       encoding: "utf8",
       timeout: 10000,

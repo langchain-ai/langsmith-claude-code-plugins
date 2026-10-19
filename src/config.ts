@@ -7,7 +7,7 @@ import {
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import type { RunTreeConfig } from "langsmith";
-import type { StringNodeRule } from "langsmith/anonymizer";
+import type { CommonRedactRule } from "@langchain/plugins-base/settings";
 import { debug, error } from "./logger.js";
 import {
   REPOSITORY_METADATA_KEYS,
@@ -119,7 +119,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
 
   // Optional user-supplied redaction rules: JSON array of { pattern, replace }.
   // `pattern` is a string (compiled with the global flag by the SDK anonymizer).
-  let redactExtraRules: StringNodeRule[] | undefined;
+  let redactExtraRules: CommonRedactRule[] | undefined;
   const providedExtra = process.env.CC_LANGSMITH_REDACT_EXTRA;
   if (providedExtra !== undefined) {
     try {
@@ -130,7 +130,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
         // Validate each rule's shape and compile its pattern here, so a malformed
         // rule surfaces as a logged error instead of throwing inside
         // createSecretAnonymizer — which would break tracing for the whole session.
-        const validRules: StringNodeRule[] = [];
+        const validRules: CommonRedactRule[] = [];
         for (const rule of parsed) {
           if (
             typeof rule !== "object" ||
@@ -176,15 +176,17 @@ export function loadConfig(options?: { cwd?: string }): Config {
         project: process.env.CC_LANGSMITH_PROJECT,
         metadata: customMetadata,
         redact: process.env.CC_LANGSMITH_REDACT === undefined ? undefined : redact,
-        // Environment rules retain the existing tolerant parser.
+        redact_extra_rules: redactExtraRules,
       },
       defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" },
     },
     { envFirst: true },
   );
   // Environment replicas retain their SDK format, including legacy tuples.
-  if (replicas === undefined) replicas = toSdkReplicas(common.replicas);
-  redactExtraRules ??= common.redact_extra_rules;
+  if (replicas === undefined || common.locked.includes("replicas")) {
+    replicas = toSdkReplicas(common.replicas);
+  }
+  redactExtraRules = common.redact_extra_rules;
   customMetadata = common.metadata && withBothGitMetadataNames(common.metadata);
 
   // Attach identity metadata so every traced run can be attributed to a
@@ -218,5 +220,8 @@ export function loadConfig(options?: { cwd?: string }): Config {
     customMetadata,
     redact: common.redact,
     redactExtraRules,
+    ...(common.managedConfigProblem === undefined
+      ? {}
+      : { managedConfigProblem: common.managedConfigProblem }),
   };
 }

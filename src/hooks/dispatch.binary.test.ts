@@ -13,6 +13,14 @@ const root = new URL("../../", import.meta.url);
 const { version } = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
 const binary = fileURLToPath(new URL(`bin/${EXECUTABLE_NAME}`, root));
 const built = existsSync(binary);
+const machineHasManagedFile = (() => {
+  if (process.platform !== "darwin") return false;
+  const entry = spawnSync("/usr/bin/id", ["-P", String(process.getuid?.())], { encoding: "utf8" });
+  const accountHome = entry.stdout?.split(":")[8];
+  return (
+    Boolean(accountHome) && existsSync(join(accountHome, ".langsmith-plugins", "managed.json"))
+  );
+})();
 
 // A skip still exits 0, so a missing binary has to fail the runner that just built it.
 if (!built && process.env.CI && process.platform === "darwin") {
@@ -24,7 +32,8 @@ beforeAll(() => {
   if (!built) return;
   home = mkdtempSync(join(tmpdir(), "ls-dispatch-binary-"));
   try {
-    for (const event of HOOK_EVENT_NAMES) dispatch([event], undefined, BINARY_COLD_START_TIMEOUT_MS);
+    for (const event of HOOK_EVENT_NAMES)
+      dispatch([event], undefined, BINARY_COLD_START_TIMEOUT_MS);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -64,7 +73,7 @@ describe.skipIf(!built)("the standalone binary, bin/langsmith-claude-code-tracin
     expect(existsSync(logDir())).toBe(false);
   });
 
-  it.each(HOOK_EVENT_NAMES)(
+  it.each(HOOK_EVENT_NAMES.filter((e) => !(machineHasManagedFile && e === "UserPromptSubmit")))(
     "runs the %s handler and writes no state while tracing is off",
     (event) => {
       const result = dispatch([event]);

@@ -55,6 +55,11 @@ describe("thread links", () => {
 
   it.each([
     [{ ...config, enabled: false }, "session", "disabled"],
+    [
+      { ...config, enabled: false, managedConfigProblem: "Managed config is broken" },
+      "session",
+      "Managed config is broken",
+    ],
     [{ ...config, apiKey: "" }, "session", "No LangSmith API key"],
   ] as const)(
     "handles unavailable tracing without requests",
