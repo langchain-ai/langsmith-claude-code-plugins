@@ -1,4 +1,4 @@
-import type { HookEventName } from "../constants.js";
+import type { HookEventName } from "../types.js";
 import { main as postCompact } from "./post-compact.js";
 import { main as postToolUse } from "./post-tool-use.js";
 import { main as preCompact } from "./pre-compact.js";

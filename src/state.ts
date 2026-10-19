@@ -3,11 +3,24 @@
  * transcript so the Stop hook only processes new messages.
  */
 
-import { readFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import { PRIVATE_FILE_MODE, STATE_TEMP_SUFFIX } from "./constants.js";
+import { readFileSync } from "node:fs";
+import {
+  PRIVATE_FILE_MODE,
+  SESSION_MAX_AGE_MS,
+  STATE_LOCK_PROBE_MS,
+  STATE_LOCK_WAIT_MS,
+  STATE_TEMP_SUFFIX,
+} from "./constants.js";
 import { publishByRename } from "./utils/atomic-file.js";
-import { withFileLock } from "./utils/file-lock.js";
+import { withStateFileLock } from "./state-lock.js";
+import {
+  applyPatches,
+  diffState,
+  hasRecentPending,
+  readPending,
+  removePending,
+  writePending,
+} from "./state-pending.js";
 import type { TracingState, SessionState } from "./types.js";
 
 /** Published by rename, since readers load state without the lock and must never see a half-written file. */
@@ -23,20 +36,31 @@ function publishState(stateFilePath: string, state: TracingState): void {
 /**
  * Atomically read state, apply `fn`, and write the result back.
  * A file lock prevents concurrent PostToolUse hooks from clobbering each other.
+ * When another process keeps the lock past a short wait, the change is saved as
+ * a pending patch that readers overlay and the next lock holder merges.
  */
 export async function atomicUpdateState(
   stateFilePath: string,
   fn: (state: TracingState) => TracingState,
 ): Promise<void> {
-  await withFileLock(stateFilePath, () => {
-    const state = loadState(stateFilePath);
-    publishState(stateFilePath, fn(state));
-  });
+  const waitMs = hasRecentPending(stateFilePath) ? STATE_LOCK_PROBE_MS : STATE_LOCK_WAIT_MS;
+  const ran = await withStateFileLock(
+    stateFilePath,
+    () => {
+      const { files, patches } = readPending(stateFilePath);
+      publishState(stateFilePath, fn(applyPatches(readStateFile(stateFilePath), patches)));
+      removePending(stateFilePath, files);
+    },
+    waitMs,
+  );
+  if (ran) return;
+  const before = loadState(stateFilePath);
+  writePending(stateFilePath, diffState(before, fn(before)));
 }
 
 // ─── State helpers ──────────────────────────────────────────────────────────
 
-export function loadState(stateFilePath: string): TracingState {
+function readStateFile(stateFilePath: string): TracingState {
   try {
     const raw = readFileSync(stateFilePath, "utf-8");
     return JSON.parse(raw) as TracingState;
@@ -45,9 +69,9 @@ export function loadState(stateFilePath: string): TracingState {
   }
 }
 
-export function saveState(stateFilePath: string, state: TracingState): void {
-  mkdirSync(dirname(stateFilePath), { recursive: true });
-  publishState(stateFilePath, state);
+export function loadState(stateFilePath: string): TracingState {
+  const { patches } = readPending(stateFilePath);
+  return applyPatches(readStateFile(stateFilePath), patches);
 }
 
 export function getSessionState(state: TracingState, sessionId: string): SessionState {
@@ -88,8 +112,6 @@ export function advanceToolTracingProgress(
 }
 
 // ─── Session pruning ───────────────────────────────────────────────────────
-
-const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
  * Remove sessions whose `updated` timestamp is older than 24 hours.

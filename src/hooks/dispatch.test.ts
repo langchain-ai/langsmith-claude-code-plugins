@@ -153,6 +153,22 @@ describe("bundle/dispatch.js", () => {
     expect(decision).toBe(event === "UserPromptSubmit" ? "block" : undefined);
   });
 
+  it("logs and still exits 0 when a handler cannot read its input", () => {
+    const result = spawnSync(process.execPath, [bundle, "PostToolUse"], {
+      cwd: home,
+      env: { HOME: home, PATH: "", STATE_FILE: join(home, "state.json") },
+      input: "not json",
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(readFileSync(join(logDir(), "hook.log"), "utf8")).toContain(
+      "PostToolUse hook fatal error",
+    );
+  });
+
   it.each([[], ["NotAnEvent"], ["SessionStart"], ["userpromptsubmit"]])(
     "logs a diagnostic and runs no handler for argv %j",
     (...args) => {

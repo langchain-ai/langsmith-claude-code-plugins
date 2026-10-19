@@ -1,16 +1,23 @@
 /**
  * LangSmith run construction and submission.
  *
- * Converts parsed Turns into LangSmith run hierarchies and sends them
- * via the LangSmith JS SDK RunTree API, which handles batching, multipart
- * serialization, retries, and auth automatically.
+ * Converts parsed Turns into LangSmith run hierarchies and captures them for
+ * the shared tracing engine, which uploads and retries them in the background.
  */
 
 import { resolveTurnTracingMode } from "./tracing-mode.js";
-import { Client, RunTree, RunTreeConfig, uuid7FromTime } from "langsmith";
-import { createSecretAnonymizer } from "langsmith/anonymizer";
-import type { StringNodeRule } from "langsmith/anonymizer";
-import type { Turn, ContentBlock, Usage, OpenTurn, SessionState, TracingMode } from "./types.js";
+import type {
+  Turn,
+  ContentBlock,
+  Usage,
+  OpenTurn,
+  SessionState,
+  TracingMode,
+  PendingSubagent,
+  TaskRunEntry,
+  TraceTurnOptions,
+  TurnRunIdentity,
+} from "./types.js";
 import {
   readTranscript,
   groupIntoTurns,
@@ -22,57 +29,13 @@ import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
-import { createRunTree } from "./privacy.js";
 import {
-  awaitsTheTurn,
   repoScopedMetadata,
   sessionScopedMetadata,
   turnScopedMetadata,
 } from "./repo-attribution.js";
-import { attributionFiller } from "./reconcile.js";
-import { recordDelivered, recordRun } from "./turn-record.js";
-import type { TurnRecordTarget } from "./types.js";
-import type { LSAgentType } from "./metadata.js";
-
-// ─── Client setup ───────────────────────────────────────────────────────────
-
-let client: Client | undefined = undefined;
-let replicas: RunTreeConfig["replicas"] | undefined = undefined;
-
-export function initTracing(
-  apiKey?: string,
-  apiUrl?: string,
-  providedReplicas?: RunTreeConfig["replicas"],
-  redact: boolean = true,
-  extraRedactionRules?: StringNodeRule[],
-) {
-  // When redaction is on, attach an anonymizer that strips common secrets from
-  // run inputs/outputs/metadata client-side, before upload. Because every
-  // RunTree here is created with this client, the anonymizer also covers
-  // replica destinations (they reuse the run's client unless given their own).
-  const anonymizer = redact
-    ? createSecretAnonymizer(extraRedactionRules ? { extraRules: extraRedactionRules } : undefined)
-    : undefined;
-
-  // Always retain the configured endpoint, even without a primary API key or
-  // redaction. Replicas can carry their own auth and inherit this client's URL;
-  // falling back to the shared client would silently use the SDK's default URL.
-  client = new Client({ apiKey: apiKey || undefined, apiUrl, anonymizer });
-  replicas = providedReplicas;
-  return client;
-}
-
-/** Flush all pending batches to ensure traces are sent before hook exits. */
-export async function flushPendingTraces(): Promise<void> {
-  logger.debug("Awaiting pending trace batches...");
-  // Flush our explicit client (if any) and the shared client used internally
-  // by RunTree for replica API calls when no explicit client is provided.
-  await Promise.all([
-    client?.awaitPendingTraceBatches(),
-    RunTree.getSharedClient().awaitPendingTraceBatches(),
-  ]);
-  logger.debug("Trace batches flushed successfully");
-}
+import { captureRun, turnFiller } from "./tracing-engine.js";
+import { stableRunId } from "./utils/ids/run-id.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -158,42 +121,6 @@ function buildUsageMetadata(usage: Usage) {
 // ─── Run creation ───────────────────────────────────────────────────────────
 
 /**
- * Create and submit LangSmith runs for a single Turn.
- *
- * Hierarchy:
- *   Turn (chain) - created by UserPromptSubmit or here if standalone
- *   ├── Assistant (llm)
- *   ├── ToolA (tool)
- *   ├── ToolB (tool)      ← tools are siblings of assistant, children of turn
- *   ├── Assistant (llm)
- *   └── ToolC (tool)
- */
-export interface TraceTurnOptions {
-  tracing?: TracingMode;
-  toolTracingModes?: Record<string, TracingMode>;
-  turn: Turn;
-  sessionId: string;
-  turnNum: number;
-  project: string;
-  parentRunId?: string;
-  existingTaskRunMap?: Record<string, TaskRunEntry>;
-  /** tool_use_ids already traced by PostToolUse — skip creating runs for these */
-  tracedToolUseIds?: Set<string>;
-  traceId?: string;
-  parentDottedOrder?: string;
-  /** Base coding-agent-v1 metadata (config base + user env metadata) merged onto every run. */
-  customMetadata?: Record<string, unknown>;
-  /** Claude Code CLI version → `ls_agent_runtime_version`. */
-  runtimeVersion?: string;
-  /** Permission mode → `approval_policy` (stamped on root/standalone turn runs only). */
-  approvalPolicy?: string;
-  /** Role stamped on this turn and each of its child runs. */
-  agentType?: LSAgentType;
-  record?: TurnRecordTarget;
-  hookCwd?: string;
-}
-
-/**
  * Trace a turn to LangSmith.
  * @returns A map of agent_id -> tool run info (ID and dotted_order) for Task tools (used to link subagent traces)
  */
@@ -202,7 +129,6 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     turn,
     sessionId,
     turnNum,
-    project,
     parentRunId,
     existingTaskRunMap,
     tracedToolUseIds,
@@ -214,7 +140,6 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     agentType = "root",
     tracing = "full",
     toolTracingModes,
-    record,
     hookCwd,
   } = options;
 
@@ -226,9 +151,6 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
 
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
-  if (!client && !replicas) {
-    throw new Error("LangSmith client not initialized — call initTracing() first");
-  }
 
   const userContent =
     typeof turn.userContent === "string"
@@ -256,40 +178,15 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
   } else {
     // Create a new turn run for interrupted/standalone turns
     shouldCreateTurn = true;
-    turnRunId = uuid7FromTime(turn.userTimestamp);
+    turnRunId = stableRunId(turn.userTimestamp, sessionId, turnId, turnNum);
     traceId = turnRunId; // This turn is its own trace root
 
     parentDottedOrder = generateDottedOrderSegment(turn.userTimestamp, turnRunId);
 
     logger.debug(`Creating new standalone turn run ${turnRunId}`);
-    const runTree = createRunTree(
-      {
-        client,
-        replicas,
-        id: turnRunId,
-        name: USER_PROMPT_TURN_NAME,
-        run_type: "chain",
-        inputs: { messages: [{ role: "user", content: userContent }] },
-        project_name: project,
-        start_time: turn.userTimestamp,
-        trace_id: traceId,
-        dotted_order: parentDottedOrder,
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId,
-            base: turnMetadataBase,
-            turnId,
-            turnNumber: turnNum,
-            runtimeVersion,
-            approvalPolicy,
-            agentType,
-          }),
-        },
-      },
-      tracing,
-    );
-    await runTree.postRun();
   }
+  const recordRunId = options.rootRunId ?? (agentType === "root" ? parentRunId : undefined);
+  const filledForTheTurn = await turnFiller(recordRunId);
 
   // Track accumulated messages for LLM input context.
   const accumulatedMessages: Array<Record<string, unknown>> = [
@@ -303,50 +200,18 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
 
   let lastEndTime = turn.userTimestamp;
 
-  const filledForTheTurn = attributionFiller(record);
-
   // 2. Process each LLM call - create as children of the turn run
-  for (const llmCall of turn.llmCalls) {
+  for (const [llmIndex, llmCall] of turn.llmCalls.entries()) {
     const assistantContent = formatContent(llmCall.content);
+    const assistantInputs = { messages: [...accumulatedMessages] };
 
     // Generate run ID for this LLM call
-    const assistantRunId = uuid7FromTime(llmCall.startTime);
+    const assistantRunId = stableRunId(llmCall.startTime, turnRunId, turnId, llmIndex);
     const assistantDottedOrderSegment = generateDottedOrderSegment(
       llmCall.startTime,
       assistantRunId,
     );
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
-
-    // Create assistant (LLM) run as child of turn using Client API
-    const assistantRunTree = createRunTree(
-      {
-        client,
-        replicas,
-        id: assistantRunId,
-        name: ASSISTANT_RUN_NAME,
-        run_type: "llm",
-        inputs: { messages: [...accumulatedMessages] },
-        project_name: project,
-        start_time: llmCall.startTime,
-        parent_run_id: turnRunId,
-        trace_id: traceId,
-        dotted_order: assistantDottedOrder,
-        extra: {
-          metadata: filledForTheTurn(
-            codingAgentMetadata({
-              sessionId,
-              base: modelRunBase,
-              turnId,
-              turnNumber: turnNum,
-              runtimeVersion,
-              agentType,
-            }),
-          ),
-        },
-      },
-      tracing,
-    );
-    await assistantRunTree.postRun();
 
     // 3. Create tool runs (siblings of assistant, children of turn).
     for (const toolCall of llmCall.toolCalls) {
@@ -373,43 +238,37 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
       const toolStartTime = llmCall.endTime <= toolEndTime ? llmCall.endTime : toolEndTime;
 
       // Generate run ID for this tool
-      const toolRunId = uuid7FromTime(toolStartTime);
+      const toolRunId = stableRunId(toolStartTime, sessionId, toolCall.tool_use.id);
       const toolDottedOrderSegment = generateDottedOrderSegment(toolStartTime, toolRunId);
       const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
 
       // Create and complete tool run in a single call.
-      const runTree = createRunTree(
+      await captureRun(
         {
-          client,
-          replicas,
           id: toolRunId,
           name: toolCall.tool_use.name,
           run_type: "tool",
           inputs: { input: toolCall.tool_use.input },
           outputs: { output: toolCall.result?.content ?? "No result" },
-          project_name: project,
           start_time: toolStartTime,
           end_time: toolEndTime,
           parent_run_id: turnRunId,
-          trace_id: traceId,
+          trace_id: traceId!,
           dotted_order: toolDottedOrder,
-          extra: {
-            metadata: codingAgentMetadata({
-              sessionId,
-              base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, sessionCwd),
-              turnId,
-              turnNumber: turnNum,
-              runtimeVersion,
-              agentType,
-              toolName: toolCall.tool_use.name,
-              runName: toolCall.tool_use.name,
-              skillName: skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input),
-            }),
-          },
+          metadata: codingAgentMetadata({
+            sessionId,
+            base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, sessionCwd),
+            turnId,
+            turnNumber: turnNum,
+            runtimeVersion,
+            agentType,
+            toolName: toolCall.tool_use.name,
+            runName: toolCall.tool_use.name,
+            skillName: skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input),
+          }),
         },
         toolMode,
       );
-      await runTree.postRun();
 
       // If this is a Task tool, store the run ID and dotted_order for subagent linking
       if (toolCall.agentId) {
@@ -451,36 +310,25 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
         },
       }),
     );
-    const settlesLater = record !== undefined && awaitsTheTurn(assistantMetadata);
-    const assistantClose = {
-      id: assistantRunId,
-      run_type: "llm",
-      trace_id: traceId,
-      dotted_order: assistantDottedOrder,
-      parent_run_id: turnRunId,
-      name: ASSISTANT_RUN_NAME,
-      project_name: project,
-      start_time: llmCall.startTime,
-      ...(settlesLater ? {} : { end_time: assistantEndTime }),
-      outputs: {
-        messages: [{ role: "assistant", content: assistantContent }],
+    await captureRun(
+      {
+        id: assistantRunId,
+        name: ASSISTANT_RUN_NAME,
+        run_type: "llm",
+        inputs: assistantInputs,
+        outputs: {
+          messages: [{ role: "assistant", content: assistantContent }],
+        },
+        start_time: llmCall.startTime,
+        end_time: assistantEndTime,
+        parent_run_id: turnRunId,
+        trace_id: traceId!,
+        dotted_order: assistantDottedOrder,
+        metadata: assistantMetadata,
       },
-      extra: { metadata: assistantMetadata },
-    };
-    const runTree = createRunTree({ ...assistantClose, client, replicas }, tracing);
-
-    await runTree.patchRun({ excludeInputs: true });
-
-    if (settlesLater && record) {
-      recordRun({
-        path: record.path,
-        run: assistantClose,
-        tracing,
-        origin: record.origin,
-        closesAt: assistantEndTime,
-      });
-      recordDelivered(record.path, assistantRunId);
-    }
+      tracing,
+      recordRunId ?? assistantRunId,
+    );
 
     // Accumulate context for next LLM call.
     accumulatedMessages.push({ role: "assistant", content: assistantContent });
@@ -501,36 +349,30 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
 
     // Mark incomplete turns with an error so they're visible in LangSmith
     const error = turn.isComplete ? undefined : "Interrupted";
-    const runTree = createRunTree(
+    await captureRun(
       {
-        client,
-        replicas,
         id: turnRunId,
         run_type: "chain",
         trace_id: traceId,
         dotted_order: parentDottedOrder,
         name: USER_PROMPT_TURN_NAME,
-        project_name: project,
+        inputs: { messages: [{ role: "user", content: userContent }] },
         start_time: turn.userTimestamp,
         end_time: lastEndTime,
         outputs: { messages: turnOutputs },
         error: error,
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId,
-            base: turnMetadataBase,
-            turnId,
-            turnNumber: turnNum,
-            runtimeVersion,
-            approvalPolicy,
-            agentType,
-          }),
-        },
+        metadata: codingAgentMetadata({
+          sessionId,
+          base: turnMetadataBase,
+          turnId,
+          turnNumber: turnNum,
+          runtimeVersion,
+          approvalPolicy,
+          agentType,
+        }),
       },
       tracing,
     );
-
-    await runTree.patchRun({ excludeInputs: true });
   }
 
   const status = turn.isComplete ? "complete" : "interrupted";
@@ -543,23 +385,6 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
 
 // ─── Turn run completion ─────────────────────────────────────────────────────
 
-/** Identity + metadata needed to patch a root "Turn" run closed. */
-export interface TurnRunIdentity {
-  tracing?: TracingMode;
-  sessionId: string;
-  project: string;
-  runId: string;
-  traceId?: string;
-  dottedOrder?: string;
-  parentRunId?: string;
-  startTime?: string;
-  turnId?: string;
-  turnNumber?: number;
-  runtimeVersion?: string;
-  approvalPolicy?: string;
-  customMetadata?: Record<string, unknown>;
-}
-
 /**
  * Patch a root "Turn" run closed — the single place every hook funnels through
  * to finalize a turn. `result` decides success vs. force-close: a
@@ -570,27 +395,20 @@ export interface TurnRunIdentity {
 async function patchTurnRun(
   id: TurnRunIdentity,
   result: { lastAssistantMessage?: string } | { error: string },
-  leaveOpen = false,
-): Promise<Record<string, unknown>> {
-  if (!client && !replicas)
-    throw new Error("LangSmith client not initialized — call initTracing() first");
-
-  const config = {
-    client,
-    replicas,
-    name: USER_PROMPT_TURN_NAME,
-    run_type: "chain",
-    project_name: id.project,
-    id: id.runId,
-    trace_id: id.traceId,
-    dotted_order: id.dottedOrder,
-    parent_run_id: id.parentRunId,
-    start_time: id.startTime,
-    ...(leaveOpen ? {} : { end_time: new Date().toISOString() }),
-    ...("error" in result
-      ? { error: result.error }
-      : { outputs: { messages: [{ role: "assistant", content: result.lastAssistantMessage }] } }),
-    extra: {
+): Promise<void> {
+  await captureRun(
+    {
+      name: USER_PROMPT_TURN_NAME,
+      run_type: "chain",
+      id: id.runId,
+      trace_id: id.traceId!,
+      dotted_order: id.dottedOrder!,
+      parent_run_id: id.parentRunId,
+      start_time: id.startTime!,
+      end_time: new Date().toISOString(),
+      ...("error" in result
+        ? { error: result.error }
+        : { outputs: { messages: [{ role: "assistant", content: result.lastAssistantMessage }] } }),
       metadata: codingAgentMetadata({
         sessionId: id.sessionId,
         base: id.customMetadata,
@@ -601,20 +419,19 @@ async function patchTurnRun(
         agentType: "root",
       }),
     },
-  };
-  const runTree = createRunTree(config, id.tracing);
-  await runTree.patchRun({ excludeInputs: true });
-  return config as unknown as Record<string, unknown>;
+    id.tracing,
+    id.runId,
+    "patch",
+  );
 }
 
 /** Build a TurnRunIdentity from a stored OpenTurn (deferred / awaiting-subagent turn). */
 export function turnIdentityFromOpenTurn(
   turn: OpenTurn,
-  ctx: { sessionId: string; project: string; customMetadata?: Record<string, unknown> },
+  ctx: { sessionId: string; customMetadata?: Record<string, unknown> },
 ): TurnRunIdentity {
   return {
     sessionId: ctx.sessionId,
-    project: ctx.project,
     customMetadata: ctx.customMetadata,
     tracing: turn.tracing ?? "full",
     runId: turn.run_id,
@@ -643,7 +460,6 @@ export async function completeTurnRun(options: {
   dottedOrder?: string;
   parentRunId?: string;
   startTime?: string;
-  project: string;
   /** Final assistant message → root run outputs. */
   lastAssistantMessage?: string;
   customMetadata?: Record<string, unknown>;
@@ -651,18 +467,12 @@ export async function completeTurnRun(options: {
   turnNumber?: number;
   runtimeVersion?: string;
   approvalPolicy?: string;
-  /** Nothing can say yet where the turn worked, so the settle fills and closes it. */
-  leaveOpen?: boolean;
-}): Promise<Record<string, unknown>> {
-  return patchTurnRun(
-    options,
-    { lastAssistantMessage: options.lastAssistantMessage },
-    options.leaveOpen,
-  );
+}): Promise<void> {
+  await patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
 }
 
 /** Force-close a turn's root run with an error/status (e.g. session ended). */
-export async function closeTurnRun(id: TurnRunIdentity, error: string): Promise<void> {
+async function closeTurnRun(id: TurnRunIdentity, error: string): Promise<void> {
   await patchTurnRun(id, { error });
 }
 
@@ -671,7 +481,7 @@ export async function closeTurnRun(id: TurnRunIdentity, error: string): Promise<
 /**
  * Close an interrupted turn run (Stop never fired for it).
  * Traces any LLM calls from the transcript, processes pending subagents,
- * closes the parent run with "User interrupt", and flushes pending traces.
+ * and closes the parent run with "User interrupt".
  *
  * Used by UserPromptSubmit (on next prompt in same session) and SessionEnd
  * (on session exit after interrupt).
@@ -683,7 +493,6 @@ export async function closeInterruptedTurn(options: {
   sessionId: string;
   sessionState: SessionState;
   transcriptPath: string | undefined;
-  project: string;
   stateFilePath: string;
   defaultMuted?: boolean;
   customMetadata?: Record<string, unknown>;
@@ -698,37 +507,31 @@ export async function closeInterruptedTurn(options: {
   turn?: OpenTurn;
   /** Root-run error/status message. Defaults to "User interrupt". */
   error?: string;
-  record?: TurnRecordTarget;
 }): Promise<{ lastLine: number; turnsTraced: number; consumedToolUseIds?: string[] }> {
   const {
     sessionId,
     sessionState,
     transcriptPath,
-    project,
     stateFilePath,
     customMetadata,
     runtimeVersion,
     approvalPolicy,
     turn,
-    record,
     error: errorMessage = "User interrupt",
   } = options;
-  if (!client && !replicas)
-    throw new Error("LangSmith client not initialized — call initTracing() first");
 
   // Fast path: closing an explicit deferred turn (already traced by Stop). Just
   // patch its root run with the error message; no transcript/subagent catch-up.
   if (turn) {
     await closeTurnRun(
       {
-        ...turnIdentityFromOpenTurn(turn, { sessionId, project, customMetadata }),
+        ...turnIdentityFromOpenTurn(turn, { sessionId, customMetadata }),
         tracing: resolveTurnTracingMode(options, sessionId, turn.tracing),
         runtimeVersion: turn.runtime_version ?? runtimeVersion,
         approvalPolicy: turn.approval_policy ?? approvalPolicy,
       },
       errorMessage,
     );
-    await flushPendingTraces();
     return { lastLine: sessionState.last_line, turnsTraced: 0 };
   }
 
@@ -765,7 +568,6 @@ export async function closeInterruptedTurn(options: {
             turn: turns[turns.length - 1],
             sessionId,
             turnNum: sessionState.turn_count + 1,
-            project,
             parentRunId: sessionState.current_turn_run_id,
             existingTaskRunMap: taskRunMap,
             tracedToolUseIds: new Set(sessionState.traced_tool_use_ids ?? []),
@@ -774,7 +576,6 @@ export async function closeInterruptedTurn(options: {
             customMetadata,
             runtimeVersion,
             approvalPolicy,
-            record,
           });
           lastLine = newLastLine;
           turnsTraced = 1;
@@ -801,12 +602,10 @@ export async function closeInterruptedTurn(options: {
         pendingSubagents,
         taskRunMap,
         parentTraceId: sessionState.current_trace_id,
-        project,
         customMetadata,
         runtimeVersion,
         turnId,
         turnNumber,
-        record,
       });
     } catch (err) {
       logger.error(`Failed to trace pending subagents on interrupt: ${err}`);
@@ -817,7 +616,6 @@ export async function closeInterruptedTurn(options: {
   await closeTurnRun(
     {
       sessionId,
-      project,
       customMetadata,
       tracing,
       runId: sessionState.current_turn_run_id!,
@@ -832,36 +630,10 @@ export async function closeInterruptedTurn(options: {
     errorMessage,
   );
 
-  await flushPendingTraces();
-
   return { lastLine, turnsTraced, consumedToolUseIds };
 }
 
 // ─── Subagent tracing ────────────────────────────────────────────────────────
-
-export interface PendingSubagent {
-  agent_id: string;
-  agent_type: string;
-  agent_transcript_path: string;
-  session_id: string;
-}
-
-export interface TaskRunEntry {
-  tracing?: TracingMode;
-  run_id: string;
-  dotted_order: string;
-  deferred?: Record<string, unknown>;
-  /** Subagent type, recorded by SubagentStop; used when closing the Agent run. */
-  agent_type?: string;
-  /** True once SubagentStop has processed this async subagent (the join's
-   *  subagent-side "done" marker, replacing the former open_agent_runs map). */
-  subagent_done?: boolean;
-  /** For dynamic Workflow runs: the workflow run_id (`wf_…`) used to correlate
-   *  `workflow-subagent` stage SubagentStops (which carry it in their path). */
-  workflow_run_id?: string;
-  /** True when this entry is a Workflow tool run — names the run "Workflow". */
-  is_workflow?: boolean;
-}
 
 /**
  * Trace pending subagents queued by SubagentStop.
@@ -875,7 +647,6 @@ export async function tracePendingSubagents(options: {
   pendingSubagents: PendingSubagent[];
   taskRunMap: Record<string, TaskRunEntry>;
   parentTraceId: string | undefined;
-  project: string;
   customMetadata?: Record<string, unknown>;
   /** Claude Code CLI version → `ls_agent_runtime_version`. */
   runtimeVersion?: string;
@@ -888,31 +659,22 @@ export async function tracePendingSubagents(options: {
    *  {@link closeAgentToolRun}) once that follow-up is done. Used for async
    *  (background) subagents, which always emit a task-notification afterward. */
   keepAgentToolRunOpen?: boolean;
-  record?: TurnRecordTarget;
 }): Promise<string[]> {
   const {
     sessionId,
     pendingSubagents,
     taskRunMap,
     parentTraceId,
-    project,
     customMetadata,
     runtimeVersion,
     turnId,
     turnNumber,
     keepAgentToolRunOpen,
-    record,
   } = options;
-
-  const filledForTheTurn = attributionFiller(record);
 
   // agent_ids whose Agent tool run we posted *open* (keepAgentToolRunOpen), so
   // the caller knows which runs it's responsible for closing later.
   const openedAgentRunIds: string[] = [];
-
-  if (!client && !replicas) {
-    throw new Error("LangSmith client not initialized — call initTracing() first");
-  }
 
   if (!parentTraceId) {
     logger.warn("Cannot trace subagents: no parent trace ID");
@@ -932,6 +694,8 @@ export async function tracePendingSubagents(options: {
       const agentToolDottedOrder = taskRunInfo.dotted_order;
       const toolName = subagent.agent_type || "Agent";
       const deferred = taskRunInfo.deferred;
+      const rootRunId = (deferred?.parent_run_id as string | undefined) ?? parentTraceId;
+      const filledForTheTurn = await turnFiller(rootRunId);
 
       logger.debug(
         `Processing subagent ${toolName} (${subagent.agent_id}) under run ${parentToolRunId}`,
@@ -969,16 +733,13 @@ export async function tracePendingSubagents(options: {
       // PostToolUse deferred the Agent tool run creation so we can use the
       // real subagent name. Create it now with the correct name and clamped times.
       if (deferred) {
-        const runTree = createRunTree(
+        await captureRun(
           {
-            client,
-            replicas,
             id: parentToolRunId,
             name: "Agent",
             run_type: "tool",
             inputs: { input: deferred.inputs ?? {} },
             outputs: { output: deferred.outputs ?? {} },
-            project_name: deferred.project_name as string | undefined,
             start_time: subagentStartTime,
             // Leave open for async agents — the task-notification turn nests under
             // this run, so it can't be closed until that turn completes.
@@ -986,29 +747,26 @@ export async function tracePendingSubagents(options: {
             parent_run_id: deferred.parent_run_id as string,
             trace_id: deferred.trace_id as string,
             dotted_order: agentToolDottedOrder,
-            extra: {
-              metadata: filledForTheTurn(
-                codingAgentMetadata({
-                  sessionId,
-                  base: customMetadata,
-                  runtimeVersion,
-                  turnId,
-                  turnNumber,
-                  agentType: "root",
-                  // run_type "tool" (run name "Agent", native tool "Task").
-                  toolName: "Task",
-                  runName: "Agent",
-                  runSpecific: {
-                    agent_type: toolName, // DEPRECATED compat alias.
-                    agent_id: subagent.agent_id, // DEPRECATED compat alias.
-                  },
-                }),
-              ),
-            },
+            metadata: filledForTheTurn(
+              codingAgentMetadata({
+                sessionId,
+                base: customMetadata,
+                runtimeVersion,
+                turnId,
+                turnNumber,
+                agentType: "root",
+                // run_type "tool" (run name "Agent", native tool "Task").
+                toolName: "Task",
+                runName: "Agent",
+                runSpecific: {
+                  agent_type: toolName, // DEPRECATED compat alias.
+                  agent_id: subagent.agent_id, // DEPRECATED compat alias.
+                },
+              }),
+            ),
           },
           tracing,
         );
-        await runTree.postRun();
         if (keepAgentToolRunOpen) openedAgentRunIds.push(subagent.agent_id);
       }
 
@@ -1018,7 +776,6 @@ export async function tracePendingSubagents(options: {
         await traceSubagentChain({
           tracing,
           sessionId,
-          project,
           parentRunId: parentToolRunId,
           parentDottedOrder: agentToolDottedOrder,
           parentTraceId,
@@ -1034,7 +791,7 @@ export async function tracePendingSubagents(options: {
           runtimeVersion,
           turnId,
           turnNumber,
-          record,
+          rootRunId,
         });
       }
     } catch (err) {
@@ -1055,7 +812,6 @@ export async function tracePendingSubagents(options: {
 async function traceSubagentChain(opts: {
   tracing?: TracingMode;
   sessionId: string;
-  project: string;
   parentRunId: string;
   parentDottedOrder: string;
   parentTraceId: string;
@@ -1071,45 +827,39 @@ async function traceSubagentChain(opts: {
   runtimeVersion?: string;
   turnId?: string;
   turnNumber?: number;
-  record?: TurnRecordTarget;
+  rootRunId?: string;
 }): Promise<void> {
-  const filledForTheTurn = attributionFiller(opts.record);
-  const subagentChainId = uuid7FromTime(opts.startTime);
+  const filledForTheTurn = await turnFiller(opts.rootRunId);
+  const subagentChainId = stableRunId(opts.startTime, opts.parentRunId, opts.subagentId);
   const subagentChainDottedOrder = `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, subagentChainId)}`;
 
-  const runTree = createRunTree(
+  await captureRun(
     {
-      client,
-      replicas,
       id: subagentChainId,
       name: opts.chainName,
       run_type: "chain",
       inputs: opts.inputs ?? {},
       outputs: { output: opts.outputs },
-      project_name: opts.project,
       start_time: opts.startTime,
       end_time: opts.endTime,
       parent_run_id: opts.parentRunId,
       trace_id: opts.parentTraceId,
       dotted_order: subagentChainDottedOrder,
-      extra: {
-        metadata: filledForTheTurn(
-          codingAgentMetadata({
-            sessionId: opts.sessionId,
-            base: opts.customMetadata,
-            runtimeVersion: opts.runtimeVersion,
-            turnId: opts.turnId,
-            turnNumber: opts.turnNumber,
-            agentType: "subagent",
-            subagentId: opts.subagentId, // → ls_subagent_id (+ agent_id alias).
-            subagentType: opts.subagentType, // → ls_subagent_type (+ agent_type alias).
-          }),
-        ),
-      },
+      metadata: filledForTheTurn(
+        codingAgentMetadata({
+          sessionId: opts.sessionId,
+          base: opts.customMetadata,
+          runtimeVersion: opts.runtimeVersion,
+          turnId: opts.turnId,
+          turnNumber: opts.turnNumber,
+          agentType: "subagent",
+          subagentId: opts.subagentId, // → ls_subagent_id (+ agent_id alias).
+          subagentType: opts.subagentType, // → ls_subagent_type (+ agent_type alias).
+        }),
+      ),
     },
     opts.tracing,
   );
-  await runTree.postRun();
 
   for (let i = 0; i < opts.subagentTurns.length; i++) {
     await traceTurn({
@@ -1117,7 +867,6 @@ async function traceSubagentChain(opts: {
       turn: opts.subagentTurns[i],
       sessionId: opts.sessionId,
       turnNum: i + 1,
-      project: opts.project,
       parentRunId: subagentChainId,
       existingTaskRunMap: undefined,
       traceId: opts.parentTraceId,
@@ -1125,7 +874,7 @@ async function traceSubagentChain(opts: {
       customMetadata: opts.customMetadata,
       runtimeVersion: opts.runtimeVersion,
       agentType: "subagent",
-      record: opts.record,
+      rootRunId: opts.rootRunId,
     });
   }
 
@@ -1144,7 +893,6 @@ async function traceSubagentChain(opts: {
 export async function traceWorkflowStage(opts: {
   tracing?: TracingMode;
   sessionId: string;
-  project: string;
   /** The open Workflow tool run these stages nest under. */
   workflowRun: { run_id: string; dotted_order: string };
   parentTraceId: string | undefined;
@@ -1156,9 +904,6 @@ export async function traceWorkflowStage(opts: {
   turnId?: string;
   turnNumber?: number;
 }): Promise<void> {
-  if (!client && !replicas) {
-    throw new Error("LangSmith client not initialized — call initTracing() first");
-  }
   if (!opts.parentTraceId) {
     logger.warn(`Cannot trace workflow stage ${opts.stageAgentId}: no parent trace ID`);
     return;
@@ -1182,7 +927,6 @@ export async function traceWorkflowStage(opts: {
   await traceSubagentChain({
     tracing: opts.tracing,
     sessionId: opts.sessionId,
-    project: opts.project,
     parentRunId: opts.workflowRun.run_id,
     parentDottedOrder: opts.workflowRun.dotted_order,
     parentTraceId: opts.parentTraceId,
@@ -1212,7 +956,6 @@ export async function closeAgentToolRun(options: {
   agentId: string;
   agentType: string;
   taskRunInfo: TaskRunEntry;
-  project: string;
   customMetadata?: Record<string, unknown>;
   runtimeVersion?: string;
   turnId?: string;
@@ -1225,9 +968,6 @@ export async function closeAgentToolRun(options: {
   /** Optional error/status to stamp on the run (e.g. "Subagent killed"). */
   error?: string;
 }): Promise<void> {
-  if (!client && !replicas)
-    throw new Error("LangSmith client not initialized — call initTracing() first");
-
   const deferred = (options.taskRunInfo.deferred ?? {}) as Record<string, unknown>;
   // A Workflow run is named "Workflow" (native tool "Workflow"); a Task Agent run
   // is named "Agent" (native tool "Task") with its resolved subagent type as the
@@ -1237,46 +977,38 @@ export async function closeAgentToolRun(options: {
   const nativeToolName = isWorkflow ? "Workflow" : "Task";
   const agentTypeAlias = isWorkflow ? "Workflow" : options.agentType || "Agent";
 
-  const runTree = createRunTree(
+  // Open run → patch it closed. Never posted (killed subagent) → create it
+  // already-closed so the trace still shows the launched-then-killed agent.
+  await captureRun(
     {
-      client,
-      replicas,
       id: options.taskRunInfo.run_id,
       name: runName,
       run_type: "tool",
       inputs: { input: deferred.inputs ?? {} },
       outputs: { output: deferred.outputs ?? {} },
-      project_name: (deferred.project_name as string | undefined) ?? options.project,
-      start_time: deferred.start_time as string | undefined,
+      start_time: deferred.start_time as string,
       end_time: new Date().toISOString(),
-      parent_run_id: deferred.parent_run_id as string | undefined,
-      trace_id: deferred.trace_id as string | undefined,
+      parent_run_id: deferred.parent_run_id as string,
+      trace_id: deferred.trace_id as string,
       dotted_order: options.taskRunInfo.dotted_order,
       ...(options.error ? { error: options.error } : {}),
-      extra: {
-        metadata: codingAgentMetadata({
-          sessionId: options.sessionId,
-          base: options.customMetadata,
-          runtimeVersion: options.runtimeVersion,
-          turnId: options.turnId,
-          turnNumber: options.turnNumber,
-          agentType: "root",
-          toolName: nativeToolName,
-          runName,
-          runSpecific: {
-            agent_type: agentTypeAlias, // DEPRECATED compat alias.
-            agent_id: options.agentId, // DEPRECATED compat alias.
-          },
-        }),
-      },
+      metadata: codingAgentMetadata({
+        sessionId: options.sessionId,
+        base: options.customMetadata,
+        runtimeVersion: options.runtimeVersion,
+        turnId: options.turnId,
+        turnNumber: options.turnNumber,
+        agentType: "root",
+        toolName: nativeToolName,
+        runName,
+        runSpecific: {
+          agent_type: agentTypeAlias, // DEPRECATED compat alias.
+          agent_id: options.agentId, // DEPRECATED compat alias.
+        },
+      }),
     },
     options.taskRunInfo.tracing ?? options.tracing,
+    options.taskRunInfo.run_id,
+    options.wasOpen ? "patch" : "post",
   );
-  // Open run → patch it closed. Never posted (killed subagent) → create it
-  // already-closed so the trace still shows the launched-then-killed agent.
-  if (options.wasOpen) {
-    await runTree.patchRun({ excludeInputs: true });
-  } else {
-    await runTree.postRun();
-  }
 }

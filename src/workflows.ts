@@ -42,23 +42,10 @@
 
 import { resolveTurnTracingMode } from "./tracing-mode.js";
 import { debug, error } from "./logger.js";
-import { flushPendingTraces, traceWorkflowStage } from "./langsmith.js";
-import type { TaskRunEntry } from "./langsmith.js";
+import { traceWorkflowStage } from "./langsmith.js";
+import { WORKFLOW_TOOL_NAME } from "./constants.js";
 import { getSessionState, loadState } from "./state.js";
-import type { SessionState } from "./types.js";
-
-/** The tool name that launches a dynamic workflow. */
-export const WORKFLOW_TOOL_NAME = "Workflow";
-/** SubagentStop `agent_type` for a workflow stage agent. */
-export const WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
-
-export interface WorkflowLaunch {
-  /** Id the completion task-notification references → task_run_map key. */
-  taskId: string;
-  /** Workflow run_id (`wf_…`) → embedded in each stage's transcript path. */
-  runId: string;
-  workflowName?: string;
-}
+import type { SessionState, WorkflowLaunch, TaskRunEntry } from "./types.js";
 
 /**
  * Detect a background Workflow launch from PostToolUse input. Returns the launch
@@ -114,7 +101,6 @@ export async function handleWorkflowSubagentStop(opts: {
   agentTranscriptPath: string;
   stateFilePath: string;
   defaultMuted?: boolean;
-  project: string;
   customMetadata?: Record<string, unknown>;
 }): Promise<void> {
   const runId = workflowRunIdFromPath(opts.agentTranscriptPath);
@@ -148,7 +134,6 @@ export async function handleWorkflowSubagentStop(opts: {
         launchingTurnId === ss.current_turn_run_id ? ss.current_turn_tracing : undefined,
       ),
       sessionId: opts.sessionId,
-      project: opts.project,
       customMetadata: opts.customMetadata,
       workflowRun: { run_id: entry.run_id, dotted_order: entry.dotted_order },
       parentTraceId,
@@ -163,6 +148,4 @@ export async function handleWorkflowSubagentStop(opts: {
   } catch (err) {
     error(`Failed to trace workflow stage ${opts.agentId}: ${err}`);
   }
-
-  await flushPendingTraces();
 }

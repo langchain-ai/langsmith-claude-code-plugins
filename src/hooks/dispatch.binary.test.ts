@@ -3,10 +3,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { binary as tracing } from "../binary-target.js";
-import { FLUSH_QUEUE_ARG, HOOK_EVENT_NAMES } from "../constants.js";
+import { BINARY_COLD_START_TIMEOUT_MS, ENGINE_WORKER_ARG, HOOK_EVENT_NAMES } from "../constants.js";
 
 const EXECUTABLE_NAME = tracing.target.executableName;
 const root = new URL("../../", import.meta.url);
@@ -20,10 +20,19 @@ if (!built && process.env.CI && process.platform === "darwin") {
 }
 
 let home: string;
+beforeAll(() => {
+  if (!built) return;
+  home = mkdtempSync(join(tmpdir(), "ls-dispatch-binary-"));
+  try {
+    for (const event of HOOK_EVENT_NAMES) dispatch([event], undefined, BINARY_COLD_START_TIMEOUT_MS);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}, BINARY_COLD_START_TIMEOUT_MS * HOOK_EVENT_NAMES.length);
 beforeEach(() => (home = mkdtempSync(join(tmpdir(), "ls-dispatch-binary-"))));
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-function dispatch(args: string[], prompt = "ordinary prompt") {
+function dispatch(args: string[], prompt = "ordinary prompt", timeout = 10000) {
   return spawnSync(binary, args, {
     cwd: home,
     env: {
@@ -39,7 +48,7 @@ function dispatch(args: string[], prompt = "ordinary prompt") {
       prompt,
     }),
     encoding: "utf8",
-    timeout: 10000,
+    timeout,
   });
 }
 
@@ -97,7 +106,7 @@ describe.skipIf(!built)("the standalone binary, bin/langsmith-claude-code-tracin
   // Catches the binary turning the uploader's own argument away as an unknown option,
   // which loses every tool trace for a binary user and says nothing about it.
   it("drains the queue rather than rejecting the uploader's argument", () => {
-    const result = dispatch([FLUSH_QUEUE_ARG]);
+    const result = dispatch([ENGINE_WORKER_ARG]);
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toBe("");

@@ -12,29 +12,19 @@
 import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { debug, error } from "../logger.js";
 import {
-  initTracing,
   closeInterruptedTurn,
   closeAgentToolRun,
   completeTurnRun,
   turnIdentityFromOpenTurn,
-  flushPendingTraces,
 } from "../langsmith.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
-import { closeTurnRecord, turnRecordPath } from "../turn-record.js";
-import { queueOrigin } from "../queue.js";
-import { startQueueFlusher } from "../utils/detach.js";
+import { initTracing } from "../tracing-engine.js";
+import { SESSION_END_STARTUP_WAIT_MS } from "../constants.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { readRuntimeVersion } from "../transcript.js";
-
-interface SessionEndHookInput {
-  session_id: string;
-  transcript_path: string;
-  cwd: string;
-  hook_event_name: "SessionEnd";
-  reason: string;
-}
+import type { SessionEndHookInput } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: SessionEndHookInput = await readStdin();
@@ -71,13 +61,7 @@ export async function main(): Promise<void> {
     return;
   }
 
-  initTracing(
-    config.apiKey,
-    config.apiBaseUrl,
-    config.replicas,
-    config.redact,
-    config.redactExtraRules,
-  );
+  initTracing(config, input.cwd, input.session_id, SESSION_END_STARTUP_WAIT_MS);
 
   const expandedTranscript = expandHome(input.transcript_path);
   const runtimeVersion =
@@ -89,11 +73,6 @@ export async function main(): Promise<void> {
 
   // Close the active turn if it was interrupted (Stop never fired for it).
   if (sessionState.current_turn_run_id) {
-    closeTurnRecord({
-      stateFilePath: config.stateFilePath,
-      sessionId: input.session_id,
-      turnRunId: sessionState.current_turn_run_id,
-    });
     debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
     try {
       const res = await closeInterruptedTurn({
@@ -101,19 +80,10 @@ export async function main(): Promise<void> {
         sessionId: input.session_id,
         sessionState,
         transcriptPath: expandedTranscript,
-        project: config.project,
         stateFilePath: config.stateFilePath,
         customMetadata: config.customMetadata,
         runtimeVersion,
         approvalPolicy: sessionState.approval_policy,
-        record: {
-          path: turnRecordPath(
-            config.stateFilePath,
-            input.session_id,
-            sessionState.current_turn_run_id,
-          ),
-          origin: queueOrigin(config),
-        },
       });
       lastLine = res.lastLine;
       turnsTraced = res.turnsTraced;
@@ -143,7 +113,6 @@ export async function main(): Promise<void> {
         agentId,
         agentType: taskRunInfo.agent_type ?? "",
         taskRunInfo,
-        project: config.project,
         customMetadata: config.customMetadata,
         runtimeVersion,
         wasOpen: true, // subagent_done ⇒ SubagentStop posted it open
@@ -164,18 +133,11 @@ export async function main(): Promise<void> {
   // turn was interrupted before completing) is closed with an error.
   for (const [turnRunId, entry] of Object.entries(openTurns)) {
     if (turnRunId === sessionState.current_turn_run_id) continue; // closed above
-    closeTurnRecord({
-      stateFilePath: config.stateFilePath,
-      sessionId: input.session_id,
-      turnRunId,
-      turnId: entry.turn_id,
-    });
     try {
       if (entry.stop_seen) {
         await completeTurnRun({
           ...turnIdentityFromOpenTurn(entry, {
             sessionId: input.session_id,
-            project: config.project,
             customMetadata: config.customMetadata,
           }),
           tracing: resolveTurnTracingMode(config, input.session_id, entry.tracing),
@@ -188,7 +150,6 @@ export async function main(): Promise<void> {
           sessionId: input.session_id,
           sessionState,
           transcriptPath: expandedTranscript,
-          project: config.project,
           stateFilePath: config.stateFilePath,
           customMetadata: config.customMetadata,
           runtimeVersion,
@@ -201,13 +162,6 @@ export async function main(): Promise<void> {
       error(`Failed to close deferred turn ${turnRunId} on session end: ${err}`);
     }
   }
-
-  // Flush all the patches posted above (closeAgentToolRun / completeTurnRun don't
-  // flush themselves) before the hook process exits, or the SDK's batch timer may
-  // not fire and the cleanup runs we just closed would never reach LangSmith.
-  await flushPendingTraces();
-
-  startQueueFlusher(input.cwd, input.session_id);
 
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);

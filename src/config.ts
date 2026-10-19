@@ -1,48 +1,30 @@
 import { readFileSync } from "node:fs";
 import {
-  COMMON_BOOLEAN_SETTINGS,
   mergeCommonConfig,
-  readCommonConfigFile,
+  readCommonConfigFiles,
   toSdkReplicas,
-} from "./shared-config.js";
+} from "@langchain/plugins-base/settings";
 import { homedir, userInfo } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import type { RunTreeConfig } from "langsmith";
 import type { StringNodeRule } from "langsmith/anonymizer";
 import { debug, error } from "./logger.js";
-import { execSync } from "node:child_process";
+import { getRepositoryMetadata } from "@langchain/plugins-base/git";
 import {
-  GIT_LOCATION_ENV_KEYS,
-  NO_PINNED_KEYS,
-  NOT_A_REPOSITORY,
-  PINNED_REPOSITORY_KEYS,
   REPOSITORY_METADATA_KEYS,
+  withBothGitMetadataNames,
+} from "@langchain/plugins-base/metadata";
+import {
+  BOOLEAN_SETTINGS,
+  NO_PINNED_KEYS,
+  PINNED_REPOSITORY_KEYS,
   STATE_FILE_DEFAULT,
 } from "./constants.js";
-import type { MetadataWithPins } from "./types.js";
-import { githubLogin } from "./utils/gh-login.js";
+import type { BooleanSetting, Config, MetadataWithPins } from "./types.js";
 
 /**
  * Configuration — existing Claude environment discovery plus the shared langsmith-plugins.json contract.
  */
-
-/**
- * Plugin version, injected at build time by esbuild `define` (no runtime
- * package.json). `typeof` guards the non-bundled case; env is the fallback.
- */
-declare const __LS_INTEGRATION_VERSION__: string;
-export const LS_INTEGRATION_VERSION: string | undefined =
-  typeof __LS_INTEGRATION_VERSION__ !== "undefined"
-    ? __LS_INTEGRATION_VERSION__
-    : process.env.CC_LANGSMITH_INTEGRATION_VERSION || undefined;
-
-/** Host used to build a canonical https repository_url from a parsed provider. */
-const PROVIDER_HOSTS: Record<string, string> = {
-  github: "github.com",
-  gitlab: "gitlab.com",
-  bitbucket: "bitbucket.org",
-  devAzure: "dev.azure.com",
-};
 
 /**
  * Read the Anthropic user ID from `~/.claude.json` if available.
@@ -51,7 +33,7 @@ const PROVIDER_HOSTS: Record<string, string> = {
  * `userID` in the user's `~/.claude.json` config file. Returns `undefined`
  * if the file doesn't exist, can't be parsed, or doesn't contain a userID.
  */
-export function readAnthropicUserId(): string | undefined {
+function readAnthropicUserId(): string | undefined {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE;
   if (!homeDir) return undefined;
 
@@ -71,112 +53,8 @@ export function readAnthropicUserId(): string | undefined {
 }
 
 /** Read the local OS username via `os.userInfo()`. */
-export function readLocalUsername(): string {
+function readLocalUsername(): string {
   return userInfo().username;
-}
-
-export interface Config {
-  /** Master tracing switch, resolved from environment, project config, then user config. */
-  enabled: boolean;
-  /** Default for threads without an explicit preference; independent of the master switch. */
-  defaultMuted: boolean;
-  apiKey: string;
-  project: string;
-  apiBaseUrl: string;
-  stateFilePath: string;
-  debug: boolean;
-  /** Dotted-order string of an existing LangSmith run to nest all traces under. */
-  parentDottedOrder?: string;
-  replicas?: RunTreeConfig["replicas"];
-  /** Base metadata (static contract keys + user CC_LANGSMITH_METADATA) for every run. */
-  customMetadata?: Record<string, unknown>;
-  /** Whether to redact detected secrets from traced data before upload. */
-  redact: boolean;
-  /** Extra user-supplied rules from CC_LANGSMITH_REDACT_EXTRA or common file config. */
-  redactExtraRules?: StringNodeRule[];
-}
-
-/**
- * Extract repo name (owner/repo) from a git remote URL.
- * Supports HTTPS, SSH, and git@ URL formats for common hosts
- * (github.com, gitlab.com, bitbucket.org, etc.).
- */
-
-const GIT_PROVIDERS: Record<string, string> = {
-  "github.com": "github",
-  "gitlab.com": "gitlab",
-  "bitbucket.org": "bitbucket",
-  "dev.azure.com": "devAzure",
-};
-
-export function parseRepoName(remoteUrl: string): { provider: string; name: string } | undefined {
-  const value = remoteUrl.trim();
-
-  // URL parsing keeps username/password (and SSH ports) out of the repository path.
-  try {
-    const url = new URL(value);
-    const provider = GIT_PROVIDERS[url.hostname.toLowerCase()];
-    const name = url.pathname.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "");
-    if (provider && name) return { provider, name };
-  } catch {
-    // SCP-style Git remotes are not valid URLs; parse them below.
-  }
-
-  const scpMatch = value.match(/^(?:[^@]+@)?([^:]+):\/?(.+)$/);
-  if (scpMatch) {
-    const provider = GIT_PROVIDERS[scpMatch[1].toLowerCase()];
-    const name = scpMatch[2].replace(/\/+$/, "").replace(/\.git$/, "");
-    if (provider && name) return { provider, name };
-  }
-  return undefined;
-}
-
-function gitOutput(command: string, cwd: string): string {
-  const env: NodeJS.ProcessEnv = { ...process.env, LC_ALL: "C", LANG: "C" };
-  for (const key of GIT_LOCATION_ENV_KEYS) delete env[key];
-  return execSync(command, {
-    cwd,
-    env,
-    encoding: "utf-8",
-    timeout: 5000,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-}
-
-/**
- * Detect the git repo name from remotes in the given directory.
- * Gives precedence to "origin", then picks the first remote matching a known host.
- */
-export function getRepoName(cwd: string): { provider: string; name: string } | undefined {
-  try {
-    const output = gitOutput("git remote -v", cwd);
-    const lines = output.trim().split("\n").filter(Boolean);
-
-    // Parse all remotes: [name, url, type]
-    const remotes: Array<{ name: string; url: string }> = [];
-    for (const line of lines) {
-      const parts = line.split(/\s+/);
-      if (parts.length >= 2 && line.includes("(fetch)")) {
-        remotes.push({ name: parts[0], url: parts[1] });
-      }
-    }
-
-    // Prefer "origin"
-    const origin = remotes.find((r) => r.name === "origin");
-    if (origin) {
-      const name = parseRepoName(origin.url + " ");
-      if (name) return name;
-    }
-
-    // Fall back to first remote that matches a known host
-    for (const remote of remotes) {
-      const name = parseRepoName(remote.url + " ");
-      if (name) return name;
-    }
-  } catch {
-    // Not a git repo or git not available — silently skip
-  }
-  return undefined;
 }
 
 export function pinnedRepositoryKeys(
@@ -184,56 +62,6 @@ export function pinnedRepositoryKeys(
 ): ReadonlySet<string> {
   return (metadata as MetadataWithPins | undefined)?.[PINNED_REPOSITORY_KEYS] ?? NO_PINNED_KEYS;
 }
-
-export function getRepoUrl(provider: string, name: string): string | undefined {
-  const host = PROVIDER_HOSTS[provider];
-  return host ? `https://${host}/${name}` : undefined;
-}
-
-/** `null` is git placing the directory in no repository, `undefined` is git not answering at all. */
-export function getRepoRoot(cwd: string): string | null | undefined {
-  try {
-    // Resolved, since git reports this with forward slashes on Windows.
-    const root = gitOutput("git rev-parse --show-toplevel", cwd).trim();
-    return root ? resolve(root) : undefined;
-  } catch (err) {
-    const stderr = String((err as { stderr?: unknown } | undefined)?.stderr ?? "");
-    return NOT_A_REPOSITORY.test(stderr) ? null : undefined;
-  }
-}
-
-export function getGitUserName(cwd: string): string | undefined {
-  try {
-    const name = gitOutput("git config user.name", cwd).trim();
-    if (name) return name;
-  } catch {}
-  return githubLogin();
-}
-
-/** Read the current git branch and commit SHA via the git CLI (omitted if absent). */
-export function getGitInfo(cwd: string): { branch?: string; commit?: string } {
-  const result: { branch?: string; commit?: string } = {};
-  try {
-    const branch = gitOutput("git rev-parse --abbrev-ref HEAD", cwd).trim();
-    // "HEAD" means detached — no branch name available.
-    if (branch && branch !== "HEAD") result.branch = branch;
-  } catch {
-    // Not a git repo / git unavailable — skip.
-  }
-  try {
-    const commit = gitOutput("git rev-parse HEAD", cwd).trim();
-    if (commit) result.commit = commit;
-  } catch {
-    // Not a git repo / git unavailable — skip.
-  }
-  return result;
-}
-
-const BOOLEAN_SETTINGS = {
-  enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
-  defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
-} as const;
-type BooleanSetting = keyof typeof BOOLEAN_SETTINGS;
 
 /** Preserve Claude environment boolean parsing; the shared helper receives parsed values. */
 function envBoolean(field: BooleanSetting): boolean | undefined {
@@ -245,10 +73,14 @@ function envBoolean(field: BooleanSetting): boolean | undefined {
   return setting.restrictive;
 }
 
+export function resolveStateFilePath(): string {
+  return process.env.STATE_FILE ?? join(homedir(), ...STATE_FILE_DEFAULT);
+}
+
 export function loadConfig(options?: { cwd?: string; deferGit?: boolean }): Config {
   const cwd = options?.cwd ?? process.cwd();
   const homeDir = homedir();
-  const stateFilePath = process.env.STATE_FILE ?? join(homeDir, ...STATE_FILE_DEFAULT);
+  const stateFilePath = resolveStateFilePath();
 
   const debug = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
 
@@ -330,16 +162,13 @@ export function loadConfig(options?: { cwd?: string; deferGit?: boolean }): Conf
     }
   }
 
+  const files = readCommonConfigFiles({ cwd, home: homeDir, harnessDirectory: ".claude" });
   const common = mergeCommonConfig(
     {
-      harness: readCommonConfigFile(join(cwd, ".claude", "langsmith.json")).common,
-      root: readCommonConfigFile(join(cwd, "langsmith-plugins.json")).common,
-      user: homeDir
-        ? readCommonConfigFile(join(homeDir, ".claude", "langsmith.json")).common
-        : undefined,
-      userRoot: homeDir
-        ? readCommonConfigFile(join(homeDir, ".langsmith-plugins.json")).common
-        : undefined,
+      harness: files.harness.common,
+      root: files.root.common,
+      user: files.user.common,
+      userRoot: files.userRoot.common,
       env: {
         enabled: envBoolean("enabled"),
         defaultMuted: envBoolean("defaultMuted"),
@@ -357,7 +186,7 @@ export function loadConfig(options?: { cwd?: string; deferGit?: boolean }): Conf
   // Environment replicas retain their SDK format, including legacy tuples.
   if (replicas === undefined) replicas = toSdkReplicas(common.replicas);
   redactExtraRules ??= common.redact_extra_rules;
-  customMetadata = common.metadata;
+  customMetadata = common.metadata && withBothGitMetadataNames(common.metadata);
 
   // Attach identity metadata so every traced run can be attributed to a
   // specific Claude Code installation and local OS user. User-supplied
@@ -372,35 +201,11 @@ export function loadConfig(options?: { cwd?: string; deferGit?: boolean }): Conf
     identityMetadata.anthropic_user_id = anthropicUserId;
   }
 
-  // coding-agent-v1 static identity literals + versions, merged onto every run.
-  const contractMetadata: Record<string, unknown> = {
-    ls_agent_purpose: "coding",
-    ls_integration: "claude-code",
-    ls_agent_runtime: "Claude Code",
-    ls_trace_schema_version: "coding-agent-v1",
-    cwd,
-  };
-  if (LS_INTEGRATION_VERSION) {
-    contractMetadata.ls_integration_version = LS_INTEGRATION_VERSION;
-  }
-
   // Attach git repo metadata if available, to attribute runs to a specific codebase.
-  const repoMetadata: Record<string, unknown> = {};
-  if (!options?.deferGit) {
-    const repoName = getRepoName(cwd);
-    if (repoName != null) {
-      repoMetadata.repository_name = repoName.name;
-      repoMetadata.repository_provider = repoName.provider;
-      const url = getRepoUrl(repoName.provider, repoName.name);
-      if (url) repoMetadata.repository_url = url;
-    }
-    const gitInfo = getGitInfo(cwd);
-    if (gitInfo.branch) repoMetadata.git_branch = gitInfo.branch;
-    if (gitInfo.commit) repoMetadata.git_commit_sha = gitInfo.commit;
-  }
+  const repoMetadata = options?.deferGit ? {} : getRepositoryMetadata(cwd);
 
   const pinned = REPOSITORY_METADATA_KEYS.filter((key) => customMetadata?.[key] !== undefined);
-  customMetadata = { ...contractMetadata, ...identityMetadata, ...repoMetadata, ...customMetadata };
+  customMetadata = { cwd, ...identityMetadata, ...repoMetadata, ...customMetadata };
   // Carried privately so per-tool attribution can leave these alone; spreading drops it.
   Object.defineProperty(customMetadata, PINNED_REPOSITORY_KEYS, { value: new Set<string>(pinned) });
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Config } from "./config.js";
-import { describeThreadLinks, LOOKUP_TIMEOUT_MS } from "./thread-link.js";
+import type { Config } from "./types.js";
+import { LOOKUP_TIMEOUT_MS } from "./constants.js";
+import { describeThreadLinks } from "./thread-link.js";
 
 // Exercise the actual SDK URL handling and requests; only HTTP is replaced.
 const fetchMock = vi.fn<typeof fetch>();

@@ -55,15 +55,19 @@ function hookBundles(pluginRoot: string): string[] {
 }
 
 describe("the caller workflow", () => {
-  it("builds with the same commit of the shared pipeline the repository installs", () => {
+  it("builds with the same release of the shared pipeline the repository installs", () => {
     const workflow = readFileSync(join(root, ".github/workflows/build-binary.yml"), "utf8");
     const lockfile = readFileSync(join(root, "pnpm-lock.yaml"), "utf8");
-    const pinned = /uses: langchain-ai\/langsmith-plugin-binary\/\S+@([0-9a-f]{40})/.exec(
+    const installed: string = json(join(root, "package.json")).devDependencies[
+      "@langchain/plugins-base"
+    ];
+    const pinned = /uses: langchain-ai\/langsmith-plugin-binary\/\S+@[0-9a-f]{40} # v(\S+)/.exec(
       workflow,
     )?.[1];
 
-    expect(pinned).toBeDefined();
-    expect(lockfile).toContain(`langsmith-plugin-binary/tar.gz/${pinned}`);
+    expect(installed).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(pinned).toBe(installed);
+    expect(lockfile).toContain(`'@langchain/plugins-base@${installed}'`);
   });
 });
 

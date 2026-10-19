@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-vi.mock("node:child_process", () => ({ execSync: vi.fn(() => "") }));
+vi.mock("node:child_process", () => ({ execFileSync: vi.fn(() => "") }));
 vi.mock("./utils/stdin.js", () => ({ readStdin: vi.fn() }));
-vi.mock("./langsmith.js", { spy: true });
+vi.mock("./tracing-engine.js", { spy: true });
 
 vi.mock("./logger.js", () => ({
   log: vi.fn(),
@@ -18,7 +18,7 @@ vi.mock("./logger.js", () => ({
 import { HOOK_EVENT_NAMES } from "./constants.js";
 import { initHook } from "./utils/hook-init.js";
 import { readStdin } from "./utils/stdin.js";
-import { initTracing } from "./langsmith.js";
+import { captureRun, initTracing } from "./tracing-engine.js";
 import { error } from "./logger.js";
 
 describe("initHook", () => {
@@ -284,9 +284,7 @@ describe("initHook", () => {
       process.env.STATE_FILE = join(home, "state.json");
       const transcript = join(home, "transcript.jsonl");
       writeFileSync(transcript, "");
-      const { RunTree } = await import("langsmith");
-      // Replace the SDK transport operation before invoking the actual hook.
-      const post = vi.spyOn(RunTree.prototype, "postRun").mockResolvedValue(undefined);
+      vi.mocked(captureRun).mockResolvedValue(undefined);
       const fetch = vi.fn();
       vi.stubGlobal("fetch", fetch);
       vi.mocked(readStdin).mockResolvedValue({
@@ -304,7 +302,7 @@ describe("initHook", () => {
         JSON.parse(readFileSync(process.env.STATE_FILE!, "utf8"))["env-enabled"],
       ).toMatchObject({ current_turn_tracing: "full" });
       expect(initTracing).toHaveBeenCalled();
-      expect(post).toHaveBeenCalledOnce();
+      expect(captureRun).toHaveBeenCalledOnce();
       expect(fetch).not.toHaveBeenCalled();
       expect(error).not.toHaveBeenCalled();
     },

@@ -13,14 +13,8 @@
  */
 
 import { resolveTurnTracingMode } from "./tracing-mode.js";
-import { closeTurnRecord } from "./turn-record.js";
-import { settledFromTurn } from "./reconcile.js";
-import {
-  closeAgentToolRun,
-  completeTurnRun,
-  flushPendingTraces,
-  turnIdentityFromOpenTurn,
-} from "./langsmith.js";
+import { closeAgentToolRun, completeTurnRun, turnIdentityFromOpenTurn } from "./langsmith.js";
+import { settledFromTurn } from "./tracing-engine.js";
 import { atomicUpdateState, getSessionState, loadState } from "./state.js";
 import * as logger from "./logger.js";
 import type { OpenTurn } from "./types.js";
@@ -29,7 +23,6 @@ export async function finalizeNotificationChain(opts: {
   stateFilePath: string;
   defaultMuted?: boolean;
   sessionId: string;
-  project: string;
   customMetadata?: Record<string, unknown>;
   runtimeVersion?: string;
   /** The agent whose notification turn just completed. */
@@ -40,7 +33,7 @@ export async function finalizeNotificationChain(opts: {
    *  ancestors walked via the chain. */
   interrupted?: boolean;
 }): Promise<void> {
-  const { stateFilePath, sessionId, project, customMetadata, runtimeVersion } = opts;
+  const { stateFilePath, sessionId, customMetadata, runtimeVersion } = opts;
 
   let agentId: string | undefined = opts.agentId;
   let interrupted = opts.interrupted ?? false;
@@ -57,12 +50,7 @@ export async function finalizeNotificationChain(opts: {
     const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : undefined;
     const agentType = taskRunInfo.agent_type ?? "";
 
-    const settled = settledFromTurn({
-      base: customMetadata,
-      stateFilePath,
-      sessionId,
-      turnRunId: launchingTurnId,
-    });
+    const settled = await settledFromTurn(customMetadata, launchingTurnId);
 
     // 1) Close the Agent tool run for this agent. If SubagentStop posted it open
     //    (subagent_done) we patch it closed; if it was killed before SubagentStop
@@ -80,7 +68,6 @@ export async function finalizeNotificationChain(opts: {
         agentId,
         agentType,
         taskRunInfo,
-        project,
         customMetadata: settled,
         runtimeVersion,
         turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : undefined,
@@ -139,15 +126,9 @@ export async function finalizeNotificationChain(opts: {
 
     // 3) Complete the launching turn's root run if it fully drained.
     if (toComplete) {
-      closeTurnRecord({
-        stateFilePath,
-        sessionId,
-        turnRunId: toComplete.run_id,
-        turnId: toComplete.turn_id,
-      });
       try {
         await completeTurnRun({
-          ...turnIdentityFromOpenTurn(toComplete, { sessionId, project, customMetadata: settled }),
+          ...turnIdentityFromOpenTurn(toComplete, { sessionId, customMetadata: settled }),
           tracing: resolveTurnTracingMode(opts, sessionId, toComplete.tracing),
           lastAssistantMessage: toComplete.last_assistant_message,
         });
@@ -163,10 +144,4 @@ export async function finalizeNotificationChain(opts: {
     agentId = nextAgentId;
     interrupted = false;
   }
-
-  // Flush our own posted runs before returning — not every caller flushes after
-  // us (e.g. UserPromptSubmit's superseded-notification path), and a hook process
-  // can exit before LangSmith's batch timer fires, dropping the runs. A redundant
-  // flush in callers that do flush (Stop, SubagentStop) is a harmless no-op.
-  await flushPendingTraces();
 }

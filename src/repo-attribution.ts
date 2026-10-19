@@ -1,30 +1,36 @@
 // A session started in a central folder works across several repositories, so its working
 // directory says nothing about the repository a given tool call touched.
 
-import { isAbsolute } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import {
+  createGitHubLoginFallback,
   getGitUserName,
-  getGitInfo,
-  getRepoName,
   getRepoRoot,
-  getRepoUrl,
-  pinnedRepositoryKeys,
-} from "./config.js";
-import {
-  ATTRIBUTION_IDENTIFIER_KEY,
-  REPOSITORY_METADATA_KEYS,
-  REPOSITORY_NAME_KEY,
-} from "./constants.js";
-import {
+  getRepositoryMetadata,
   nearestExistingDirectory,
   rootFromGitMarker,
-  toolPathFromInput,
-} from "./repo-attribution-paths.js";
-import type { RepositoryAttribution, ToolOrigin, ToolPathLookup } from "./types.js";
+} from "@langchain/plugins-base/git";
+import { pinnedRepositoryKeys, resolveStateFilePath } from "./config.js";
+import {
+  REPOSITORY_METADATA_KEYS,
+  type RepositoryAttribution,
+} from "@langchain/plugins-base/metadata";
+import { GH_LOGIN_MARKER_FILE } from "./constants.js";
+import { toolPathFromInput } from "./repo-attribution-paths.js";
+import type { ToolOrigin, ToolPathLookup } from "./types.js";
 
 const rootByDirectory = new Map<string, string | null | undefined>();
 const attributionByRoot = new Map<string, RepositoryAttribution>();
 const identifierByRoot = new Map<string, RepositoryAttribution>();
+let githubLogin: (() => string | undefined) | undefined;
+
+function gitUserName(root: string): string | undefined {
+  const stateFile = resolveStateFilePath();
+  githubLogin ??= createGitHubLoginFallback({
+    markerPath: join(dirname(stateFile), GH_LOGIN_MARKER_FILE),
+  });
+  return getGitUserName(root, { githubLogin });
+}
 
 function rootForPath(path: string): string | null | undefined {
   const directory = nearestExistingDirectory(path);
@@ -63,7 +69,7 @@ function withoutRepositoryKeys(
 function identifierForRoot(root: string): RepositoryAttribution {
   const cached = identifierByRoot.get(root);
   if (cached) return cached;
-  const userName = getGitUserName(root);
+  const userName = gitUserName(root);
   const identifier: RepositoryAttribution = userName ? { ls_attribution_identifier: userName } : {};
   identifierByRoot.set(root, identifier);
   return identifier;
@@ -72,17 +78,10 @@ function identifierForRoot(root: string): RepositoryAttribution {
 function attributionForRoot(root: string): RepositoryAttribution {
   const cached = attributionByRoot.get(root);
   if (cached) return cached;
-  const attribution: RepositoryAttribution = { ...identifierForRoot(root) };
-  const repoName = getRepoName(root);
-  if (repoName) {
-    attribution.repository_name = repoName.name;
-    attribution.repository_provider = repoName.provider;
-    const url = getRepoUrl(repoName.provider, repoName.name);
-    if (url) attribution.repository_url = url;
-  }
-  const gitInfo = getGitInfo(root);
-  if (gitInfo.branch) attribution.git_branch = gitInfo.branch;
-  if (gitInfo.commit) attribution.git_commit_sha = gitInfo.commit;
+  const attribution: RepositoryAttribution = {
+    ...identifierForRoot(root),
+    ...getRepositoryMetadata(root),
+  };
   attributionByRoot.set(root, attribution);
   return attribution;
 }
@@ -145,9 +144,6 @@ export function repoScopedMetadata(
   );
 }
 
-export const awaitsTheTurn = (metadata: Record<string, unknown> | undefined): boolean =>
-  !metadata?.[REPOSITORY_NAME_KEY] || !metadata?.[ATTRIBUTION_IDENTIFIER_KEY];
-
 export function toolOrigin(toolInput: unknown, sessionCwd?: string): ToolOrigin {
   return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd) };
 }
@@ -175,19 +171,6 @@ export function settledRepositoryMetadata(
   );
 }
 
-/** The settled run to upload, left open when only the turn can say where it worked. */
-export function settledRunConfig(
-  run: Record<string, unknown>,
-  origin: ToolOrigin,
-): { run: Record<string, unknown>; open: boolean } {
-  const extra = run.extra as { metadata?: Record<string, unknown> } | undefined;
-  const metadata = settledRepositoryMetadata(extra?.metadata, origin) ?? extra?.metadata ?? {};
-  const settled: Record<string, unknown> = { ...run, extra: { ...extra, metadata } };
-  const open = awaitsTheTurn(metadata);
-  if (open) delete settled.end_time;
-  return { run: settled, open };
-}
-
 export function turnScopedMetadata(
   base: Record<string, unknown> | undefined,
   toolInputs: Iterable<unknown>,
@@ -209,4 +192,5 @@ export function clearRepoAttributionCache(): void {
   rootByDirectory.clear();
   attributionByRoot.clear();
   identifierByRoot.clear();
+  githubLogin = undefined;
 }

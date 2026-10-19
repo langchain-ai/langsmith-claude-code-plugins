@@ -11,15 +11,7 @@ import { atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
-
-interface PreCompactHookInput {
-  session_id: string;
-  transcript_path: string;
-  cwd: string;
-  hook_event_name: "PreCompact";
-  trigger: "manual" | "auto";
-  custom_instructions: string;
-}
+import type { PreCompactHookInput } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: PreCompactHookInput = await readStdin();

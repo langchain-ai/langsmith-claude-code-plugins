@@ -7,9 +7,8 @@
  */
 
 import { resolveTurnTracingMode } from "../tracing-mode.js";
-import { uuid7FromTime } from "langsmith";
 import { debug, error } from "../logger.js";
-import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
+import { generateDottedOrderSegment } from "../langsmith.js";
 import {
   loadState,
   atomicUpdateState,
@@ -21,26 +20,11 @@ import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
 import { settledRepositoryMetadata, toolOrigin } from "../repo-attribution.js";
-import { createRunTree, runConfigForMode } from "../privacy.js";
 import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
-import { enqueueRun, queueOrigin } from "../queue.js";
-import { recordRun, turnRecordPath } from "../turn-record.js";
-import { startQueueFlusher } from "../utils/detach.js";
-
-interface PostToolUseHookInput {
-  session_id: string;
-  transcript_path: string;
-  cwd: string;
-  permission_mode?: string;
-  hook_event_name: "PostToolUse";
-  tool_name: string;
-  tool_input: Record<string, unknown>;
-  tool_response: Record<string, unknown>;
-  tool_use_id: string;
-  agent_id?: string;
-  agent_type?: string;
-}
+import { captureRun, captureToolRun, initTracing } from "../tracing-engine.js";
+import { stableRunId } from "../utils/ids/run-id.js";
+import type { PostToolUseHookInput } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: PostToolUseHookInput = await readStdin();
@@ -82,9 +66,8 @@ export async function main(): Promise<void> {
   // Use PreToolUse's recorded start time if available (accurate wall-clock time
   // from before the tool ran), otherwise fall back to Date.now().
   const startTime = sessionState.tool_start_times?.[input.tool_use_id] ?? Date.now();
-  const toolRunId = uuid7FromTime(startTime);
+  const toolRunId = stableRunId(startTime, input.session_id, input.tool_use_id);
   const toolEndTime = Date.now();
-  // Convert to ISO for RunTree (avoids internal timestamp mangling)
   const startTimeIso = new Date(startTime).toISOString();
   const toolEndTimeIso = new Date(toolEndTime).toISOString();
 
@@ -100,7 +83,6 @@ export async function main(): Promise<void> {
     : undefined;
 
   const origin = toolOrigin(input.tool_input, input.cwd);
-  const turnRecord = turnRecordPath(config.stateFilePath, input.session_id, parentRunId);
 
   if (agentId) {
     // Agent tool: defer LangSmith run creation to the Stop hook, which will
@@ -113,81 +95,59 @@ export async function main(): Promise<void> {
     debug(
       `Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`,
     );
-    const client = initTracing(
-      config.apiKey,
-      config.apiBaseUrl,
-      config.replicas,
-      config.redact,
-      config.redactExtraRules,
-    );
-    const runTree = createRunTree(
+    initTracing(config, input.cwd, input.session_id);
+    await captureRun(
       {
-        client,
-        replicas: config.replicas,
         id: toolRunId,
         name: "Workflow",
         run_type: "tool",
         inputs: { input: input.tool_input },
-        project_name: config.project,
         start_time: startTimeIso,
         // No end_time — left open until finalizeNotificationChain closes it.
         parent_run_id: parentRunId,
         trace_id: traceId,
         dotted_order: toolDottedOrder,
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId: input.session_id,
-            base: settledRepositoryMetadata(config.customMetadata, origin),
-            turnNumber: sessionState.current_turn_number,
-            runtimeVersion: sessionState.runtime_version,
-            agentType: "root",
-            toolName: "Workflow",
-            runName: "Workflow",
-          }),
-        },
+        metadata: codingAgentMetadata({
+          sessionId: input.session_id,
+          base: settledRepositoryMetadata(config.customMetadata, origin),
+          turnNumber: sessionState.current_turn_number,
+          runtimeVersion: sessionState.runtime_version,
+          agentType: "root",
+          toolName: "Workflow",
+          runName: "Workflow",
+        }),
       },
       tracing,
     );
-    await runTree.postRun();
   } else {
-    // Regular tool: queue the finished run and leave the upload to the flusher.
-    const toolMetadata = codingAgentMetadata({
-      sessionId: input.session_id,
-      base: config.customMetadata,
-      turnNumber: sessionState.current_turn_number,
-      runtimeVersion: sessionState.runtime_version,
-      agentType: "root",
-      toolName: input.tool_name,
-      runName: input.tool_name,
-      skillName: skillNameFromTool(input.tool_name, input.tool_input),
-    });
-    const settles = tracing === "full" ? origin : undefined;
-    const toolRun = {
-      id: toolRunId,
-      name: input.tool_name,
-      run_type: "tool",
-      inputs: { input: input.tool_input },
-      outputs: { output: input.tool_response },
-      project_name: config.project,
-      start_time: startTimeIso,
-      end_time: toolEndTimeIso,
-      parent_run_id: parentRunId,
-      trace_id: traceId,
-      dotted_order: toolDottedOrder,
-      extra: { metadata: toolMetadata },
-    };
-    const queued = queueOrigin(config);
-    recordRun({ path: turnRecord, run: toolRun, tracing, origin: queued });
-    await enqueueRun(
-      config.stateFilePath,
-      input.session_id,
-      toolRun,
+    initTracing(config, input.cwd, input.session_id);
+    await captureToolRun(
+      {
+        id: toolRunId,
+        name: input.tool_name,
+        run_type: "tool",
+        inputs: { input: input.tool_input },
+        outputs: { output: input.tool_response },
+        start_time: startTimeIso,
+        end_time: toolEndTimeIso,
+        parent_run_id: parentRunId,
+        trace_id: traceId,
+        dotted_order: toolDottedOrder,
+        metadata: codingAgentMetadata({
+          sessionId: input.session_id,
+          base: config.customMetadata,
+          turnNumber: sessionState.current_turn_number,
+          runtimeVersion: sessionState.runtime_version,
+          agentType: "root",
+          toolName: input.tool_name,
+          runName: input.tool_name,
+          skillName: skillNameFromTool(input.tool_name, input.tool_input),
+        }),
+      },
       tracing,
-      queued,
-      turnRecord,
-      settles,
+      parentRunId,
+      origin,
     );
-    startQueueFlusher(input.cwd, input.session_id);
   }
 
   // Save state atomically so concurrent PostToolUse hooks don't clobber each other.
@@ -202,18 +162,13 @@ export async function main(): Promise<void> {
     // subagent_done + is_workflow so finalize patches it closed as "Workflow".
     let backgroundUpdate: Pick<typeof freshSession, "task_run_map" | "open_turns"> | undefined;
     if (agentId || workflow) {
-      const deferred = runConfigForMode(
-        {
-          trace_id: traceId!,
-          parent_run_id: parentRunId!,
-          start_time: startTimeIso,
-          end_time: toolEndTimeIso,
-          inputs: input.tool_input,
-          outputs: input.tool_response,
-          project_name: config.project,
-        },
-        tracing,
-      ) as Record<string, unknown>;
+      const deferred: Record<string, unknown> = {
+        trace_id: traceId!,
+        parent_run_id: parentRunId!,
+        start_time: startTimeIso,
+        end_time: toolEndTimeIso,
+        ...(tracing === "full" ? { inputs: input.tool_input, outputs: input.tool_response } : {}),
+      };
       const launchingTurn = {
         tracing: resolveTurnTracingMode(
           config,
@@ -283,10 +238,4 @@ export async function main(): Promise<void> {
       },
     };
   });
-
-  // Only the open Workflow run posts here: a regular tool is queued for the detached
-  // flusher, and the deferred Agent tool run is created by Stop.
-  if (workflow) {
-    await flushPendingTraces();
-  }
 }

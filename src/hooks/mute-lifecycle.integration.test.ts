@@ -1,9 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HookEventName } from "../constants.js";
-import type { TracingMode, TracingState, TranscriptMessage } from "../types.js";
+import type { HookEventName, TracingMode, TracingState, TranscriptMessage } from "../types.js";
 import { tracingPolicyPath } from "../tracing-policy.js";
 
 // Exercise the real hooks, grouping, run builders, background registration and
@@ -21,7 +21,6 @@ const h = vi.hoisted(() => ({
   beforePost: undefined as undefined | (() => void | Promise<void>),
   event: "" as string,
   errors: [] as unknown[],
-  queueState: "",
 }));
 vi.mock("langsmith", () => ({
   Client: class {
@@ -40,14 +39,40 @@ vi.mock("langsmith", () => ({
     async patchRun() {
       h.operations.push({ action: "patch", config: JSON.parse(JSON.stringify(this.config)) });
     }
+    createChild() {}
+    end() {}
+    toJSON() {}
   },
 }));
+vi.mock("node:child_process", { spy: true });
+vi.mock("../tracing-engine.js", async () => {
+  const { createCodingAgentRunTree } = await import("@langchain/plugins-base/privacy");
+  const { buildCodingAgentMetadata } = await import("@langchain/plugins-base/metadata");
+  const captureRun = async (
+    { metadata, ...run }: Record<string, any>,
+    mode: TracingMode = "full",
+    _rootRunId?: string,
+    operation = "post",
+  ) => {
+    const config = { ...run, extra: { metadata: buildCodingAgentMetadata(metadata) } };
+    const tree = createCodingAgentRunTree(config as never, "claude-code", mode);
+    await (operation === "post" ? tree.postRun() : tree.patchRun());
+  };
+  return {
+    initTracing: () => {},
+    settledFromTurn: async (base: unknown) => base,
+    turnFiller: async () => (metadata: unknown) => metadata,
+    captureRun,
+    captureToolRun: (run: Record<string, any>, mode: TracingMode, rootRunId: string) =>
+      captureRun(run, mode, rootRunId),
+  };
+});
 vi.mock("../utils/stdin.js", () => ({ readStdin: async () => h.input }));
 vi.mock("../utils/hook-init.js", () => ({
   initHook: () => ({
     apiKey: "test",
     project: "test",
-    stateFilePath: h.queueState,
+    stateFilePath: "/unused",
     defaultMuted: h.defaultMuted,
     redact: false,
     customMetadata: { custom: "PRIVATE_MARKER", ls_model_name: "PRIVATE_MARKER" },
@@ -169,7 +194,7 @@ const HOOK_EVENT_BY_NAME = {
   failure: "StopFailure",
   end: "SessionEnd",
 } satisfies Record<string, HookEventName>;
-async function hook(name: keyof typeof HOOK_EVENT_BY_NAME, extra: Record<string, unknown> = {}) {
+async function hook(name: string, extra: Record<string, unknown> = {}) {
   h.input = {
     session_id: "session",
     cwd: "/repo",
@@ -183,23 +208,11 @@ async function hook(name: keyof typeof HOOK_EVENT_BY_NAME, extra: Record<string,
     tool_response: { content: privateText },
     ...extra,
   };
-  h.event = HOOK_EVENT_BY_NAME[name];
+  const event = HOOK_EVENT_BY_NAME[name as keyof typeof HOOK_EVENT_BY_NAME];
+  h.event = event;
   vi.resetModules();
   const { HOOK_HANDLERS } = await import("./registry.js");
-  const { queueSessionDir, readQueue, removeQueued } = await import("../queue.js");
-  const queued = queueSessionDir(h.queueState, String(h.input.session_id));
-  // A nested hook must leave its caller's entry for the caller to drain in order.
-  const inherited = new Set(readQueue(queued).map((entry) => entry.queue_id));
-  await HOOK_HANDLERS[HOOK_EVENT_BY_NAME[name]]();
-  // Awaiting the handler covers Stop's 200ms transcript flush, so this settle
-  // only has to let the SDK's unawaited posts land.
-  await new Promise((resolve) => setTimeout(resolve, 15));
-  // A tool run is queued rather than posted now, so read what the real queue wrote.
-  for (const entry of readQueue(queued)) {
-    if (inherited.has(entry.queue_id)) continue;
-    h.operations.push({ action: "post", config: entry.run as Record<string, any> });
-    removeQueued(queued, entry.queue_id);
-  }
+  await HOOK_HANDLERS[event]();
 }
 function topology() {
   return h.operations.map(({ action, config: c }) => ({
@@ -219,12 +232,7 @@ function expectPrivate(operations = h.operations) {
   for (const { config } of operations)
     expect(config.extra.metadata.ls_tracing_mode).toBe("metadata");
 }
-const queueSandbox = join(mkdtempSync(join(tmpdir(), "queue-sandbox-")), "state.json");
-beforeEach(async () => {
-  h.queueState = queueSandbox;
-  const { queueSessionDir, readQueue, removeQueued } = await import("../queue.js");
-  const previous = queueSessionDir(queueSandbox, "session");
-  for (const entry of readQueue(previous)) removeQueued(previous, entry.queue_id);
+beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(now));
 });
@@ -252,6 +260,7 @@ function legacyParent() {
   h.state.session = {
     last_line: -1,
     turn_count: 0,
+    updated: "",
     current_turn_run_id: "legacy-root",
     current_trace_id: "legacy-root",
     current_dotted_order: "legacy-order",
@@ -575,7 +584,7 @@ describe("privacy propagation without lifecycle changes", () => {
       await hook("stop");
       expect(h.operations.length).toBeGreaterThan(0);
       expectPrivate();
-      const { MUTED_TRACE_CONTENT } = await import("../privacy.js");
+      const { MUTED_TRACE_CONTENT } = await import("@langchain/plugins-base/privacy");
       expect(JSON.stringify(h.operations)).toContain(MUTED_TRACE_CONTENT);
       expect(h.operations.some((op) => op.config.run_type === "llm")).toBe(true);
       expect(h.operations.some((op) => op.config.name === "Bash")).toBe(true);
@@ -668,16 +677,13 @@ describe("privacy propagation without lifecycle changes", () => {
           },
           ...(path === "workflow" ? { workflow_run_id: "wf_test", is_workflow: true } : {}),
         },
-      };
+      } as never;
       if (path === "finalize") {
-        const { initTracing } = await import("../langsmith.js");
         const { finalizeNotificationChain } = await import("../finalize.js");
-        initTracing("test", undefined, undefined, false);
         await finalizeNotificationChain({
           stateFilePath: "/unused",
           defaultMuted: h.defaultMuted,
           sessionId: "session",
-          project: "test",
           agentId: "background",
         });
       } else if (path === "end") {
@@ -860,9 +866,8 @@ describe("privacy propagation without lifecycle changes", () => {
       const topologies = [];
       for (const mode of ["full", "metadata"] as const) {
         reset(mode);
-        const { initTracing, traceTurn } = await import("../langsmith.js");
+        const { traceTurn } = await import("../langsmith.js");
         const { groupIntoTurns } = await import("../transcript.js");
-        initTracing("test", undefined, undefined, false);
         const turns = groupIntoTurns(
           transcript({ id: "tool", name, agentId: name === "Task" ? "agent" : undefined }),
         );
@@ -870,7 +875,6 @@ describe("privacy propagation without lifecycle changes", () => {
           turn: turns[0],
           sessionId: "session",
           turnNum: 1,
-          project: "test",
           tracing: mode,
           toolTracingModes: { tool: "full" },
         });
@@ -952,6 +956,15 @@ describe("privacy propagation without lifecycle changes", () => {
     },
   );
 
+  it("runs no git on the tool hook's path", async () => {
+    reset("full");
+    await hook("prompt");
+    vi.mocked(execFileSync).mockClear();
+    await hook("post", { tool_input: { file_path: `${process.cwd()}/package.json` } });
+    expect(h.operations.at(-1)?.config.name).toBe("Bash");
+    expect(vi.mocked(execFileSync).mock.calls.filter(([file]) => file === "git")).toEqual([]);
+  });
+
   it("preserves exact full/muted topology through tools, deferred Stop, SubagentStop and notification join", async () => {
     const topologies = [];
     for (const mode of ["full", "metadata"] as const) {
@@ -990,9 +1003,7 @@ describe("privacy propagation without lifecycle changes", () => {
       topologies.push(topology());
       if (mode === "metadata") {
         expectPrivate();
-        const llm = h.operations.find(
-          (op) => op.action === "patch" && op.config.run_type === "llm",
-        )!;
+        const llm = h.operations.find((op) => op.config.run_type === "llm")!;
         expect(llm.config.extra.metadata.ls_model_name).toBe("claude-test");
         expect(llm.config.extra.metadata.usage_metadata.total_tokens).toBe(5);
       } else expect(JSON.stringify(h.operations)).toContain(privateText);

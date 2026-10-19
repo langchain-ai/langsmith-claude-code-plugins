@@ -4,10 +4,9 @@
 
 import { appendFileSync, mkdirSync, statSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
+import { MAX_LOG_BYTES } from "./constants.js";
 
-const MAX_LOG_BYTES = 5 * 1024 * 1024; // 5 MB
-
-const LOG_FILE =
+export const LOG_FILE =
   process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
 
 let debugEnabled = false;

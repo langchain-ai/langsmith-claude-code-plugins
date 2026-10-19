@@ -2,7 +2,7 @@
  * UserPromptSubmit hook handler.
  *
  * Invoked when a user submits a prompt, before Claude processes it.
- * Creates the initial RunTree for the turn and stores the run ID
+ * Creates the initial run for the turn and stores the run ID
  * for the Stop hook to use as the parent for all LLM and tool runs.
  *
  * Also handles interrupted turns: if Stop never fired for the previous turn
@@ -10,16 +10,15 @@
  * transcript before closing it with "User interrupt".
  */
 
-import { uuid7FromTime } from "langsmith";
 import { debug, error } from "../logger.js";
 import {
-  initTracing,
   closeInterruptedTurn,
   generateDottedOrderSegment,
   parseDottedOrder,
 } from "../langsmith.js";
 import { finalizeNotificationChain } from "../finalize.js";
-import { settledFromTurn } from "../reconcile.js";
+import { captureRun, initTracing, settledFromTurn } from "../tracing-engine.js";
+import { stableRunId } from "../utils/ids/run-id.js";
 import {
   loadState,
   atomicUpdateState,
@@ -30,12 +29,8 @@ import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
-import { startQueueFlusher } from "../utils/detach.js";
-import { queueOrigin } from "../queue.js";
-import { recordRun, turnRecordPath } from "../turn-record.js";
-import { USER_PROMPT_TURN_NAME } from "../constants.js";
+import { KILLED_NOTIFICATION_STATUS, USER_PROMPT_TURN_NAME } from "../constants.js";
 import { codingAgentMetadata } from "../metadata.js";
-import { createRunTree } from "../privacy.js";
 import { loadConfig } from "../config.js";
 import { describeThreadLinks } from "../thread-link.js";
 import {
@@ -43,27 +38,7 @@ import {
   setThreadTracingMode,
   getThreadTracingMode,
 } from "../tracing-policy.js";
-
-interface UserPromptSubmitHookInput {
-  session_id: string;
-  transcript_path: string;
-  cwd: string;
-  permission_mode?: string;
-  hook_event_name: "UserPromptSubmit";
-  prompt: string;
-  agent_id?: string;
-  agent_type?: string;
-}
-
-/**
- * The task-notification <status> that means the subagent was forcibly stopped
- * (so SubagentStop never fires and we must finalize from the notification turn,
- * marking the agent interrupted). We match only this known value: an unknown/new
- * status falls back to being treated as a normal completion — we'd rather show a
- * killed subagent as completed than mislabel a successful one as interrupted if
- * Claude Code changes its status vocabulary. Matched case-insensitively.
- */
-const KILLED_NOTIFICATION_STATUS = "killed";
+import type { UserPromptSubmitHookInput } from "../types.js";
 
 export async function main(): Promise<void> {
   const hookStartTime = Date.now();
@@ -124,17 +99,9 @@ export async function main(): Promise<void> {
     return;
   }
 
-  const client = initTracing(
-    config.apiKey,
-    config.apiBaseUrl,
-    config.replicas,
-    config.redact,
-    config.redactExtraRules,
-  );
+  initTracing(config, input.cwd, input.session_id);
 
   const state = loadState(config.stateFilePath);
-  // Sweep once at the start, for folders other sessions left behind long enough ago to be safe.
-  if (state[input.session_id] === undefined) startQueueFlusher(input.cwd, input.session_id);
   const sessionState = getSessionState(state, input.session_id);
   const turnMode = getThreadTracingMode(
     config.stateFilePath,
@@ -190,19 +157,10 @@ export async function main(): Promise<void> {
         sessionId: input.session_id,
         sessionState,
         transcriptPath: expandHome(input.transcript_path),
-        project: config.project,
         stateFilePath: config.stateFilePath,
         customMetadata: config.customMetadata,
         runtimeVersion,
         approvalPolicy,
-        record: {
-          path: turnRecordPath(
-            config.stateFilePath,
-            input.session_id,
-            sessionState.current_turn_run_id,
-          ),
-          origin: queueOrigin(config),
-        },
         error: supersededNotificationAgentId
           ? "Superseded by a newer task-notification"
           : "User interrupt",
@@ -215,7 +173,6 @@ export async function main(): Promise<void> {
           defaultMuted: config.defaultMuted,
           stateFilePath: config.stateFilePath,
           sessionId: input.session_id,
-          project: config.project,
           customMetadata: config.customMetadata,
           runtimeVersion,
           agentId: supersededNotificationAgentId,
@@ -232,7 +189,7 @@ export async function main(): Promise<void> {
   const turnNum = sessionState.turn_count + interruptedTurnsTraced + 1;
 
   const startTime = new Date().toISOString();
-  const runId = uuid7FromTime(startTime);
+  const runId = stableRunId(startTime, input.session_id, turnNum);
   const segment = generateDottedOrderSegment(startTime, runId);
 
   // Decide where this turn nests.
@@ -291,26 +248,18 @@ export async function main(): Promise<void> {
 
   const launchingTurnId = (agentToolRun?.deferred as Record<string, unknown> | undefined)
     ?.parent_run_id as string | undefined;
-  const inherited = settledFromTurn({
-    base: config.customMetadata,
-    stateFilePath: config.stateFilePath,
-    sessionId: input.session_id,
-    turnRunId: launchingTurnId,
-  });
+  const inherited = await settledFromTurn(config.customMetadata, launchingTurnId);
 
-  const turnRun = {
-    client,
-    replicas: config.replicas,
-    id: runId,
-    name: USER_PROMPT_TURN_NAME,
-    run_type: "chain",
-    inputs: { messages: [{ role: "user", content: input.prompt }] },
-    project_name: config.project,
-    start_time: startTime,
-    trace_id: traceId,
-    dotted_order: dottedOrder,
-    ...(parentRunId ? { parent_run_id: parentRunId } : {}),
-    extra: {
+  await captureRun(
+    {
+      id: runId,
+      name: USER_PROMPT_TURN_NAME,
+      run_type: "chain",
+      inputs: { messages: [{ role: "user", content: input.prompt }] },
+      start_time: startTime,
+      trace_id: traceId,
+      dotted_order: dottedOrder,
+      ...(parentRunId ? { parent_run_id: parentRunId } : {}),
       metadata: codingAgentMetadata({
         sessionId: input.session_id,
         base: inherited,
@@ -320,19 +269,8 @@ export async function main(): Promise<void> {
         agentType: "root",
       }),
     },
-  };
-
-  const runTree = createRunTree(turnRun, turnMode);
-
-  await runTree.postRun();
-
-  recordRun({
-    path: turnRecordPath(config.stateFilePath, input.session_id, runId),
-    run: turnRun,
-    tracing: turnMode,
-    origin: queueOrigin(config),
-    root: true,
-  });
+    turnMode,
+  );
 
   debug(`Created initial run ${runId} for turn ${turnNum}`);
 

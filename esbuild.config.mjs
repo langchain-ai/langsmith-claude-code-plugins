@@ -31,7 +31,7 @@ await build({
   plugins: [runtimeBinaryConfig],
   define: {
     // Build-time injection of the plugin (integration) version. Consumed by
-    // config.ts via `typeof __LS_INTEGRATION_VERSION__`.
+    // constants.ts via `typeof __LS_INTEGRATION_VERSION__`.
     __LS_INTEGRATION_VERSION__: JSON.stringify(pkg.version),
     __LS_BINARY_HOOKS__: JSON.stringify(
       readFileSync(new URL("./hooks/hooks.binary.json", import.meta.url), "utf-8"),

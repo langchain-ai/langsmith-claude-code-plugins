@@ -12,14 +12,7 @@ import { atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
-
-interface PreToolUseHookInput {
-  session_id: string;
-  cwd: string;
-  hook_event_name: "PreToolUse";
-  tool_use_id: string;
-  tool_name: string;
-}
+import type { PreToolUseHookInput } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: PreToolUseHookInput = await readStdin();

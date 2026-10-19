@@ -2,10 +2,23 @@
  * Types for Claude Code hook inputs and JSONL transcript messages.
  */
 
-import type { RunTree } from "langsmith";
-import type { GIT_MARKERS, PINNED_REPOSITORY_KEYS, TURN_RECORD_LINE } from "./constants.js";
+import type { RunTree, RunTreeConfig } from "langsmith";
+import type { StringNodeRule } from "langsmith/anonymizer";
+import type {
+  CodingAgentAgentType,
+  CodingAgentMetadataOptions,
+} from "@langchain/plugins-base/metadata";
+import type { PluginSession } from "@langchain/plugins-base/plugin";
+import type { RecordedRun, TurnRecord } from "@langchain/plugins-base/tracing/settlement";
+import type { BOOLEAN_SETTINGS, HOOK_EVENT_NAMES, PINNED_REPOSITORY_KEYS } from "./constants.js";
 
 export type TracingMode = "full" | "metadata";
+
+export type HookEventName = (typeof HOOK_EVENT_NAMES)[number];
+
+export interface TracingPolicy {
+  threads: Record<string, TracingMode>;
+}
 
 // ─── Hook Input Types ───────────────────────────────────────────────────────
 
@@ -15,7 +28,7 @@ export interface HookEventPayload {
 }
 
 /** Common fields present in all hook inputs (delivered via stdin JSON). */
-export interface HookInputBase {
+interface HookInputBase {
   session_id: string;
   transcript_path: string;
   cwd: string;
@@ -172,15 +185,6 @@ export interface Turn {
 
 // ─── Repository Attribution ────────────────────────────────────────────────
 
-export interface RepositoryAttribution {
-  repository_name?: string;
-  repository_provider?: string;
-  repository_url?: string;
-  git_branch?: string;
-  git_commit_sha?: string;
-  ls_attribution_identifier?: string;
-}
-
 export interface ToolPathLookup {
   path?: string;
   namedAPath: boolean;
@@ -190,7 +194,45 @@ export interface ToolOrigin extends ToolPathLookup {
   cwd?: string;
 }
 
-export type GitMarker = (typeof GIT_MARKERS)[keyof typeof GIT_MARKERS];
+export type ClaudeMetadataOptions = Omit<
+  CodingAgentMetadataOptions,
+  "integration" | "integrationVersion" | "threadId" | "runType"
+> & { sessionId: string };
+
+export interface ClaudeRun {
+  id: string;
+  name: string;
+  run_type: string;
+  start_time: string | number;
+  end_time?: string | number;
+  inputs?: Record<string, unknown>;
+  outputs?: Record<string, unknown>;
+  error?: string;
+  parent_run_id?: string;
+  trace_id: string;
+  dotted_order: string;
+  metadata: CodingAgentMetadataOptions;
+}
+
+export type RunOperation = "post" | "patch";
+
+export interface ClaudeTracingSession extends PluginSession {
+  destinations: readonly { id: string }[];
+}
+
+export interface EngineRunPayload {
+  privacyMode: TracingMode;
+  run: Record<string, string>;
+}
+
+export interface EngineTurnRecord {
+  record: TurnRecord;
+  landed: boolean;
+}
+
+export interface TurnEvidenceChildren {
+  childRunIds?: string[];
+}
 
 export interface MetadataWithPins {
   [PINNED_REPOSITORY_KEYS]?: ReadonlySet<string>;
@@ -338,95 +380,240 @@ export interface TracingState {
   [sessionId: string]: SessionState;
 }
 
-// ─── Upload queue ───────────────────────────────────────────────────────────
-
-/** Everything an upload depends on beyond the run itself, which decides where it may be sent. */
-export interface QueueDestination {
-  apiBaseUrl: string;
-  apiKey: string;
-  replicas?: unknown;
-  redact?: boolean;
-  redactExtraRules?: unknown;
+/** Trace context of the turn that launched a background run. */
+export interface LaunchingTurn {
+  tracing?: TracingMode;
+  run_id: string;
+  trace_id?: string;
+  dotted_order?: string;
+  parent_run_id?: string;
+  start_time?: string;
+  turn_number?: number;
+  runtime_version?: string;
+  approval_policy?: string;
 }
 
-/** One finished run waiting to be uploaded, written by a hook that did not wait. */
-export interface QueuedRun {
-  queue_id: string;
+/** Assistant and tool runs are siblings under the turn run. */
+export interface TraceTurnOptions {
+  tracing?: TracingMode;
+  toolTracingModes?: Record<string, TracingMode>;
+  turn: Turn;
+  sessionId: string;
+  turnNum: number;
+  parentRunId?: string;
+  existingTaskRunMap?: Record<string, TaskRunEntry>;
+  /** Already traced by PostToolUse, so skipped. */
+  tracedToolUseIds?: Set<string>;
+  traceId?: string;
+  parentDottedOrder?: string;
+  customMetadata?: Record<string, unknown>;
+  /** Sent as `ls_agent_runtime_version`. */
+  runtimeVersion?: string;
+  /** Sent as `approval_policy` on the turn run only. */
+  approvalPolicy?: string;
+  agentType?: CodingAgentAgentType;
+  rootRunId?: string;
+  hookCwd?: string;
+}
+
+/** What it takes to close a turn run. */
+export interface TurnRunIdentity {
+  tracing?: TracingMode;
+  sessionId: string;
+  runId: string;
+  traceId?: string;
+  dottedOrder?: string;
+  parentRunId?: string;
+  startTime?: string;
+  turnId?: string;
+  turnNumber?: number;
+  runtimeVersion?: string;
+  approvalPolicy?: string;
+  customMetadata?: Record<string, unknown>;
+}
+
+export interface PendingSubagent {
+  agent_id: string;
+  agent_type: string;
+  agent_transcript_path: string;
+  session_id: string;
+}
+
+export interface TaskRunEntry {
+  tracing?: TracingMode;
+  run_id: string;
+  dotted_order: string;
+  deferred?: Record<string, unknown>;
+  /** Set by SubagentStop to close the Agent run. */
+  agent_type?: string;
+  /** Set once SubagentStop has handled this background subagent. */
+  subagent_done?: boolean;
+  /** Matches workflow stage SubagentStops, which carry it in their path. */
+  workflow_run_id?: string;
+  is_workflow?: boolean;
+}
+
+export interface PreToolUseHookInput {
+  session_id: string;
+  cwd: string;
+  hook_event_name: "PreToolUse";
+  tool_use_id: string;
+  tool_name: string;
+}
+
+export interface PreCompactHookInput {
+  session_id: string;
+  transcript_path: string;
+  cwd: string;
+  hook_event_name: "PreCompact";
+  trigger: "manual" | "auto";
+  custom_instructions: string;
+}
+
+export interface StopFailureHookInput {
+  session_id: string;
+  transcript_path: string;
+  cwd: string;
+  hook_event_name: "StopFailure";
+  error: string;
+  error_details?: string;
+  last_assistant_message?: string;
+}
+
+export interface PostCompactHookInput {
+  session_id: string;
+  transcript_path: string;
+  cwd: string;
+  hook_event_name: "PostCompact";
+  trigger: "manual" | "auto";
+  compact_summary: string;
+}
+
+export interface PostToolUseHookInput {
+  session_id: string;
+  transcript_path: string;
+  cwd: string;
+  permission_mode?: string;
+  hook_event_name: "PostToolUse";
+  tool_name: string;
+  tool_input: Record<string, unknown>;
+  tool_response: Record<string, unknown>;
+  tool_use_id: string;
+  agent_id?: string;
+  agent_type?: string;
+}
+
+export interface SessionEndHookInput {
+  session_id: string;
+  transcript_path: string;
+  cwd: string;
+  hook_event_name: "SessionEnd";
+  reason: string;
+}
+
+export interface WorkflowLaunch {
+  /** The completion notification refers to it. */
+  taskId: string;
+  /** Appears in each stage's transcript path. */
+  runId: string;
+  workflowName?: string;
+}
+
+export interface UserPromptSubmitHookInput {
+  session_id: string;
+  transcript_path: string;
+  cwd: string;
+  permission_mode?: string;
+  hook_event_name: "UserPromptSubmit";
+  prompt: string;
+  agent_id?: string;
+  agent_type?: string;
+}
+
+export interface Config {
+  /** Resolved from env, then project config, then user config. */
+  enabled: boolean;
+  /** For threads with no preference of their own. */
+  defaultMuted: boolean;
+  apiKey: string;
+  project: string;
+  apiBaseUrl: string;
+  stateFilePath: string;
+  debug: boolean;
+  /** Existing run to nest every trace under. */
+  parentDottedOrder?: string;
+  replicas?: RunTreeConfig["replicas"];
+  /** Added to every run, including repo info and CC_LANGSMITH_METADATA. */
+  customMetadata?: Record<string, unknown>;
+  redact: boolean;
+  /** From CC_LANGSMITH_REDACT_EXTRA or the config file. */
+  redactExtraRules?: StringNodeRule[];
+}
+
+export type BooleanSetting = keyof typeof BOOLEAN_SETTINGS;
+
+export interface StatePatchOperation {
+  path: string[];
+  set?: unknown;
+  unset?: boolean;
+  add?: unknown[];
+  remove?: unknown[];
+}
+
+export interface StatePatchEntry {
+  session: string;
+  removed?: boolean;
+  operations?: StatePatchOperation[];
+}
+
+export type StatePatch = StatePatchEntry[];
+
+export interface PendingStatePatches {
+  files: string[];
+  patches: StatePatch[];
+}
+
+export interface LegacyQueueEntry {
   tracing: TracingMode;
-  attempts: number;
-  /** Which LangSmith account this was queued for, so no stranger uploads it to their own. */
   origin: string;
-  /** A RunTree config without `client` or `replicas`, which the flusher supplies. */
-  run: Record<string, unknown>;
-  record?: string;
-  /** Where the tool worked, so the flusher can settle the repository without the hook running git. */
+  run: Omit<ClaudeRun, "metadata"> & { extra?: { metadata?: Record<string, unknown> } };
   where?: ToolOrigin;
 }
 
-export interface RecordedRun {
-  run_id: string;
-  parent_run_id?: string;
-  trace_id: string;
-  dotted_order: string;
-  name: string;
-  run_type: string;
-  project_name?: string;
-  start_time?: string;
-  end_time?: string;
-  tracing: TracingMode;
-  open?: boolean;
-  metadata: Record<string, unknown>;
+export interface LegacyRun {
+  sessionId: string;
+  file: string;
+  mode: TracingMode;
+  operation: RunOperation;
+  run: ClaudeRun;
 }
 
-export type TurnRecordLine =
-  | { k: typeof TURN_RECORD_LINE.run; root?: boolean; origin?: string; run: RecordedRun }
-  | { k: typeof TURN_RECORD_LINE.closed; turn_id?: string }
-  | { k: typeof TURN_RECORD_LINE.delivered; id: string }
-  | { k: typeof TURN_RECORD_LINE.reconciled; id: string };
+export type LegacyFile = [sessionId: string, file: string];
 
-export interface TurnRecordTarget {
-  path: string;
-  origin: string;
+export interface LegacyScan {
+  runs: LegacyRun[];
+  settled: string[];
+  unreadable: string[];
 }
 
-export interface TurnRecord {
-  path: string;
-  origin: string;
-  root?: RecordedRun;
-  children: RecordedRun[];
-  turnId?: string;
-  closed: boolean;
-  delivered: Set<string>;
-  fixed: Set<string>;
+export interface LegacyTurnLine {
+  k: string;
+  root?: boolean;
+  origin?: string;
+  id: string;
+  run?: RecordedRun;
 }
 
-// ─── Standalone Binary ──────────────────────────────────────────────────────
-
-export interface HookCommand {
-  type: string;
-  command: string;
-}
-
-export interface HookGroup {
-  hooks: HookCommand[];
-}
-
-export type HooksManifest = Record<string, HookGroup[]>;
-
-export interface SettingsFile {
-  hooks?: HooksManifest;
-  [key: string]: unknown;
-}
-
-export interface GhLoginMarker {
-  failed: string;
-}
-
-// ─── Test Fixtures ──────────────────────────────────────────────────────────
-
-export type FakeRunVerdict = { status: number; body?: string } | "ignore" | undefined;
-
-export interface FakeLangSmithRules {
-  rejects?(body: string): boolean;
-  rejectsRun?(wire: { action: "post" | "patch"; run: Record<string, any> }): FakeRunVerdict;
+export interface LegacyRunMetadata {
+  thread_id?: string;
+  ls_agent_type?: CodingAgentAgentType;
+  turn_id?: string;
+  turn_number?: number;
+  ls_agent_runtime_version?: string;
+  ls_integration_version?: string;
+  ls_subagent_id?: string;
+  ls_subagent_type?: string;
+  ls_skill_name?: string;
+  ls_model_name?: string;
+  usage_metadata?: Record<string, unknown>;
 }

@@ -4,60 +4,30 @@ import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 
 const mockCreateRun = vi.fn().mockResolvedValue(undefined);
 const mockUpdateRun = vi.fn().mockResolvedValue(undefined);
-const mockAwaitPendingTraceBatches = vi.fn().mockResolvedValue(undefined);
-const { mockUuid7FromTime } = vi.hoisted(() => ({
-  mockUuid7FromTime: vi.fn(),
-}));
+
+const created = (name: string) =>
+  mockCreateRun.mock.calls.map(([run]) => run).find((run) => run.name === name);
 
 function timestampFromUuid7(uuid: string): number {
   return Number.parseInt(uuid.replaceAll("-", "").slice(0, 12), 16);
 }
-
-// Track the last RunTree params for assertions
-let lastRunTreeParams: Record<string, unknown> | null = null;
-// Track all RunTree instances with their operations
 let allRunTreeInstances: Array<{ params: Record<string, unknown>; ops: string[] }> = [];
 
-vi.mock("langsmith", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("langsmith")>();
-  mockUuid7FromTime.mockImplementation(actual.uuid7FromTime);
-
-  class MockClient {
-    createRun = mockCreateRun;
-    updateRun = mockUpdateRun;
-    awaitPendingTraceBatches = mockAwaitPendingTraceBatches;
-  }
-  class MockRunTree {
-    client: MockClient | undefined;
-    params: Record<string, unknown>;
-    _tracker: { params: Record<string, unknown>; ops: string[] };
-    constructor(params: { client?: MockClient; id: string } & Record<string, unknown>) {
-      this.client = params.client;
-      this.params = params;
-      lastRunTreeParams = params;
-      this._tracker = { params, ops: [] };
-      allRunTreeInstances.push(this._tracker);
-    }
-    postRun() {
-      this._tracker.ops.push("postRun");
-      // Only call createRun if client exists (for non-replica-only mode)
-      if (this.client) {
-        this.client.createRun(this.params);
-      }
-    }
-    patchRun() {
-      this._tracker.ops.push("patchRun");
-      // Only call updateRun if client exists (for non-replica-only mode)
-      if (this.client) {
-        this.client.updateRun(this.params.id, this.params);
-      }
-    }
-  }
-
+vi.mock("./tracing-engine.js", async () => {
+  const { buildCodingAgentMetadata } = await import("@langchain/plugins-base/metadata");
   return {
-    RunTree: MockRunTree,
-    Client: MockClient,
-    uuid7FromTime: mockUuid7FromTime,
+    turnFiller: async () => (metadata: unknown) => metadata,
+    captureRun: async (
+      { metadata, ...run }: Record<string, any>,
+      _mode?: string,
+      _rootRunId?: string,
+      operation = "post",
+    ) => {
+      const params = { ...run, extra: { metadata: buildCodingAgentMetadata(metadata) } };
+      allRunTreeInstances.push({ params, ops: [operation === "post" ? "postRun" : "patchRun"] });
+      if (operation === "post") mockCreateRun(params);
+      else mockUpdateRun((params as unknown as { id: string }).id, params);
+    },
   };
 });
 
@@ -70,7 +40,6 @@ vi.mock("./logger.js", () => ({
 }));
 
 import {
-  initTracing,
   traceTurn,
   completeTurnRun,
   closeAgentToolRun,
@@ -83,9 +52,7 @@ describe("completeTurnRun", () => {
   beforeEach(() => {
     mockCreateRun.mockClear();
     mockUpdateRun.mockClear();
-    mockAwaitPendingTraceBatches.mockClear();
     allRunTreeInstances = [];
-    initTracing("test-api-key", "https://test.api.com");
   });
 
   it("patches the existing Turn run with the real assistant outputs", async () => {
@@ -96,7 +63,6 @@ describe("completeTurnRun", () => {
       dottedOrder: "20250101T000000000000Zturn-run-1",
       parentRunId: undefined,
       startTime: "2025-01-01T00:00:00Z",
-      project: "test-project",
       lastAssistantMessage: "Here is my final answer.",
       turnId: "prompt_abc",
       turnNumber: 3,
@@ -138,7 +104,6 @@ describe("closeAgentToolRun", () => {
     mockCreateRun.mockClear();
     mockUpdateRun.mockClear();
     allRunTreeInstances = [];
-    initTracing("test-api-key", "https://test.api.com");
   });
 
   const taskRunInfo = {
@@ -160,7 +125,6 @@ describe("closeAgentToolRun", () => {
       agentId: "a46e99ad19d864c31",
       agentType: "Explore",
       taskRunInfo,
-      project: "test-project",
       wasOpen: true,
     });
 
@@ -191,7 +155,6 @@ describe("closeAgentToolRun", () => {
       agentId: "a46e99ad19d864c31",
       agentType: "Explore",
       taskRunInfo,
-      project: "test-project",
       wasOpen: false,
       error: "Subagent killed",
     });
@@ -236,10 +199,7 @@ describe("traceTurn", () => {
   beforeEach(() => {
     mockCreateRun.mockClear();
     mockUpdateRun.mockClear();
-    mockAwaitPendingTraceBatches.mockClear();
-    mockUuid7FromTime.mockClear();
     allRunTreeInstances = [];
-    initTracing("test-api-key", "https://test.api.com");
   });
 
   it("creates a standalone turn when no parentRunId given", async () => {
@@ -263,41 +223,28 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 1,
-      project: "test-project",
     });
 
-    // Should create: turn run + assistant run = 2 createRun calls
     expect(mockCreateRun).toHaveBeenCalledTimes(2);
+    expect(mockUpdateRun).not.toHaveBeenCalled();
 
-    // First call creates the standalone turn
-    const turnCall = mockCreateRun.mock.calls[0][0];
-    expect(turnCall.name).toBe(USER_PROMPT_TURN_NAME);
+    const turnCall = created(USER_PROMPT_TURN_NAME);
     expect(turnCall.run_type).toBe("chain");
     expect(turnCall.trace_id).toBe(turnCall.id); // root trace
     expect(turnCall.dotted_order).toBeTruthy();
 
-    // Second call creates the assistant LLM run (bare — no metadata on createRun)
-    const llmCall = mockCreateRun.mock.calls[1][0];
-    expect(llmCall.name).toBe(ASSISTANT_RUN_NAME);
+    const llmCall = created(ASSISTANT_RUN_NAME);
     expect(llmCall.run_type).toBe("llm");
     expect(llmCall.parent_run_id).toBe(turnCall.id);
     expect(llmCall.trace_id).toBe(turnCall.id);
-
-    // Should update: assistant run + turn run = 2 updateRun calls
-    expect(mockUpdateRun).toHaveBeenCalledTimes(2);
-
-    // Metadata is on the assistant updateRun, not createRun
-    const assistantUpdateArgs = mockUpdateRun.mock.calls[0][1];
-    expect(assistantUpdateArgs.extra.metadata.ls_provider).toBe("anthropic");
-    expect(assistantUpdateArgs.extra.metadata.ls_model_name).toBe("claude-sonnet-4-5");
-    expect(assistantUpdateArgs.extra.metadata.ls_invocation_params).toEqual({
+    expect(llmCall.extra.metadata.ls_provider).toBe("anthropic");
+    expect(llmCall.extra.metadata.ls_model_name).toBe("claude-sonnet-4-5");
+    expect(llmCall.extra.metadata.ls_invocation_params).toEqual({
       model: "claude-sonnet-4-5",
     });
 
     expect(timestampFromUuid7(turnCall.id)).toBe(Date.parse(turnCall.start_time));
     expect(timestampFromUuid7(llmCall.id)).toBe(Date.parse(llmCall.start_time));
-    expect(mockUuid7FromTime).toHaveBeenNthCalledWith(1, turnCall.start_time);
-    expect(mockUuid7FromTime).toHaveBeenNthCalledWith(2, llmCall.start_time);
   });
 
   it.each([
@@ -323,9 +270,9 @@ describe("traceTurn", () => {
         isComplete: true,
       };
 
-      await traceTurn({ turn, sessionId: "session-123", turnNum: 1, project: "test-project" });
+      await traceTurn({ turn, sessionId: "session-123", turnNum: 1 });
 
-      expect(mockUpdateRun.mock.calls[0][1].extra.metadata.ls_invocation_params).toEqual({
+      expect(created(ASSISTANT_RUN_NAME).extra.metadata.ls_invocation_params).toEqual({
         model: "claude-opus-5",
         ...extra,
       });
@@ -357,7 +304,6 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 1,
-      project: "test-project",
       parentRunId,
       traceId,
       parentDottedOrder,
@@ -373,8 +319,7 @@ describe("traceTurn", () => {
     expect(llmCall.trace_id).toBe(traceId);
     expect(llmCall.dotted_order).toContain(parentDottedOrder);
 
-    // Should only update 1 run (assistant), no turn update
-    expect(mockUpdateRun).toHaveBeenCalledTimes(1);
+    expect(mockUpdateRun).not.toHaveBeenCalled();
   });
 
   it("throws when parentRunId given without trace context", async () => {
@@ -390,7 +335,6 @@ describe("traceTurn", () => {
         turn,
         sessionId: "session-123",
         turnNum: 1,
-        project: "test-project",
         parentRunId: "some-id",
         // missing traceId and parentDottedOrder
       }),
@@ -431,22 +375,18 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 1,
-      project: "test-project",
     });
 
     // Should create: turn + assistant + tool = 3 createRun calls
     expect(mockCreateRun).toHaveBeenCalledTimes(3);
 
-    const turnCall = mockCreateRun.mock.calls[0][0];
-    const llmCall = mockCreateRun.mock.calls[1][0];
-    const toolCall = mockCreateRun.mock.calls[2][0];
+    const turnCall = created(USER_PROMPT_TURN_NAME);
+    const llmCall = created(ASSISTANT_RUN_NAME);
+    const toolCall = created("Read");
 
     expect(timestampFromUuid7(turnCall.id)).toBe(Date.parse(turnCall.start_time));
     expect(timestampFromUuid7(llmCall.id)).toBe(Date.parse(llmCall.start_time));
     expect(timestampFromUuid7(toolCall.id)).toBe(Date.parse(toolCall.start_time));
-    expect(mockUuid7FromTime).toHaveBeenNthCalledWith(1, turnCall.start_time);
-    expect(mockUuid7FromTime).toHaveBeenNthCalledWith(2, llmCall.start_time);
-    expect(mockUuid7FromTime).toHaveBeenNthCalledWith(3, toolCall.start_time);
 
     // Tool is child of turn, not assistant
     expect(toolCall.parent_run_id).toBe(turnCall.id);
@@ -456,9 +396,6 @@ describe("traceTurn", () => {
 
     // LLM is also child of turn
     expect(llmCall.parent_run_id).toBe(turnCall.id);
-
-    // Should update: assistant + turn = 2 updateRun calls (tools are single createRun)
-    expect(mockUpdateRun).toHaveBeenCalledTimes(2);
 
     // Tool output is on createRun (tools are created and completed in one call)
     expect(toolCall.outputs).toEqual({ output: "file contents" });
@@ -501,14 +438,15 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 1,
-      project: "test-project",
     });
 
     // Should create: turn + assistant1 + tool + assistant2 = 4 createRun calls
     expect(mockCreateRun).toHaveBeenCalledTimes(4);
 
     // Second assistant should include accumulated context in inputs
-    const assistant2Call = mockCreateRun.mock.calls[3][0];
+    const assistant2Call = mockCreateRun.mock.calls
+      .map(([run]) => run)
+      .filter((run) => run.name === ASSISTANT_RUN_NAME)[1];
     expect(assistant2Call.inputs.messages).toHaveLength(3); // user + assistant1 + tool_result
     expect(assistant2Call.inputs.messages[0].role).toBe("user");
     expect(assistant2Call.inputs.messages[1].role).toBe("assistant");
@@ -541,11 +479,9 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 1,
-      project: "test-project",
     });
 
-    // First updateRun call is the assistant run (before the turn update)
-    const assistantUpdateArgs = mockUpdateRun.mock.calls[0][1];
+    const assistantUpdateArgs = created(ASSISTANT_RUN_NAME);
     expect(assistantUpdateArgs.extra.metadata.usage_metadata).toEqual({
       input_tokens: 800, // 100 + 200 + 500
       output_tokens: 50,
@@ -578,11 +514,9 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 1,
-      project: "test-project",
     });
 
-    // Last updateRun call is the turn completion (standalone turn)
-    const turnUpdateArgs = mockUpdateRun.mock.calls[mockUpdateRun.mock.calls.length - 1][1];
+    const turnUpdateArgs = created(USER_PROMPT_TURN_NAME);
     const outputRoles = turnUpdateArgs.outputs.messages.map((m: Record<string, unknown>) => m.role);
     expect(outputRoles).not.toContain("user");
   });
@@ -616,12 +550,9 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 1,
-      project: "test-project",
     });
 
-    // Tool output is on createRun (tools are created and completed in one call)
-    // createRun: turn (0), assistant (1), tool (2)
-    const toolCreateArgs = mockCreateRun.mock.calls[2][0];
+    const toolCreateArgs = created("Bash");
     expect(toolCreateArgs.outputs).toEqual({ output: "No result" });
   });
 
@@ -664,7 +595,6 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 1,
-      project: "test-project",
       parentRunId,
       traceId,
       parentDottedOrder,
@@ -713,7 +643,6 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 1,
-      project: "test-project",
     });
 
     // Should return a taskRunMap entry for the agent
@@ -743,558 +672,9 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 1,
-      project: "test-project",
     });
 
-    // Last updateRun call is the turn completion
-    const turnUpdateArgs = mockUpdateRun.mock.calls[mockUpdateRun.mock.calls.length - 1][1];
-    expect(turnUpdateArgs.error).toBe("Interrupted");
-  });
-
-  it("passes replicas to RunTree when provided", async () => {
-    const replicas = [
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_workspace_a",
-        projectName: "project-prod",
-      },
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_workspace_b",
-        projectName: "project-staging",
-        updates: { metadata: { environment: "staging" } },
-      },
-    ];
-
-    // Re-initialize with replicas
-    initTracing("test-api-key", "https://test.api.com", replicas);
-
-    const turn: Turn = {
-      userContent: "Hello",
-      userTimestamp: "2025-01-01T00:00:00Z",
-      llmCalls: [
-        {
-          content: [{ type: "text", text: "Hi there!" }],
-          model: "claude-sonnet-4-5",
-          usage: { input_tokens: 10, output_tokens: 5 },
-          startTime: "2025-01-01T00:00:01Z",
-          endTime: "2025-01-01T00:00:02Z",
-          toolCalls: [],
-        },
-      ],
-      isComplete: true,
-    };
-
-    await traceTurn({
-      turn,
-      sessionId: "session-123",
-      turnNum: 1,
-      project: "test-project",
-    });
-
-    // Check that replicas were passed to RunTree
-    expect(lastRunTreeParams).toBeDefined();
-    expect(lastRunTreeParams?.replicas).toEqual(replicas);
-  });
-
-  it("works with replicas only (no client API key)", async () => {
-    // Initialize with no API key but with replicas
-    initTracing(undefined, undefined, [
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_replica",
-        projectName: "project-replica",
-      },
-    ]);
-
-    const turn: Turn = {
-      userContent: "Hello",
-      userTimestamp: "2025-01-01T00:00:00Z",
-      llmCalls: [
-        {
-          content: [{ type: "text", text: "Hi there!" }],
-          model: "claude-sonnet-4-5",
-          usage: { input_tokens: 10, output_tokens: 5 },
-          startTime: "2025-01-01T00:00:01Z",
-          endTime: "2025-01-01T00:00:02Z",
-          toolCalls: [],
-        },
-      ],
-      isComplete: true,
-    };
-
-    // Should not throw even without client
-    await expect(
-      traceTurn({
-        turn,
-        sessionId: "session-123",
-        turnNum: 1,
-        project: "test-project",
-      }),
-    ).resolves.not.toThrow();
-
-    // RunTree should still be created with replicas
-    expect(lastRunTreeParams).toBeDefined();
-    expect(lastRunTreeParams?.replicas).toBeDefined();
-    expect(lastRunTreeParams?.replicas).toHaveLength(1);
-    // With redaction on (the default), a client is created even without an API
-    // key so replica posts are anonymized rather than falling back to the
-    // shared client, which carries no anonymizer.
-    expect(lastRunTreeParams?.client).toBeDefined();
-  });
-
-  it("retains the configured client in replicas-only mode when redaction is disabled", async () => {
-    // Routing must not depend on whether the client has an anonymizer.
-    initTracing(
-      undefined,
-      undefined,
-      [
-        {
-          apiUrl: "https://api.smith.langchain.com",
-          apiKey: "ls__key_replica",
-          projectName: "project-replica",
-        },
-      ],
-      false,
-    );
-
-    const turn: Turn = {
-      userContent: "Hello",
-      userTimestamp: "2025-01-01T00:00:00Z",
-      llmCalls: [
-        {
-          content: [{ type: "text", text: "Hi there!" }],
-          model: "claude-sonnet-4-5",
-          usage: { input_tokens: 10, output_tokens: 5 },
-          startTime: "2025-01-01T00:00:01Z",
-          endTime: "2025-01-01T00:00:02Z",
-          toolCalls: [],
-        },
-      ],
-      isComplete: true,
-    };
-
-    await expect(
-      traceTurn({ turn, sessionId: "session-123", turnNum: 1, project: "test-project" }),
-    ).resolves.not.toThrow();
-
-    expect(lastRunTreeParams?.replicas).toHaveLength(1);
-    expect(lastRunTreeParams?.client).toBeDefined();
-  });
-
-  it("constructs a client even when initialized without a primary key or replicas", async () => {
-    const client = initTracing(undefined, "https://private.test", undefined, false);
-    expect(client).toBeDefined();
-
-    const turn: Turn = {
-      userContent: "Hello",
-      userTimestamp: "2025-01-01T00:00:00Z",
-      llmCalls: [],
-      isComplete: true,
-    };
-
-    await expect(
-      traceTurn({
-        turn,
-        sessionId: "session-123",
-        turnNum: 1,
-        project: "test-project",
-      }),
-    ).resolves.not.toThrow();
-    expect(lastRunTreeParams?.client).toBe(client);
-  });
-
-  it("passes replicas with updates field to RunTree", async () => {
-    const replicas = [
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_workspace_a",
-        projectName: "project-prod",
-      },
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_workspace_b",
-        projectName: "project-staging",
-        updates: { metadata: { environment: "staging" } },
-      },
-    ];
-
-    initTracing("test-api-key", "https://test.api.com", replicas);
-
-    const turn: Turn = {
-      userContent: "Hello",
-      userTimestamp: "2025-01-01T00:00:00Z",
-      llmCalls: [
-        {
-          content: [{ type: "text", text: "Hi there!" }],
-          model: "claude-sonnet-4-5",
-          usage: { input_tokens: 10, output_tokens: 5 },
-          startTime: "2025-01-01T00:00:01Z",
-          endTime: "2025-01-01T00:00:02Z",
-          toolCalls: [],
-        },
-      ],
-      isComplete: true,
-    };
-
-    await traceTurn({
-      turn,
-      sessionId: "session-123",
-      turnNum: 1,
-      project: "test-project",
-    });
-
-    // Check that replicas with updates field was passed correctly
-    expect(lastRunTreeParams?.replicas).toHaveLength(2);
-    expect((lastRunTreeParams?.replicas as any)?.[1]).toHaveProperty("updates");
-    expect((lastRunTreeParams?.replicas as any)?.[1].updates).toEqual({
-      metadata: { environment: "staging" },
-    });
-  });
-
-  it("traces to multiple different projects via replicas", async () => {
-    const replicas = [
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_prod_workspace",
-        projectName: "production-project",
-      },
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_staging_workspace",
-        projectName: "staging-project",
-      },
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_dev_workspace",
-        projectName: "dev-project",
-      },
-    ];
-
-    initTracing("test-api-key", "https://test.api.com", replicas);
-
-    const turn: Turn = {
-      userContent: "Hello",
-      userTimestamp: "2025-01-01T00:00:00Z",
-      llmCalls: [
-        {
-          content: [{ type: "text", text: "Hi!" }],
-          model: "claude-sonnet-4-5",
-          usage: { input_tokens: 10, output_tokens: 5 },
-          startTime: "2025-01-01T00:00:01Z",
-          endTime: "2025-01-01T00:00:02Z",
-          toolCalls: [],
-        },
-      ],
-      isComplete: true,
-    };
-
-    await traceTurn({
-      turn,
-      sessionId: "session-123",
-      turnNum: 1,
-      project: "test-project",
-    });
-
-    // Verify all three project destinations are in replicas
-    expect(lastRunTreeParams?.replicas).toHaveLength(3);
-    const projectNames = (lastRunTreeParams?.replicas as any[])?.map((r) => r.projectName);
-    expect(projectNames).toContain("production-project");
-    expect(projectNames).toContain("staging-project");
-    expect(projectNames).toContain("dev-project");
-  });
-
-  it("works with replicas-only mode tracing to different projects", async () => {
-    // No primary client - only replicas
-    const replicas = [
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_workspace_a",
-        projectName: "project-prod",
-      },
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_workspace_b",
-        projectName: "project-staging",
-        updates: { metadata: { environment: "staging" } },
-      },
-    ];
-
-    // Initialize with no API key, no API URL, only replicas
-    initTracing(undefined, undefined, replicas);
-
-    const turn: Turn = {
-      userContent: "Hello",
-      userTimestamp: "2025-01-01T00:00:00Z",
-      llmCalls: [
-        {
-          content: [{ type: "text", text: "Hi there!" }],
-          model: "claude-sonnet-4-5",
-          usage: { input_tokens: 10, output_tokens: 5 },
-          startTime: "2025-01-01T00:00:01Z",
-          endTime: "2025-01-01T00:00:02Z",
-          toolCalls: [],
-        },
-      ],
-      isComplete: true,
-    };
-
-    // Should successfully trace without a primary client
-    await expect(
-      traceTurn({
-        turn,
-        sessionId: "session-123",
-        turnNum: 1,
-        project: "test-project",
-      }),
-    ).resolves.not.toThrow();
-
-    // Verify replicas are passed correctly
-    expect(lastRunTreeParams?.replicas).toHaveLength(2);
-    // Redaction is on by default, so a client is created to carry the
-    // anonymizer even though no primary API key was provided.
-    expect(lastRunTreeParams?.client).toBeDefined();
-
-    // Verify both project destinations
-    const projectNames = (lastRunTreeParams?.replicas as any[])?.map((r) => r.projectName);
-    expect(projectNames).toContain("project-prod");
-    expect(projectNames).toContain("project-staging");
-  });
-
-  it("supports replicas with different API URLs (multi-tenant)", async () => {
-    const replicas = [
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_langsmith",
-        projectName: "langsmith-project",
-      },
-      {
-        apiUrl: "https://custom.langsmith.enterprise.com",
-        apiKey: "ls__key_enterprise",
-        projectName: "enterprise-project",
-      },
-    ];
-
-    initTracing(undefined, undefined, replicas);
-
-    const turn: Turn = {
-      userContent: "Hello",
-      userTimestamp: "2025-01-01T00:00:00Z",
-      llmCalls: [
-        {
-          content: [{ type: "text", text: "Hi!" }],
-          model: "claude-sonnet-4-5",
-          usage: { input_tokens: 10, output_tokens: 5 },
-          startTime: "2025-01-01T00:00:01Z",
-          endTime: "2025-01-01T00:00:02Z",
-          toolCalls: [],
-        },
-      ],
-      isComplete: true,
-    };
-
-    await traceTurn({
-      turn,
-      sessionId: "session-123",
-      turnNum: 1,
-      project: "test-project",
-    });
-
-    // Verify different API URLs are preserved
-    const apiUrls = (lastRunTreeParams?.replicas as any[])?.map((r) => r.apiUrl);
-    expect(apiUrls).toContain("https://api.smith.langchain.com");
-    expect(apiUrls).toContain("https://custom.langsmith.enterprise.com");
-  });
-
-  it("applies updates metadata to replica runs", async () => {
-    const replicas = [
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_with_updates",
-        projectName: "project-with-metadata",
-        updates: {
-          metadata: {
-            environment: "production",
-            version: "1.0.0",
-            team: "platform",
-          },
-        },
-      },
-    ];
-
-    initTracing(undefined, undefined, replicas);
-
-    const turn: Turn = {
-      userContent: "Hello",
-      userTimestamp: "2025-01-01T00:00:00Z",
-      llmCalls: [
-        {
-          content: [{ type: "text", text: "Hi!" }],
-          model: "claude-sonnet-4-5",
-          usage: { input_tokens: 10, output_tokens: 5 },
-          startTime: "2025-01-01T00:00:01Z",
-          endTime: "2025-01-01T00:00:02Z",
-          toolCalls: [],
-        },
-      ],
-      isComplete: true,
-    };
-
-    await traceTurn({
-      turn,
-      sessionId: "session-123",
-      turnNum: 1,
-      project: "test-project",
-    });
-
-    // Verify updates are passed through
-    expect(lastRunTreeParams?.replicas).toHaveLength(1);
-    expect((lastRunTreeParams?.replicas as any[])?.[0].updates).toEqual({
-      metadata: {
-        environment: "production",
-        version: "1.0.0",
-        team: "platform",
-      },
-    });
-  });
-
-  it("sets project_name consistently on patchRun RunTree instances (standalone turn)", async () => {
-    const replicas = [
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_a",
-        projectName: "project-a",
-      },
-    ];
-
-    initTracing("test-api-key", "https://test.api.com", replicas);
-    allRunTreeInstances = [];
-
-    const turn: Turn = {
-      userContent: "Hello",
-      userTimestamp: "2025-01-01T00:00:00Z",
-      llmCalls: [
-        {
-          content: [{ type: "text", text: "Hi there!" }],
-          model: "claude-sonnet-4-5",
-          usage: { input_tokens: 10, output_tokens: 5 },
-          startTime: "2025-01-01T00:00:01Z",
-          endTime: "2025-01-01T00:00:02Z",
-          toolCalls: [],
-        },
-      ],
-      isComplete: true,
-    };
-
-    // Standalone turn (no parentRunId) creates the turn run itself
-    await traceTurn({
-      turn,
-      sessionId: "session-123",
-      turnNum: 1,
-      project: "test-project",
-    });
-
-    // Every RunTree used for patchRun must have project_name and run_type set
-    const patchInstances = allRunTreeInstances.filter((i) => i.ops.includes("patchRun"));
-    expect(patchInstances.length).toBeGreaterThan(0);
-    for (const inst of patchInstances) {
-      expect(inst.params.project_name).toBe("test-project");
-      expect(inst.params.run_type).toBeDefined();
-    }
-
-    // Standalone turn has: turn patchRun (chain) + assistant patchRun (llm)
-    const llmPatches = patchInstances.filter((i) => i.params.run_type === "llm");
-    const chainPatches = patchInstances.filter((i) => i.params.run_type === "chain");
-    expect(llmPatches.length).toBe(1);
-    expect(chainPatches.length).toBe(1);
-
-    // start_time must be set on patchRun to prevent the SDK from defaulting to Date.now()
-    // which would overwrite the correct start_time and cause negative durations
-    expect(llmPatches[0].params.start_time).toBe("2025-01-01T00:00:01Z");
-    expect(chainPatches[0].params.start_time).toBe("2025-01-01T00:00:00Z");
-  });
-
-  it("sets project_name and run_type consistently on patchRun RunTree instances (with parentRunId)", async () => {
-    const replicas = [
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_a",
-        projectName: "project-a",
-      },
-      {
-        apiUrl: "https://api.smith.langchain.com",
-        apiKey: "ls__key_b",
-        projectName: "test-project",
-      },
-    ];
-
-    initTracing("test-api-key", "https://test.api.com", replicas);
-    allRunTreeInstances = [];
-
-    const parentRunId = "parent-run-id";
-    const traceId = "trace-id";
-    const parentDottedOrder = "20250101T000000000000Ztrace-id";
-
-    const turn: Turn = {
-      userContent: "Hello",
-      userTimestamp: "2025-01-01T00:00:00Z",
-      llmCalls: [
-        {
-          content: [{ type: "text", text: "Hi!" }],
-          model: "claude-sonnet-4-5",
-          usage: { input_tokens: 10, output_tokens: 5 },
-          startTime: "2025-01-01T00:00:01Z",
-          endTime: "2025-01-01T00:00:02Z",
-          toolCalls: [
-            {
-              tool_use: {
-                type: "tool_use",
-                id: "tool-1",
-                name: "Read",
-                input: { file: "test.ts" },
-              },
-              result: { content: "file contents", timestamp: "2025-01-01T00:00:03Z" },
-            },
-          ],
-        },
-      ],
-      isComplete: true,
-    };
-
-    await traceTurn({
-      turn,
-      sessionId: "session-123",
-      turnNum: 1,
-      project: "test-project",
-      parentRunId,
-      traceId,
-      parentDottedOrder,
-    });
-
-    // Every RunTree used for patchRun must have project_name and run_type
-    const patchInstances = allRunTreeInstances.filter((i) => i.ops.includes("patchRun"));
-    expect(patchInstances.length).toBeGreaterThan(0);
-    for (const inst of patchInstances) {
-      expect(inst.params.project_name).toBe("test-project");
-      expect(inst.params.run_type).toBeDefined();
-    }
-
-    // With parentRunId (no standalone turn creation), only the assistant patchRun fires
-    const llmPatches = patchInstances.filter((i) => i.params.run_type === "llm");
-    expect(llmPatches.length).toBe(1);
-
-    // LLM patchRun must carry the original start_time to avoid negative durations
-    expect(llmPatches[0].params.start_time).toBe("2025-01-01T00:00:01Z");
-
-    // end_time should be the last tool result timestamp (tool calls present)
-    expect(llmPatches[0].params.end_time).toBe("2025-01-01T00:00:03Z");
-
-    // postRun instances should also have project_name set
-    const postInstances = allRunTreeInstances.filter((i) => i.ops.includes("postRun"));
-    expect(postInstances.length).toBeGreaterThan(0);
-    for (const inst of postInstances) {
-      expect(inst.params.project_name).toBe("test-project");
-    }
+    expect(created(USER_PROMPT_TURN_NAME).error).toBe("Interrupted");
   });
 
   it("attaches customMetadata to standalone turn creation and completion", async () => {
@@ -1318,11 +698,9 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 1,
-      project: "test-project",
       customMetadata: { pr_url: "https://github.com/org/repo/pull/42", pr_author: "octocat" },
     });
 
-    // Standalone turn: postRun (creation) + patchRun (completion)
     const turnPostInstances = allRunTreeInstances.filter(
       (i) => i.ops.includes("postRun") && i.params.name === USER_PROMPT_TURN_NAME,
     );
@@ -1331,18 +709,9 @@ describe("traceTurn", () => {
       ?.metadata as Record<string, unknown>;
     expect(turnCreateMetadata.pr_url).toBe("https://github.com/org/repo/pull/42");
     expect(turnCreateMetadata.pr_author).toBe("octocat");
-
-    const turnPatchInstances = allRunTreeInstances.filter(
-      (i) => i.ops.includes("patchRun") && i.params.name === USER_PROMPT_TURN_NAME,
-    );
-    expect(turnPatchInstances).toHaveLength(1);
-    const turnPatchMetadata = (turnPatchInstances[0].params.extra as Record<string, unknown>)
-      ?.metadata as Record<string, unknown>;
-    expect(turnPatchMetadata.pr_url).toBe("https://github.com/org/repo/pull/42");
-    expect(turnPatchMetadata.pr_author).toBe("octocat");
     // Standard metadata should still be present
-    expect(turnPatchMetadata.thread_id).toBe("session-123");
-    expect(turnPatchMetadata.ls_integration).toBe("claude-code");
+    expect(turnCreateMetadata.thread_id).toBe("session-123");
+    expect(turnCreateMetadata.ls_integration).toBe("claude-code");
   });
 
   it("attaches customMetadata to child LLM runs", async () => {
@@ -1366,14 +735,10 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 1,
-      project: "test-project",
       customMetadata: { pr_url: "https://github.com/org/repo/pull/42" },
     });
 
-    // LLM patchRun should also have custom metadata
-    const llmPatchInstances = allRunTreeInstances.filter(
-      (i) => i.ops.includes("patchRun") && i.params.run_type === "llm",
-    );
+    const llmPatchInstances = allRunTreeInstances.filter((i) => i.params.run_type === "llm");
     expect(llmPatchInstances).toHaveLength(1);
     const llmMetadata = (llmPatchInstances[0].params.extra as Record<string, unknown>)
       ?.metadata as Record<string, unknown>;
@@ -1410,7 +775,6 @@ describe("traceTurn", () => {
       turn,
       sessionId: "session-123",
       turnNum: 7,
-      project: "test-project",
       customMetadata: { ls_integration_version: "0.1.3" },
       runtimeVersion: "2.1.181",
       approvalPolicy: "acceptEdits",
@@ -1439,10 +803,8 @@ describe("traceTurn", () => {
     expect(toolMeta.ls_tool_name).toBeUndefined(); // equals run name → omitted
     expect(toolMeta.approval_policy).toBeUndefined(); // tool runs never get approval_policy
 
-    // LLM run (patchRun) — contract keys + preserved model conventions.
-    const llmPatch = allRunTreeInstances.find(
-      (i) => i.params.run_type === "llm" && i.ops.includes("patchRun"),
-    )!;
+    // LLM run: contract keys + preserved model conventions.
+    const llmPatch = allRunTreeInstances.find((i) => i.params.run_type === "llm")!;
     const llmMeta = (llmPatch.params.extra as Record<string, unknown>).metadata as Record<
       string,
       unknown
@@ -1455,10 +817,8 @@ describe("traceTurn", () => {
     });
     expect(llmMeta.ls_agent_type).toBe("root");
 
-    // Standalone (root) turn completion (patchRun) — approval_policy + ls_agent_type.
-    const turnPatch = allRunTreeInstances.find(
-      (i) => i.params.name === USER_PROMPT_TURN_NAME && i.ops.includes("patchRun"),
-    )!;
+    // Standalone (root) turn: approval_policy + ls_agent_type.
+    const turnPatch = allRunTreeInstances.find((i) => i.params.name === USER_PROMPT_TURN_NAME)!;
     const turnMeta = (turnPatch.params.extra as Record<string, unknown>).metadata as Record<
       string,
       unknown

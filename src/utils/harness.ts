@@ -1,8 +1,7 @@
 /** Cursor imports Claude Code's hooks and runs them with its own payloads, which must never be traced as Claude Code. */
 
 import { CURSOR_VERSION_FIELD } from "../constants.js";
-import type { HookEventName } from "../constants.js";
-import type { HookEventPayload } from "../types.js";
+import type { HookEventName, HookEventPayload } from "../types.js";
 
 export function isCursorPayload(input: unknown): boolean {
   return typeof input === "object" && input !== null && Object.hasOwn(input, CURSOR_VERSION_FIELD);

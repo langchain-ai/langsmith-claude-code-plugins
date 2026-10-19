@@ -4,6 +4,7 @@
  */
 
 import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
+import { MAX_FULL_READ_BYTES } from "./constants.js";
 import type {
   TranscriptMessage,
   AssistantMessage,
@@ -18,12 +19,6 @@ import type {
 } from "./types.js";
 
 // ─── Low-level parsing ─────────────────────────────────────────────────────
-
-/**
- * Maximum transcript file size (in bytes) to read in full via readFileSync.
- * Larger files are read in streaming chunks to avoid OOM.
- */
-const MAX_FULL_READ_BYTES = 50 * 1024 * 1024; // 50 MB
 
 /** Read a JSONL file and return parsed lines starting after `afterLine`. */
 export function readTranscript(

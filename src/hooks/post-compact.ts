@@ -6,24 +6,16 @@
  */
 
 import { resolveTurnTracingMode } from "../tracing-mode.js";
-import { uuid7FromTime } from "langsmith";
 import { debug, error } from "../logger.js";
-import { initTracing, generateDottedOrderSegment, flushPendingTraces } from "../langsmith.js";
+import { generateDottedOrderSegment } from "../langsmith.js";
+import { captureRun, initTracing } from "../tracing-engine.js";
+import { stableRunId } from "../utils/ids/run-id.js";
 import { loadState, atomicUpdateState, getSessionState } from "../state.js";
 import { initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
-import { createRunTree } from "../privacy.js";
 import { codingAgentMetadata } from "../metadata.js";
-
-interface PostCompactHookInput {
-  session_id: string;
-  transcript_path: string;
-  cwd: string;
-  hook_event_name: "PostCompact";
-  trigger: "manual" | "auto";
-  compact_summary: string;
-}
+import type { PostCompactHookInput } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: PostCompactHookInput = await readStdin();
@@ -34,13 +26,7 @@ export async function main(): Promise<void> {
 
   debug(`PostCompact hook started, session=${input.session_id}, trigger=${input.trigger}`);
 
-  const client = initTracing(
-    config.apiKey,
-    config.apiBaseUrl,
-    config.replicas,
-    config.redact,
-    config.redactExtraRules,
-  );
+  initTracing(config, input.cwd, input.session_id);
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
@@ -50,7 +36,7 @@ export async function main(): Promise<void> {
     ? new Date(sessionState.compaction_start_time).toISOString()
     : endTime;
 
-  const runId = uuid7FromTime(startTime);
+  const runId = stableRunId(startTime, input.session_id, input.trigger);
   const segment = generateDottedOrderSegment(startTime, runId);
 
   // Nest under the current turn's trace if one is active, otherwise standalone.
@@ -61,31 +47,26 @@ export async function main(): Promise<void> {
     : segment;
 
   try {
-    const runTree = createRunTree(
+    await captureRun(
       {
-        client,
-        replicas: config.replicas,
         id: runId,
         name: `Context Compaction (${input.trigger})`,
         run_type: "chain",
         inputs: {},
         outputs: { compact_summary: input.compact_summary },
-        project_name: config.project,
         start_time: startTime,
         end_time: endTime,
         trace_id: traceId,
         dotted_order: dottedOrder,
         ...(parentRunId ? { parent_run_id: parentRunId } : {}),
-        extra: {
-          metadata: codingAgentMetadata({
-            sessionId: input.session_id,
-            base: config.customMetadata,
-            turnNumber: sessionState.current_turn_number,
-            runtimeVersion: sessionState.runtime_version,
-            agentType: "compaction",
-            runSpecific: { trigger: input.trigger },
-          }),
-        },
+        metadata: codingAgentMetadata({
+          sessionId: input.session_id,
+          base: config.customMetadata,
+          turnNumber: sessionState.current_turn_number,
+          runtimeVersion: sessionState.runtime_version,
+          agentType: "compaction",
+          runSpecific: { trigger: input.trigger },
+        }),
       },
       resolveTurnTracingMode(
         config,
@@ -97,16 +78,11 @@ export async function main(): Promise<void> {
           : undefined,
       ),
     );
-    await runTree.postRun();
 
     debug(`Created compaction run ${runId} (${input.trigger})`);
   } catch (err) {
     error(`Failed to create compaction run: ${err}`);
   }
-
-  // Flush the compaction run before this async hook exits, or the SDK's batch
-  // timer may not fire and the run would never reach LangSmith.
-  await flushPendingTraces();
 
   // Clear compaction_start_time from state
   await atomicUpdateState(config.stateFilePath, (s) => {

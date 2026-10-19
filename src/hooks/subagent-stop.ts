@@ -31,11 +31,11 @@
 import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { debug, error } from "../logger.js";
 import { atomicUpdateState, getSessionState, loadState } from "../state.js";
-import { initTracing, tracePendingSubagents, flushPendingTraces } from "../langsmith.js";
+import { tracePendingSubagents } from "../langsmith.js";
 import { finalizeNotificationChain } from "../finalize.js";
-import { WORKFLOW_SUBAGENT_TYPE, handleWorkflowSubagentStop } from "../workflows.js";
-import { turnRecordPath } from "../turn-record.js";
-import { queueOrigin } from "../queue.js";
+import { WORKFLOW_SUBAGENT_TYPE } from "../constants.js";
+import { handleWorkflowSubagentStop } from "../workflows.js";
+import { initTracing } from "../tracing-engine.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
@@ -56,13 +56,7 @@ export async function main(): Promise<void> {
     return;
   }
 
-  initTracing(
-    config.apiKey,
-    config.apiBaseUrl,
-    config.replicas,
-    config.redact,
-    config.redactExtraRules,
-  );
+  initTracing(config, input.cwd, input.session_id);
 
   // Dynamic-workflow stage: not launched via the Task tool (so it's absent from
   // task_run_map), it nests under its open Workflow run instead. Handled
@@ -75,7 +69,6 @@ export async function main(): Promise<void> {
       agentType: input.agent_type,
       agentTranscriptPath,
       stateFilePath: config.stateFilePath,
-      project: config.project,
       customMetadata: config.customMetadata,
     });
     return;
@@ -148,19 +141,12 @@ export async function main(): Promise<void> {
       ],
       taskRunMap,
       parentTraceId: turnTraceId,
-      project: config.project,
       customMetadata: config.customMetadata,
       runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
       turnId: launchingTurn?.turn_id,
       turnNumber: launchingTurn?.turn_number ?? sessionState.current_turn_number,
       // Leave the Agent tool run open — the task-notification turn nests under it.
       keepAgentToolRunOpen: true,
-      record: turnRunId
-        ? {
-            path: turnRecordPath(config.stateFilePath, input.session_id, turnRunId),
-            origin: queueOrigin(config),
-          }
-        : undefined,
     });
     debug(`Traced background subagent ${input.agent_type} (${input.agent_id})`);
   } catch (err) {
@@ -208,7 +194,6 @@ export async function main(): Promise<void> {
       defaultMuted: config.defaultMuted,
       stateFilePath: config.stateFilePath,
       sessionId: input.session_id,
-      project: config.project,
       customMetadata: config.customMetadata,
       runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
       agentId: input.agent_id,
@@ -216,6 +201,4 @@ export async function main(): Promise<void> {
   } else {
     debug(`Subagent ${input.agent_id} traced; awaiting task-notification to finalize`);
   }
-
-  await flushPendingTraces();
 }

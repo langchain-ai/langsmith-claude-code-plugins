@@ -46,7 +46,21 @@ export function createGitSandbox(prefix: string) {
     git,
     makeDir,
     makeRepo,
+    waitForWorkers: () => waitUntilNoProcessMentions(root),
     // A detached uploader may still be writing here, so give the removal a few tries.
     remove: () => rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 150 }),
   };
+}
+
+async function waitUntilNoProcessMentions(root: string, ms = 30_000): Promise<void> {
+  if (process.platform === "win32") return;
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const listing = spawnSync("ps", ["-axww", "-o", "pid=,command="], { encoding: "utf-8" }).stdout;
+    const running = listing
+      .split("\n")
+      .filter((line) => line.includes(root) && !line.trim().startsWith(`${process.pid} `));
+    if (running.length === 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 }

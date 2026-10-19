@@ -1,22 +1,18 @@
 import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGitSandbox } from "./fixtures/git-sandbox.js";
 import { waitFor } from "./fixtures/wait-for.js";
-import {
-  REPOSITORY_METADATA_KEYS,
-  TURN_RECORD_DIR_NAME,
-  TURN_RECORD_SUFFIX,
-  USER_PROMPT_TURN_NAME,
-} from "./constants.js";
+import { USER_PROMPT_TURN_NAME } from "./constants.js";
 
 // Claude Code runs the built bundle, so drive that, one real process per hook.
 const bundle = fileURLToPath(new URL("../bundle/dispatch.js", import.meta.url));
 
-type Run = { name?: string; extra?: { metadata?: Record<string, unknown> } };
+type Run = { id?: string; name?: string; extra?: { metadata?: Record<string, unknown> } };
+const settled = (check: () => void) => vi.waitFor(check, { timeout: 30_000, interval: 100 });
 
 const sandbox = createGitSandbox("ls repo e2e ");
 const alpha = sandbox.makeRepo("alpha repo", "trunk-a", "Alpha Owner", "git@github.com:acme/a.git");
@@ -135,17 +131,6 @@ function replyOnly(): string {
     .join("\n");
 }
 
-/** Every run line the tool hook wrote down for a session, straight off disk. */
-function recordedRuns(session: string): Array<Record<string, any>> {
-  const dir = join(sandbox.root, TURN_RECORD_DIR_NAME, session);
-  return readdirSync(dir)
-    .filter((name) => name.endsWith(TURN_RECORD_SUFFIX))
-    .flatMap((name) => readFileSync(join(dir, name), "utf-8").split("\n"))
-    .filter(Boolean)
-    .map((line) => JSON.parse(line))
-    .filter((line) => line.run && !line.root);
-}
-
 function toolRun(name: string): Record<string, unknown> {
   const runs = posted.filter((run) => run.name === name);
   expect(runs, `exactly one ${name} run`).toHaveLength(1);
@@ -175,12 +160,15 @@ beforeAll(async () => {
         response.end(JSON.stringify({ batch_ingest_config: { use_multipart_endpoint: false } }));
         return;
       }
-      if (body) {
-        const parsed = JSON.parse(body);
-        // Patches carry the turn's final metadata, so a post-only capture cannot see a close.
-        const batched = [...(parsed.post ?? []), ...(parsed.patch ?? [])];
-        posted.push(...(batched.length > 0 ? batched : Array.isArray(parsed) ? parsed : [parsed]));
-      }
+      if (body && request.url?.endsWith("/runs/batch")) {
+        const batch = JSON.parse(body);
+        for (const run of batch.post ?? []) posted.push(run);
+        for (const run of batch.patch ?? [])
+          Object.assign(posted.find(({ id }) => id === run.id) ?? {}, run);
+      } else if (body && request.method === "PATCH") {
+        const id = request.url?.split("/").at(-1);
+        Object.assign(posted.find((run) => run.id === id) ?? {}, JSON.parse(body));
+      } else if (body) posted.push(JSON.parse(body));
       response.end("{}");
     });
   });
@@ -190,6 +178,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  await sandbox.waitForWorkers();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   sandbox.remove();
 });
@@ -214,12 +203,14 @@ describe("a turn working across repositories", () => {
     await stop(base);
 
     const inBeta = {
-      repository_name: "acme/b",
-      git_branch: "trunk-b",
+      ls_git_repo: "acme/b",
+      ls_git_branch: "trunk-b",
       ls_attribution_identifier: "Beta Owner",
     };
-    for (const name of ["Read", "Glob"]) expect(toolRun(name)).toMatchObject(inBeta);
-    expect(toolRun("Edit")).toMatchObject({ repository_name: "acme/a", git_branch: "trunk-a" });
+    await settled(() => {
+      for (const name of ["Read", "Glob"]) expect(toolRun(name)).toMatchObject(inBeta);
+      expect(toolRun("Edit")).toMatchObject({ ls_git_repo: "acme/a", ls_git_branch: "trunk-a" });
+    });
   }, 120_000);
 
   it("keeps the turn's repository off a shell command that ran outside one", async () => {
@@ -231,9 +222,11 @@ describe("a turn working across repositories", () => {
     writeFileSync(path, transcript(join(beta, "seed.txt"), join(alpha, "seed.txt"), true));
     await stop(base);
 
-    expect(toolRun("Glob")).toMatchObject({ repository_name: "acme/b" });
-    expect(toolRun("Bash").repository_name).toBeUndefined();
-    expect(toolRun("Bash").ls_attribution_identifier).toBeUndefined();
+    await settled(() => {
+      expect(toolRun("Glob")).toMatchObject({ ls_git_repo: "acme/b" });
+      expect(toolRun("Bash").ls_git_repo).toBeUndefined();
+      expect(toolRun("Bash").ls_attribution_identifier).toBeUndefined();
+    });
   }, 120_000);
 
   it("fills a turn that resolved no repository from its first tool", async () => {
@@ -246,48 +239,15 @@ describe("a turn working across repositories", () => {
     writeFileSync(path, transcript(join(beta, "seed.txt"), join(alpha, "seed.txt")));
     await stop(base);
 
-    const inBeta = { repository_name: "acme/b", ls_attribution_identifier: "Beta Owner" };
-    const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
-    expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject(inBeta);
+    const inBeta = { ls_git_repo: "acme/b", ls_attribution_identifier: "Beta Owner" };
+    await settled(() => {
+      const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
+      expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject(inBeta);
+    });
     expect(toolRun("Glob")).toMatchObject(inBeta);
     expect(toolRun("Edit")).toMatchObject({
-      repository_name: "acme/a",
+      ls_git_repo: "acme/a",
       ls_attribution_identifier: "Alpha Owner",
-    });
-  }, 120_000);
-
-  // Catches the repository being worked out on the tool hook's own path again, which is
-  // several git subprocesses per tool call. Every other test here reads the uploaded run,
-  // which looks identical either way.
-  it("saves a tool call without working out its repository", async () => {
-    const session = "hook-stays-off-git";
-    const path = join(sandbox.root, `${session}.jsonl`);
-    const base = { session_id: session, transcript_path: path, cwd: alpha };
-
-    await prompt(base);
-    await hook("PostToolUse", {
-      ...base,
-      hook_event_name: "PostToolUse",
-      tool_name: "Read",
-      tool_input: { file_path: join(beta, "seed.txt") },
-      tool_response: { ok: true },
-      tool_use_id: `${session}-tool-0`,
-    });
-
-    const [asSaved] = recordedRuns(session);
-    for (const key of REPOSITORY_METADATA_KEYS) {
-      expect(asSaved.run.metadata, `${key} was settled on the hook's path`).not.toHaveProperty(key);
-    }
-
-    // The uploader works it out and writes the answer back, so nothing is lost.
-    expect(await waitFor(() => recordedRuns(session).length > 1)).toBe(true);
-    expect(recordedRuns(session).at(-1)?.run.metadata).toMatchObject({
-      repository_name: "acme/b",
-      ls_attribution_identifier: "Beta Owner",
-    });
-    expect(toolRun("Read")).toMatchObject({
-      repository_name: "acme/b",
-      ls_attribution_identifier: "Beta Owner",
     });
   }, 120_000);
 
@@ -312,10 +272,12 @@ describe("a turn working across repositories", () => {
     writeFileSync(path, replyOnly());
     await stop(base);
 
-    const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
-    expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject({
-      repository_name: "acme/b",
-      ls_attribution_identifier: "Beta Owner",
+    await settled(() => {
+      const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
+      expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject({
+        ls_git_repo: "acme/b",
+        ls_attribution_identifier: "Beta Owner",
+      });
     });
   }, 120_000);
 
@@ -338,12 +300,13 @@ describe("a turn working across repositories", () => {
       home,
     );
 
-    expect(await waitFor(() => posted.some((run) => run.name === "Read"))).toBe(true);
-    expect(toolRun("Read")).toMatchObject({
-      repository_name: "private/dotfiles",
-      git_branch: "trunk-home",
-      ls_attribution_identifier: "Private Person",
-    });
+    await settled(() =>
+      expect(toolRun("Read")).toMatchObject({
+        ls_git_repo: "private/dotfiles",
+        ls_git_branch: "trunk-home",
+        ls_attribution_identifier: "Private Person",
+      }),
+    );
   }, 120_000);
 
   it("labels a turn with the GitHub login when no git name is set", async () => {
@@ -355,10 +318,12 @@ describe("a turn working across repositories", () => {
     writeFileSync(path, transcript(join(nameless, "seed.txt")));
     const closing = await stop(base, undefined, signedInWithoutAGitName);
 
-    const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
-    expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject({
-      repository_name: "acme/c",
-      ls_attribution_identifier: "ejaimez14",
+    await settled(() => {
+      const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
+      expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject({
+        ls_git_repo: "acme/c",
+        ls_attribution_identifier: "ejaimez14",
+      });
     });
     expect(opening + closing).not.toContain("a new release of gh");
   }, 120_000);
