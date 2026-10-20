@@ -612,6 +612,11 @@ describe("loadConfig", () => {
       expect(config.credentialProblem).toContain("login is for https://login.example");
     });
 
+    it("sends runs saved before a project lock to the locked project", () => {
+      lock({ status: "valid", common: { project: "locked" }, diagnostics: [] });
+      expect(writerOptions(loadConfig({ cwd })).projectLocked).toBe(true);
+    });
+
     it("keeps the browser sign-in off when the managed file turns it off", () => {
       lock({ status: "valid", common: { login_browser: false }, diagnostics: [] });
       process.env.CC_LANGSMITH_LOGIN_BROWSER = "true";

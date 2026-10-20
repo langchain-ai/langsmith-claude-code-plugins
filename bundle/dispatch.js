@@ -23629,7 +23629,8 @@ function loadConfig(options) {
     ...credential.kind === "login" ? { login: credential.login } : {},
     ...credential.kind === "none" ? { credentialProblem: credential.reason } : {},
     ...common.login_browser === void 0 ? {} : { loginBrowser: common.login_browser },
-    ...common.notice_cooldown === void 0 ? {} : { noticeCooldown: common.notice_cooldown }
+    ...common.notice_cooldown === void 0 ? {} : { noticeCooldown: common.notice_cooldown },
+    ...common.locked.includes("project") ? { projectLocked: true } : {}
   };
 }
 
@@ -24235,6 +24236,7 @@ function writerOptions(config) {
     ...replicas?.length ? { replicas: replicas.map(writerReplica) } : {},
     redact: config.redact,
     ...config.loginBrowser === void 0 ? {} : { loginBrowser: config.loginBrowser },
+    ...config.projectLocked ? { projectLocked: true } : {},
     ...config.redactExtraRules ? {
       redactExtraRules: config.redactExtraRules
     } : {}

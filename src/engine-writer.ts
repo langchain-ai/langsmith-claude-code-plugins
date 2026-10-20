@@ -21,6 +21,7 @@ export function writerOptions(config: Config): LangSmithUploadWriterOptions {
     ...(replicas?.length ? { replicas: replicas.map(writerReplica) } : {}),
     redact: config.redact,
     ...(config.loginBrowser === undefined ? {} : { loginBrowser: config.loginBrowser }),
+    ...(config.projectLocked ? { projectLocked: true } : {}),
     ...(config.redactExtraRules
       ? {
           redactExtraRules:

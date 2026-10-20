@@ -594,6 +594,7 @@ export interface Config {
   loginBrowser?: boolean;
   credentialProblem?: string;
   noticeCooldown?: number | "off";
+  projectLocked?: boolean;
 }
 
 export type BooleanSetting = keyof typeof BOOLEAN_SETTINGS;
