@@ -21,13 +21,18 @@ const SHELL_TIMEOUT_MS = 60_000;
 const executable = binary.target.executableName;
 
 type Hooks = Record<string, { hooks: { command: string }[] }[]>;
-const hooks: Hooks = JSON.parse(readFileSync(join(root, "hooks/hooks.json"), "utf8")).hooks;
+const hooks: Hooks = JSON.parse(
+  readFileSync(join(root, "plugins/langsmith-tracing/hooks/hooks.json"), "utf8"),
+).hooks;
 const registered = hooks.SessionEnd[0].hooks[0].command;
 
 function sandbox(builds: string[]): string {
   const dir = mkdtempSync(join(tmpdir(), "langsmith hooks "));
   for (const folder of ["hooks", "binary", "bundle", "machine"]) mkdirSync(join(dir, folder));
-  cpSync(join(root, "hooks/langsmith-tracing"), join(dir, "hooks/langsmith-tracing"));
+  cpSync(
+    join(root, "plugins/langsmith-tracing/hooks/langsmith-tracing"),
+    join(dir, "hooks/langsmith-tracing"),
+  );
   chmodSync(join(dir, "hooks/langsmith-tracing"), 0o755);
   writeFileSync(join(dir, "bundle/dispatch.js"), 'console.log("node " + process.argv[2]);\n');
   writeFileSync(
