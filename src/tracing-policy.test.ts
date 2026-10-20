@@ -374,9 +374,24 @@ describe("actual UserPromptSubmit command prefix", () => {
   });
 
   it("blocks commands with master enabled but credentials missing", async () => {
-    mocks.config.mockReturnValue({ stateFilePath: state, apiKey: "", enabled: true });
+    mocks.config.mockReturnValue({
+      stateFilePath: state,
+      apiKey: "",
+      enabled: true,
+      credentialProblem: "No credential",
+    });
     expect(await submit("/langsmith-tracing:mute", "true")).toContain("credentials");
     expect(getThreadTracingMode(state, "session")).toBe("metadata");
+  });
+
+  it("doesn't call a CLI login user's credentials missing", async () => {
+    mocks.config.mockReturnValue({
+      stateFilePath: state,
+      apiKey: "",
+      enabled: true,
+      login: { configPath: "/login/config.json", profile: "work" },
+    });
+    expect(await submit("/langsmith-tracing:mute", "true")).not.toContain("credentials");
   });
 
   it("accepts legacy setter mocks returning undefined", async () => {

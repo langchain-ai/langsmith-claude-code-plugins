@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mergeCommonConfig, type CommonConfigResult } from "@langchain/plugins-base/settings";
 import { loadConfig, pinnedRepositoryKeys } from "./config.js";
 import { writerOptions } from "./engine-writer.js";
+import { writeLoginConfig } from "./fixtures/login-config.js";
 import { execFileSync } from "node:child_process";
 
 vi.mock("@langchain/plugins-base/settings", { spy: true });
@@ -273,6 +274,14 @@ describe("loadConfig", () => {
 
   it("returns empty string when no API key set", () => {
     expect(loadConfig({ cwd }).apiKey).toBe("");
+  });
+
+  it.each([
+    ["off", "off"],
+    ["10", 10],
+  ] as const)("reads a %s notice cooldown from the shell", (env, cooldown) => {
+    process.env.CC_LANGSMITH_NOTICE_COOLDOWN = env;
+    expect(loadConfig({ cwd }).noticeCooldown).toBe(cooldown);
   });
 
   it("defaults project to 'claude-code'", () => {
@@ -592,6 +601,21 @@ describe("loadConfig", () => {
       const config = loadConfig({ cwd });
       expect(config.replicas).toEqual([]);
       expect(writerOptions(config).replicas ?? []).toEqual([]);
+    });
+
+    it("keeps a locked server ahead of the CLI login's own server", () => {
+      lock({ status: "valid", common: { api_url: locked.apiUrl }, diagnostics: [] });
+      process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://login.example");
+      const config = loadConfig({ cwd });
+      expect(config.apiBaseUrl).toBe(locked.apiUrl);
+      expect(config.login).toBeUndefined();
+      expect(config.credentialProblem).toContain("login is for https://login.example");
+    });
+
+    it("keeps the browser sign-in off when the managed file turns it off", () => {
+      lock({ status: "valid", common: { login_browser: false }, diagnostics: [] });
+      process.env.CC_LANGSMITH_LOGIN_BROWSER = "true";
+      expect(writerOptions(loadConfig({ cwd })).loginBrowser).toBe(false);
     });
 
     it("keeps environment redaction rules from bypassing the lock", () => {

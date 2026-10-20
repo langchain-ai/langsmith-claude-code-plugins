@@ -1,5 +1,6 @@
+import { sdkSetting } from "@langchain/plugins-base/auth";
 import { Client } from "langsmith";
-import type { Config } from "./types.js";
+import type { Config, SdkClientKey } from "./types.js";
 import { LOOKUP_TIMEOUT_MS } from "./constants.js";
 
 /**
@@ -31,12 +32,12 @@ export async function describeThreadLinks(config: Config, sessionId: string): Pr
       const destination = Array.isArray(replica) ? { projectName: replica[0] } : replica;
       const projectName = destination.projectName ?? config.project;
       const apiKey = destination.apiKey ?? config.apiKey;
-      if (!apiKey) {
-        return {
-          resolved: false,
-          line: `${projectName}: No LangSmith API key configured for this destination.`,
-        };
-      }
+      const keyed = sdkSetting(apiKey) !== undefined;
+      const missingKey = {
+        resolved: false,
+        line: `${projectName}: No LangSmith API key configured for this destination.`,
+      };
+      if (!keyed && (destination.apiUrl || !config.login)) return missingKey;
 
       try {
         const client = new Client({
@@ -51,6 +52,7 @@ export async function describeThreadLinks(config: Config, sessionId: string): Pr
             },
           },
         });
+        if (keyed && !(client as unknown as SdkClientKey).apiKey) return missingKey;
         const project = await client.readProject({ projectName });
         const url = new URL(client.getHostUrl());
         const path = ["o", project.tenant_id, "projects", "p", project.id, "t", sessionId];

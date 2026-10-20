@@ -3,7 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HookEventName, TracingMode, TracingState, TranscriptMessage } from "../types.js";
+import type { UploadLogin } from "@langchain/plugins-base/auth";
+import type {
+  Config,
+  HookEventName,
+  TracingMode,
+  TracingState,
+  TranscriptMessage,
+} from "../types.js";
 import { tracingPolicyPath } from "../tracing-policy.js";
 import { STOP_FLUSH_WAIT_MS } from "../constants.js";
 
@@ -26,6 +33,27 @@ const h = vi.hoisted(() => ({
   readAt: 0,
   endLine: -1,
   managedProblem: undefined as string | undefined,
+  login: undefined as UploadLogin | undefined,
+  loginNotice: undefined as string | undefined,
+  credentialProblem: undefined as string | undefined,
+  noticeCooldown: undefined as number | "off" | undefined,
+  noticeCalls: [] as unknown[],
+  shownKinds: new Set<string>(),
+  replicas: undefined as Config["replicas"],
+  enabled: true,
+}));
+vi.mock("@langchain/plugins-base/plugin", async (original) => ({
+  ...(await original<typeof import("@langchain/plugins-base/plugin")>()),
+  shouldShowNotice: (options: { kind: string }) => {
+    h.noticeCalls.push(options);
+    if (h.shownKinds.has(options.kind)) return false;
+    h.shownKinds.add(options.kind);
+    return true;
+  },
+}));
+vi.mock("@langchain/plugins-base/auth", async (original) => ({
+  ...(await original<typeof import("@langchain/plugins-base/auth")>()),
+  readLoginNotice: (root: string) => (root === "/langsmith_engine" ? h.loginNotice : undefined),
 }));
 vi.mock("langsmith", () => ({
   Client: class {
@@ -83,7 +111,7 @@ vi.mock("../repo-attribution.js", async (original) => ({
 vi.mock("../utils/stdin.js", () => ({ readStdin: async () => h.input }));
 vi.mock("../utils/hook-init.js", () => ({
   initHook: () =>
-    h.managedProblem
+    h.managedProblem || (h.credentialProblem && !h.replicas)
       ? null
       : {
           apiKey: "test",
@@ -93,6 +121,11 @@ vi.mock("../utils/hook-init.js", () => ({
           parentDottedOrder: h.parentDottedOrder,
           redact: false,
           customMetadata: { custom: "PRIVATE_MARKER", ls_model_name: "PRIVATE_MARKER" },
+          login: h.login,
+          apiBaseUrl: "https://login.example",
+          credentialProblem: h.credentialProblem,
+          noticeCooldown: h.noticeCooldown,
+          replicas: h.replicas,
         },
   expandHome: (path: string) => path,
 }));
@@ -101,8 +134,10 @@ vi.mock("../config.js", async (original) => ({
   loadConfig: () => ({
     stateFilePath: "/unused",
     apiKey: "test",
-    enabled: !h.managedProblem,
+    enabled: h.enabled && !h.managedProblem,
     managedConfigProblem: h.managedProblem,
+    credentialProblem: h.credentialProblem,
+    noticeCooldown: h.noticeCooldown,
   }),
 }));
 vi.mock("../tracing-policy.js", async (original) => {
@@ -208,6 +243,14 @@ function reset(mode: TracingMode) {
   h.parentDottedOrder = undefined;
   h.endLine = -1;
   h.managedProblem = undefined;
+  h.login = undefined;
+  h.loginNotice = undefined;
+  h.credentialProblem = undefined;
+  h.noticeCooldown = undefined;
+  h.noticeCalls = [];
+  h.shownKinds = new Set();
+  h.replicas = undefined;
+  h.enabled = true;
 }
 const HOOK_EVENT_BY_NAME = {
   prompt: "UserPromptSubmit",
@@ -466,18 +509,102 @@ describe("closing hooks hand their work to the uploader", () => {
     expect(h.errors).toEqual([]);
   });
 
-  it("shows a broken managed file's reason once per session without blocking the prompt", async () => {
+  it("shows a broken managed file's reason through the shared cooldown without blocking the prompt", async () => {
     reset("full");
     h.managedProblem = "Managed config is broken";
+    h.noticeCooldown = 7;
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
-    await hook("prompt", {}, { closings: false });
     await hook("prompt", {}, { closings: false });
     await hook("prompt", { session_id: "next" }, { closings: false });
     expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
       { systemMessage: "Managed config is broken" },
-      { systemMessage: "Managed config is broken" },
+    ]);
+    expect(h.noticeCalls[0]).toEqual({
+      plugin: "claude-code",
+      kind: "managed-invalid",
+      cooldown: 7,
+      storageRoot: "/langsmith_engine",
+    });
+    expect(h.operations).toEqual([]);
+    output.mockRestore();
+  });
+
+  it("shows a rejected API key's notice as a chat line without holding back the prompt", async () => {
+    reset("full");
+    h.loginNotice = "LangSmith API key was rejected.";
+    h.noticeCooldown = 7;
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "LangSmith API key was rejected." },
+    ]);
+    expect(h.noticeCalls[0]).toEqual({
+      plugin: "claude-code",
+      kind: "login-expired",
+      cooldown: 7,
+      storageRoot: "/langsmith_engine",
+    });
+    expect(h.operations).toHaveLength(2);
+    output.mockRestore();
+  });
+
+  it("shows why tracing can't upload only when tracing is on", async () => {
+    reset("full");
+    h.credentialProblem = "LANGCHAIN_API_KEY is overriding your LangSmith login.";
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    h.enabled = false;
+    await hook("prompt", {}, { closings: false });
+    expect(output).not.toHaveBeenCalled();
+    h.enabled = true;
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "LANGCHAIN_API_KEY is overriding your LangSmith login." },
     ]);
     expect(h.operations).toEqual([]);
+    output.mockRestore();
+  });
+
+  it("shows a refused login's reason while replicas with their own key still upload", async () => {
+    reset("full");
+    h.credentialProblem = "LANGCHAIN_API_KEY is overriding your LangSmith login.";
+    h.replicas = [{ projectName: "own", apiKey: "replica-key" }];
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "LANGCHAIN_API_KEY is overriding your LangSmith login." },
+    ]);
+    expect(h.operations).toHaveLength(1);
+    output.mockRestore();
+  });
+
+  it("names the keyless replicas the login can't reach only for a CLI login user", async () => {
+    reset("full");
+    h.replicas = [{ apiUrl: "https://other.example" }];
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    h.login = { configPath: "/login/config.json", profile: "work" };
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line).systemMessage)).toEqual([
+      expect.stringContaining("replicas on https://other.example need their own API key"),
+    ]);
+    expect(h.operations).toHaveLength(2);
+    output.mockRestore();
+  });
+
+  it("shows a replica notice on the next prompt when an expired login notice took this one", async () => {
+    reset("full");
+    h.login = { configPath: "/login/config.json", profile: "work" };
+    h.loginNotice = "Tracing is paused";
+    h.replicas = [{ apiUrl: "https://other.example" }];
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    expect(output).toHaveBeenCalledTimes(1);
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line).systemMessage)).toEqual([
+      "Tracing is paused",
+      expect.stringContaining("replicas on https://other.example need their own API key"),
+    ]);
     output.mockRestore();
   });
 

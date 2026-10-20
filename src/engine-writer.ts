@@ -3,7 +3,8 @@ import type {
   LangSmithUploadReplicaConfig,
   LangSmithUploadWriterOptions,
 } from "@langchain/plugins-base/tracing/upload";
-import { SDK_REPLICA_PROBE } from "./constants.js";
+import { dirname, join } from "node:path";
+import { ENGINE_STORAGE_DIR_NAME, SDK_REPLICA_PROBE } from "./constants.js";
 import type { Config } from "./types.js";
 import { cloneJson } from "./utils/clone.js";
 
@@ -11,10 +12,15 @@ export function writerOptions(config: Config): LangSmithUploadWriterOptions {
   const replicas = config.replicas ?? replicasFromEnvironment();
   return {
     destinations: [
-      { apiKey: config.apiKey, apiUrl: config.apiBaseUrl, projectName: config.project },
+      {
+        ...(config.login ? { login: config.login } : { apiKey: config.apiKey }),
+        apiUrl: config.apiBaseUrl,
+        projectName: config.project,
+      },
     ],
     ...(replicas?.length ? { replicas: replicas.map(writerReplica) } : {}),
     redact: config.redact,
+    ...(config.loginBrowser === undefined ? {} : { loginBrowser: config.loginBrowser }),
     ...(config.redactExtraRules
       ? {
           redactExtraRules:
@@ -22,6 +28,10 @@ export function writerOptions(config: Config): LangSmithUploadWriterOptions {
         }
       : {}),
   };
+}
+
+export function engineStorageRoot(stateFilePath: string): string {
+  return join(dirname(stateFilePath), ENGINE_STORAGE_DIR_NAME);
 }
 
 function replicasFromEnvironment(): RunTree["replicas"] {

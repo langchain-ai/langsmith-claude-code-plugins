@@ -8,7 +8,7 @@ Sends your Claude Code conversations to [LangSmith](https://smith.langchain.com)
 
 - **On a Mac, nothing.** The plugin carries its own build and runs it directly.
 - **Everywhere else, including Windows,** Node.js 20 or newer.
-- A LangSmith account and API key.
+- A LangSmith account, with either an API key or a sign-in from the LangSmith CLI.
 
 If the carried Mac build cannot start, the plugin falls back to Node rather than dropping the trace, so Node is worth having on a Mac too.
 
@@ -26,13 +26,15 @@ Updates are off by default for this marketplace, so turn on auto-update in `/plu
 
 ## Turn on tracing
 
-Tracing is off until you give it a key and switch it on. Write both to `~/.claude/langsmith.json`:
+Tracing is off until you switch it on and give it a key or a CLI sign-in. To use a key, write both to `~/.claude/langsmith.json`:
 
 ```json
 { "enabled": true, "api_key": "lsv2_pt_...", "project": "claude-code" }
 ```
 
 Get a key from [smith.langchain.com](https://smith.langchain.com) under **Settings** then **API Keys**. Send a message, then look for it in the `claude-code` project.
+
+If you'd rather not make a key, run `langsmith auth login` and leave `api_key` out, so the plugin uploads with your CLI sign-in. An API key still wins when both are set, and a `LANGCHAIN_API_KEY` in your shell stops the sign-in from being used, so unset it. When the sign-in expires tracing pauses until you sign in again, and Claude Code tells you so while a browser sign-in opens once unless you set `login_browser` to `false`. A warning repeats at most every 2 minutes, which `notice_cooldown` or `CC_LANGSMITH_NOTICE_COOLDOWN` changes, and `off` silences them.
 
 A project can carry its own settings in `<project>/.claude/langsmith.json`, and a setting in your shell beats any file. [Advanced configuration](./ADVANCED.md) lists the other locations.
 
@@ -78,12 +80,13 @@ Every setting has a key you can write in the config file and a variable you can 
 | `redact_extra_rules` | `CC_LANGSMITH_REDACT_EXTRA`   | none                              | Extra patterns to strip                 |
 | `metadata`           | `CC_LANGSMITH_METADATA`       | none                              | Custom fields on every run              |
 | `replicas`           | `CC_LANGSMITH_RUNS_ENDPOINTS` | none                              | Send the same trace somewhere else too  |
+| `login_browser`      | `CC_LANGSMITH_LOGIN_BROWSER`  | `true`                            | Open a browser when the sign-in expires |
 
 Unless you turn `redact` off, secrets are stripped before anything is uploaded, covering API keys, JWTs, PEM blocks and common `NAME=value`, `Authorization` and URL-credential shapes. That is not a guarantee that what you upload is safe to share.
 
 ### Lock settings with a managed file
 
-An admin can lock any of these settings for each user through a managed file, which overrides every other file and shell variable, at `~/.langsmith-plugins/managed.json` in each user's home. If that file is broken or not owned by root, tracing stops and Claude Code shows why once per session. See [the settings guide](https://github.com/langchain-ai/langsmith-plugin-binary/blob/main/docs/settings.md) to set it up.
+An admin can lock any of these settings for each user through a managed file, which overrides every other file and shell variable, at `~/.langsmith-plugins/managed.json` in each user's home. If that file is broken or not owned by root, tracing stops and Claude Code shows why, at most every 2 minutes. See [the settings guide](https://github.com/langchain-ai/langsmith-plugin-binary/blob/main/docs/settings.md) to set it up.
 
 ## When nothing shows up
 

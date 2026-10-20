@@ -62,9 +62,16 @@ const STATE_FILE_DEFAULT = [".claude", "state", "langsmith_state.json"];
 
 const GH_LOGIN_MARKER_FILE = "langsmith_gh_login.json";
 
+const NOTICE_KINDS = {
+  managed: "managed-invalid",
+  credential: "credential-problem",
+} as const;
+const NOTICE_COOLDOWN_OFF = "off";
+
 const BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
   defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
+  login_browser: { env: "CC_LANGSMITH_LOGIN_BROWSER", restrictive: false },
 } as const;
 
 const USAGE_TEMPLATE = `Usage:
@@ -133,6 +140,8 @@ export {
   TURN_RECORD_LINE,
   USAGE_TEMPLATE,
   BOOLEAN_SETTINGS,
+  NOTICE_KINDS,
+  NOTICE_COOLDOWN_OFF,
   MAX_LOG_BYTES,
   LOOKUP_TIMEOUT_MS,
   MAX_FULL_READ_BYTES,
