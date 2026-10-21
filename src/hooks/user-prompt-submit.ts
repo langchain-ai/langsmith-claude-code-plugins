@@ -39,6 +39,7 @@ import {
   KILLED_NOTIFICATION_STATUS,
   LS_INTEGRATION,
   NOTICE_KINDS,
+  MUTE_LOCKED_REPLY,
   USER_PROMPT_TURN_NAME,
 } from "../constants.js";
 import { engineStorageRoot, writerOptions } from "../engine-writer.js";
@@ -72,6 +73,8 @@ export async function main(): Promise<void> {
       const commandConfig = loadConfig({ cwd: input.cwd });
       if (command === "trace") {
         reason = await describeThreadLinks(commandConfig, input.session_id);
+      } else if (command === "unmute" && commandConfig.mutedLocked) {
+        reason = MUTE_LOCKED_REPLY;
       } else {
         const mode = command === "mute" ? "metadata" : "full";
         const result = await setThreadTracingMode(
@@ -140,11 +143,9 @@ export async function main(): Promise<void> {
   if (!showNotice(LOGIN_NOTICE_KIND, loginNotice, config)) {
     showNotice(NOTICE_KINDS.credential, credentialNotice, config);
   }
-  const turnMode = getThreadTracingMode(
-    config.stateFilePath,
-    input.session_id,
-    config.defaultMuted,
-  );
+  const turnMode = config.mutedLocked
+    ? "metadata"
+    : getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
 
   // CLI version (ls_agent_runtime_version); best-effort, Stop backfills if empty.
   const expandedTranscript = expandHome(input.transcript_path);

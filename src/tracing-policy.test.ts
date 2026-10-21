@@ -384,6 +384,20 @@ describe("actual UserPromptSubmit command prefix", () => {
     expect(getThreadTracingMode(state, "session")).toBe("metadata");
   });
 
+  it("refuses to unmute when the managed file locks muting on", async () => {
+    mocks.config.mockReturnValue({
+      stateFilePath: state,
+      apiKey: "test",
+      enabled: true,
+      defaultMuted: true,
+      mutedLocked: true,
+    });
+    expect(await submit("/langsmith-tracing:unmute", "true")).toContain("locked muting");
+    expect(getThreadTracingMode(state, "session", true)).toBe("metadata");
+    await submit("/langsmith-tracing:mute", "true");
+    expect(getThreadTracingMode(state, "session", false)).toBe("metadata");
+  });
+
   it("doesn't call a CLI login user's credentials missing", async () => {
     mocks.config.mockReturnValue({
       stateFilePath: state,

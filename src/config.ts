@@ -245,5 +245,6 @@ export function loadConfig(options?: { cwd?: string }): Config {
     ...(common.login_browser === undefined ? {} : { loginBrowser: common.login_browser }),
     ...(common.notice_cooldown === undefined ? {} : { noticeCooldown: common.notice_cooldown }),
     ...(common.locked.includes("project") ? { projectLocked: true } : {}),
+    ...(common.locked.includes("defaultMuted") && common.defaultMuted ? { mutedLocked: true } : {}),
   };
 }

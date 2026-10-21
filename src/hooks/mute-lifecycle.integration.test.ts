@@ -40,6 +40,7 @@ const h = vi.hoisted(() => ({
   noticeCalls: [] as unknown[],
   shownKinds: new Set<string>(),
   replicas: undefined as Config["replicas"],
+  mutedLocked: false,
   enabled: true,
 }));
 vi.mock("@langchain/plugins-base/plugin", async (original) => ({
@@ -126,6 +127,7 @@ vi.mock("../utils/hook-init.js", () => ({
           credentialProblem: h.credentialProblem,
           noticeCooldown: h.noticeCooldown,
           replicas: h.replicas,
+          mutedLocked: h.mutedLocked,
         },
   expandHome: (path: string) => path,
 }));
@@ -250,6 +252,7 @@ function reset(mode: TracingMode) {
   h.noticeCalls = [];
   h.shownKinds = new Set();
   h.replicas = undefined;
+  h.mutedLocked = false;
   h.enabled = true;
 }
 const HOOK_EVENT_BY_NAME = {
@@ -606,6 +609,21 @@ describe("closing hooks hand their work to the uploader", () => {
       expect.stringContaining("replicas on https://other.example need their own API key"),
     ]);
     output.mockRestore();
+  });
+
+  it("keeps a conversation unmuted before the lock from tracing content while muting is locked", async () => {
+    reset("full");
+    h.mutedLocked = true;
+    await hook("prompt");
+    await hook("pre");
+    await hook("post");
+    h.messages = transcript({ id: "tool", name: "Bash" });
+    await hook("stop");
+    expect(h.operations.length).toBeGreaterThan(0);
+    expectPrivate();
+    legacyParent();
+    await hook("pre");
+    expect(h.state.session.tool_tracing_modes?.tool).toBe("metadata");
   });
 
   it("an interrupted turn is counted at once and later closed with the session's repository", async () => {

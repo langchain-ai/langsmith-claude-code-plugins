@@ -67,6 +67,7 @@ const NOTICE_KINDS = {
   credential: "credential-problem",
 } as const;
 const NOTICE_COOLDOWN_OFF = "off";
+const MUTE_LOCKED_REPLY = "An admin locked muting on, so this conversation stays muted.";
 
 const BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
@@ -142,6 +143,7 @@ export {
   BOOLEAN_SETTINGS,
   NOTICE_KINDS,
   NOTICE_COOLDOWN_OFF,
+  MUTE_LOCKED_REPLY,
   MAX_LOG_BYTES,
   LOOKUP_TIMEOUT_MS,
   MAX_FULL_READ_BYTES,

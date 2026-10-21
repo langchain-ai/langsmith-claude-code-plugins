@@ -22887,6 +22887,7 @@ var NOTICE_KINDS = {
   credential: "credential-problem"
 };
 var NOTICE_COOLDOWN_OFF = "off";
+var MUTE_LOCKED_REPLY = "An admin locked muting on, so this conversation stays muted.";
 var BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
   defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
@@ -23630,7 +23631,8 @@ function loadConfig(options) {
     ...credential.kind === "none" ? { credentialProblem: credential.reason } : {},
     ...common.login_browser === void 0 ? {} : { loginBrowser: common.login_browser },
     ...common.notice_cooldown === void 0 ? {} : { noticeCooldown: common.notice_cooldown },
-    ...common.locked.includes("project") ? { projectLocked: true } : {}
+    ...common.locked.includes("project") ? { projectLocked: true } : {},
+    ...common.locked.includes("defaultMuted") && common.defaultMuted ? { mutedLocked: true } : {}
   };
 }
 
@@ -23859,8 +23861,8 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
 
 // dist/src/tracing-mode.js
 function resolveTurnTracingMode(config, sessionId, ...snapshots) {
-  const { stateFilePath, defaultMuted } = typeof config === "string" ? { stateFilePath: config } : config;
-  return snapshots.find((mode) => mode !== void 0) ?? getThreadTracingMode(stateFilePath, sessionId, defaultMuted);
+  const { stateFilePath, defaultMuted, mutedLocked } = typeof config === "string" ? { stateFilePath: config } : config;
+  return snapshots.find((mode) => mode !== void 0) ?? (mutedLocked ? "metadata" : getThreadTracingMode(stateFilePath, sessionId, defaultMuted));
 }
 
 // dist/src/transcript.js
@@ -25693,6 +25695,8 @@ async function main4() {
       const commandConfig = loadConfig({ cwd: input.cwd });
       if (command === "trace") {
         reason = await describeThreadLinks(commandConfig, input.session_id);
+      } else if (command === "unmute" && commandConfig.mutedLocked) {
+        reason = MUTE_LOCKED_REPLY;
       } else {
         const mode = command === "mute" ? "metadata" : "full";
         const result = await setThreadTracingMode(commandConfig.stateFilePath, input.session_id, mode);
@@ -25739,7 +25743,7 @@ async function main4() {
   if (!showNotice(LOGIN_NOTICE_KIND, loginNotice, config)) {
     showNotice(NOTICE_KINDS.credential, credentialNotice, config);
   }
-  const turnMode = getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
+  const turnMode = config.mutedLocked ? "metadata" : getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
   const expandedTranscript = expandHome(input.transcript_path);
   const runtimeVersion = (expandedTranscript ? readRuntimeVersion(expandedTranscript) : void 0) ?? sessionState.runtime_version;
   const approvalPolicy = input.permission_mode;

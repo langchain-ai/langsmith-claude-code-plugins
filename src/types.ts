@@ -595,6 +595,7 @@ export interface Config {
   credentialProblem?: string;
   noticeCooldown?: number | "off";
   projectLocked?: boolean;
+  mutedLocked?: boolean;
 }
 
 export type BooleanSetting = keyof typeof BOOLEAN_SETTINGS;
