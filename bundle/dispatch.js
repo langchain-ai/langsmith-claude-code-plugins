@@ -18334,6 +18334,11 @@ function refusedLoginReplicas(replicas, apiUrl) {
   const refused = (replicas ?? []).filter((replica) => sdkSetting(replica.apiKey) === void 0 && replica.apiUrl !== void 0).map(({ apiUrl: url }) => url).filter((url) => !sameServer(url, apiUrl));
   return refused.length === 0 ? void 0 : fillTemplate(LOGIN_REPLICA_REFUSED_REASON, { urls: refused.join(", "), apiUrl });
 }
+function loginReplicaRefusal(replicas, apiUrl) {
+  const configured = replicas ?? [];
+  const usable = configured.some((replica) => sdkSetting(replica.apiKey) !== void 0 || replica.apiUrl === void 0 || sameServer(replica.apiUrl, apiUrl));
+  return usable ? void 0 : refusedLoginReplicas(configured, apiUrl);
+}
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_d3780d12fce4e0e642416b694fac9fef/node_modules/@langchain/plugins-base/dist/tracing/upload/destination-identity.js
 function resolveUploadDestinationIdentities(options) {
@@ -23059,7 +23064,7 @@ function attributionReady(metadata) {
 }
 
 // dist/src/repo-attribution.js
-import { dirname as dirname16, join as join24 } from "node:path";
+import { dirname as dirname17, join as join25 } from "node:path";
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_d3780d12fce4e0e642416b694fac9fef/node_modules/@langchain/plugins-base/dist/git/attribution.js
 import { isAbsolute as isAbsolute4 } from "node:path";
@@ -23466,12 +23471,49 @@ function withoutRepositoryKeys(base, pinned) {
 // dist/src/config.js
 import { readFileSync as readFileSync14 } from "node:fs";
 import { homedir as homedir2, userInfo as userInfo2 } from "node:os";
-import { join as join23 } from "node:path";
+import { join as join24 } from "node:path";
+
+// dist/src/engine-writer.js
+import { dirname as dirname16, join as join23 } from "node:path";
+function writerOptions(config) {
+  const replicas = uploadReplicas(config.replicas);
+  return {
+    destinations: [
+      {
+        ...config.login ? { login: config.login } : { apiKey: config.apiKey },
+        apiUrl: config.apiBaseUrl,
+        projectName: config.project
+      }
+    ],
+    ...replicas.length ? { replicas } : {},
+    redact: config.redact,
+    ...config.loginBrowser === void 0 ? {} : { loginBrowser: config.loginBrowser },
+    ...config.projectLocked ? { projectLocked: true } : {},
+    ...config.redactExtraRules ? {
+      redactExtraRules: config.redactExtraRules
+    } : {}
+  };
+}
+function engineStorageRoot(stateFilePath) {
+  return join23(dirname16(stateFilePath), ENGINE_STORAGE_DIR_NAME);
+}
+function uploadReplicas(replicas) {
+  return (replicas ?? replicasFromEnvironment() ?? []).map(writerReplica);
+}
+function replicasFromEnvironment() {
+  return new RunTree(SDK_REPLICA_PROBE).replicas;
+}
+function writerReplica(replica) {
+  const source = Array.isArray(replica) ? { projectName: replica[0], updates: replica[1] } : replica;
+  return cloneJson(source);
+}
+
+// dist/src/config.js
 function readAnthropicUserId() {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE;
   if (!homeDir)
     return void 0;
-  const configPath = join23(homeDir, ".claude.json");
+  const configPath = join24(homeDir, ".claude.json");
   try {
     const raw = readFileSync14(configPath, "utf-8");
     const parsed = JSON.parse(raw);
@@ -23511,7 +23553,7 @@ function envCooldown() {
   return Number.isFinite(minutes) && minutes >= 0 ? minutes : void 0;
 }
 function resolveStateFilePath() {
-  return process.env.STATE_FILE ?? join23(homedir2(), ...STATE_FILE_DEFAULT);
+  return process.env.STATE_FILE ?? join24(homedir2(), ...STATE_FILE_DEFAULT);
 }
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
@@ -23602,6 +23644,7 @@ function loadConfig(options) {
     apiUrl: common.api_url,
     apiUrlIsDefault: common.defaulted.includes("api_url")
   });
+  const unreachable = credential.kind === "login" ? loginReplicaRefusal(uploadReplicas(replicas), credential.apiUrl) : void 0;
   customMetadata = common.metadata && withBothGitMetadataNames(common.metadata);
   const anthropicUserId = readAnthropicUserId();
   const localUsername = readLocalUsername();
@@ -23629,6 +23672,7 @@ function loadConfig(options) {
     ...common.managedConfigProblem === void 0 ? {} : { managedConfigProblem: common.managedConfigProblem },
     ...credential.kind === "login" ? { login: credential.login } : {},
     ...credential.kind === "none" ? { credentialProblem: credential.reason } : {},
+    ...unreachable ? { credentialProblem: unreachable } : {},
     ...common.login_browser === void 0 ? {} : { loginBrowser: common.login_browser },
     ...common.notice_cooldown === void 0 ? {} : { noticeCooldown: common.notice_cooldown },
     ...common.locked.includes("project") ? { projectLocked: true } : {},
@@ -23665,7 +23709,7 @@ function toolPathFromInput(toolInput, sessionCwd) {
 var attributor;
 function repositoryAttributor() {
   attributor ??= createRepositoryAttributor({
-    githubLoginMarkerPath: join24(dirname16(resolveStateFilePath()), GH_LOGIN_MARKER_FILE)
+    githubLoginMarkerPath: join25(dirname17(resolveStateFilePath()), GH_LOGIN_MARKER_FILE)
   });
   return attributor;
 }
@@ -23805,7 +23849,7 @@ function updateSessionState(state, sessionId, lastLine, turnCount, taskRunMap, c
 
 // dist/src/tracing-policy.js
 import { mkdir as mkdir6 } from "node:fs/promises";
-import { dirname as dirname17 } from "node:path";
+import { dirname as dirname18 } from "node:path";
 
 // dist/src/utils/records.js
 function isRecord(value) {
@@ -23853,7 +23897,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     throw new Error("A nonempty session ID and a full/metadata tracing mode are required");
   }
   const path3 = tracingPolicyPath(stateFilePath);
-  await mkdir6(dirname17(path3), { recursive: true });
+  await mkdir6(dirname18(path3), { recursive: true });
   return updatePolicyFile(path3, POLICY_FILE, (policy) => {
     policy.threads = { ...policy.threads, [sessionId]: mode };
   });
@@ -24221,38 +24265,6 @@ function skillNameFromTool(toolName, toolInput) {
     return void 0;
   const skill = toolInput?.skill;
   return typeof skill === "string" ? skill : void 0;
-}
-
-// dist/src/engine-writer.js
-import { dirname as dirname18, join as join25 } from "node:path";
-function writerOptions(config) {
-  const replicas = config.replicas ?? replicasFromEnvironment();
-  return {
-    destinations: [
-      {
-        ...config.login ? { login: config.login } : { apiKey: config.apiKey },
-        apiUrl: config.apiBaseUrl,
-        projectName: config.project
-      }
-    ],
-    ...replicas?.length ? { replicas: replicas.map(writerReplica) } : {},
-    redact: config.redact,
-    ...config.loginBrowser === void 0 ? {} : { loginBrowser: config.loginBrowser },
-    ...config.projectLocked ? { projectLocked: true } : {},
-    ...config.redactExtraRules ? {
-      redactExtraRules: config.redactExtraRules
-    } : {}
-  };
-}
-function engineStorageRoot(stateFilePath) {
-  return join25(dirname18(stateFilePath), ENGINE_STORAGE_DIR_NAME);
-}
-function replicasFromEnvironment() {
-  return new RunTree(SDK_REPLICA_PROBE).replicas;
-}
-function writerReplica(replica) {
-  const source = Array.isArray(replica) ? { projectName: replica[0], updates: replica[1] } : replica;
-  return cloneJson(source);
 }
 
 // dist/src/engine-session.js

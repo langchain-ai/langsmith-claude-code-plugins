@@ -174,6 +174,24 @@ describe("initHook", () => {
     expect(writer.routes[writer.destinations[0]!.id]).toMatchObject({ projectName: "own" });
   });
 
+  it("stops before uploading when the login can't reach any replica", () => {
+    process.env.TRACE_TO_LANGSMITH = "true";
+    process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://login.example");
+    process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([{ apiUrl: "https://other.example" }]);
+    expect(initHook(cwd)).toBeNull();
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("replicas on https://other.example"),
+    );
+    process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([
+      { apiUrl: "https://other.example" },
+      { projectName: "same-server" },
+    ]);
+    expect(initHook(cwd)).not.toBeNull();
+    delete process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
+    process.env.LANGSMITH_RUNS_ENDPOINTS = JSON.stringify({ "https://other.example": "" });
+    expect(initHook(cwd)).toBeNull();
+  });
+
   it("returns config when replicas are set but no API key", () => {
     process.env.TRACE_TO_LANGSMITH = "true";
     process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([

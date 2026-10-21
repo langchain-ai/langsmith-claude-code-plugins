@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { resolveUploadCredential } from "@langchain/plugins-base/auth";
+import { loginReplicaRefusal, resolveUploadCredential } from "@langchain/plugins-base/auth";
 import {
   mergeCommonConfig,
   readCommonConfigFiles,
@@ -22,6 +22,7 @@ import {
   STATE_FILE_DEFAULT,
 } from "./constants.js";
 import type { BooleanSetting, Config, MetadataWithPins } from "./types.js";
+import { uploadReplicas } from "./engine-writer.js";
 
 /**
  * Configuration — existing Claude environment discovery plus the shared langsmith-plugins.json contract.
@@ -204,6 +205,10 @@ export function loadConfig(options?: { cwd?: string }): Config {
     apiUrl: common.api_url,
     apiUrlIsDefault: common.defaulted.includes("api_url"),
   });
+  const unreachable =
+    credential.kind === "login"
+      ? loginReplicaRefusal(uploadReplicas(replicas), credential.apiUrl)
+      : undefined;
   customMetadata = common.metadata && withBothGitMetadataNames(common.metadata);
 
   // Attach identity metadata so every traced run can be attributed to a
@@ -242,6 +247,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
       : { managedConfigProblem: common.managedConfigProblem }),
     ...(credential.kind === "login" ? { login: credential.login } : {}),
     ...(credential.kind === "none" ? { credentialProblem: credential.reason } : {}),
+    ...(unreachable ? { credentialProblem: unreachable } : {}),
     ...(common.login_browser === undefined ? {} : { loginBrowser: common.login_browser }),
     ...(common.notice_cooldown === undefined ? {} : { noticeCooldown: common.notice_cooldown }),
     ...(common.locked.includes("project") ? { projectLocked: true } : {}),
