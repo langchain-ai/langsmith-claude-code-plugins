@@ -12,6 +12,7 @@ import {
   resolveProvider,
   groupIntoTurns,
 } from "./transcript.js";
+import { hashPrompt } from "./utils/ids/prompt-hash.js";
 import type {
   UserMessage,
   ToolResultMessage,
@@ -152,7 +153,7 @@ describe("readTranscript", () => {
       makeUser("Next", undefined, "p2"),
       makeAssistant("msg_3", "c"),
     ]);
-    expect(readTranscript(flushed, -1, undefined, promptAt).lastLine).toBe(3);
+    expect(readTranscript(flushed, -1, undefined, { promptAtByte: promptAt }).lastLine).toBe(3);
 
     const earlier = writeJsonl("late.jsonl", [makeUser("Earlier"), makeAssistant("msg_0", "z")]);
     const lateAt = statSync(earlier).size;
@@ -163,7 +164,29 @@ describe("readTranscript", () => {
       makeAssistant("msg_1", "a"),
       makeUser("Next", undefined, "p2"),
     ]);
-    expect(readTranscript(earlier, 1, undefined, lateAt).lastLine).toBe(3);
+    expect(readTranscript(earlier, 1, undefined, { promptAtByte: lateAt }).lastLine).toBe(3);
+  });
+
+  it("keeps an unfinished earlier prompt and the turn's own prompt already on disk", () => {
+    const path = writeJsonl("backlog.jsonl", [
+      makeUser("Earlier", undefined, "p0"),
+      makeAssistant("msg_0", "z"),
+      makeUser("Own", undefined, "p1"),
+      makeAssistant("msg_1", "a"),
+    ]);
+    const promptAtByte = statSync(path).size;
+    expect(readTranscript(path, -1, undefined, { promptAtByte }).lastLine).toBe(3);
+  });
+
+  it("ends the turn at a repeat of its own prompt text", () => {
+    const path = writeJsonl("repeat.jsonl", [
+      makeUser("Same", undefined, "p1"),
+      makeAssistant("msg_1", "a"),
+      makeUser("Same", undefined, "p2"),
+      makeAssistant("msg_2", "b"),
+    ]);
+    const turn = { promptAtByte: 0, promptHash: hashPrompt("Same") };
+    expect(readTranscript(path, -1, undefined, turn).lastLine).toBe(1);
   });
 
   it("reads past a malformed line inside the turn", () => {
@@ -172,7 +195,9 @@ describe("readTranscript", () => {
     const lines = [JSON.stringify(own), "{not json", JSON.stringify(makeAssistant("msg_1", "a"))];
     writeFileSync(path, `${lines.join("\n")}\n`);
     const promptAt = Buffer.byteLength(JSON.stringify(own)) + 1;
-    expect(readTranscript(path, -1, undefined, promptAt).messages).toHaveLength(2);
+    expect(readTranscript(path, -1, undefined, { promptAtByte: promptAt }).messages).toHaveLength(
+      2,
+    );
   });
 
   it("skips lines up to afterLine", () => {

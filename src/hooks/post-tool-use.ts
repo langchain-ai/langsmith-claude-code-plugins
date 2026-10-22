@@ -6,7 +6,7 @@
  * so SubagentStop can nest the subagent trace under it.
  */
 
-import { resolveTurnTracingMode } from "../tracing-mode.js";
+import { resolveTurnTracingMode, toolTracingMode } from "../tracing-mode.js";
 import { debug, error } from "../logger.js";
 import { generateDottedOrderSegment } from "../langsmith.js";
 import {
@@ -15,7 +15,7 @@ import {
   getSessionState,
   advanceToolTracingProgress,
 } from "../state.js";
-import { initHook } from "../utils/hook-init.js";
+import { expandHome, initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
@@ -45,7 +45,7 @@ export async function main(): Promise<void> {
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
 
-  const tracing = resolveTurnTracingMode(
+  const turnTracing = resolveTurnTracingMode(
     config,
     input.session_id,
     sessionState.tool_tracing_modes?.[input.tool_use_id],
@@ -53,6 +53,14 @@ export async function main(): Promise<void> {
     sessionState.current_turn_run_id
       ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing
       : undefined,
+  );
+  const tracing = toolTracingMode(
+    config,
+    input.session_id,
+    sessionState,
+    expandHome(input.transcript_path),
+    input.tool_use_id,
+    turnTracing,
   );
   const parentRunId = sessionState.current_turn_run_id;
   const traceId = sessionState.current_trace_id;

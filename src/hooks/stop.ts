@@ -7,12 +7,14 @@
  */
 
 import { resolveTurnTracingMode } from "../tracing-mode.js";
+import { getThreadTracingMode } from "../tracing-policy.js";
 import {
   readTranscript,
   groupIntoTurns,
   readRuntimeVersion,
   completedToolUseIds,
   turnToolInputs,
+  turnPrompt,
 } from "../transcript.js";
 import { turnScopedMetadata } from "../repo-attribution.js";
 import { log, warn, debug, error } from "../logger.js";
@@ -97,14 +99,28 @@ export async function closeStoppedTurn(
   // model finishes generating, but the JSONL file write may still be in flight.
   await delay(Math.max(0, startTime + STOP_FLUSH_WAIT_MS - Date.now()));
 
-  const { messages, lastLine } = readTranscript(
+  const { messages, lastLine, laterPrompt } = readTranscript(
     transcriptPath,
     sessionState.last_line,
     closing.cut_bytes,
-    sessionState.current_turn_prompt_bytes,
-    closing.session.current_turn_run_id !== undefined &&
-      live.read_turn_run_id === closing.session.current_turn_run_id,
+    {
+      ...turnPrompt(
+        sessionState,
+        closing.session.current_turn_run_id !== undefined &&
+          live.read_turn_run_id === closing.session.current_turn_run_id,
+      ),
+      nextPromptHash:
+        live.current_turn_run_id !== undefined &&
+        live.current_turn_run_id !== closing.session.current_turn_run_id
+          ? live.current_turn_prompt_hash
+          : undefined,
+    },
   );
+  const finalMessage =
+    laterPrompt &&
+    getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted) === "metadata"
+      ? undefined
+      : input.last_assistant_message;
   if (messages.length === 0 && !sessionState.current_turn_run_id) {
     debug("No new messages");
     return;
@@ -137,7 +153,7 @@ export async function closeStoppedTurn(
   // input, which Claude Code guarantees is the complete final text.
   // Use real wall-clock times: last_tool_end_time (from PostToolUse) as
   // start, and Date.now() (Stop hook firing time) as end.
-  if (turns.length > 0 && input.last_assistant_message) {
+  if (turns.length > 0 && finalMessage) {
     const lastTurn = turns[turns.length - 1];
     const lastLlm = lastTurn.llmCalls[lastTurn.llmCalls.length - 1];
     if (lastLlm && lastLlm.toolCalls.length > 0) {
@@ -147,7 +163,7 @@ export async function closeStoppedTurn(
         : (lastLlm.toolCalls[lastLlm.toolCalls.length - 1].result?.timestamp ?? lastLlm.endTime);
       const syntheticEnd = new Date(startTime).toISOString(); // startTime = when the Stop hook fired
       lastTurn.llmCalls.push({
-        content: [{ type: "text", text: input.last_assistant_message }],
+        content: [{ type: "text", text: finalMessage }],
         model: lastLlm.model,
         // A request setting, so it carries over like the model. service_tier is a
         // response value with no reading for this call, so it stays absent.
@@ -347,9 +363,7 @@ export async function closeStoppedTurn(
           stop_seen: true,
           tracing: entry.tracing ?? currentTracing,
           last_assistant_message:
-            (entry.tracing ?? currentTracing) === "metadata"
-              ? MUTED_TRACE_CONTENT
-              : input.last_assistant_message,
+            (entry.tracing ?? currentTracing) === "metadata" ? MUTED_TRACE_CONTENT : finalMessage,
           turn_id: lastTurnId,
           // If this turn is itself a task-notification turn that spawned its own
           // background subagent, remember the agent to finalize once it drains.
@@ -387,7 +401,7 @@ export async function closeStoppedTurn(
         dottedOrder: currentDottedOrder,
         parentRunId: currentParentRunId,
         startTime: sessionState.current_turn_start,
-        lastAssistantMessage: input.last_assistant_message,
+        lastAssistantMessage: finalMessage,
         customMetadata: turnMetadata,
         turnId: lastTurnId,
         turnNumber: sessionState.current_turn_number,
