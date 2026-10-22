@@ -112,6 +112,20 @@ export async function main(): Promise<void> {
   const config = initHook(input.cwd);
   if (!config) {
     const setup = loadConfig({ cwd: input.cwd });
+    const muted =
+      setup.mutedLocked ||
+      getThreadTracingMode(setup.stateFilePath, input.session_id, setup.defaultMuted) !== "full";
+    if (
+      setup.enabled &&
+      setup.credentialProblem &&
+      setup.strictAuth &&
+      !setup.managedConfigProblem &&
+      !muted &&
+      isAttendedSession()
+    ) {
+      console.log(JSON.stringify({ decision: "block", reason: setup.credentialProblem }));
+      return;
+    }
     if (setup.managedConfigProblem)
       await showNotice(NOTICE_KINDS.managed, setup.managedConfigProblem, setup);
     else if (setup.enabled)

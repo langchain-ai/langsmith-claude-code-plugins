@@ -150,6 +150,8 @@ vi.mock("../config.js", async (original) => ({
     managedConfigProblem: h.managedProblem,
     credentialProblem: h.credentialProblem,
     noticeCooldown: h.noticeCooldown,
+    strictAuth: h.strictAuth,
+    defaultMuted: h.defaultMuted,
   }),
 }));
 vi.mock("../tracing-policy.js", async (original) => {
@@ -658,6 +660,22 @@ describe("closing hooks hand their work to the uploader", () => {
     await hook("prompt", {}, { closings: false });
     expect(output).not.toHaveBeenCalled();
     expect(h.operations).toHaveLength(1);
+    output.mockRestore();
+  });
+
+  it("refuses a person's prompt with no sign-in at all in strict mode, and only reminds a script", async () => {
+    reset("full");
+    h.credentialProblem = "LangSmith isn't signed in.";
+    h.strictAuth = true;
+    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "1");
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "0");
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { decision: "block", reason: "LangSmith isn't signed in." },
+      { systemMessage: "LangSmith isn't signed in." },
+    ]);
     output.mockRestore();
   });
 
