@@ -24618,7 +24618,7 @@ async function closeStoppedTurn(_id, closing, config) {
     ...turnPrompt(sessionState, closing.session.current_turn_run_id !== void 0 && live.read_turn_run_id === closing.session.current_turn_run_id),
     nextPromptHash: live.current_turn_run_id !== void 0 && live.current_turn_run_id !== closing.session.current_turn_run_id ? live.current_turn_prompt_hash : void 0
   });
-  const finalMessage = laterPrompt && getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted) === "metadata" ? void 0 : input.last_assistant_message;
+  const finalMessage = laterPrompt ? void 0 : input.last_assistant_message;
   if (messages.length === 0 && !sessionState.current_turn_run_id) {
     debug("No new messages");
     return;

@@ -7,7 +7,6 @@
  */
 
 import { resolveTurnTracingMode } from "../tracing-mode.js";
-import { getThreadTracingMode } from "../tracing-policy.js";
 import {
   readTranscript,
   groupIntoTurns,
@@ -116,11 +115,7 @@ export async function closeStoppedTurn(
           : undefined,
     },
   );
-  const finalMessage =
-    laterPrompt &&
-    getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted) === "metadata"
-      ? undefined
-      : input.last_assistant_message;
+  const finalMessage = laterPrompt ? undefined : input.last_assistant_message;
   if (messages.length === 0 && !sessionState.current_turn_run_id) {
     debug("No new messages");
     return;
