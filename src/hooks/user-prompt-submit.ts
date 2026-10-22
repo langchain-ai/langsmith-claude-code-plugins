@@ -39,6 +39,7 @@ import {
   getThreadTracingMode,
 } from "../tracing-policy.js";
 import { queueClosing } from "../closing-queue.js";
+import { transcriptSize } from "../utils/files.js";
 import type {
   Config,
   InterruptedClosingInput,
@@ -125,6 +126,7 @@ export async function main(): Promise<void> {
 
   initTracing(config, input.cwd, input.session_id);
 
+  const promptBytes = transcriptSize(input.transcript_path);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   const turnMode = getThreadTracingMode(
@@ -306,6 +308,7 @@ export async function main(): Promise<void> {
         current_parent_run_id: parentRunId,
         current_turn_number: turnNum,
         current_turn_start: startTime,
+        current_turn_prompt_bytes: promptBytes,
         // If this is a task-notification turn, record the agent it's for so Stop
         // closes that agent's tool run + launching turn once this turn completes.
         current_notification_agent_id: notificationAgentId,
@@ -365,6 +368,7 @@ export async function closeInterruptedPrompt(
           ...ss,
           // Advance past the interrupted turn's messages so Stop doesn't re-trace them
           last_line: Math.max(ss.last_line, lastLine),
+          read_turn_run_id: sessionState.current_turn_run_id,
           ...advanceToolTracingProgress(ss, consumedToolUseIds ?? [], "transcript"),
           turn_count: Math.max(ss.turn_count, sessionState.turn_count + turnsTraced),
         },

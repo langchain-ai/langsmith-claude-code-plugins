@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { writeFileSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { writeFileSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -139,6 +139,41 @@ describe("readTranscript", () => {
       vi.doUnmock("./constants.js");
     },
   );
+
+  it("keeps a turn's own prompt and its follow-up lines but stops at the next turn's prompt", () => {
+    const own = makeUser("Own", undefined, "p1");
+    const flushed = writeJsonl("own.jsonl", [own, makeAssistant("msg_1", "a")]);
+    const promptAt = statSync(flushed).size;
+    writeJsonl("own.jsonl", [
+      own,
+      makeAssistant("msg_1", "a"),
+      makeUser("Skill instructions", undefined, "p1"),
+      makeAssistant("msg_2", "b"),
+      makeUser("Next", undefined, "p2"),
+      makeAssistant("msg_3", "c"),
+    ]);
+    expect(readTranscript(flushed, -1, undefined, promptAt).lastLine).toBe(3);
+
+    const earlier = writeJsonl("late.jsonl", [makeUser("Earlier"), makeAssistant("msg_0", "z")]);
+    const lateAt = statSync(earlier).size;
+    writeJsonl("late.jsonl", [
+      makeUser("Earlier"),
+      makeAssistant("msg_0", "z"),
+      own,
+      makeAssistant("msg_1", "a"),
+      makeUser("Next", undefined, "p2"),
+    ]);
+    expect(readTranscript(earlier, 1, undefined, lateAt).lastLine).toBe(3);
+  });
+
+  it("reads past a malformed line inside the turn", () => {
+    const own = makeUser("Own", undefined, "p1");
+    const path = join(mkdtempSync(join(tmpdir(), "transcript-bad-")), "bad.jsonl");
+    const lines = [JSON.stringify(own), "{not json", JSON.stringify(makeAssistant("msg_1", "a"))];
+    writeFileSync(path, `${lines.join("\n")}\n`);
+    const promptAt = Buffer.byteLength(JSON.stringify(own)) + 1;
+    expect(readTranscript(path, -1, undefined, promptAt).messages).toHaveLength(2);
+  });
 
   it("skips lines up to afterLine", () => {
     const path = writeJsonl("test.jsonl", [

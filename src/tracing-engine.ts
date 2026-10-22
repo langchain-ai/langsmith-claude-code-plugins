@@ -7,6 +7,7 @@ import { captureInto, saveOrWarn } from "./engine-capture.js";
 import { openSession } from "./engine-session.js";
 import { captureToolRun as captureToolRunInto } from "./engine-tool-settlement.js";
 import { readEngineTurn } from "./engine-turn-record.js";
+import { getThreadTracingMode } from "./tracing-policy.js";
 import type {
   ClaudeRun,
   ClaudeTracingSession,
@@ -19,14 +20,21 @@ import type {
 export { runEngineWorker } from "./engine-worker.js";
 
 let active: ClaudeTracingSession | undefined;
+let mutedNow = false;
 
 function started(): ClaudeTracingSession {
   if (!active) throw new Error(TRACING_NOT_STARTED_MESSAGE);
   return active;
 }
 
+function uploadMode(mode: TracingMode): TracingMode {
+  return mutedNow ? "metadata" : mode;
+}
+
 export function initTracing(config: Config, cwd: string, sessionId: string): void {
   active = openSession(config, cwd, sessionId);
+  mutedNow =
+    getThreadTracingMode(config.stateFilePath, sessionId, config.defaultMuted) === "metadata";
 }
 
 export async function captureRun(
@@ -35,7 +43,7 @@ export async function captureRun(
   rootRunId: string = run.id,
   operation: RunOperation = "post",
 ): Promise<void> {
-  await captureInto(started(), run, mode, rootRunId, operation);
+  await captureInto(started(), run, uploadMode(mode), rootRunId, operation);
 }
 
 export async function captureToolRun(
@@ -44,7 +52,7 @@ export async function captureToolRun(
   rootRunId: string,
   origin: ToolOrigin,
 ): Promise<void> {
-  await captureToolRunInto(started(), run, mode, rootRunId, origin);
+  await captureToolRunInto(started(), run, uploadMode(mode), rootRunId, origin);
 }
 
 export async function queueJob(input: ReconstructionJobInput): Promise<void> {

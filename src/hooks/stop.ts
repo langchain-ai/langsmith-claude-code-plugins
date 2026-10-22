@@ -101,6 +101,9 @@ export async function closeStoppedTurn(
     transcriptPath,
     sessionState.last_line,
     closing.cut_bytes,
+    sessionState.current_turn_prompt_bytes,
+    closing.session.current_turn_run_id !== undefined &&
+      live.read_turn_run_id === closing.session.current_turn_run_id,
   );
   if (messages.length === 0 && !sessionState.current_turn_run_id) {
     debug("No new messages");

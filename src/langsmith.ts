@@ -559,6 +559,7 @@ export async function closeInterruptedTurn(options: {
         transcriptPath,
         sessionState.last_line,
         options.cutAtByte,
+        sessionState.current_turn_prompt_bytes,
       );
       if (messages.length > 0) {
         const turns = groupIntoTurns(messages);

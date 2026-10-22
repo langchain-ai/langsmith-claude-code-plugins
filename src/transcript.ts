@@ -26,14 +26,32 @@ export function readTranscript(
   filePath: string,
   afterLine: number = -1,
   cutAtByte?: number,
+  promptAtByte?: number,
+  promptRead = false,
 ): { messages: TranscriptMessage[]; lastLine: number } {
-  const endsBeforeCut = (offset: number, line: string): boolean => {
-    if (cutAtByte === undefined || offset < cutAtByte) return false;
-    try {
-      return isHumanMessage(JSON.parse(line) as TranscriptMessage);
-    } catch {
-      return true;
+  let promptSeen = promptRead;
+  let promptId: string | undefined;
+  const opensLaterTurn = (offset: number, message: UserMessage): boolean => {
+    if (promptAtByte === undefined) return false;
+    if (promptSeen && (message.promptId === undefined || message.promptId === promptId)) {
+      return false;
     }
+    if (promptSeen && offset >= promptAtByte) return true;
+    promptSeen = true;
+    promptId = message.promptId;
+    return false;
+  };
+  const endsBeforeCut = (offset: number, line: string): boolean => {
+    const pastCut = cutAtByte !== undefined && offset >= cutAtByte;
+    if (!pastCut && promptAtByte === undefined) return false;
+    let message: TranscriptMessage;
+    try {
+      message = JSON.parse(line) as TranscriptMessage;
+    } catch {
+      return pastCut;
+    }
+    if (!isHumanMessage(message)) return false;
+    return pastCut || opensLaterTurn(offset, message);
   };
   let size: number;
   try {

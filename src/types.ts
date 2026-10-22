@@ -273,6 +273,8 @@ export interface SessionState {
   current_turn_number?: number;
   /** Current turn start time (ISO string) for duration calculation */
   current_turn_start?: string;
+  current_turn_prompt_bytes?: number;
+  read_turn_run_id?: string;
   /** Permission mode for the current turn → coding-agent-v1 `approval_policy` (root/interrupted). */
   approval_policy?: string;
   /** Claude Code CLI version → coding-agent-v1 `ls_agent_runtime_version`. */

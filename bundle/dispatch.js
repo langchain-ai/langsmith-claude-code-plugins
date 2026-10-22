@@ -23222,15 +23222,34 @@ function resolveTurnTracingMode(config, sessionId, ...snapshots) {
 // dist/src/transcript.js
 import { readFileSync as readFileSync13, statSync as statSync7, fstatSync as fstatSync3, openSync as openSync5, readSync, closeSync as closeSync5 } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
-function readTranscript(filePath, afterLine = -1, cutAtByte) {
-  const endsBeforeCut = (offset, line) => {
-    if (cutAtByte === void 0 || offset < cutAtByte)
+function readTranscript(filePath, afterLine = -1, cutAtByte, promptAtByte, promptRead = false) {
+  let promptSeen = promptRead;
+  let promptId;
+  const opensLaterTurn = (offset, message) => {
+    if (promptAtByte === void 0)
       return false;
-    try {
-      return isHumanMessage(JSON.parse(line));
-    } catch {
-      return true;
+    if (promptSeen && (message.promptId === void 0 || message.promptId === promptId)) {
+      return false;
     }
+    if (promptSeen && offset >= promptAtByte)
+      return true;
+    promptSeen = true;
+    promptId = message.promptId;
+    return false;
+  };
+  const endsBeforeCut = (offset, line) => {
+    const pastCut = cutAtByte !== void 0 && offset >= cutAtByte;
+    if (!pastCut && promptAtByte === void 0)
+      return false;
+    let message;
+    try {
+      message = JSON.parse(line);
+    } catch {
+      return pastCut;
+    }
+    if (!isHumanMessage(message))
+      return false;
+    return pastCut || opensLaterTurn(offset, message);
   };
   let size;
   try {
@@ -23688,19 +23707,24 @@ async function delivered(context, capture) {
 
 // dist/src/tracing-engine.js
 var active;
+var mutedNow = false;
 function started() {
   if (!active)
     throw new Error(TRACING_NOT_STARTED_MESSAGE);
   return active;
 }
+function uploadMode(mode) {
+  return mutedNow ? "metadata" : mode;
+}
 function initTracing(config, cwd, sessionId) {
   active = openSession(config, cwd, sessionId);
+  mutedNow = getThreadTracingMode(config.stateFilePath, sessionId, config.defaultMuted) === "metadata";
 }
 async function captureRun(run, mode = "full", rootRunId = run.id, operation = "post") {
-  await captureInto(started(), run, mode, rootRunId, operation);
+  await captureInto(started(), run, uploadMode(mode), rootRunId, operation);
 }
 async function captureToolRun2(run, mode, rootRunId, origin) {
-  await captureToolRun(started(), run, mode, rootRunId, origin);
+  await captureToolRun(started(), run, uploadMode(mode), rootRunId, origin);
 }
 async function queueJob(input) {
   const { session } = started();
@@ -24005,7 +24029,7 @@ async function closeInterruptedTurn(options) {
   const turnNumber = sessionState.current_turn_number;
   if (transcriptPath) {
     try {
-      const { messages, lastLine: newLastLine } = readTranscript(transcriptPath, sessionState.last_line, options.cutAtByte);
+      const { messages, lastLine: newLastLine } = readTranscript(transcriptPath, sessionState.last_line, options.cutAtByte, sessionState.current_turn_prompt_bytes);
       if (messages.length > 0) {
         const turns = groupIntoTurns(messages);
         if (turns.length > 0) {
@@ -24402,7 +24426,66 @@ async function finalizeNotificationChain(opts) {
 
 // dist/src/closing-queue.js
 import { randomUUID as randomUUID7 } from "node:crypto";
-import { statSync as statSync8 } from "node:fs";
+
+// dist/src/utils/files.js
+import { lstatSync as lstatSync4, readdirSync as readdirSync2, readFileSync as readFileSync14, rmdirSync as rmdirSync2, statSync as statSync8, unlinkSync as unlinkSync3 } from "node:fs";
+function listDirectory(path3) {
+  try {
+    return readdirSync2(path3).sort();
+  } catch {
+    return [];
+  }
+}
+function entryInfo(path3) {
+  try {
+    return lstatSync4(path3);
+  } catch {
+    return void 0;
+  }
+}
+function removeFile2(path3) {
+  if (!entryInfo(path3)?.isFile())
+    return false;
+  try {
+    unlinkSync3(path3);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function removeEmptyFolder(path3) {
+  try {
+    rmdirSync2(path3);
+  } catch {
+    return;
+  }
+}
+function readText(path3) {
+  try {
+    return readFileSync14(path3, "utf-8");
+  } catch {
+    return "";
+  }
+}
+function readJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return void 0;
+  }
+}
+function transcriptSize(path3) {
+  const expanded = expandHome(path3);
+  if (!expanded)
+    return void 0;
+  try {
+    return statSync8(expanded).size;
+  } catch {
+    return void 0;
+  }
+}
+
+// dist/src/closing-queue.js
 async function queueClosing(config, kind, input, options = {}) {
   const id = randomUUID7();
   const at = Date.now();
@@ -24441,16 +24524,6 @@ async function queueClosing(config, kind, input, options = {}) {
     privacyMode: CLOSING_PRIVACY_MODE,
     turnEvidence: { childRunIds: [], closureState: "open" }
   });
-}
-function transcriptSize(path3) {
-  const expanded = expandHome(path3);
-  if (!expanded)
-    return void 0;
-  try {
-    return statSync8(expanded).size;
-  } catch {
-    return void 0;
-  }
 }
 function turnClosedReset(session) {
   return {
@@ -24506,7 +24579,7 @@ async function closeStoppedTurn(_id, closing, config) {
   const runtimeVersion = sessionState.runtime_version ?? readRuntimeVersion(transcriptPath);
   const approvalPolicy = sessionState.approval_policy ?? input.permission_mode;
   await delay5(Math.max(0, startTime + STOP_FLUSH_WAIT_MS - Date.now()));
-  const { messages, lastLine } = readTranscript(transcriptPath, sessionState.last_line, closing.cut_bytes);
+  const { messages, lastLine } = readTranscript(transcriptPath, sessionState.last_line, closing.cut_bytes, sessionState.current_turn_prompt_bytes, closing.session.current_turn_run_id !== void 0 && live.read_turn_run_id === closing.session.current_turn_run_id);
   if (messages.length === 0 && !sessionState.current_turn_run_id) {
     debug("No new messages");
     return;
@@ -25082,6 +25155,7 @@ async function main4() {
     return;
   }
   initTracing(config, input.cwd, input.session_id);
+  const promptBytes = transcriptSize(input.transcript_path);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   const turnMode = getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
@@ -25177,6 +25251,7 @@ async function main4() {
         current_parent_run_id: parentRunId,
         current_turn_number: turnNum,
         current_turn_start: startTime,
+        current_turn_prompt_bytes: promptBytes,
         // If this is a task-notification turn, record the agent it's for so Stop
         // closes that agent's tool run + launching turn once this turn completes.
         current_notification_agent_id: notificationAgentId,
@@ -25228,6 +25303,7 @@ async function closeInterruptedPrompt(_id, closing, config) {
           ...ss,
           // Advance past the interrupted turn's messages so Stop doesn't re-trace them
           last_line: Math.max(ss.last_line, lastLine),
+          read_turn_run_id: sessionState.current_turn_run_id,
           ...advanceToolTracingProgress(ss, consumedToolUseIds ?? [], "transcript"),
           turn_count: Math.max(ss.turn_count, sessionState.turn_count + turnsTraced)
         }
@@ -25537,56 +25613,6 @@ async function runQueuedClosings(workerConfig, sessionId) {
 // dist/src/legacy-import.js
 import { createHmac } from "node:crypto";
 import { basename as basename4, dirname as dirname18, join as join22 } from "node:path";
-
-// dist/src/utils/files.js
-import { lstatSync as lstatSync4, readdirSync as readdirSync2, readFileSync as readFileSync14, rmdirSync as rmdirSync2, unlinkSync as unlinkSync3 } from "node:fs";
-function listDirectory(path3) {
-  try {
-    return readdirSync2(path3).sort();
-  } catch {
-    return [];
-  }
-}
-function entryInfo(path3) {
-  try {
-    return lstatSync4(path3);
-  } catch {
-    return void 0;
-  }
-}
-function removeFile2(path3) {
-  if (!entryInfo(path3)?.isFile())
-    return false;
-  try {
-    unlinkSync3(path3);
-    return true;
-  } catch {
-    return false;
-  }
-}
-function removeEmptyFolder(path3) {
-  try {
-    rmdirSync2(path3);
-  } catch {
-    return;
-  }
-}
-function readText(path3) {
-  try {
-    return readFileSync14(path3, "utf-8");
-  } catch {
-    return "";
-  }
-}
-function readJson(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return void 0;
-  }
-}
-
-// dist/src/legacy-import.js
 function legacyRuns(config) {
   const origin = legacyOrigin(config);
   const root = dirname18(config.stateFilePath);
