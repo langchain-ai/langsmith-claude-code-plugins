@@ -5,7 +5,7 @@
 import { loadConfig } from "../config.js";
 import type { Config } from "../types.js";
 import { initLogger, error } from "../logger.js";
-import { hasOwnApiKey } from "./replicas.js";
+import { hasUsableDestination } from "./replicas.js";
 
 /**
  * Standard hook startup: load config, init logger, check kill-switch and credentials.
@@ -22,8 +22,8 @@ export function initHook(cwd?: string): Config | null {
     return null;
   }
 
-  if (config.credentialProblem && !config.replicas?.some(hasOwnApiKey)) {
-    error(config.credentialProblem);
+  if (!hasUsableDestination(config)) {
+    error(config.credentialProblem!);
     return null;
   }
 

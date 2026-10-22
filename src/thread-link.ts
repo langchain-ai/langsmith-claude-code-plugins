@@ -1,4 +1,4 @@
-import { sdkSetting } from "@langchain/plugins-base/auth";
+import { refusedLoginReplicas, sdkSetting } from "@langchain/plugins-base/auth";
 import { Client } from "langsmith";
 import type { Config, SdkClientKey } from "./types.js";
 import { LOOKUP_TIMEOUT_MS } from "./constants.js";
@@ -37,7 +37,10 @@ export async function describeThreadLinks(config: Config, sessionId: string): Pr
         resolved: false,
         line: `${projectName}: No LangSmith API key configured for this destination.`,
       };
-      if (!keyed && (destination.apiUrl || !config.login)) return missingKey;
+      const otherServer =
+        destination.apiUrl !== undefined &&
+        refusedLoginReplicas([{ apiUrl: destination.apiUrl }], config.apiBaseUrl) !== undefined;
+      if (!keyed && (otherServer || !config.login)) return missingKey;
 
       try {
         const client = new Client({

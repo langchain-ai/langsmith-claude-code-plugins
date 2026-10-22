@@ -24987,6 +24987,9 @@ async function closeAgentToolRun(options) {
 function hasOwnApiKey(replica) {
   return !Array.isArray(replica) && sdkSetting(replica.apiKey) !== void 0;
 }
+function hasUsableDestination(config) {
+  return !config.credentialProblem || Boolean(config.replicas?.some(hasOwnApiKey));
+}
 
 // dist/src/utils/hook-init.js
 function initHook(cwd) {
@@ -24995,7 +24998,7 @@ function initHook(cwd) {
   if (!config.enabled) {
     return null;
   }
-  if (config.credentialProblem && !config.replicas?.some(hasOwnApiKey)) {
+  if (!hasUsableDestination(config)) {
     error(config.credentialProblem);
     return null;
   }
@@ -25700,7 +25703,8 @@ async function describeThreadLinks(config, sessionId) {
       resolved: false,
       line: `${projectName}: No LangSmith API key configured for this destination.`
     };
-    if (!keyed && (destination.apiUrl || !config.login))
+    const otherServer = destination.apiUrl !== void 0 && refusedLoginReplicas([{ apiUrl: destination.apiUrl }], config.apiBaseUrl) !== void 0;
+    if (!keyed && (otherServer || !config.login))
       return missingKey;
     try {
       const client = new Client({
@@ -25760,7 +25764,7 @@ async function main4() {
           reason += ` ${commandConfig.managedConfigProblem}`;
         } else if (!commandConfig.enabled) {
           reason += " Master tracing is disabled; this preference does not enable it.";
-        } else if (commandConfig.credentialProblem && (!commandConfig.replicas || commandConfig.replicas.length === 0)) {
+        } else if (!hasUsableDestination(commandConfig)) {
           reason += " Tracing remains inactive until credentials are configured.";
         }
       }
@@ -25778,9 +25782,9 @@ async function main4() {
   if (!config) {
     const setup = loadConfig({ cwd: input.cwd });
     if (setup.managedConfigProblem)
-      showNotice(NOTICE_KINDS.managed, setup.managedConfigProblem, setup);
+      await showNotice(NOTICE_KINDS.managed, setup.managedConfigProblem, setup);
     else if (setup.enabled)
-      showNotice(NOTICE_KINDS.credential, setup.credentialProblem, setup);
+      await showNotice(NOTICE_KINDS.credential, setup.credentialProblem, setup);
     return;
   }
   debug(`UserPromptSubmit hook started, session=${input.session_id}`);
@@ -25791,10 +25795,10 @@ async function main4() {
   initTracing(config, input.cwd, input.session_id);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
-  const loginNotice = readLoginNotice(engineStorageRoot(config.stateFilePath));
-  const credentialNotice = config.credentialProblem ?? (config.login ? refusedLoginReplicas(writerOptions(config).replicas, config.apiBaseUrl) : void 0);
-  if (!showNotice(LOGIN_NOTICE_KIND, loginNotice, config)) {
-    showNotice(NOTICE_KINDS.credential, credentialNotice, config);
+  const loginNotice = readLoginNotice(engineStorageRoot(config.stateFilePath), process.env, config.login ? void 0 : sdkSetting(config.apiKey));
+  const credentialNotice = config.login ? refusedLoginReplicas(writerOptions(config).replicas, config.apiBaseUrl) : void 0;
+  if (!await showNotice(LOGIN_NOTICE_KIND, loginNotice, config)) {
+    await showNotice(NOTICE_KINDS.credential, credentialNotice, config);
   }
   const turnMode = config.mutedLocked ? "metadata" : getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
   const expandedTranscript = expandHome(input.transcript_path);
@@ -25912,14 +25916,14 @@ async function main4() {
   const duration = ((Date.now() - hookStartTime) / 1e3).toFixed(1);
   debug(`UserPromptSubmit hook completed in ${duration}s`);
 }
-function showNotice(kind, notice, config) {
+async function showNotice(kind, notice, config) {
   const options = {
     plugin: LS_INTEGRATION,
     kind,
     cooldown: config.noticeCooldown,
     storageRoot: engineStorageRoot(config.stateFilePath)
   };
-  if (!notice || !shouldShowNotice(options))
+  if (!notice || !await shouldShowNotice(options))
     return false;
   console.log(JSON.stringify({ systemMessage: notice }));
   return true;

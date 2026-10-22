@@ -35,6 +35,7 @@ const h = vi.hoisted(() => ({
   managedProblem: undefined as string | undefined,
   login: undefined as UploadLogin | undefined,
   loginNotice: undefined as string | undefined,
+  keyRejected: undefined as string | undefined,
   credentialProblem: undefined as string | undefined,
   noticeCooldown: undefined as number | "off" | undefined,
   noticeCalls: [] as unknown[],
@@ -45,16 +46,17 @@ const h = vi.hoisted(() => ({
 }));
 vi.mock("@langchain/plugins-base/plugin", async (original) => ({
   ...(await original<typeof import("@langchain/plugins-base/plugin")>()),
-  shouldShowNotice: (options: { kind: string }) => {
+  shouldShowNotice: async (options: { kind: string; cooldown?: number | "off" }) => {
     h.noticeCalls.push(options);
-    if (h.shownKinds.has(options.kind)) return false;
+    if (options.cooldown === "off" || h.shownKinds.has(options.kind)) return false;
     h.shownKinds.add(options.kind);
     return true;
   },
 }));
 vi.mock("@langchain/plugins-base/auth", async (original) => ({
   ...(await original<typeof import("@langchain/plugins-base/auth")>()),
-  readLoginNotice: (root: string) => (root === "/langsmith_engine" ? h.loginNotice : undefined),
+  readLoginNotice: (root: string, _env: unknown, apiKey?: string) =>
+    root !== "/langsmith_engine" ? undefined : apiKey === undefined ? h.loginNotice : h.keyRejected,
 }));
 vi.mock("langsmith", () => ({
   Client: class {
@@ -247,6 +249,7 @@ function reset(mode: TracingMode) {
   h.managedProblem = undefined;
   h.login = undefined;
   h.loginNotice = undefined;
+  h.keyRejected = undefined;
   h.credentialProblem = undefined;
   h.noticeCooldown = undefined;
   h.noticeCalls = [];
@@ -534,7 +537,7 @@ describe("closing hooks hand their work to the uploader", () => {
 
   it("shows a rejected API key's notice as a chat line without holding back the prompt", async () => {
     reset("full");
-    h.loginNotice = "LangSmith API key was rejected.";
+    h.keyRejected = "LangSmith API key was rejected.";
     h.noticeCooldown = 7;
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
     await hook("prompt", {}, { closings: false });
@@ -552,6 +555,46 @@ describe("closing hooks hand their work to the uploader", () => {
     output.mockRestore();
   });
 
+  it("shows a CLI login user their login notice, not a stale rejected-key one", async () => {
+    reset("full");
+    h.login = { configPath: "/login/config.json", profile: "work" };
+    h.loginNotice = "Tracing is paused";
+    h.keyRejected = "LangSmith API key was rejected.";
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "Tracing is paused" },
+    ]);
+    output.mockRestore();
+  });
+
+  it("prints no notice at all when the cooldown is off", async () => {
+    reset("full");
+    h.noticeCooldown = "off";
+    h.loginNotice = "Tracing is paused";
+    h.login = { configPath: "/login/config.json", profile: "work" };
+    h.replicas = [{ apiUrl: "https://other.example" }];
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    h.login = undefined;
+    h.replicas = undefined;
+    h.managedProblem = "Managed config is broken";
+    await hook("prompt", {}, { closings: false });
+    expect(output).not.toHaveBeenCalled();
+    output.mockRestore();
+  });
+
+  it("keeps a working replica setup quiet about the missing main credential", async () => {
+    reset("full");
+    h.credentialProblem = "LangSmith isn't signed in.";
+    h.replicas = [{ projectName: "own", apiKey: "replica-key" }];
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    expect(output).not.toHaveBeenCalled();
+    expect(h.operations).toHaveLength(1);
+    output.mockRestore();
+  });
+
   it("shows why tracing can't upload only when tracing is on", async () => {
     reset("full");
     h.credentialProblem = "LANGCHAIN_API_KEY is overriding your LangSmith login.";
@@ -565,19 +608,6 @@ describe("closing hooks hand their work to the uploader", () => {
       { systemMessage: "LANGCHAIN_API_KEY is overriding your LangSmith login." },
     ]);
     expect(h.operations).toEqual([]);
-    output.mockRestore();
-  });
-
-  it("shows a refused login's reason while replicas with their own key still upload", async () => {
-    reset("full");
-    h.credentialProblem = "LANGCHAIN_API_KEY is overriding your LangSmith login.";
-    h.replicas = [{ projectName: "own", apiKey: "replica-key" }];
-    const output = vi.spyOn(console, "log").mockImplementation(() => {});
-    await hook("prompt", {}, { closings: false });
-    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
-      { systemMessage: "LANGCHAIN_API_KEY is overriding your LangSmith login." },
-    ]);
-    expect(h.operations).toHaveLength(1);
     output.mockRestore();
   });
 

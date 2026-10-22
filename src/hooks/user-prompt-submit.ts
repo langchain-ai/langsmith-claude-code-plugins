@@ -13,6 +13,7 @@
 import {
   LOGIN_NOTICE_KIND,
   readLoginNotice,
+  sdkSetting,
   refusedLoginReplicas,
 } from "@langchain/plugins-base/auth";
 import { shouldShowNotice } from "@langchain/plugins-base/plugin";
@@ -43,6 +44,7 @@ import {
   USER_PROMPT_TURN_NAME,
 } from "../constants.js";
 import { engineStorageRoot, writerOptions } from "../engine-writer.js";
+import { hasUsableDestination } from "../utils/replicas.js";
 import { codingAgentMetadata } from "../metadata.js";
 import { loadConfig } from "../config.js";
 import { describeThreadLinks } from "../thread-link.js";
@@ -89,10 +91,7 @@ export async function main(): Promise<void> {
           reason += ` ${commandConfig.managedConfigProblem}`;
         } else if (!commandConfig.enabled) {
           reason += " Master tracing is disabled; this preference does not enable it.";
-        } else if (
-          commandConfig.credentialProblem &&
-          (!commandConfig.replicas || commandConfig.replicas.length === 0)
-        ) {
+        } else if (!hasUsableDestination(commandConfig)) {
           reason += " Tracing remains inactive until credentials are configured.";
         }
       }
@@ -114,8 +113,9 @@ export async function main(): Promise<void> {
   if (!config) {
     const setup = loadConfig({ cwd: input.cwd });
     if (setup.managedConfigProblem)
-      showNotice(NOTICE_KINDS.managed, setup.managedConfigProblem, setup);
-    else if (setup.enabled) showNotice(NOTICE_KINDS.credential, setup.credentialProblem, setup);
+      await showNotice(NOTICE_KINDS.managed, setup.managedConfigProblem, setup);
+    else if (setup.enabled)
+      await showNotice(NOTICE_KINDS.credential, setup.credentialProblem, setup);
     return;
   }
 
@@ -134,14 +134,16 @@ export async function main(): Promise<void> {
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
-  const loginNotice = readLoginNotice(engineStorageRoot(config.stateFilePath));
-  const credentialNotice =
-    config.credentialProblem ??
-    (config.login
-      ? refusedLoginReplicas(writerOptions(config).replicas, config.apiBaseUrl)
-      : undefined);
-  if (!showNotice(LOGIN_NOTICE_KIND, loginNotice, config)) {
-    showNotice(NOTICE_KINDS.credential, credentialNotice, config);
+  const loginNotice = readLoginNotice(
+    engineStorageRoot(config.stateFilePath),
+    process.env,
+    config.login ? undefined : sdkSetting(config.apiKey),
+  );
+  const credentialNotice = config.login
+    ? refusedLoginReplicas(writerOptions(config).replicas, config.apiBaseUrl)
+    : undefined;
+  if (!(await showNotice(LOGIN_NOTICE_KIND, loginNotice, config))) {
+    await showNotice(NOTICE_KINDS.credential, credentialNotice, config);
   }
   const turnMode = config.mutedLocked
     ? "metadata"
@@ -345,18 +347,18 @@ export async function main(): Promise<void> {
   debug(`UserPromptSubmit hook completed in ${duration}s`);
 }
 
-function showNotice(
+async function showNotice(
   kind: string,
   notice: string | undefined,
   config: Pick<Config, "noticeCooldown" | "stateFilePath">,
-): boolean {
+): Promise<boolean> {
   const options = {
     plugin: LS_INTEGRATION,
     kind,
     cooldown: config.noticeCooldown,
     storageRoot: engineStorageRoot(config.stateFilePath),
   };
-  if (!notice || !shouldShowNotice(options)) return false;
+  if (!notice || !(await shouldShowNotice(options))) return false;
   console.log(JSON.stringify({ systemMessage: notice }));
   return true;
 }

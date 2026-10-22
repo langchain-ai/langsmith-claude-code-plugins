@@ -146,6 +146,25 @@ describe("thread links", () => {
     },
   );
 
+  it("links a keyless replica on the login's own server with the login", async () => {
+    vi.stubEnv("LANGSMITH_API_KEY", undefined);
+    vi.stubEnv("LANGCHAIN_API_KEY", undefined);
+    vi.stubEnv("LANGSMITH_CONFIG_FILE", writeLoginConfig(config.apiBaseUrl));
+    const output = await describeThreadLinks(
+      {
+        ...config,
+        apiKey: "",
+        login: { configPath: process.env.LANGSMITH_CONFIG_FILE!, profile: "work" },
+        replicas: [{ projectName: "same", apiUrl: `${config.apiBaseUrl}/api/v1/` }],
+      },
+      "session",
+    );
+    expect(output).toContain("same: \u001b]8;;");
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("authorization")).toBe(
+      "Bearer synthetic-access",
+    );
+  });
+
   it("hands the SDK the key exactly as written", async () => {
     await describeThreadLinks({ ...config, apiKey: '""k""' }, "session");
     expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("x-api-key")).toBe('"k"');

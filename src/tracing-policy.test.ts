@@ -398,6 +398,17 @@ describe("actual UserPromptSubmit command prefix", () => {
     expect(getThreadTracingMode(state, "session", false)).toBe("metadata");
   });
 
+  it("says credentials are missing when no replica brings its own key", async () => {
+    mocks.config.mockReturnValue({
+      stateFilePath: state,
+      apiKey: "",
+      enabled: true,
+      credentialProblem: "LangSmith isn't signed in.",
+      replicas: [{ projectName: "keyless" }],
+    });
+    expect(await submit("/langsmith-tracing:mute", "true")).toContain("credentials");
+  });
+
   it("doesn't call a CLI login user's credentials missing", async () => {
     mocks.config.mockReturnValue({
       stateFilePath: state,
