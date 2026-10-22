@@ -606,12 +606,16 @@ describe("closing hooks hand their work to the uploader", () => {
     h.keyRejected = "LangSmith API key was rejected.";
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
     await hook("prompt", {}, { closings: false });
+    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", undefined);
+    h.shownKinds = new Set();
+    await hook("prompt", {}, { closings: false });
     reset("metadata");
     vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "1");
     h.strictAuth = true;
     h.keyRejected = "LangSmith API key was rejected.";
     await hook("prompt", {}, { closings: false });
     expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "LangSmith API key was rejected." },
       { systemMessage: "LangSmith API key was rejected." },
       { systemMessage: "LangSmith API key was rejected." },
     ]);
