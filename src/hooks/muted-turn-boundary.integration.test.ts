@@ -305,4 +305,27 @@ describe("a muted turn after an open full turn", () => {
     expect(sent).toContain('"name":"Bash"');
     expect(sent).not.toContain("SECRET");
   });
+
+  it.each([
+    ["a prompt", () => prompt("PUBLIC_PROMPT", "P")],
+    ["a task notification", () => prompt(NOTIFICATION)],
+  ])(
+    "uploads only metadata for a muted prompt with no prompt id delivered into a turn opened by %s",
+    async (_, open) => {
+      await open();
+      assistant([{ type: "text", text: "PUBLIC_REPLY" }], "end_turn", "P");
+      await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+      user("SECRET_PROMPT");
+      assistant([{ type: "tool_use", id: "toolu_bash", name: "Bash", input: BASH }], "tool_use");
+      user([{ type: "tool_result", tool_use_id: "toolu_bash", content: "SECRET_BASH_OUTPUT" }]);
+      await bashHooks();
+      assistant([{ type: "text", text: "SECRET_ANSWER" }], "end_turn");
+      await hook("Stop", { stop_hook_active: false, last_assistant_message: "SECRET_ANSWER" });
+
+      const sent = await uploaded();
+
+      expect(sent).toContain("PUBLIC_REPLY");
+      expect(sent).not.toContain("SECRET");
+    },
+  );
 });

@@ -5,7 +5,7 @@
 
 import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
-import { MAX_FULL_READ_BYTES } from "./constants.js";
+import { MAX_FULL_READ_BYTES, TASK_NOTIFICATION_OPENING } from "./constants.js";
 import { hashPrompt } from "./utils/ids/prompt-hash.js";
 import type {
   TranscriptMessage,
@@ -44,7 +44,11 @@ export function readTranscript(
     const own = !ownSeen && hash !== undefined && hash === promptHash;
     if (!own && hash !== undefined && hash === nextPromptHash) return (laterPrompt = true);
     if (!own && promptSeen) {
-      if (message.promptId === undefined || message.promptId === promptId) return false;
+      if (message.promptId !== undefined && message.promptId === promptId) return false;
+      const notification =
+        typeof message.message.content === "string" &&
+        message.message.content.startsWith(TASK_NOTIFICATION_OPENING);
+      if (message.promptId === undefined && (notification || offset < promptAtByte)) return false;
       if (offset >= promptAtByte) return (laterPrompt = true);
     }
     ownSeen ||= own;

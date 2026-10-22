@@ -80,6 +80,7 @@ const MAX_LOG_BYTES = 5 * 1024 * 1024; // 5 MB
 const LOOKUP_TIMEOUT_MS = 4_000;
 
 /** Larger transcripts are streamed instead of read whole. */
+const TASK_NOTIFICATION_OPENING = "<task-notification>";
 const MAX_FULL_READ_BYTES = 50 * 1024 * 1024; // 50 MB
 
 const WORKFLOW_TOOL_NAME = "Workflow";
@@ -136,6 +137,7 @@ export {
   MAX_LOG_BYTES,
   LOOKUP_TIMEOUT_MS,
   MAX_FULL_READ_BYTES,
+  TASK_NOTIFICATION_OPENING,
   WORKFLOW_TOOL_NAME,
   WORKFLOW_SUBAGENT_TYPE,
   KILLED_NOTIFICATION_STATUS,

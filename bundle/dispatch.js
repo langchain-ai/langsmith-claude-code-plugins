@@ -22286,6 +22286,7 @@ Options:
   --version, -v  Print the installed version and exit`;
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
 var LOOKUP_TIMEOUT_MS = 4e3;
+var TASK_NOTIFICATION_OPENING = "<task-notification>";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 var WORKFLOW_TOOL_NAME = "Workflow";
 var WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
@@ -23238,7 +23239,10 @@ function readTranscript(filePath, afterLine = -1, cutAtByte, turn = {}) {
     if (!own && hash !== void 0 && hash === nextPromptHash)
       return laterPrompt = true;
     if (!own && promptSeen) {
-      if (message.promptId === void 0 || message.promptId === promptId)
+      if (message.promptId !== void 0 && message.promptId === promptId)
+        return false;
+      const notification = typeof message.message.content === "string" && message.message.content.startsWith(TASK_NOTIFICATION_OPENING);
+      if (message.promptId === void 0 && (notification || offset < promptAtByte))
         return false;
       if (offset >= promptAtByte)
         return laterPrompt = true;
