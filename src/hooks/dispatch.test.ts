@@ -13,7 +13,7 @@ import { noManagedConfigEnv } from "../fixtures/no-managed-config-env.js";
 const EXECUTABLE_NAME = binary.target.executableName;
 
 const root = new URL("../../", import.meta.url);
-const bundle = fileURLToPath(new URL("bundle/dispatch.js", root));
+const bundle = fileURLToPath(new URL("plugins/langsmith-tracing/bundle/dispatch.js", root));
 const { version } = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
 
 let home: string;

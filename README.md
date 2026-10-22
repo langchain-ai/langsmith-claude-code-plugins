@@ -108,7 +108,7 @@ pnpm test
 pnpm build
 ```
 
-Run `pnpm build`, then `claude --plugin-dir /path/to/langsmith-claude-code-plugins`, and send a new message to pick up your changes.
+Run `pnpm build`, then `claude --plugin-dir /path/to/langsmith-claude-code-plugins/plugins/langsmith-tracing`, and send a new message to pick up your changes.
 
 ## License
 

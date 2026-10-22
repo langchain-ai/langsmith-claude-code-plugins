@@ -306,7 +306,7 @@ describe("actual UserPromptSubmit command prefix", () => {
     "handles the actual %s command definition body without a model turn",
     async (command) => {
       const definition = readFileSync(
-        new URL(`../commands/${command}.md`, import.meta.url),
+        new URL(`../plugins/langsmith-tracing/commands/${command}.md`, import.meta.url),
         "utf8",
       );
       const frontmatter = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(definition)!;
