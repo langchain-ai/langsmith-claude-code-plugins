@@ -134,10 +134,11 @@ export async function main(): Promise<void> {
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
+  const apiKey = sdkSetting(config.apiKey);
   const loginNotice = readLoginNotice(
     engineStorageRoot(config.stateFilePath),
     process.env,
-    config.login ? undefined : sdkSetting(config.apiKey),
+    config.login || apiKey === undefined ? undefined : { apiKey, apiUrl: config.apiBaseUrl },
   );
   const credentialNotice = config.login
     ? refusedLoginReplicas(writerOptions(config).replicas, config.apiBaseUrl)

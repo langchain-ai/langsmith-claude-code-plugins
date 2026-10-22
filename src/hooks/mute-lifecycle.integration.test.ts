@@ -56,8 +56,14 @@ vi.mock("@langchain/plugins-base/plugin", async (original) => ({
 }));
 vi.mock("@langchain/plugins-base/auth", async (original) => ({
   ...(await original<typeof import("@langchain/plugins-base/auth")>()),
-  readLoginNotice: (root: string, _env: unknown, apiKey?: string) =>
-    root !== "/langsmith_engine" ? undefined : apiKey === undefined ? h.loginNotice : h.keyRejected,
+  readLoginNotice: (root: string, _env: unknown, rejected?: { apiKey: string; apiUrl: string }) =>
+    root !== "/langsmith_engine"
+      ? undefined
+      : rejected === undefined
+        ? h.loginNotice
+        : rejected.apiUrl === "https://login.example"
+          ? h.keyRejected
+          : undefined,
 }));
 vi.mock("langsmith", () => ({
   Client: class {
