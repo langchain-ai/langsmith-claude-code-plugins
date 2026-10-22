@@ -141,7 +141,6 @@ describe("initHook", () => {
 
   it("traces through the CLI login when no API key is set", () => {
     process.env.TRACE_TO_LANGSMITH = "true";
-    process.env.CC_LANGSMITH_LOGIN_BROWSER = "false";
     process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://login.example");
     const config = initHook(cwd);
     expect(config).not.toBeNull();
@@ -152,7 +151,6 @@ describe("initHook", () => {
           apiUrl: "https://login.example",
         },
       ],
-      loginBrowser: false,
     });
     expect(writerOptions(config!).destinations[0]).not.toHaveProperty("apiKey");
   });

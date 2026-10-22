@@ -591,9 +591,9 @@ export interface Config {
   redactExtraRules?: StringNodeRule[];
   managedConfigProblem?: string;
   login?: UploadLogin;
-  loginBrowser?: boolean;
   credentialProblem?: string;
   noticeCooldown?: number | "off";
+  strictAuth?: boolean;
   projectLocked?: boolean;
   mutedLocked?: boolean;
 }

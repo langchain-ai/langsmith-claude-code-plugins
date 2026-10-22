@@ -186,7 +186,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
       env: {
         enabled: envBoolean("enabled"),
         defaultMuted: envBoolean("defaultMuted"),
-        login_browser: envBoolean("login_browser"),
+        strict_auth: envBoolean("strict_auth"),
         notice_cooldown: envCooldown(),
         api_key: process.env.CC_LANGSMITH_API_KEY,
         api_url: process.env.LANGSMITH_ENDPOINT,
@@ -255,7 +255,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
     ...(credential.kind === "login" ? { login: credential.login } : {}),
     ...(credential.kind === "none" ? { credentialProblem: credential.reason } : {}),
     ...(unreachable ? { credentialProblem: unreachable } : {}),
-    ...(common.login_browser === undefined ? {} : { loginBrowser: common.login_browser }),
+    ...(common.strict_auth ? { strictAuth: true } : {}),
     ...(common.notice_cooldown === undefined ? {} : { noticeCooldown: common.notice_cooldown }),
     ...(common.locked.includes("project") ? { projectLocked: true } : {}),
     ...(common.locked.includes("defaultMuted") && common.defaultMuted ? { mutedLocked: true } : {}),

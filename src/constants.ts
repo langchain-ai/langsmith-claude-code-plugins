@@ -67,12 +67,14 @@ const NOTICE_KINDS = {
   credential: "credential-problem",
 } as const;
 const NOTICE_COOLDOWN_OFF = "off";
+const ATTENDED_SESSION_VARIABLE = "CLAUDE_CODE_SESSION_ATTENDED";
+const ATTENDED_SESSION_VALUE = "1";
 const MUTE_LOCKED_REPLY = "An admin locked muting on, so this conversation stays muted.";
 
 const BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
   defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
-  login_browser: { env: "CC_LANGSMITH_LOGIN_BROWSER", restrictive: false },
+  strict_auth: { env: "CC_LANGSMITH_STRICT_AUTH", restrictive: false },
 } as const;
 
 const USAGE_TEMPLATE = `Usage:
@@ -145,6 +147,8 @@ export {
   NOTICE_KINDS,
   NOTICE_COOLDOWN_OFF,
   MUTE_LOCKED_REPLY,
+  ATTENDED_SESSION_VARIABLE,
+  ATTENDED_SESSION_VALUE,
   MAX_LOG_BYTES,
   LOOKUP_TIMEOUT_MS,
   GENERIC_API_KEY_VARIABLES,

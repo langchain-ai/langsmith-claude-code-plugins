@@ -34,7 +34,7 @@ import {
 } from "../state.js";
 import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
-import { isPayloadForHook } from "../utils/harness.js";
+import { isAttendedSession, isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import {
   KILLED_NOTIFICATION_STATUS,
@@ -142,12 +142,16 @@ export async function main(): Promise<void> {
   const credentialNotice = config.login
     ? refusedLoginReplicas(writerOptions(config).replicas, config.apiBaseUrl)
     : undefined;
-  if (!(await showNotice(LOGIN_NOTICE_KIND, loginNotice, config))) {
-    await showNotice(NOTICE_KINDS.credential, credentialNotice, config);
-  }
   const turnMode = config.mutedLocked
     ? "metadata"
     : getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
+  if (loginNotice && config.strictAuth && turnMode === "full" && isAttendedSession()) {
+    console.log(JSON.stringify({ decision: "block", reason: loginNotice }));
+    return;
+  }
+  if (!(await showNotice(LOGIN_NOTICE_KIND, loginNotice, config))) {
+    await showNotice(NOTICE_KINDS.credential, credentialNotice, config);
+  }
 
   // CLI version (ls_agent_runtime_version); best-effort, Stop backfills if empty.
   const expandedTranscript = expandHome(input.transcript_path);

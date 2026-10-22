@@ -42,6 +42,7 @@ const h = vi.hoisted(() => ({
   shownKinds: new Set<string>(),
   replicas: undefined as Config["replicas"],
   mutedLocked: false,
+  strictAuth: false,
   enabled: true,
 }));
 vi.mock("@langchain/plugins-base/plugin", async (original) => ({
@@ -130,6 +131,7 @@ vi.mock("../utils/hook-init.js", () => ({
           noticeCooldown: h.noticeCooldown,
           replicas: h.replicas,
           mutedLocked: h.mutedLocked,
+          strictAuth: h.strictAuth,
         },
   expandHome: (path: string) => path,
 }));
@@ -256,7 +258,9 @@ function reset(mode: TracingMode) {
   h.shownKinds = new Set();
   h.replicas = undefined;
   h.mutedLocked = false;
+  h.strictAuth = false;
   h.enabled = true;
+  vi.unstubAllEnvs();
 }
 const HOOK_EVENT_BY_NAME = {
   prompt: "UserPromptSubmit",
@@ -564,6 +568,46 @@ describe("closing hooks hand their work to the uploader", () => {
     await hook("prompt", {}, { closings: false });
     expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
       { systemMessage: "Tracing is paused" },
+    ]);
+    output.mockRestore();
+  });
+
+  it("refuses every prompt with the login notice in strict mode until the user signs in again", async () => {
+    reset("full");
+    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "1");
+    h.strictAuth = true;
+    h.login = { configPath: "/login/config.json", profile: "work" };
+    h.loginNotice = "Tracing is paused";
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { decision: "block", reason: "Tracing is paused" },
+      { decision: "block", reason: "Tracing is paused" },
+    ]);
+    expect(h.operations).toEqual([]);
+    h.loginNotice = undefined;
+    await hook("prompt", {}, { closings: false });
+    expect(output).toHaveBeenCalledTimes(2);
+    expect(h.operations).toHaveLength(1);
+    output.mockRestore();
+  });
+
+  it("only reminds an automated or muted conversation in strict mode", async () => {
+    reset("full");
+    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "0");
+    h.strictAuth = true;
+    h.keyRejected = "LangSmith API key was rejected.";
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    reset("metadata");
+    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "1");
+    h.strictAuth = true;
+    h.keyRejected = "LangSmith API key was rejected.";
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "LangSmith API key was rejected." },
+      { systemMessage: "LangSmith API key was rejected." },
     ]);
     output.mockRestore();
   });

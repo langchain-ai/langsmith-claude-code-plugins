@@ -622,10 +622,12 @@ describe("loadConfig", () => {
       expect(writerOptions(loadConfig({ cwd })).projectLocked).toBe(true);
     });
 
-    it("keeps the browser sign-in off when the managed file turns it off", () => {
-      lock({ status: "valid", common: { login_browser: false }, diagnostics: [] });
-      process.env.CC_LANGSMITH_LOGIN_BROWSER = "true";
-      expect(writerOptions(loadConfig({ cwd })).loginBrowser).toBe(false);
+    it("turns strict auth on from its variable and keeps it on when the managed file locks it", () => {
+      process.env.CC_LANGSMITH_STRICT_AUTH = "true";
+      expect(loadConfig({ cwd }).strictAuth).toBe(true);
+      lock({ status: "valid", common: { strict_auth: true }, diagnostics: [] });
+      process.env.CC_LANGSMITH_STRICT_AUTH = "false";
+      expect(loadConfig({ cwd }).strictAuth).toBe(true);
     });
 
     it("keeps environment redaction rules from bypassing the lock", () => {

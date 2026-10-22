@@ -20,7 +20,6 @@ export function writerOptions(config: Config): LangSmithUploadWriterOptions {
     ],
     ...(replicas.length ? { replicas } : {}),
     redact: config.redact,
-    ...(config.loginBrowser === undefined ? {} : { loginBrowser: config.loginBrowser }),
     ...(config.projectLocked ? { projectLocked: true } : {}),
     ...(config.redactExtraRules
       ? {
