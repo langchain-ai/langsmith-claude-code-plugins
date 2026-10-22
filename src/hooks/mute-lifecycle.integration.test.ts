@@ -599,6 +599,18 @@ describe("closing hooks hand their work to the uploader", () => {
     output.mockRestore();
   });
 
+  it("only reminds a person typing when strict mode is off", async () => {
+    reset("full");
+    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "1");
+    h.keyRejected = "LangSmith API key was rejected.";
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "LangSmith API key was rejected." },
+    ]);
+    output.mockRestore();
+  });
+
   it("only reminds an automated or muted conversation in strict mode", async () => {
     reset("full");
     vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "0");
