@@ -1,7 +1,8 @@
 import { refusedLoginReplicas, sdkSetting } from "@langchain/plugins-base/auth";
 import { Client } from "langsmith";
 import type { Config, SdkClientKey } from "./types.js";
-import { LOOKUP_TIMEOUT_MS } from "./constants.js";
+import { GENERIC_API_KEY_VARIABLES, LOOKUP_TIMEOUT_MS } from "./constants.js";
+import { withoutEnvVariables } from "./utils/env.js";
 
 /**
  * OSC 8 hyperlink keeping a wrapped URL clickable. The URL is its own label, so
@@ -43,18 +44,22 @@ export async function describeThreadLinks(config: Config, sessionId: string): Pr
       if (!keyed && (otherServer || !config.login)) return missingKey;
 
       try {
-        const client = new Client({
-          apiKey,
-          apiUrl: destination.apiUrl ?? config.apiBaseUrl,
-          workspaceId: destination.workspaceId,
-          timeout_ms: LOOKUP_TIMEOUT_MS,
-          callerOptions: {
-            // The SDK ignores maxRetries on reads. Throwing here is what stops the retries.
-            onFailedResponseHook: async () => {
-              throw new Error("Thread link lookup failed");
-            },
-          },
-        });
+        const client = withoutEnvVariables(
+          keyed ? [] : GENERIC_API_KEY_VARIABLES,
+          () =>
+            new Client({
+              apiKey,
+              apiUrl: destination.apiUrl ?? config.apiBaseUrl,
+              workspaceId: destination.workspaceId,
+              timeout_ms: LOOKUP_TIMEOUT_MS,
+              callerOptions: {
+                // The SDK ignores maxRetries on reads. Throwing here is what stops the retries.
+                onFailedResponseHook: async () => {
+                  throw new Error("Thread link lookup failed");
+                },
+              },
+            }),
+        );
         if (keyed && !(client as unknown as SdkClientKey).apiKey) return missingKey;
         const project = await client.readProject({ projectName });
         const url = new URL(client.getHostUrl());

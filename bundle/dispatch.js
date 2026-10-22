@@ -593,7 +593,7 @@ var require_dist = __commonJS({
   }
 });
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/errors.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/errors.js
 function describe(error2) {
   return error2 instanceof Error ? error2.message : String(error2);
 }
@@ -607,7 +607,7 @@ function failureStatus(error2) {
   return typeof status === "number" ? status : void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/plugin/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/plugin/constants.js
 var POLICY_LOCK_TIMEOUT_MS = 2e3;
 var POLICY_LOCK_TIMEOUT_ERROR = "Timed out waiting for tracing preference lock";
 var POLICY_LOCK_TIMEOUT_MESSAGE = "Retry; if it persists, remove the lock only after confirming no preference writer is running.";
@@ -650,7 +650,7 @@ var NOTICE_OFF = "off";
 var NOTICE_STATE_FILE = "notices.json";
 var NOTICE_KEY_SEPARATOR = "\n";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/plugin/hook-command.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/plugin/hook-command.js
 async function dispatchHookCommand(argv, options) {
   assertHookOptions(options);
   const [argument, ...rest] = argv;
@@ -685,17 +685,17 @@ function reportHookError(name, error2, options) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/plugin/policy-file.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/plugin/policy-file.js
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import { open, rename as rename3, unlink as unlink3 } from "node:fs/promises";
 import { dirname as dirname4 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/files/cleanup.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/files/cleanup.js
 import { rmdir, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/constants.js
 var FILE_MISSING_CODE = "ENOENT";
 var PROCESS_MISSING_CODE = "ESRCH";
 var PROCESS_CHECK_SIGNAL = 0;
@@ -709,7 +709,7 @@ var DIRECTORY_NOT_EMPTY_CODE = "ENOTEMPTY";
 var INVALID_ARGUMENT_CODE = "EINVAL";
 var TEMPLATE_PLACEHOLDER = /\{(\w+)\}/gu;
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/files/cleanup-constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/files/cleanup-constants.js
 var CLEANUP_IGNORED_DIRECTORY_CODES = [
   FILE_MISSING_CODE,
   DIRECTORY_NOT_EMPTY_CODE,
@@ -719,7 +719,7 @@ var CLEANUP_IGNORED_DIRECTORY_CODES = [
   FILE_ACCESS_DENIED_CODE
 ];
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/files/cleanup.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/files/cleanup.js
 async function removeFileIfPresent(path3) {
   try {
     await unlink(path3);
@@ -752,7 +752,7 @@ async function removeEmptyAncestors(directory, root) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/constants.js
 var FILE_LOCK_CLAIM_VERSION = 1;
 var FILE_LOCK_CLAIM_EXTENSION = ".json";
 var FILE_LOCK_DIRECTORY_SUFFIX = ".claims";
@@ -813,19 +813,19 @@ var STORAGE_ENGINE_FILE_PATTERNS = [
 ];
 var STORAGE_CLAIM_FILE = new RegExp(`^${STORAGE_UUID}\\.json$`, "u");
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/lock-folders.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/lock-folders.js
 async function removeEmptyLockFolders(lockPath, root) {
   await removeEmptyAncestors(`${lockPath}${FILE_LOCK_DIRECTORY_SUFFIX}`, root);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/file-lock.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/file-lock.js
 import { chmod, link, lstat as lstat2, mkdir as mkdir2, readFile as readFile2, readdir, rename as rename2, writeFile as writeFile2 } from "node:fs/promises";
 import { performance as performance4 } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID as randomUUID2 } from "node:crypto";
 import { dirname as dirname3, join as join2, resolve as resolve2 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/constants.js
 var CAPTURE_JOBS_DIRECTORY = "jobs";
 var CAPTURE_SESSIONS_DIRECTORY = "sessions";
 var CAPTURE_TURNS_DIRECTORY = "turns";
@@ -870,7 +870,7 @@ var CAPTURE_FILE_EXTENSION = ".json";
 var CAPTURE_LOCK_EXTENSION = ".lock";
 var CAPTURE_STORAGE_DIRECTORY_MESSAGE = "Capture directory must be turns or jobs";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/utils/serialization.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/utils/serialization.js
 function canonicalJson(value) {
   const result = JSON.stringify(canonicalValue(value, /* @__PURE__ */ new Set()));
   if (result === void 0)
@@ -922,7 +922,7 @@ function canonicalValue(value, seen) {
   return result;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/validation/objects.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/validation/objects.js
 function isPlainRecord(value) {
   return value !== null && typeof value === "object" && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
 }
@@ -1002,7 +1002,7 @@ function parseJsonObject(contents, message) {
   return value;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/errors.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/errors.js
 import { resolve } from "node:path";
 var FileLockTimeoutError = class extends Error {
   blockedPath;
@@ -1025,7 +1025,7 @@ var StorageNotWritableError = class extends Error {
   }
 };
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/file-lock-heartbeat.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/file-lock-heartbeat.js
 import { utimes } from "node:fs/promises";
 var heartbeats = /* @__PURE__ */ new Map();
 function startHeartbeat(path3, id) {
@@ -1045,13 +1045,13 @@ function warnUnlessMissing(error2) {
     console.warn(FILE_LOCK_HEARTBEAT_WARNING, describe(error2));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/legacy-gate.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/legacy-gate.js
 import { lstat, mkdir, readFile, rename, rmdir as rmdir2, writeFile } from "node:fs/promises";
 import { performance as performance3 } from "node:perf_hooks";
 import { randomUUID } from "node:crypto";
 import { dirname as dirname2, join } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/file-lock-support.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/file-lock-support.js
 import { unlink as unlink2 } from "node:fs/promises";
 import { performance as performance2 } from "node:perf_hooks";
 function processIsAlive(pid) {
@@ -1090,7 +1090,7 @@ function waitForNextScan(deadline, blockedPath) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, Math.min(FILE_LOCK_POLL_INTERVAL_MS, remaining)));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/legacy-gate.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/legacy-gate.js
 async function createLegacyGate(gatePath) {
   await mkdir(gatePath, { mode: FILE_LOCK_DIRECTORY_MODE });
   const stat3 = await lstat(gatePath);
@@ -1253,7 +1253,7 @@ async function reclaimLegacyGate(gatePath, filePath, tryAcquire) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/file-lock.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/file-lock.js
 function parseClaim(value, id) {
   if (!isPlainRecord(value))
     return void 0;
@@ -1577,7 +1577,7 @@ async function withFileLock(filePath, callback, options) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/plugin/policy-file.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/plugin/policy-file.js
 function readPolicyFile(path3, options) {
   let raw;
   try {
@@ -1691,20 +1691,20 @@ function findLockTimeout(error2) {
   return error2.errors.map(findLockTimeout).find((found) => found !== void 0);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/errors.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/errors.js
 var CaptureRecordInvalidError = class extends Error {
 };
 var CaptureRecordVersionError = class extends Error {
 };
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/capture-store.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/capture-store.js
 import { lstat as lstat6 } from "node:fs/promises";
 import { basename as basename2, dirname as dirname8, join as join8, resolve as resolve5 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/state-store.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/state-store.js
 import { readFileSync as readFileSync3, renameSync as renameSync2 } from "node:fs";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/files/publish.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/files/publish.js
 import { closeSync, openSync, renameSync, writeSync } from "node:fs";
 import { randomUUID as randomUUID4 } from "node:crypto";
 function publishByRename(path3, contents, tempSuffix, mode) {
@@ -1718,7 +1718,7 @@ function publishByRename(path3, contents, tempSuffix, mode) {
   renameSync(temp, path3);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/state-constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/state-constants.js
 var STATE_TEMP_SUFFIX = ".state.tmp";
 var STATE_CORRUPT_SUFFIX = ".corrupt";
 var STATE_FILE_ENCODING = "utf-8";
@@ -1740,7 +1740,7 @@ var STATE_PRIVATE_FILE_MODE = 384;
 var STATE_CLAIM_SUFFIX = ".claim";
 var STATE_CLAIM_SKEW_MS = 6e4;
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/state-pending.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/state-pending.js
 import { mkdirSync, readdirSync, readFileSync as readFileSync2, rmdirSync, rmSync, statSync } from "node:fs";
 import { join as join3 } from "node:path";
 var sequence = 0;
@@ -1903,7 +1903,7 @@ function removePending(stateFilePath, files) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/state-store.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/state-store.js
 function createStateStore(options) {
   const { path: path3 } = options;
   const warn2 = options.warn ?? console.warn;
@@ -1989,7 +1989,7 @@ async function withStateFileLock(path3, warn2, callback, waitMs) {
   return true;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/state-claim.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/state-claim.js
 import { mkdirSync as mkdirSync2 } from "node:fs";
 import { dirname as dirname5 } from "node:path";
 async function claimStateEntry(path3, key, windowMs) {
@@ -2010,7 +2010,7 @@ async function claimStateEntry(path3, key, windowMs) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/paths.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/paths.js
 import { createHash } from "node:crypto";
 import { resolve as resolve3, join as join4 } from "node:path";
 function validateIntegration(value) {
@@ -2068,7 +2068,7 @@ function recordLockPath(root, scope) {
   return `${path3.slice(0, -CAPTURE_FILE_EXTENSION.length)}${CAPTURE_LOCK_EXTENSION}`;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/utils/atomic-file.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/utils/atomic-file.js
 import { constants as fsConstants } from "node:fs";
 import { chmod as chmod2, link as link2, lstat as lstat3, mkdir as mkdir3, open as open2, rename as rename4, unlink as unlink4 } from "node:fs/promises";
 import { dirname as dirname6, isAbsolute, join as join5, relative, sep } from "node:path";
@@ -2256,7 +2256,7 @@ async function syncDirectory(path3) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/files/private-directory.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/files/private-directory.js
 import { lstat as lstat4, readdir as readdir2 } from "node:fs/promises";
 import { isAbsolute as isAbsolute2, join as join6, relative as relative2, resolve as resolve4, sep as sep2 } from "node:path";
 async function listPrivateDirectory(root, directory) {
@@ -2292,7 +2292,7 @@ async function lstatDirectory(path3) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/scope.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/scope.js
 function scopeOf(value) {
   return {
     integration: value.integration,
@@ -2305,21 +2305,21 @@ function scopeKey(scope) {
   return JSON.stringify([scope.integration, scope.sessionId, scope.turnId, scope.eventId]);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/compare.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/compare.js
 function compareText(left, right) {
   if (left === right)
     return 0;
   return left < right ? -1 : 1;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/order.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/order.js
 function compareCaptureOrder(left, right) {
   if (left.capturedAtMs !== right.capturedAtMs)
     return left.capturedAtMs < right.capturedAtMs ? -1 : 1;
   return compareText(left.eventId, right.eventId);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/utils/digest.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/utils/digest.js
 import { createHash as createHash2 } from "node:crypto";
 function captureContentDigest(record) {
   const content = { ...record };
@@ -2330,7 +2330,7 @@ function captureContentDigest(record) {
   return createHash2("sha256").update(canonicalJson(content)).digest("hex");
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/markers.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/markers.js
 import { lstat as lstat5 } from "node:fs/promises";
 import { basename, dirname as dirname7, join as join7 } from "node:path";
 function markerPath(root, scope) {
@@ -2475,7 +2475,7 @@ async function removeOldMarkers(root, directory, modifiedBeforeMs) {
   return removed;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/capture-store.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/capture-store.js
 function createCaptureStore(root, directory = CAPTURE_TURNS_DIRECTORY) {
   const storageRoot = { root: resolve5(root), directory };
   captureDirectory(storageRoot);
@@ -2905,17 +2905,17 @@ function failure(code, error2) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/format.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/format.js
 function fillTemplate(template, values) {
   return template.replace(TEMPLATE_PLACEHOLDER, (_match, key) => String(values[key]));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/account.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/account.js
 function isWaitingForOtherSetting(record, accountFingerprint) {
   return record.destinationFingerprint !== accountFingerprint && Object.keys(record.delivery?.outcomes ?? {}).length === 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/expiry.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/expiry.js
 function liveTurnSpans(captures) {
   const spans = /* @__PURE__ */ new Map();
   for (const { record, capturedAtMs } of captures) {
@@ -2969,12 +2969,12 @@ async function removeExpiredCaptures(options) {
   return dropped;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/background-worker/worker.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/background-worker/worker.js
 import { randomUUID as randomUUID6 } from "node:crypto";
 import { resolve as resolve7 } from "node:path";
 import { setTimeout as delay2 } from "node:timers/promises";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/background-worker/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/background-worker/constants.js
 var BACKGROUND_WORKER_LOCK_FILE = "worker";
 var BACKGROUND_WORKER_PENDING_FILE = "wake.pending";
 var BACKGROUND_WORKER_ACTIVE_PREFIX = "wake.active.";
@@ -3018,7 +3018,7 @@ var BACKGROUND_WORKER_FILE_PREFIX = "wake";
 var BACKGROUND_WORKER_SCOPED_FILE = /^wake-[0-9a-f]{64}\.(?:pending|launching|active\.[0-9a-f-]{36}(?:\.attempt\.[1-9]\d*)?\.json)$/u;
 var BACKGROUND_WORKER_SHARED_DIRECTORY = /^(?:turns|jobs|delivery\.claims|reconstruction\.claims|(?:worker|settlement)-[0-9a-f]{64}\.claims)$/u;
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/background-worker/paths.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/background-worker/paths.js
 import { join as join9, resolve as resolve6 } from "node:path";
 function validateWorkerScope(scope) {
   validateIntegration(scope.integration);
@@ -3052,13 +3052,13 @@ function scopedWorkerFileName(scope, name) {
   return name.startsWith(prefix) ? `${BACKGROUND_WORKER_FILE_PREFIX}.${name.slice(prefix.length)}` : void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/background-worker/utils/scope.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/background-worker/utils/scope.js
 async function matchesScope(resolveScope, expected) {
   const actual = await resolveScope();
   return actual.integration === expected.integration && actual.sessionId === expected.sessionId && actual.accountFingerprint === expected.accountFingerprint;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/background-worker/state.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/background-worker/state.js
 import { join as join10 } from "node:path";
 function assertPlainFile(entry, message) {
   if (!entry.isFile() || entry.isSymbolicLink())
@@ -3163,7 +3163,7 @@ function parseAttempt(contents, markerId, attempt) {
   return value;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/background-worker/worker.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/background-worker/worker.js
 function createBackgroundWorker(options) {
   validateOptions(options);
   const context = createWorkerContext(options);
@@ -3430,14 +3430,14 @@ async function readLaunch(storageRoot, scope) {
   return value;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/bridge.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/bridge.js
 import { join as join17, resolve as resolve9 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/stale-files.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/stale-files.js
 import { lstat as lstat7, readFile as readFile3, readdir as readdir3, rmdir as rmdir3 } from "node:fs/promises";
 import { basename as basename3, dirname as dirname9, join as join11 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/files/missing.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/files/missing.js
 function ifMissing(fallback) {
   return (error2) => {
     if (errorCode(error2) === FILE_MISSING_CODE)
@@ -3446,7 +3446,7 @@ function ifMissing(fallback) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/stale-files.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/stale-files.js
 async function removeStaleStorageFiles(root, folders, modifiedBeforeMs) {
   let removed = 0;
   for (const folder of folders)
@@ -3493,10 +3493,10 @@ function warnUnlessExpected(error2) {
     console.warn(STORAGE_STALE_DIRECTORY_WARNING, describe(error2));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/delivery/coordinator.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/delivery/coordinator.js
 import { join as join12, resolve as resolve8 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/delivery/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/delivery/constants.js
 var DELIVERY_RETRY_BASE_MS = 5e3;
 var DELIVERY_RETRY_BACKOFF_FACTOR = 2;
 var DELIVERY_RETRY_MAX_MS = 30 * 60 * 1e3;
@@ -3524,13 +3524,13 @@ var DELIVERY_DRAIN_LOCK = "delivery";
 var DELIVERY_DROPPED_DETAIL = "{eventId} for run {runId} on destination {destination} ({reason}){hint}";
 var DELIVERY_DEPENDENTS_DROPPED_WARNING = "Dropped trace work that depended on dropped work on destination {destination}: runs {runs}";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/storage/capture/retry-state.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/storage/capture/retry-state.js
 var PROCESS_STARTED_AT_MS = Date.now();
 function isWaitingForRetry(retry, now = Date.now()) {
   return retry !== void 0 && retry.notBeforeMs > now && !(retry.recordedAtMs !== void 0 && retry.recordedAtMs < PROCESS_STARTED_AT_MS);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/delivery/batch.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/delivery/batch.js
 function createBatch() {
   return { candidates: [], scopes: /* @__PURE__ */ new Set(), runIds: /* @__PURE__ */ new Set(), bytes: 0 };
 }
@@ -3550,10 +3550,10 @@ function joinBatch(batch, candidate) {
   batch.bytes += payloadBytes(candidate.entry.record);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/delivery/deliver.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/delivery/deliver.js
 import { setTimeout as delay3 } from "node:timers/promises";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/delivery/retry.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/delivery/retry.js
 function isRetryable(error2) {
   return error2?.retryable !== false;
 }
@@ -3573,7 +3573,7 @@ function nextRetry(previous, baseMs) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/delivery/outcomes.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/delivery/outcomes.js
 function emptyDestinationResult() {
   return { delivered: 0, dropped: 0, failed: 0, progressed: false };
 }
@@ -3653,7 +3653,7 @@ async function settleDroppedDependency(drainCache, candidate, destination, resul
   result.progressed = true;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/delivery/deliver.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/delivery/deliver.js
 async function trySend(context, destination, candidates) {
   const { policy, request } = context;
   const { writer } = request;
@@ -3724,7 +3724,7 @@ async function deliverBatch(context, destination, candidates) {
   return settleFailed(context, destination, candidates, error2);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/delivery/drain-cache.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/delivery/drain-cache.js
 function deliveryKey(scope, destination) {
   return JSON.stringify([scopeKey(scope), destination]);
 }
@@ -3789,7 +3789,7 @@ async function countPending(drainCache, entries, destinations) {
   return nextRetryAtMs === void 0 ? { count } : { count, nextRetryAtMs };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/delivery/drain.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/delivery/drain.js
 async function drainLocked(captureStore, integration, sessionId, policy, request, drainCache) {
   const captures = await captureStore.enumerate(integration, sessionId);
   const eligible = captures.filter(({ record }) => record.destinationFingerprint === request.writer.accountFingerprint);
@@ -3922,7 +3922,7 @@ async function dropPending(drainCache, candidate, reason) {
   return dropped;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/delivery/options.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/delivery/options.js
 function validateDrainRequest(request) {
   if (request.writer === null || typeof request.writer !== "object")
     throw new TypeError(DELIVERY_WRITER_REQUIRED_MESSAGE);
@@ -3980,7 +3980,7 @@ function resolvePolicy(policy) {
   return resolved;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/delivery/coordinator.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/delivery/coordinator.js
 async function drainUnderLock(context, request, drainCache) {
   const { captureStore, integration, sessionId, storageRoot, policy } = context;
   const sessionDirectory = await ensurePrivateDirectory(storageRoot, sessionSegments(identifierHash(sessionId)));
@@ -4046,17 +4046,17 @@ function createDeliveryCoordinator(options) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/auth/profile.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/auth/profile.js
 import { createHash as createHash3 } from "node:crypto";
 import { readFileSync as readFileSync4 } from "node:fs";
 import { join as join13 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/sdk/sdk-constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/sdk/sdk-constants.js
 var SDK_DOUBLE_QUOTED = /^"(.*)"$/;
 var SDK_SINGLE_QUOTED = /^'(.*)'$/;
 var SDK_PROFILE_QUOTES = /^["']|["']$/g;
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/sdk/normalize.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/sdk/normalize.js
 function sdkSetting(value) {
   if (typeof value !== "string")
     return void 0;
@@ -4069,7 +4069,7 @@ function sdkProfileValue(value) {
   return value.trim().replace(SDK_PROFILE_QUOTES, "") || void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/auth/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/auth/constants.js
 var LOGIN_CONFIG_FILE_VARIABLE = "LANGSMITH_CONFIG_FILE";
 var LOGIN_PROFILE_VARIABLE = "LANGSMITH_PROFILE";
 var LOGIN_HOME_VARIABLES = ["HOME", "USERPROFILE"];
@@ -4094,11 +4094,10 @@ var LOGIN_TOKEN_HASH_LENGTH = 16;
 var LOGIN_EXPIRED_MARKER_PREFIX = "login-expired-";
 var LOGIN_CONFIG_FILE_ENCODING = "utf8";
 var LOGIN_NONE_REASON = "LangSmith isn't signed in. Run `langsmith auth login` or set an API key.";
-var LOGIN_ENV_KEY_REASON = "{variable} is overriding your LangSmith login. Unset it or use it as the plugin's API key.";
 var LOGIN_ENDPOINT_MISMATCH_REASON = "LangSmith login is for {loginUrl} but tracing sends to {apiUrl}. Check your settings or set an API key.";
 var LOGIN_REPLICA_REFUSED_REASON = "LangSmith replicas on {urls} need their own API key, so they're skipped.";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/auth/profile.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/auth/profile.js
 function readLoginProfile(env) {
   const configPath = loginConfigPath(env);
   return configPath === void 0 ? void 0 : readProfileAt(configPath, env[LOGIN_PROFILE_VARIABLE] || void 0);
@@ -4162,7 +4161,7 @@ function credentialHash(value) {
   return createHash3(LOGIN_TOKEN_HASH).update(value).digest("hex").slice(0, LOGIN_TOKEN_HASH_LENGTH);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/auth/renewal-constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/auth/renewal-constants.js
 var LOGIN_STATE_SUBFOLDER = "sign-in";
 var LOGIN_SIGN_IN_LIFETIME = "15m";
 var LOGIN_SIGN_IN_LIFETIME_MS = 15 * 60 * 1e3;
@@ -4197,12 +4196,12 @@ var LOGIN_KEY_REJECTED_ENTRY = "api-key-rejected.";
 var LOGIN_BROWSER_CLAIM_SUFFIX = ".browser";
 var LOGIN_KEY_REJECTED_NOTICE = "LangSmith API key was rejected. Create a new key, or remove it and run `langsmith auth login`.";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/auth/renewal.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/auth/renewal.js
 import { closeSync as closeSync2, mkdirSync as mkdirSync3, openSync as openSync2, readdirSync as readdirSync2, readFileSync as readFileSync5, statSync as statSync3, unlinkSync } from "node:fs";
 import { join as join16 } from "node:path";
 import { setTimeout as delay4 } from "node:timers/promises";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/plugin/notice-cooldown.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/plugin/notice-cooldown.js
 import { join as join14 } from "node:path";
 var shownInProcess = /* @__PURE__ */ new Set();
 async function shouldShowNotice(options) {
@@ -4220,11 +4219,11 @@ async function shouldShowNotice(options) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/desktop/launch.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/desktop/launch.js
 import { accessSync, constants, statSync as statSync2 } from "node:fs";
 import { join as join15, posix, win32 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/desktop/desktop-constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/desktop/desktop-constants.js
 var DESKTOP_SSH_VARIABLES = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"];
 var DESKTOP_DISPLAY_VARIABLES = ["DISPLAY", "WAYLAND_DISPLAY"];
 var DESKTOP_WINDOWED_PLATFORMS = ["darwin", "win32"];
@@ -4272,7 +4271,7 @@ var DESKTOP_WINDOWS_NOTIFIER_ARGUMENTS = [
   DESKTOP_WINDOWS_TOAST_SCRIPT
 ];
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/desktop/launch.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/desktop/launch.js
 function canOpenBrowser(env, platform) {
   if (DESKTOP_SSH_VARIABLES.some((name) => env[name]))
     return false;
@@ -4299,18 +4298,18 @@ function findExecutable(name, env, platform, extraFolders = []) {
   return void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/desktop/notification.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/desktop/notification.js
 import { win32 as win322 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/process.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/process.js
 import { execFile, execFileSync, spawn } from "node:child_process";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/constants.js
 var DEFAULT_PUBLISHED_TARGETS = {
   darwin: ["arm64", "x64"]
 };
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/process.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/process.js
 function spawnDetached(command, args, env, output) {
   try {
     const child = spawn(command, args, {
@@ -4327,7 +4326,7 @@ function spawnDetached(command, args, env, output) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/desktop/notification.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/desktop/notification.js
 var launcher = spawnDetached;
 function showDesktopNotification(title, message, platform = process.platform, env = process.env) {
   const notifier = desktopNotificationCommand(title, message, platform, env);
@@ -4349,7 +4348,7 @@ function desktopNotificationCommand(title, message, platform, env) {
   return notifier === void 0 ? void 0 : { command: notifier, args: [DESKTOP_LINUX_END_OF_OPTIONS, title, message], env };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/auth/renewal.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/auth/renewal.js
 var unrecorded = /* @__PURE__ */ new Set();
 async function renewRejectedLogin(login, apiUrl, sentTokenHash, options = {}) {
   try {
@@ -4533,7 +4532,7 @@ function readCodeFile(path3) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/metadata/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/metadata/constants.js
 var CODING_AGENT_SCHEMA_VERSION = "coding-agent-v1";
 var CODING_AGENT_PURPOSE = "coding";
 var GIT_METADATA_KEYS = {
@@ -4738,7 +4737,7 @@ var CODING_AGENT_ENVIRONMENT_METADATA_ENDPOINT_SUBSTRINGS = [
 var CODING_AGENT_REVISION_ID_VARIABLE = "LANGCHAIN_REVISION_ID";
 var CODING_AGENT_REVISION_ID_KEY = "revision_id";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/metadata/contract.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/metadata/contract.js
 function field(key, options = {}) {
   return { key, ...CODING_AGENT_FIELD_DEFAULTS, ...options };
 }
@@ -4862,7 +4861,7 @@ var CODING_AGENT_V1_CONTRACT = {
   integrationPolicies: CODING_AGENT_INTEGRATION_POLICIES
 };
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/metadata/git-names.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/metadata/git-names.js
 function withBothGitMetadataNames(metadata) {
   const both = { ...metadata };
   for (const role of Object.keys(GIT_METADATA_KEYS)) {
@@ -4875,7 +4874,7 @@ function withBothGitMetadataNames(metadata) {
   return both;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/metadata/validation.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/metadata/validation.js
 function metadataFieldTypeIssue(field4, value) {
   const matchesType = field4.type === "string" ? typeof value === "string" && value.length > 0 : field4.type === "integer" ? typeof value === "number" && Number.isSafeInteger(value) && value >= 1 : isPlainRecord(value);
   if (!matchesType)
@@ -4921,7 +4920,7 @@ function normalizeProviderMetadata(value, integration, runType) {
   return Object.fromEntries(Object.entries(value).filter(([key, entry]) => entry !== void 0 && !issues.has(key)));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/metadata/builder.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/metadata/builder.js
 function buildCodingAgentMetadata(options) {
   const policy = CODING_AGENT_INTEGRATION_POLICIES[options.integration];
   const identity = {
@@ -4989,7 +4988,7 @@ function trustedCodingAgentMetadata(metadata) {
   return metadata?.[TRUSTED_METADATA];
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/metadata/runtime.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/metadata/runtime.js
 function forwardsEnvironmentVariable(name, value, environmentMetadata) {
   return typeof value === "string" && environmentMetadata.prefixes.some((prefix) => name.startsWith(prefix)) && !environmentMetadata.excluded.includes(name) && ![...environmentMetadata.sensitiveSubstrings, ...environmentMetadata.endpointSubstrings].some((part) => name.toLowerCase().includes(part));
 }
@@ -5015,7 +5014,7 @@ function buildCodingAgentRuntimeMetadata(options) {
   return { runtime, metadata };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/metadata/privacy.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/metadata/privacy.js
 function projectCodingAgentMetadata(metadata, integration, status) {
   const safe = {};
   for (const [key, value] of Object.entries(metadata ?? {})) {
@@ -5037,7 +5036,7 @@ function metadataForMode(metadata, integration, mode = "full", status) {
   return projectCodingAgentMetadata(source, integration, status);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/metadata/provenance.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/metadata/provenance.js
 function prepareCodingAgentMetadataProvenance(value, integration, mode, status = "running") {
   const source = requirePlainRecord(value, "Run metadata");
   const declaredIntegration = ownDataField(source, "integration");
@@ -18071,7 +18070,7 @@ var AsyncLocalStorageProvider = class {
 };
 var AsyncLocalStorageProviderSingleton = new AsyncLocalStorageProvider();
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/privacy/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/privacy/constants.js
 var MUTED_TRACE_CONTENT = "[LangSmith system notice: content omitted because tracing is muted.]";
 var METADATA_MODE_RUN_CONFIG_FIELDS = [
   "client",
@@ -18088,7 +18087,7 @@ var METADATA_MODE_RUN_CONFIG_FIELDS = [
   "distributedParentId"
 ];
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/privacy/run-tree.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/privacy/run-tree.js
 function mutedContent(role) {
   return { messages: [{ role, content: MUTED_TRACE_CONTENT }] };
 }
@@ -18209,7 +18208,23 @@ function survivingCodingAgentPatchFields(projectedRun, fields) {
   });
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/env.js
+function withoutEnvVariables(names2, run) {
+  const hidden = names2.flatMap((name) => {
+    const value = process.env[name];
+    return value === void 0 ? [] : [[name, value]];
+  });
+  for (const [name] of hidden)
+    delete process.env[name];
+  try {
+    return run();
+  } finally {
+    for (const [name, value] of hidden)
+      process.env[name] = value;
+  }
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/constants.js
 var UPLOAD_ACCOUNT_FINGERPRINT_PREFIX = "account_";
 var UPLOAD_DESTINATION_ID_PREFIX = "destination_";
 var UPLOAD_FINGERPRINT_LENGTH = 32;
@@ -18291,12 +18306,12 @@ var UPLOAD_LOGIN_FIELD_NAMES = {
   workspaceId: "login workspace ID"
 };
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/client.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/client.js
 var rejectedAuthorizations = /* @__PURE__ */ new WeakMap();
 function createUploadClient(options) {
   const { apiKey, apiUrl, workspaceId, login, anonymizer, redactedFields } = options;
   const auth = login === void 0 ? { apiKey: apiKey ?? "", workspaceId: workspaceId ?? "" } : {};
-  const client = new Client({
+  const config = {
     ...auth,
     apiUrl,
     autoBatchTracing: false,
@@ -18316,7 +18331,8 @@ function createUploadClient(options) {
         rejectedAuthorizations.set(client, new Headers(init?.headers).get(UPLOAD_AUTHORIZATION_HEADER) ?? "");
       return response;
     }
-  });
+  };
+  const client = withoutEnvVariables(LOGIN_API_KEY_VARIABLES, () => new Client(config));
   return client;
 }
 function takeRejectedAccessToken(client) {
@@ -18325,10 +18341,10 @@ function takeRejectedAccessToken(client) {
   return authorization?.replace(UPLOAD_BEARER_PATTERN, "") || void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/destination-identity.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/destination-identity.js
 import { createHash as createHash4 } from "node:crypto";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/auth/credential.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/auth/credential.js
 function resolveUploadCredential(options = {}) {
   const env = options.env ?? process.env;
   const workspaceId = sdkSetting(options.workspaceId);
@@ -18337,15 +18353,17 @@ function resolveUploadCredential(options = {}) {
   const apiUrl = options.apiUrlIsDefault ? void 0 : configuredUrl;
   const apiKey = sdkSetting(options.apiKey);
   if (apiKey !== void 0)
-    return {
-      kind: "api-key",
-      apiKey,
-      apiUrl: configuredUrl ?? LOGIN_DEFAULT_API_URL,
-      ...workspace
-    };
-  const variable = LOGIN_API_KEY_VARIABLES.find((name2) => env[name2]?.trim());
-  if (variable !== void 0)
-    return { kind: "none", reason: fillTemplate(LOGIN_ENV_KEY_REASON, { variable }) };
+    return keyCredential(apiKey, configuredUrl, workspace);
+  const login = loginCredential(env, apiUrl, workspace);
+  if (login.kind === "login")
+    return login;
+  const envKey = LOGIN_API_KEY_VARIABLES.map((name) => sdkSetting(env[name])).find(Boolean);
+  return envKey === void 0 ? login : keyCredential(envKey, configuredUrl, workspace);
+}
+function keyCredential(apiKey, apiUrl, workspace) {
+  return { kind: "api-key", apiKey, apiUrl: apiUrl ?? LOGIN_DEFAULT_API_URL, ...workspace };
+}
+function loginCredential(env, apiUrl, workspace) {
   const profile = readLoginProfile(env);
   if (profile === void 0)
     return { kind: "none", reason: LOGIN_NONE_REASON };
@@ -18376,7 +18394,7 @@ function loginReplicaRefusal(replicas, apiUrl) {
   return usable ? void 0 : refusedLoginReplicas(configured, apiUrl);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/destination-identity.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/destination-identity.js
 function resolveUploadDestinationIdentities(options) {
   if (!Array.isArray(options.destinations) || options.destinations.length === 0) {
     throw new TypeError("At least one upload destination is required");
@@ -18731,7 +18749,7 @@ function createSecretAnonymizer(options) {
   return createAnonymizer(rules, { maxDepth: options?.maxDepth ?? 24 });
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/redaction.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/redaction.js
 function createUploadAnonymizer(enabled, extraRules) {
   if (!enabled)
     return void 0;
@@ -18761,7 +18779,7 @@ function normalizedRedactedFields(value) {
   return UPLOAD_REDACTED_FIELDS.filter((field4) => value.includes(field4));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/destinations.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/destinations.js
 function resolveUploadDestinations(options) {
   const resolved = resolveUploadDestinationIdentities(options);
   const destinations = resolved.destinations.map((destination) => {
@@ -18790,7 +18808,7 @@ function usesLogin(login, client) {
   return loginUrl === void 0 || typeof clientUrl === "string" && sameServer(clientUrl, loginUrl);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/client-cache.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/client-cache.js
 function createUploadClientCache() {
   const clientsByMode = /* @__PURE__ */ new Map();
   return {
@@ -18809,7 +18827,7 @@ function createUploadClientCache() {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/errors.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/errors.js
 var UploadError = class extends Error {
   retryable;
   status;
@@ -18827,7 +18845,7 @@ function isAlreadyReceived(cause) {
   return failureStatus(cause) === UPLOAD_ALREADY_RECEIVED_STATUS && describe(cause).includes(UPLOAD_ALREADY_RECEIVED_MESSAGE);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/runtime-metadata.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/runtime-metadata.js
 function applyRuntimeMetadata(payload, privacyMode) {
   if (privacyMode !== "full")
     return;
@@ -18845,7 +18863,7 @@ function applyRuntimeMetadata(payload, privacyMode) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/replica-identifiers.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/replica-identifiers.js
 import { createHash as createHash5 } from "node:crypto";
 function contextForDestination(context, destination) {
   if (destination.sourceProjectName === void 0)
@@ -18889,7 +18907,7 @@ function remapReplicaDottedOrder(dottedOrder, projectName) {
   }).join(".");
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/replica-updates.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/replica-updates.js
 function applyReplicaPatchUpdates(payload, destination, privacyMode) {
   if (privacyMode !== "full" || destination.updates === void 0)
     return;
@@ -18916,7 +18934,7 @@ function mergeReplicaExtra(baseValue, updateValue) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/deadline.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/deadline.js
 async function withDeadline(work) {
   let timer;
   const expired = new Promise((_resolve, reject) => {
@@ -18929,7 +18947,7 @@ async function withDeadline(work) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/sampling.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/sampling.js
 import { createHash as createHash6 } from "node:crypto";
 function samplingRate(environment) {
   for (const name of UPLOAD_SAMPLING_RATE_VARIABLES) {
@@ -18952,7 +18970,7 @@ function traceIdOf(run) {
   return run.trace_id ?? UPLOAD_DOTTED_ORDER_ROOT_ID.exec(run.dotted_order ?? "")?.[1] ?? run.id;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/timestamps.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/timestamps.js
 function startTimeFromDottedOrder(dottedOrder) {
   if (typeof dottedOrder !== "string")
     return void 0;
@@ -18971,7 +18989,7 @@ function startTimeText(supplied, dottedOrder) {
   return startTimeFromDottedOrder(dottedOrder);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/upload.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/upload.js
 function createLangSmithUploadWriter(options) {
   const resolved = resolveUploadDestinations(options);
   const destinations = resolved.destinations.map(({ id }) => Object.freeze({ id }));
@@ -19243,11 +19261,11 @@ function validatePatch(submission) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/capture-wake-constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/capture-wake-constants.js
 var CAPTURE_WAKE_ERROR_NAME = "CaptureWakeError";
 var CAPTURE_WAKE_FAILURE_MESSAGE = "Trace work was saved but its worker could not start";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/capture-wake.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/capture-wake.js
 var CaptureWakeError = class extends Error {
   captureResult;
   constructor(captureResult, cause) {
@@ -19279,7 +19297,7 @@ async function readSavedCaptureWake(error2, options) {
   return saved !== void 0 && saved.capturedAtMs === record.capturedAtMs && captureContentDigest(saved) === captureContentDigest(record) ? { ...result, record: saved } : void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/constants.js
 var ROOT_RUN_EXECUTION_ORDER = 1;
 var DOTTED_ORDER_TIME_PREFIX_LENGTH = 18;
 var DOTTED_ORDER_SEGMENT_PATTERN = /^(\d{8}T\d{12}Z)([^.]+)$/u;
@@ -19317,7 +19335,7 @@ var LIFECYCLE_IDENTITY_FIELD_LABELS = [
   ["dotted_order", "Dotted order"]
 ];
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/settlement/readiness.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/settlement/readiness.js
 async function captureReadiness(scopes, destinations, readOutcome) {
   const pending = /* @__PURE__ */ new Set();
   const dropped = /* @__PURE__ */ new Set();
@@ -19337,7 +19355,7 @@ async function captureReadiness(scopes, destinations, readOutcome) {
   return pending.size > 0 ? { status: "pending", destinations: [...pending].toSorted() } : dropped.size > 0 ? { status: "dropped", destinations: [...dropped].toSorted() } : { status: "delivered", destinations: [] };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/closure.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/closure.js
 function deriveAttributionReadiness(value, integration) {
   const source = requirePlainRecord(value, "Prepared run submission");
   const metadata = prepareCodingAgentMetadataProvenance(requireOwnDataField(source, "metadata"), integration, "full");
@@ -19478,7 +19496,7 @@ function field2(value, key) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value[key] : void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/identity.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/identity.js
 function createRunIdentity(input) {
   const id = requireNonBlankString(input.id, "Run ID");
   const start_time = requireTimestamp(input.start_time);
@@ -19538,7 +19556,7 @@ function dottedOrderSegment(startTime, runId) {
   return `${precisionTime.replace(DOTTED_ORDER_STRIP_PATTERN, "")}${runId}`;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/projection.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/projection.js
 function projectPostSubmission(source, common, priorIdentity) {
   const { integration, privacyMode, redaction } = common;
   const run = canonicalIdentity(normalizedRunSnapshot(requireOwnDataField(source, "run")), priorIdentity);
@@ -19805,7 +19823,7 @@ function requiredText(source, key, name) {
   return requireNonBlankString(requireOwnDataField(source, key), name);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/settlement/projection.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/settlement/projection.js
 function projectCapture(record, integration) {
   const rawPayload = canonicalJsonObject(record.normalizedPayload, "Stored run payload");
   const submission = projectSubmission({ ...rawPayload, metadata: record.metadataProvenance }, integration);
@@ -19893,7 +19911,7 @@ function closureRank(state) {
   return state === "authoritative" ? 2 : state === "provisional" ? 1 : 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/settlement/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/settlement/constants.js
 var REPOSITORY_NAME_KEY = GIT_METADATA_KEYS.repository;
 var SETTLEMENT_EVENT_ID_PREFIX = "turn-settlement-";
 var SETTLEMENT_DROPPED_RUN_WARNING = "Trace work for run {runId} was dropped, so it is left out; the rest of its turn is still being finished.";
@@ -19901,7 +19919,7 @@ var SETTLEMENT_ATTRIBUTION_LOST_MESSAGE = "Settlement metadata could not preserv
 var SETTLEMENT_QUIET_TURN_MS = 2 * 60 * 60 * 1e3;
 var SETTLEMENT_NEVER_ENDED_WARNING = "Turn {turnId} never ended, so it was finished with the work saved for it; its root run may stay open.";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/settlement/recorded-run.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/settlement/recorded-run.js
 function recordRun(events) {
   const latest = events.at(-1);
   const run = latest.payload.run;
@@ -19944,10 +19962,10 @@ function mergeMetadataObject(previous, current) {
   return { ...previous, ...current };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/settlement/revision.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/settlement/revision.js
 import { createHash as createHash7 } from "node:crypto";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/settlement/source-order.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/settlement/source-order.js
 function uniqueScopes(scopes) {
   const unique = /* @__PURE__ */ new Map();
   for (const scope of scopes)
@@ -20049,7 +20067,7 @@ function report(turnId, status, reason, runIds = [], destinations = []) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/settlement/revision.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/settlement/revision.js
 function settlementEventId(turnId, runId, dependencies, rootRunId, childRunIds, attribution) {
   const revision = createHash7("sha256").update(JSON.stringify({
     turnId,
@@ -20062,7 +20080,7 @@ function settlementEventId(turnId, runId, dependencies, rootRunId, childRunIds, 
   return `${SETTLEMENT_EVENT_ID_PREFIX}${revision}`;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/settlement/run-state.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/settlement/run-state.js
 function hasCausalRunError(events) {
   let hasError = false;
   for (const { payload } of events) {
@@ -20094,7 +20112,7 @@ function retainedEndTime(events) {
   return endTime;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/settlement/settlement.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/settlement/settlement.js
 function attributionOf(metadata) {
   const carried = {};
   const named = withBothGitMetadataNames(metadata ?? {});
@@ -20137,7 +20155,7 @@ function settledTurnMetadata(base, record) {
   return missing.length === 0 ? base : { ...base, ...Object.fromEntries(missing) };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/settlement/settle-turn.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/settlement/settle-turn.js
 function unsettled(settlementReport) {
   return { report: settlementReport, patches: [], captured: 0 };
 }
@@ -20378,7 +20396,7 @@ async function settleOneTurn(turnId, events, generated, allByRunId, options) {
   return captureTurnPatches(state, requiredRunIds, currentByRunId, generated, options);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/settlement/pass.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/settlement/pass.js
 async function settleCapturedTurns(options) {
   if (options.destinations.length === 0)
     throw new TypeError("At least one settlement destination is required");
@@ -20440,7 +20458,7 @@ async function refreshSettlementProgress(work, destinations, readOutcome) {
   return { captured: work.progress.captured, turns };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/validation/snapshot.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/validation/snapshot.js
 function snapshotData(value) {
   return copySnapshot(value, /* @__PURE__ */ new WeakMap());
 }
@@ -20480,7 +20498,7 @@ function copySnapshot(value, copies) {
   return copy;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/turn-removal.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/turn-removal.js
 async function removeSettledTurns(options) {
   const known = new Set(options.knownScopes.map(turnEventKey));
   const removable = /* @__PURE__ */ new Map();
@@ -20547,7 +20565,7 @@ function field3(value, key) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value[key] : void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/bridge.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/lifecycle/bridge.js
 function createLifecycleBridge(options) {
   const context = createBridgeContext(options);
   return Object.freeze({
@@ -20903,10 +20921,10 @@ function restoreSubmission(record, integration) {
   return { ...projected.value.payload, metadata: projected.value.metadata };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/worker.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/worker.js
 import { join as join18, resolve as resolve10 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/constants.js
 var RECONSTRUCTION_DRAIN_LOCK = "reconstruction";
 var RECONSTRUCTION_RUN_ID_PREFIX = "reconstruction:";
 var RECONSTRUCTION_MAPPING_EVENT_ID_PREFIX = "reconstruction-map:";
@@ -21029,14 +21047,14 @@ var RECONSTRUCTION_LABEL_SOURCE_REF = "Source ref";
 var RECONSTRUCTION_LABEL_SOURCE_REF_FIELD = "source ref";
 var RECONSTRUCTION_SUBMISSION_INVALID_MESSAGE = "Reconstruction submission is invalid";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/known-keys.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/known-keys.js
 function assertKnownKeys(record, required, optional, message) {
   const keys = Object.keys(record);
   if (required.some((key) => !keys.includes(key)) || keys.some((key) => !required.includes(key) && !optional.includes(key)))
     throw new TypeError(message);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/job-validation.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/job-validation.js
 function readEventId(output, seen) {
   const eventId = requireNonBlankString(requireOwnDataField(output, "eventId"), RECONSTRUCTION_LABEL_EVENT_ID);
   validateIdentifier(eventId, RECONSTRUCTION_LABEL_EVENT_ID_FIELD);
@@ -21307,7 +21325,7 @@ function validateTurnEvidence(value) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/job-records.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/job-records.js
 function snapshotJob(job) {
   return Object.freeze({
     ...job,
@@ -21505,7 +21523,7 @@ function mappingScope(job) {
   return { ...scopeOf(job), eventId };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/job-processing.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/job-processing.js
 async function processJob(candidate, context) {
   const { job, scope } = candidate;
   const retry = candidate.entry.record.delivery?.retries[job.accountFingerprint];
@@ -21623,7 +21641,7 @@ async function recordTerminal(store, scope, accountFingerprint, outcome, reason)
   return result.status === "recorded";
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/worker.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/reconstruction/worker.js
 function createReconstructionWorker(options) {
   const integration = options.integration;
   const sessionId = requireNonBlankString(options.sessionId, "Session ID");
@@ -21778,7 +21796,7 @@ async function summarizePending(context) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/engine/pass-results.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/engine/pass-results.js
 function reconstructionPassResult(result) {
   if (result.status === "busy")
     return "retryable-failure";
@@ -21797,10 +21815,10 @@ function waitingOnBackoff(result) {
   return result.pending > 0 && result.nextRetryAtMs !== void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/engine/options.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/engine/options.js
 import { resolve as resolve11 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/engine/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/engine/constants.js
 var TRACING_ENGINE_FOREIGN_SESSION_MIN_AGE_MS = 2 * 60 * 60 * 1e3;
 var TRACING_ENGINE_BACKGROUND_RECOVERY_REPORT_ERROR = "Background recovery report callback failed";
 var TRACING_ENGINE_BACKGROUND_RECOVERY_SESSION_CALLBACK_ERROR = "Background recovery session callback is required";
@@ -21817,7 +21835,7 @@ var TRACING_ENGINE_STORAGE_ROOT_REQUIRED_MESSAGE = "A storage folder is required
 var TRACING_ENGINE_RECOVERY_SETTLEMENT_CONFLICT_MESSAGE = "Recovery settlement capture conflicts with the current source state";
 var TRACING_ENGINE_MISSING_SETTLEMENT_CAPTURE_MESSAGE = "A planned settlement capture is not saved yet";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/engine/options.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/engine/options.js
 function snapshotEngineOptions(options) {
   if (typeof options.storageRoot !== "string" || options.storageRoot.trim() === "")
     throw new TypeError(TRACING_ENGINE_STORAGE_ROOT_REQUIRED_MESSAGE);
@@ -21858,7 +21876,7 @@ function snapshotWriterOptions(options) {
   });
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/engine/errors.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/engine/errors.js
 var MissingSettlementCaptureError = class extends Error {
   constructor() {
     super(TRACING_ENGINE_MISSING_SETTLEMENT_CAPTURE_MESSAGE);
@@ -21866,7 +21884,7 @@ var MissingSettlementCaptureError = class extends Error {
   }
 };
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/engine/recovery-settlement.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/engine/recovery-settlement.js
 async function hasUnsettledRecoverySettlement(options) {
   try {
     const work = await settleCapturedTurns({
@@ -21909,7 +21927,7 @@ async function hasUnsettledRecoverySettlement(options) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/engine/recovery.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/engine/recovery.js
 function validateRecoveryRequest(request) {
   const now = request.now ?? Date.now();
   if (!Number.isSafeInteger(now) || !Number.isFinite(new Date(now).getTime()))
@@ -22057,7 +22075,7 @@ async function recoverTracingSessions(runtime, request, scopeGuard) {
   return { scheduled, failed };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/engine/background-recovery.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/engine/background-recovery.js
 function retryableFailure(error2) {
   return { status: "failed", message: describe(error2), retryable: true };
 }
@@ -22105,7 +22123,7 @@ async function runBackgroundRecovery(runtime, options, scopeGuard) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/engine/retry-wait.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/engine/retry-wait.js
 import { setTimeout as delay5 } from "node:timers/promises";
 async function drainThroughBackoff(drain) {
   let waitedMs = 0;
@@ -22126,7 +22144,7 @@ async function drainThroughBackoff(drain) {
   return result;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/engine/engine.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/engine/engine.js
 function createTracingEngine(options) {
   const config = snapshotEngineOptions(options);
   const forSession = (sessionOptions) => createSession(config, snapshotSessionOptions(sessionOptions));
@@ -22245,12 +22263,12 @@ async function drainSession(context) {
   return result;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/tracing/upload/identity.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/tracing/upload/identity.js
 function resolveUploadDestinationFingerprint(options) {
   return resolveUploadDestinationIdentities(options).accountFingerprint;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/plugin/session.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/plugin/session.js
 function openPluginSession(options) {
   const { storageRoot, integration, sessionId, writer } = options;
   const callbacks = (id) => ({
@@ -22290,28 +22308,28 @@ function fingerprintOf(writer) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/plugin/worker-launch.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/plugin/worker-launch.js
 import { spawn as spawn2 } from "node:child_process";
 import { closeSync as closeSync3, mkdirSync as mkdirSync6, openSync as openSync3, statSync as statSync5, writeSync as writeSync2 } from "node:fs";
 import { dirname as dirname10, join as join19 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/binary-runtime.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/binary-runtime.js
 function builtAsBinary() {
   return typeof LS_COMPILED_BINARY !== "undefined";
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/tls/system-certificates.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/tls/system-certificates.js
 import { readFileSync as readFileSync8, writeFileSync as writeFileSync3 } from "node:fs";
 import * as tls from "node:tls";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/tls/tls-constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/tls/tls-constants.js
 var EXTRA_CERTIFICATES_VARIABLE = "NODE_EXTRA_CA_CERTS";
 var SYSTEM_CERTIFICATE_STORE = "system";
 var CERTIFICATE_FILE_ENCODING = "utf8";
 var SYSTEM_CERTIFICATES_WARNING = "Uploads will not trust this computer's certificates:";
 var CERTIFICATE_PATTERN = /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g;
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/tls/system-certificates.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/tls/system-certificates.js
 function trustSystemCertificates(file, environment, readSystem = readSystemStore) {
   const existing = environment[EXTRA_CERTIFICATES_VARIABLE] || void 0;
   if (existing === file)
@@ -22347,7 +22365,7 @@ function readIfPresent(file) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/plugin/worker-launch.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/plugin/worker-launch.js
 function launchDetachedWorker(args, options = {}) {
   const root = options.storageRoot;
   const log2 = root === void 0 ? void 0 : openLog(join19(root, WORKER_LOG_FILE_NAME));
@@ -22398,10 +22416,10 @@ function logWarning(log2, warning) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/binary.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/binary.js
 import { arch as osArch, platform as osPlatform } from "node:os";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/target.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/target.js
 function resolveTarget(options) {
   for (const field4 of ["executableName", "repository", "userAgent"]) {
     if (typeof options[field4] !== "string" || options[field4].trim() === "") {
@@ -22423,7 +22441,7 @@ function releaseAssetName(target, platform, arch, version) {
   return `${target.executableName}-${platform}-${arch}-${version}`;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/binary.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/binary.js
 function defineBinaryTarget(options) {
   const target = resolveTarget(options);
   return {
@@ -22444,7 +22462,7 @@ var binary = defineBinaryTarget({
   releasesApiOverrideEnvVar: "CC_LANGSMITH_RELEASES_API"
 });
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/settings/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/settings/constants.js
 import { constants as constants2 } from "node:fs";
 var COMMON_BOOLEAN_SETTINGS = {
   enabled: { default: false, restrictive: false },
@@ -22485,17 +22503,17 @@ var ACCOUNT_ID_FIELD = 2;
 var ACCOUNT_FIELD_SEPARATOR = ":";
 var UTF8_BOM = /^\uFEFF/;
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/settings/managed-config.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/settings/managed-config.js
 import { closeSync as closeSync4, fstatSync, lstatSync as lstatSync2, openSync as openSync4, readFileSync as readFileSync10 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname as dirname11, join as join20 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/settings/utils/records.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/settings/utils/records.js
 function object(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/settings/parse.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/settings/parse.js
 function invalid(raw) {
   return {
     status: "invalid",
@@ -22610,7 +22628,7 @@ function parseCommonConfig(value) {
   return { status: "valid", common, raw: value, diagnostics };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/settings/utils/account-home.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/settings/utils/account-home.js
 import { execFileSync as execFileSync2 } from "node:child_process";
 import { readFileSync as readFileSync9 } from "node:fs";
 import { userInfo } from "node:os";
@@ -22684,7 +22702,7 @@ function homeField(entry, field4) {
   return home !== void 0 && isAbsolute3(home) ? home : void 0;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/settings/utils/warnings.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/settings/utils/warnings.js
 var warned = /* @__PURE__ */ new Set();
 function warnOnce2(lines) {
   for (const line of lines) {
@@ -22695,7 +22713,7 @@ function warnOnce2(lines) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/settings/managed-config.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/settings/managed-config.js
 function onlyOwnerCanChange(stats, ownerUid) {
   return !stats.isSymbolicLink() && stats.uid === ownerUid && (stats.mode & GROUP_OR_OTHERS_WRITE_BITS) === 0;
 }
@@ -22747,7 +22765,7 @@ function readManagedConfigFile(options = {}) {
   return { status: "valid", common: parsed.common, raw, diagnostics: parsed.diagnostics };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/settings/managed-lock.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/settings/managed-lock.js
 import { isDeepStrictEqual } from "node:util";
 function lockedValues(common) {
   const lock = { ...common };
@@ -22799,7 +22817,7 @@ function overrideDiagnostics(sources, lock) {
   return [MANAGED_CONFIG_OVERRIDE_WARNING.replace("{overrides}", list)];
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/settings/common-config.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/settings/common-config.js
 function resolveField(sources, field4) {
   return sources.find((source) => source[field4] !== void 0)?.[field4];
 }
@@ -22848,7 +22866,7 @@ function toSdkReplicas(replicas) {
   }));
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/settings/config-files.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/settings/config-files.js
 import { closeSync as closeSync5, fstatSync as fstatSync2, lstatSync as lstatSync3, openSync as openSync5, readFileSync as readFileSync11 } from "node:fs";
 import { join as join21 } from "node:path";
 function readCommonConfigFile(path3) {
@@ -22948,6 +22966,7 @@ Options:
   --version, -v  Print the installed version and exit`;
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
 var LOOKUP_TIMEOUT_MS = 4e3;
+var GENERIC_API_KEY_VARIABLES = ["LANGSMITH_API_KEY", "LANGCHAIN_API_KEY"];
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 var WORKFLOW_TOOL_NAME = "Workflow";
 var WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
@@ -23107,10 +23126,10 @@ function attributionReady(metadata) {
 // dist/src/repo-attribution.js
 import { dirname as dirname17, join as join25 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/git/attribution.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/git/attribution.js
 import { isAbsolute as isAbsolute4 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/utils/paths.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/utils/paths.js
 import { statSync as statSync7 } from "node:fs";
 import { dirname as dirname13 } from "node:path";
 function nearestExistingDirectory(path3) {
@@ -23129,11 +23148,11 @@ function nearestExistingDirectory(path3) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/git/github-login.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/git/github-login.js
 import { mkdirSync as mkdirSync8, readFileSync as readFileSync12, renameSync as renameSync6, writeFileSync as writeFileSync4 } from "node:fs";
 import { dirname as dirname14 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/git/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/git/constants.js
 var GIT_LOCATION_ENV_KEYS = [
   "GIT_DIR",
   "GIT_WORK_TREE",
@@ -23177,7 +23196,7 @@ var GH_LOGIN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
 var GH_LOGIN_NULL_OUTPUT = "null";
 var GH_LOGIN_RETRY_AFTER_MS = 24 * 60 * 60 * 1e3;
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/git/repository.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/git/repository.js
 import { execFileSync as execFileSync3 } from "node:child_process";
 import { resolve as resolve12 } from "node:path";
 function parseRepoName(remoteUrl) {
@@ -23324,7 +23343,7 @@ function installedCommand(name) {
   return found;
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/git/github-login.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/git/github-login.js
 function createGitHubLoginFallback(options) {
   const now = options.now ?? Date.now;
   const retryAfterMs = options.retryAfterMs ?? GH_LOGIN_RETRY_AFTER_MS;
@@ -23368,7 +23387,7 @@ function createGitHubLoginFallback(options) {
   };
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/git/paths.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/git/paths.js
 import { readFileSync as readFileSync13, statSync as statSync8 } from "node:fs";
 import { dirname as dirname15, join as join22, resolve as resolve13 } from "node:path";
 function gitMarkerAt(directory) {
@@ -23405,7 +23424,7 @@ function rootFromGitMarker(directory) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_45d3dae3a2d88c57b9270f7741827e23/node_modules/@langchain/plugins-base/dist/git/attribution.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_2a8bb001fd019cb2864e297edf29c6f2/node_modules/@langchain/plugins-base/dist/git/attribution.js
 function createRepositoryAttributor(options) {
   const rootByDirectory = /* @__PURE__ */ new Map();
   const attributionByRoot = /* @__PURE__ */ new Map();
@@ -23667,7 +23686,7 @@ function loadConfig(options) {
       defaultMuted: envBoolean("defaultMuted"),
       login_browser: envBoolean("login_browser"),
       notice_cooldown: envCooldown(),
-      api_key: process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY,
+      api_key: process.env.CC_LANGSMITH_API_KEY,
       api_url: process.env.LANGSMITH_ENDPOINT,
       project: process.env.CC_LANGSMITH_PROJECT,
       metadata: customMetadata,
@@ -23700,7 +23719,7 @@ function loadConfig(options) {
   return {
     enabled: common.enabled,
     defaultMuted: common.defaultMuted,
-    apiKey: common.api_key,
+    apiKey: credential.kind === "api-key" && sdkSetting(common.api_key) === void 0 ? credential.apiKey : common.api_key,
     project: common.project,
     apiBaseUrl: credential.kind === "login" ? credential.apiUrl : common.api_url,
     stateFilePath,
@@ -25683,6 +25702,22 @@ function withoutKeys(entries, removed) {
   return Object.fromEntries(Object.entries(entries ?? {}).filter(([key]) => !(key in removed)));
 }
 
+// dist/src/utils/env.js
+function withoutEnvVariables2(names2, run) {
+  const hidden = names2.flatMap((name) => {
+    const value = process.env[name];
+    return value === void 0 ? [] : [[name, value]];
+  });
+  for (const [name] of hidden)
+    delete process.env[name];
+  try {
+    return run();
+  } finally {
+    for (const [name, value] of hidden)
+      process.env[name] = value;
+  }
+}
+
 // dist/src/thread-link.js
 function terminalLink(url) {
   const OSC8 = "\x1B]8;;";
@@ -25707,7 +25742,7 @@ async function describeThreadLinks(config, sessionId) {
     if (!keyed && (otherServer || !config.login))
       return missingKey;
     try {
-      const client = new Client({
+      const client = withoutEnvVariables2(keyed ? [] : GENERIC_API_KEY_VARIABLES, () => new Client({
         apiKey,
         apiUrl: destination.apiUrl ?? config.apiBaseUrl,
         workspaceId: destination.workspaceId,
@@ -25718,7 +25753,7 @@ async function describeThreadLinks(config, sessionId) {
             throw new Error("Thread link lookup failed");
           }
         }
-      });
+      }));
       if (keyed && !client.apiKey)
         return missingKey;
       const project = await client.readProject({ projectName });

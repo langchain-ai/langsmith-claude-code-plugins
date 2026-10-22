@@ -34,7 +34,7 @@ Tracing is off until you switch it on and give it a key or a CLI sign-in. To use
 
 Get a key from [smith.langchain.com](https://smith.langchain.com) under **Settings** then **API Keys**. Send a message, then look for it in the `claude-code` project.
 
-If you'd rather not make a key, run `langsmith auth login` and leave `api_key` out, so the plugin uploads with your CLI sign-in. An API key still wins when both are set, and a `LANGCHAIN_API_KEY` in your shell stops the sign-in from being used, so unset it. When the sign-in expires tracing pauses until you sign in again, and Claude Code tells you so while a browser sign-in opens once unless you set `login_browser` to `false`. A warning repeats at most every 2 minutes, which `notice_cooldown` or `CC_LANGSMITH_NOTICE_COOLDOWN` changes, and `off` silences them.
+If you'd rather not make a key, run `langsmith auth login` and leave `api_key` out, so the plugin uploads with your CLI sign-in. The plugin's own key from `api_key` or `CC_LANGSMITH_API_KEY` beats the sign-in, while a `LANGSMITH_API_KEY` or `LANGCHAIN_API_KEY` in your shell is only used when you aren't signed in. When the sign-in expires tracing pauses until you sign in again, and Claude Code tells you so while a browser sign-in opens once unless you set `login_browser` to `false`. A warning repeats at most every 2 minutes, which `notice_cooldown` or `CC_LANGSMITH_NOTICE_COOLDOWN` changes, and `off` silences them.
 
 A project can carry its own settings in `<project>/.claude/langsmith.json`, and a setting in your shell beats any file. [Advanced configuration](./ADVANCED.md) lists the other locations.
 
@@ -67,7 +67,7 @@ To mute every conversation, set `defaultMuted` to `true`. A conversation you mut
 
 ## Change a setting
 
-Every setting has a key you can write in the config file and a variable you can set in your shell, and the shell wins. For the API key alone you may also use `LANGSMITH_API_KEY`, which `CC_LANGSMITH_API_KEY` overrides.
+Every setting has a key you can write in the config file and a variable you can set in your shell, and the shell wins. For the API key alone you may also use `LANGSMITH_API_KEY` or `LANGCHAIN_API_KEY`, which only count when the plugin has no key of its own and you aren't signed in.
 
 | Config key           | Environment variable          | Default                           | What it does                            |
 | -------------------- | ----------------------------- | --------------------------------- | --------------------------------------- |

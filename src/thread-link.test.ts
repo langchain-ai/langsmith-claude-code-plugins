@@ -123,6 +123,16 @@ describe("thread links", () => {
     expect(headers.get("authorization")).toBe("Bearer synthetic-access");
   });
 
+  it("looks up a CLI login user's link with the login while a generic key is exported", async () => {
+    vi.stubEnv("LANGSMITH_API_KEY", "generic-key");
+    vi.stubEnv("LANGSMITH_CONFIG_FILE", writeLoginConfig(config.apiBaseUrl));
+    const login = { configPath: process.env.LANGSMITH_CONFIG_FILE!, profile: "work" };
+    await describeThreadLinks({ ...config, apiKey: "", login }, "session");
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("authorization")).toBe(
+      "Bearer synthetic-access",
+    );
+  });
+
   it.each(["", "   ", '"  "', '""""', `"''"`, "' '"])(
     "never sends the login to another server for a replica key of %j",
     async (apiKey) => {

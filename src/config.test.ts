@@ -224,7 +224,6 @@ describe("loadConfig", () => {
         redactExtraRules: [{ pattern: "private", replace: "hidden" }],
       });
       process.env.CC_LANGSMITH_API_KEY = "";
-      process.env.LANGSMITH_API_KEY = "ignored";
       process.env.LANGSMITH_ENDPOINT = "";
       process.env.CC_LANGSMITH_PROJECT = "";
       process.env.CC_LANGSMITH_REDACT = "true";
@@ -256,7 +255,6 @@ describe("loadConfig", () => {
         apiBaseUrl: "",
       });
       delete process.env.CC_LANGSMITH_API_KEY;
-      delete process.env.LANGSMITH_API_KEY;
       expect(loadConfig({ cwd: projectDir }).apiKey).toBe("user-key");
     });
   });

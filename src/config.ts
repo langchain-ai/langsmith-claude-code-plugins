@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
-import { loginReplicaRefusal, resolveUploadCredential } from "@langchain/plugins-base/auth";
+import {
+  loginReplicaRefusal,
+  resolveUploadCredential,
+  sdkSetting,
+} from "@langchain/plugins-base/auth";
 import {
   mergeCommonConfig,
   readCommonConfigFiles,
@@ -184,7 +188,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
         defaultMuted: envBoolean("defaultMuted"),
         login_browser: envBoolean("login_browser"),
         notice_cooldown: envCooldown(),
-        api_key: process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY,
+        api_key: process.env.CC_LANGSMITH_API_KEY,
         api_url: process.env.LANGSMITH_ENDPOINT,
         project: process.env.CC_LANGSMITH_PROJECT,
         metadata: customMetadata,
@@ -232,7 +236,10 @@ export function loadConfig(options?: { cwd?: string }): Config {
   return {
     enabled: common.enabled,
     defaultMuted: common.defaultMuted,
-    apiKey: common.api_key!,
+    apiKey:
+      credential.kind === "api-key" && sdkSetting(common.api_key) === undefined
+        ? credential.apiKey
+        : common.api_key!,
     project: common.project!,
     apiBaseUrl: credential.kind === "login" ? credential.apiUrl : common.api_url!,
     stateFilePath,

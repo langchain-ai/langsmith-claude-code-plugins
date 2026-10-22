@@ -597,7 +597,7 @@ describe("closing hooks hand their work to the uploader", () => {
 
   it("shows why tracing can't upload only when tracing is on", async () => {
     reset("full");
-    h.credentialProblem = "LANGCHAIN_API_KEY is overriding your LangSmith login.";
+    h.credentialProblem = "LangSmith isn't signed in.";
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
     h.enabled = false;
     await hook("prompt", {}, { closings: false });
@@ -605,7 +605,7 @@ describe("closing hooks hand their work to the uploader", () => {
     h.enabled = true;
     await hook("prompt", {}, { closings: false });
     expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
-      { systemMessage: "LANGCHAIN_API_KEY is overriding your LangSmith login." },
+      { systemMessage: "LangSmith isn't signed in." },
     ]);
     expect(h.operations).toEqual([]);
     output.mockRestore();

@@ -157,15 +157,26 @@ describe("initHook", () => {
     expect(writerOptions(config!).destinations[0]).not.toHaveProperty("apiKey");
   });
 
+  it("traces through the CLI login over a generic API key", () => {
+    process.env.TRACE_TO_LANGSMITH = "true";
+    process.env.LANGSMITH_API_KEY = "generic-key";
+    process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://login.example");
+    const destination = writerOptions(initHook(cwd)!).destinations[0];
+    expect(destination).toMatchObject({ login: { profile: "work" } });
+    expect(destination).not.toHaveProperty("apiKey");
+  });
+
   it("uploads only to replicas with their own key when the login is refused", () => {
     process.env.TRACE_TO_LANGSMITH = "true";
-    process.env.LANGCHAIN_API_KEY = "synthetic-env-key";
+    process.env.LANGSMITH_ENDPOINT = "https://endpoint.example";
     process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://login.example");
     const inherits = { apiUrl: "https://login.example", projectName: "inherits" };
     const blank = { apiUrl: "https://replica.example", apiKey: "   ", projectName: "blank" };
     process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([inherits, blank]);
     expect(initHook(cwd)).toBeNull();
-    expect(error).toHaveBeenCalledWith(expect.stringContaining("LANGCHAIN_API_KEY is overriding"));
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("login is for https://login.example"),
+    );
 
     const own = { apiUrl: "https://replica.example", apiKey: "replica-key", projectName: "own" };
     process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([own, inherits]);

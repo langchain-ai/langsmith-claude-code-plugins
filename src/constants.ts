@@ -86,6 +86,7 @@ Options:
 const MAX_LOG_BYTES = 5 * 1024 * 1024; // 5 MB
 
 const LOOKUP_TIMEOUT_MS = 4_000;
+const GENERIC_API_KEY_VARIABLES = ["LANGSMITH_API_KEY", "LANGCHAIN_API_KEY"] as const;
 
 /** Larger transcripts are streamed instead of read whole. */
 const MAX_FULL_READ_BYTES = 50 * 1024 * 1024; // 50 MB
@@ -146,6 +147,7 @@ export {
   MUTE_LOCKED_REPLY,
   MAX_LOG_BYTES,
   LOOKUP_TIMEOUT_MS,
+  GENERIC_API_KEY_VARIABLES,
   MAX_FULL_READ_BYTES,
   WORKFLOW_TOOL_NAME,
   WORKFLOW_SUBAGENT_TYPE,
