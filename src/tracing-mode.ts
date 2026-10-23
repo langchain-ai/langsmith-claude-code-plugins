@@ -1,5 +1,6 @@
 import { getThreadTracingMode } from "./tracing-policy.js";
-import type { TracingMode } from "./types.js";
+import { turnOwnsToolUse } from "./transcript.js";
+import type { Config, SessionState, TracingMode } from "./types.js";
 
 /** Saved launch snapshots win; only unsnapshotted work consults policy + config. */
 export function resolveTurnTracingMode(
@@ -14,4 +15,19 @@ export function resolveTurnTracingMode(
     snapshots.find((mode) => mode !== undefined) ??
     getThreadTracingMode(stateFilePath, sessionId, defaultMuted)
   );
+}
+
+export function toolTracingMode(
+  config: Config,
+  sessionId: string,
+  session: SessionState,
+  transcriptPath: string | undefined,
+  toolUseId: string,
+  mode: TracingMode,
+): TracingMode {
+  if (mode === "metadata") return mode;
+  if (getThreadTracingMode(config.stateFilePath, sessionId, config.defaultMuted) === "full") {
+    return mode;
+  }
+  return transcriptPath && turnOwnsToolUse(transcriptPath, session, toolUseId) ? mode : "metadata";
 }

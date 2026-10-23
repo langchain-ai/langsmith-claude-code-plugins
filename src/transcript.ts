@@ -5,7 +5,8 @@
 
 import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
-import { MAX_FULL_READ_BYTES } from "./constants.js";
+import { MAX_FULL_READ_BYTES, TASK_NOTIFICATION_OPENING } from "./constants.js";
+import { hashPrompt } from "./utils/ids/prompt-hash.js";
 import type {
   TranscriptMessage,
   AssistantMessage,
@@ -17,6 +18,9 @@ import type {
   ContentBlock,
   ToolUseBlock,
   Usage,
+  SessionState,
+  TranscriptRead,
+  TurnPrompt,
 } from "./types.js";
 
 // ─── Low-level parsing ─────────────────────────────────────────────────────
@@ -26,20 +30,49 @@ export function readTranscript(
   filePath: string,
   afterLine: number = -1,
   cutAtByte?: number,
-): { messages: TranscriptMessage[]; lastLine: number } {
-  const endsBeforeCut = (offset: number, line: string): boolean => {
-    if (cutAtByte === undefined || offset < cutAtByte) return false;
-    try {
-      return isHumanMessage(JSON.parse(line) as TranscriptMessage);
-    } catch {
-      return true;
+  turn: TurnPrompt = {},
+): TranscriptRead {
+  const { promptAtByte, promptHash, nextPromptHash } = turn;
+  let promptSeen = turn.promptRead ?? false;
+  let ownSeen = false;
+  let promptId: string | undefined;
+  let laterPrompt = false;
+  const opensLaterTurn = (offset: number, message: UserMessage): boolean => {
+    if (promptAtByte === undefined) return false;
+    const hash =
+      typeof message.message.content === "string" ? hashPrompt(message.message.content) : undefined;
+    const own = !ownSeen && hash !== undefined && hash === promptHash;
+    if (!own && hash !== undefined && hash === nextPromptHash) return (laterPrompt = true);
+    if (!own && promptSeen) {
+      if (message.promptId !== undefined && message.promptId === promptId) return false;
+      const notification =
+        typeof message.message.content === "string" &&
+        message.message.content.startsWith(TASK_NOTIFICATION_OPENING);
+      if (message.promptId === undefined && (notification || offset < promptAtByte)) return false;
+      if (offset >= promptAtByte) return (laterPrompt = true);
     }
+    ownSeen ||= own;
+    promptSeen = true;
+    promptId = message.promptId;
+    return false;
+  };
+  const endsBeforeCut = (offset: number, line: string): boolean => {
+    const pastCut = cutAtByte !== undefined && offset >= cutAtByte;
+    if (!pastCut && promptAtByte === undefined) return false;
+    let message: TranscriptMessage;
+    try {
+      message = JSON.parse(line) as TranscriptMessage;
+    } catch {
+      return pastCut;
+    }
+    if (!isHumanMessage(message)) return false;
+    return pastCut || opensLaterTurn(offset, message);
   };
   let size: number;
   try {
     size = statSync(filePath).size;
   } catch {
-    return { messages: [], lastLine: afterLine };
+    return { messages: [], lastLine: afterLine, laterPrompt };
   }
 
   // For small-to-moderate files, read the whole thing (simple, fast).
@@ -65,7 +98,7 @@ export function readTranscript(
         // Skip malformed lines.
       }
     }
-    return { messages, lastLine };
+    return { messages, lastLine, laterPrompt };
   }
 
   // Large file: stream through in chunks to avoid loading everything at once.
@@ -130,7 +163,7 @@ export function readTranscript(
       }
     }
 
-    return { messages, lastLine };
+    return { messages, lastLine, laterPrompt };
   } finally {
     closeSync(fd);
   }
@@ -235,6 +268,26 @@ export function isHumanMessage(msg: TranscriptMessage): msg is UserMessage {
     return !msg.message.content.some((b: { type: string }) => b.type === "tool_result");
   }
   return false;
+}
+
+export function turnPrompt(session: SessionState, promptRead = false): TurnPrompt {
+  return {
+    promptAtByte: session.current_turn_prompt_bytes,
+    promptHash: session.current_turn_prompt_hash,
+    promptRead,
+  };
+}
+
+export function turnOwnsToolUse(path: string, session: SessionState, toolUseId: string): boolean {
+  const read = readTranscript(path, session.last_line, undefined, turnPrompt(session));
+  return (
+    !read.laterPrompt ||
+    read.messages.some(
+      (msg) =>
+        isAssistantMessage(msg) &&
+        msg.message.content.some((block) => block.type === "tool_use" && block.id === toolUseId),
+    )
+  );
 }
 
 /** Check if a message is a tool result (array content with tool_result blocks). */

@@ -1,5 +1,6 @@
-import { lstatSync, readdirSync, readFileSync, rmdirSync, unlinkSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, rmdirSync, statSync, unlinkSync } from "node:fs";
 import type { Stats } from "node:fs";
+import { expandHome } from "./hook-init.js";
 
 export function listDirectory(path: string): string[] {
   try {
@@ -46,6 +47,16 @@ export function readText(path: string): string {
 export function readJson(text: string): unknown {
   try {
     return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+export function transcriptSize(path: string | undefined): number | undefined {
+  const expanded = expandHome(path);
+  if (!expanded) return undefined;
+  try {
+    return statSync(expanded).size;
   } catch {
     return undefined;
   }

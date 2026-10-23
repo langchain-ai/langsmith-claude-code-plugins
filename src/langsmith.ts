@@ -24,6 +24,7 @@ import {
   resolveProvider,
   completedToolUseIds,
   turnToolInputs,
+  turnPrompt,
 } from "./transcript.js";
 import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
@@ -508,6 +509,7 @@ export async function closeInterruptedTurn(options: {
   /** Root-run error/status message. Defaults to "User interrupt". */
   error?: string;
   cutAtByte?: number;
+  nextPromptHash?: string;
 }): Promise<{ lastLine: number; turnsTraced: number; consumedToolUseIds?: string[] }> {
   const {
     sessionId,
@@ -559,6 +561,7 @@ export async function closeInterruptedTurn(options: {
         transcriptPath,
         sessionState.last_line,
         options.cutAtByte,
+        { ...turnPrompt(sessionState), nextPromptHash: options.nextPromptHash },
       );
       if (messages.length > 0) {
         const turns = groupIntoTurns(messages);

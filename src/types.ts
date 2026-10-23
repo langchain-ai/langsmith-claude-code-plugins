@@ -107,6 +107,19 @@ export interface UserMessage {
   promptId?: string;
 }
 
+export interface TurnPrompt {
+  promptAtByte?: number;
+  promptHash?: string;
+  promptRead?: boolean;
+  nextPromptHash?: string;
+}
+
+export interface TranscriptRead {
+  messages: TranscriptMessage[];
+  lastLine: number;
+  laterPrompt: boolean;
+}
+
 /** A tool result message in the transcript (also role: "user"). */
 export interface ToolResultMessage {
   type: "user";
@@ -273,6 +286,9 @@ export interface SessionState {
   current_turn_number?: number;
   /** Current turn start time (ISO string) for duration calculation */
   current_turn_start?: string;
+  current_turn_prompt_bytes?: number;
+  current_turn_prompt_hash?: string;
+  read_turn_run_id?: string;
   /** Permission mode for the current turn → coding-agent-v1 `approval_policy` (root/interrupted). */
   approval_policy?: string;
   /** Claude Code CLI version → coding-agent-v1 `ls_agent_runtime_version`. */
@@ -361,6 +377,7 @@ export type ClosingKind =
 
 export type InterruptedClosingInput = Omit<UserPromptSubmitHookInput, "prompt"> & {
   error: string;
+  next_prompt_hash?: string;
 };
 
 export type ClosingInput =
