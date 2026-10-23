@@ -1,15 +1,13 @@
-import { dirname, join } from "node:path";
 import type { PluginSessionOptions } from "@langchain/plugins-base/plugin";
 import { launchDetachedWorker, openPluginSession } from "@langchain/plugins-base/plugin";
 import { createLangSmithUploadWriter } from "@langchain/plugins-base/tracing/upload";
 import { loadConfig } from "./config.js";
 import {
-  ENGINE_STORAGE_DIR_NAME,
   ENGINE_WORKER_ARG,
   LS_INTEGRATION,
   RECOVERY_REPORT_PROBLEM_STATUSES,
 } from "./constants.js";
-import { writerOptions } from "./engine-writer.js";
+import { engineStorageRoot, writerOptions } from "./engine-writer.js";
 import { settleToolRuns } from "./engine-tool-settlement.js";
 import { warn } from "./logger.js";
 import type { ClaudeTracingSession, Config } from "./types.js";
@@ -21,7 +19,7 @@ export function openSession(
   reconstruct: PluginSessionOptions["reconstruct"] = settleToolRuns,
 ): ClaudeTracingSession {
   const writer = writerOptions(config);
-  const storageRoot = join(dirname(config.stateFilePath), ENGINE_STORAGE_DIR_NAME);
+  const storageRoot = engineStorageRoot(config.stateFilePath);
   const context = openPluginSession({
     storageRoot,
     integration: LS_INTEGRATION,

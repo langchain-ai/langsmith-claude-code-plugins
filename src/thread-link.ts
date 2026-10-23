@@ -1,6 +1,8 @@
+import { refusedLoginReplicas, sdkSetting } from "@langchain/plugins-base/auth";
 import { Client } from "langsmith";
-import type { Config } from "./types.js";
-import { LOOKUP_TIMEOUT_MS } from "./constants.js";
+import type { Config, SdkClientKey } from "./types.js";
+import { GENERIC_API_KEY_VARIABLES, LOOKUP_TIMEOUT_MS } from "./constants.js";
+import { withoutEnvVariables } from "./utils/env.js";
 
 /**
  * OSC 8 hyperlink keeping a wrapped URL clickable. The URL is its own label, so
@@ -31,26 +33,34 @@ export async function describeThreadLinks(config: Config, sessionId: string): Pr
       const destination = Array.isArray(replica) ? { projectName: replica[0] } : replica;
       const projectName = destination.projectName ?? config.project;
       const apiKey = destination.apiKey ?? config.apiKey;
-      if (!apiKey) {
-        return {
-          resolved: false,
-          line: `${projectName}: No LangSmith API key configured for this destination.`,
-        };
-      }
+      const keyed = sdkSetting(apiKey) !== undefined;
+      const missingKey = {
+        resolved: false,
+        line: `${projectName}: No LangSmith API key configured for this destination.`,
+      };
+      const otherServer =
+        destination.apiUrl !== undefined &&
+        refusedLoginReplicas([{ apiUrl: destination.apiUrl }], config.apiBaseUrl) !== undefined;
+      if (!keyed && (otherServer || !config.login)) return missingKey;
 
       try {
-        const client = new Client({
-          apiKey,
-          apiUrl: destination.apiUrl ?? config.apiBaseUrl,
-          workspaceId: destination.workspaceId,
-          timeout_ms: LOOKUP_TIMEOUT_MS,
-          callerOptions: {
-            // The SDK ignores maxRetries on reads. Throwing here is what stops the retries.
-            onFailedResponseHook: async () => {
-              throw new Error("Thread link lookup failed");
-            },
-          },
-        });
+        const client = withoutEnvVariables(
+          keyed ? [] : GENERIC_API_KEY_VARIABLES,
+          () =>
+            new Client({
+              apiKey,
+              apiUrl: destination.apiUrl ?? config.apiBaseUrl,
+              workspaceId: destination.workspaceId,
+              timeout_ms: LOOKUP_TIMEOUT_MS,
+              callerOptions: {
+                // The SDK ignores maxRetries on reads. Throwing here is what stops the retries.
+                onFailedResponseHook: async () => {
+                  throw new Error("Thread link lookup failed");
+                },
+              },
+            }),
+        );
+        if (keyed && !(client as unknown as SdkClientKey).apiKey) return missingKey;
         const project = await client.readProject({ projectName });
         const url = new URL(client.getHostUrl());
         const path = ["o", project.tenant_id, "projects", "p", project.id, "t", sessionId];

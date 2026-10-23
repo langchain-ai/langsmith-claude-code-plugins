@@ -1,5 +1,10 @@
 import { readFileSync } from "node:fs";
 import {
+  loginReplicaRefusal,
+  resolveUploadCredential,
+  sdkSetting,
+} from "@langchain/plugins-base/auth";
+import {
   mergeCommonConfig,
   readCommonConfigFiles,
   toSdkReplicas,
@@ -16,10 +21,12 @@ import {
 import {
   BOOLEAN_SETTINGS,
   NO_PINNED_KEYS,
+  NOTICE_COOLDOWN_OFF,
   PINNED_REPOSITORY_KEYS,
   STATE_FILE_DEFAULT,
 } from "./constants.js";
 import type { BooleanSetting, Config, MetadataWithPins } from "./types.js";
+import { uploadReplicas } from "./engine-writer.js";
 
 /**
  * Configuration — existing Claude environment discovery plus the shared langsmith-plugins.json contract.
@@ -70,6 +77,14 @@ function envBoolean(field: BooleanSetting): boolean | undefined {
   if (env === "true") return true;
   if (env === "false") return false;
   return setting.restrictive;
+}
+
+function envCooldown(): number | "off" | undefined {
+  const env = process.env.CC_LANGSMITH_NOTICE_COOLDOWN?.trim().toLowerCase();
+  if (!env) return undefined;
+  if (env === NOTICE_COOLDOWN_OFF) return NOTICE_COOLDOWN_OFF;
+  const minutes = Number(env);
+  return Number.isFinite(minutes) && minutes >= 0 ? minutes : undefined;
 }
 
 export function resolveStateFilePath(): string {
@@ -171,7 +186,9 @@ export function loadConfig(options?: { cwd?: string }): Config {
       env: {
         enabled: envBoolean("enabled"),
         defaultMuted: envBoolean("defaultMuted"),
-        api_key: process.env.CC_LANGSMITH_API_KEY ?? process.env.LANGSMITH_API_KEY,
+        strict_auth: envBoolean("strict_auth"),
+        notice_cooldown: envCooldown(),
+        api_key: process.env.CC_LANGSMITH_API_KEY,
         api_url: process.env.LANGSMITH_ENDPOINT,
         project: process.env.CC_LANGSMITH_PROJECT,
         metadata: customMetadata,
@@ -187,6 +204,15 @@ export function loadConfig(options?: { cwd?: string }): Config {
     replicas = toSdkReplicas(common.replicas);
   }
   redactExtraRules = common.redact_extra_rules;
+  const credential = resolveUploadCredential({
+    apiKey: common.api_key,
+    apiUrl: common.api_url,
+    apiUrlIsDefault: common.defaulted.includes("api_url"),
+  });
+  const unreachable =
+    credential.kind === "login"
+      ? loginReplicaRefusal(uploadReplicas(replicas), credential.apiUrl)
+      : undefined;
   customMetadata = common.metadata && withBothGitMetadataNames(common.metadata);
 
   // Attach identity metadata so every traced run can be attributed to a
@@ -210,9 +236,12 @@ export function loadConfig(options?: { cwd?: string }): Config {
   return {
     enabled: common.enabled,
     defaultMuted: common.defaultMuted,
-    apiKey: common.api_key!,
+    apiKey:
+      credential.kind === "api-key" && sdkSetting(common.api_key) === undefined
+        ? credential.apiKey
+        : common.api_key!,
     project: common.project!,
-    apiBaseUrl: common.api_url!,
+    apiBaseUrl: credential.kind === "login" ? credential.apiUrl : common.api_url!,
     stateFilePath,
     debug,
     parentDottedOrder,
@@ -223,5 +252,12 @@ export function loadConfig(options?: { cwd?: string }): Config {
     ...(common.managedConfigProblem === undefined
       ? {}
       : { managedConfigProblem: common.managedConfigProblem }),
+    ...(credential.kind === "login" ? { login: credential.login } : {}),
+    ...(credential.kind === "none" ? { credentialProblem: credential.reason } : {}),
+    ...(unreachable ? { credentialProblem: unreachable } : {}),
+    ...(common.strict_auth ? { strictAuth: true } : {}),
+    ...(common.notice_cooldown === undefined ? {} : { noticeCooldown: common.notice_cooldown }),
+    ...(common.locked.includes("project") ? { projectLocked: true } : {}),
+    ...(common.locked.includes("defaultMuted") && common.defaultMuted ? { mutedLocked: true } : {}),
   };
 }

@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mergeCommonConfig, type CommonConfigResult } from "@langchain/plugins-base/settings";
 import { loadConfig, pinnedRepositoryKeys } from "./config.js";
 import { writerOptions } from "./engine-writer.js";
+import { writeLoginConfig } from "./fixtures/login-config.js";
 import { execFileSync } from "node:child_process";
 
 vi.mock("@langchain/plugins-base/settings", { spy: true });
@@ -223,7 +224,6 @@ describe("loadConfig", () => {
         redactExtraRules: [{ pattern: "private", replace: "hidden" }],
       });
       process.env.CC_LANGSMITH_API_KEY = "";
-      process.env.LANGSMITH_API_KEY = "ignored";
       process.env.LANGSMITH_ENDPOINT = "";
       process.env.CC_LANGSMITH_PROJECT = "";
       process.env.CC_LANGSMITH_REDACT = "true";
@@ -255,7 +255,6 @@ describe("loadConfig", () => {
         apiBaseUrl: "",
       });
       delete process.env.CC_LANGSMITH_API_KEY;
-      delete process.env.LANGSMITH_API_KEY;
       expect(loadConfig({ cwd: projectDir }).apiKey).toBe("user-key");
     });
   });
@@ -273,6 +272,14 @@ describe("loadConfig", () => {
 
   it("returns empty string when no API key set", () => {
     expect(loadConfig({ cwd }).apiKey).toBe("");
+  });
+
+  it.each([
+    ["off", "off"],
+    ["10", 10],
+  ] as const)("reads a %s notice cooldown from the shell", (env, cooldown) => {
+    process.env.CC_LANGSMITH_NOTICE_COOLDOWN = env;
+    expect(loadConfig({ cwd }).noticeCooldown).toBe(cooldown);
   });
 
   it("defaults project to 'claude-code'", () => {
@@ -592,6 +599,35 @@ describe("loadConfig", () => {
       const config = loadConfig({ cwd });
       expect(config.replicas).toEqual([]);
       expect(writerOptions(config).replicas ?? []).toEqual([]);
+    });
+
+    it("keeps a locked server ahead of the CLI login's own server", () => {
+      lock({ status: "valid", common: { api_url: locked.apiUrl }, diagnostics: [] });
+      process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://login.example");
+      const config = loadConfig({ cwd });
+      expect(config.apiBaseUrl).toBe(locked.apiUrl);
+      expect(config.login).toBeUndefined();
+      expect(config.credentialProblem).toContain("login is for https://login.example");
+    });
+
+    it("tells the commands when the managed file locks muting on", () => {
+      process.env.CC_LANGSMITH_DEFAULT_MUTED = "true";
+      expect(loadConfig({ cwd }).mutedLocked).toBeUndefined();
+      lock({ status: "valid", common: { defaultMuted: true }, diagnostics: [] });
+      expect(loadConfig({ cwd }).mutedLocked).toBe(true);
+    });
+
+    it("sends runs saved before a project lock to the locked project", () => {
+      lock({ status: "valid", common: { project: "locked" }, diagnostics: [] });
+      expect(writerOptions(loadConfig({ cwd })).projectLocked).toBe(true);
+    });
+
+    it("turns strict auth on from its variable and keeps it on when the managed file locks it", () => {
+      process.env.CC_LANGSMITH_STRICT_AUTH = "true";
+      expect(loadConfig({ cwd }).strictAuth).toBe(true);
+      lock({ status: "valid", common: { strict_auth: true }, diagnostics: [] });
+      process.env.CC_LANGSMITH_STRICT_AUTH = "false";
+      expect(loadConfig({ cwd }).strictAuth).toBe(true);
     });
 
     it("keeps environment redaction rules from bypassing the lock", () => {
