@@ -67,8 +67,6 @@ const NOTICE_KINDS = {
   credential: "credential-problem",
 } as const;
 const NOTICE_COOLDOWN_OFF = "off";
-const ATTENDED_SESSION_VARIABLE = "CLAUDE_CODE_SESSION_ATTENDED";
-const ATTENDED_SESSION_VALUE = "1";
 const MUTE_LOCKED_REPLY = "An admin locked muting on, so this conversation stays muted.";
 
 const BOOLEAN_SETTINGS = {
@@ -147,8 +145,6 @@ export {
   NOTICE_KINDS,
   NOTICE_COOLDOWN_OFF,
   MUTE_LOCKED_REPLY,
-  ATTENDED_SESSION_VARIABLE,
-  ATTENDED_SESSION_VALUE,
   MAX_LOG_BYTES,
   LOOKUP_TIMEOUT_MS,
   GENERIC_API_KEY_VARIABLES,

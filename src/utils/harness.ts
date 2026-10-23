@@ -1,10 +1,6 @@
 /** Cursor imports Claude Code's hooks and runs them with its own payloads, which must never be traced as Claude Code. */
 
-import {
-  ATTENDED_SESSION_VALUE,
-  ATTENDED_SESSION_VARIABLE,
-  CURSOR_VERSION_FIELD,
-} from "../constants.js";
+import { CURSOR_VERSION_FIELD } from "../constants.js";
 import type { HookEventName, HookEventPayload } from "../types.js";
 
 export function isCursorPayload(input: unknown): boolean {
@@ -16,8 +12,4 @@ export function isPayloadForHook(input: HookEventPayload, event: HookEventName):
   const declared = input.hook_event_name;
   // Standing down on an absent name would silently stop tracing, so only a disagreeing name counts.
   return declared === undefined || declared === event;
-}
-
-export function isAttendedSession(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env[ATTENDED_SESSION_VARIABLE] === ATTENDED_SESSION_VALUE;
 }

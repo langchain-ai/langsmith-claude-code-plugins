@@ -22731,8 +22731,6 @@ var NOTICE_KINDS = {
   credential: "credential-problem"
 };
 var NOTICE_COOLDOWN_OFF = "off";
-var ATTENDED_SESSION_VARIABLE = "CLAUDE_CODE_SESSION_ATTENDED";
-var ATTENDED_SESSION_VALUE = "1";
 var MUTE_LOCKED_REPLY = "An admin locked muting on, so this conversation stays muted.";
 var BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
@@ -24852,9 +24850,6 @@ function isPayloadForHook(input, event) {
   const declared = input.hook_event_name;
   return declared === void 0 || declared === event;
 }
-function isAttendedSession(env = process.env) {
-  return env[ATTENDED_SESSION_VARIABLE] === ATTENDED_SESSION_VALUE;
-}
 
 // dist/src/utils/stdin.js
 function readStdin() {
@@ -25634,7 +25629,7 @@ async function main4() {
   const config = initHook(input.cwd);
   if (!config) {
     const setup = loadConfig({ cwd: input.cwd });
-    if (setup.enabled && setup.credentialProblem && setup.strictAuth && !setup.managedConfigProblem && isAttendedSession()) {
+    if (setup.enabled && setup.credentialProblem && setup.strictAuth && !setup.managedConfigProblem) {
       console.log(JSON.stringify({ decision: "block", reason: setup.credentialProblem }));
       return;
     }
@@ -25656,7 +25651,7 @@ async function main4() {
   const loginNotice = readLoginNotice(engineStorageRoot(config.stateFilePath), process.env, config.login || apiKey === void 0 ? void 0 : { apiKey, apiUrl: config.apiBaseUrl });
   const credentialNotice = config.login ? refusedLoginReplicas(writerOptions(config).replicas, config.apiBaseUrl) : void 0;
   const turnMode = config.mutedLocked ? "metadata" : getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
-  if (loginNotice && config.strictAuth && isAttendedSession()) {
+  if (loginNotice && config.strictAuth) {
     console.log(JSON.stringify({ decision: "block", reason: loginNotice }));
     return;
   }

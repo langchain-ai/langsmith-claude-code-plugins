@@ -34,7 +34,7 @@ import {
 } from "../state.js";
 import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
-import { isAttendedSession, isPayloadForHook } from "../utils/harness.js";
+import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import {
   KILLED_NOTIFICATION_STATUS,
@@ -116,8 +116,7 @@ export async function main(): Promise<void> {
       setup.enabled &&
       setup.credentialProblem &&
       setup.strictAuth &&
-      !setup.managedConfigProblem &&
-      isAttendedSession()
+      !setup.managedConfigProblem
     ) {
       console.log(JSON.stringify({ decision: "block", reason: setup.credentialProblem }));
       return;
@@ -156,7 +155,7 @@ export async function main(): Promise<void> {
   const turnMode = config.mutedLocked
     ? "metadata"
     : getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
-  if (loginNotice && config.strictAuth && isAttendedSession()) {
+  if (loginNotice && config.strictAuth) {
     console.log(JSON.stringify({ decision: "block", reason: loginNotice }));
     return;
   }

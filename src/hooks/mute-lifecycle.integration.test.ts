@@ -582,7 +582,6 @@ describe("closing hooks hand their work to the uploader", () => {
 
   it("refuses every prompt with the login notice in strict mode until the user signs in again", async () => {
     reset("full");
-    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "1");
     h.strictAuth = true;
     h.login = { configPath: "/login/config.json", profile: "work" };
     h.loginNotice = "Tracing is paused";
@@ -601,9 +600,8 @@ describe("closing hooks hand their work to the uploader", () => {
     output.mockRestore();
   });
 
-  it("only reminds a person typing when strict mode is off", async () => {
+  it("only reminds when strict mode is off", async () => {
     reset("full");
-    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "1");
     h.keyRejected = "LangSmith API key was rejected.";
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
     await hook("prompt", {}, { closings: false });
@@ -613,24 +611,19 @@ describe("closing hooks hand their work to the uploader", () => {
     output.mockRestore();
   });
 
-  it("only reminds an automated conversation in strict mode, even a muted one is refused", async () => {
+  it("refuses a headless or muted conversation in strict mode too", async () => {
     reset("full");
     vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "0");
     h.strictAuth = true;
     h.keyRejected = "LangSmith API key was rejected.";
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
     await hook("prompt", {}, { closings: false });
-    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", undefined);
-    h.shownKinds = new Set();
-    await hook("prompt", {}, { closings: false });
     reset("metadata");
-    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "1");
     h.strictAuth = true;
     h.keyRejected = "LangSmith API key was rejected.";
     await hook("prompt", {}, { closings: false });
     expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
-      { systemMessage: "LangSmith API key was rejected." },
-      { systemMessage: "LangSmith API key was rejected." },
+      { decision: "block", reason: "LangSmith API key was rejected." },
       { decision: "block", reason: "LangSmith API key was rejected." },
     ]);
     output.mockRestore();
@@ -663,18 +656,15 @@ describe("closing hooks hand their work to the uploader", () => {
     output.mockRestore();
   });
 
-  it("refuses a person's prompt with no sign-in at all in strict mode, even muted, and only reminds a script", async () => {
+  it("refuses every prompt with no sign-in at all in strict mode, even muted or headless", async () => {
     reset("metadata");
     h.credentialProblem = "LangSmith isn't signed in.";
     h.strictAuth = true;
-    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "1");
-    const output = vi.spyOn(console, "log").mockImplementation(() => {});
-    await hook("prompt", {}, { closings: false });
     vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "0");
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
     await hook("prompt", {}, { closings: false });
     expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
       { decision: "block", reason: "LangSmith isn't signed in." },
-      { systemMessage: "LangSmith isn't signed in." },
     ]);
     output.mockRestore();
   });
