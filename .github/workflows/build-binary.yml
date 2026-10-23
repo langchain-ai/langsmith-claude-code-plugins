@@ -20,7 +20,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: langchain-ai/langsmith-plugin-binary/.github/workflows/build-binary.yml@86e520503256fd4f672da5ab1b58e7fdaee9d6d8 # 86e5205
+    uses: langchain-ai/langsmith-plugin-binary/.github/workflows/build-binary.yml@51382c34f4c8133af7deacb3177e525ee88568b3 # 51382c3
     with:
       bun-version: 1.4.4
     secrets:
