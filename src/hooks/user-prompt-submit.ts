@@ -112,15 +112,11 @@ export async function main(): Promise<void> {
   const config = initHook(input.cwd);
   if (!config) {
     const setup = loadConfig({ cwd: input.cwd });
-    const muted =
-      setup.mutedLocked ||
-      getThreadTracingMode(setup.stateFilePath, input.session_id, setup.defaultMuted) !== "full";
     if (
       setup.enabled &&
       setup.credentialProblem &&
       setup.strictAuth &&
       !setup.managedConfigProblem &&
-      !muted &&
       isAttendedSession()
     ) {
       console.log(JSON.stringify({ decision: "block", reason: setup.credentialProblem }));
@@ -160,7 +156,7 @@ export async function main(): Promise<void> {
   const turnMode = config.mutedLocked
     ? "metadata"
     : getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
-  if (loginNotice && config.strictAuth && turnMode === "full" && isAttendedSession()) {
+  if (loginNotice && config.strictAuth && isAttendedSession()) {
     console.log(JSON.stringify({ decision: "block", reason: loginNotice }));
     return;
   }
