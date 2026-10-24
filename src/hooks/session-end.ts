@@ -17,14 +17,20 @@ import {
   completeTurnRun,
   turnIdentityFromOpenTurn,
 } from "../langsmith.js";
-import { loadState, atomicUpdateState, getSessionState } from "../state.js";
+import { loadState, atomicUpdateState, getSessionState, furtherRead } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { initTracing } from "../tracing-engine.js";
 import { queueClosing } from "../closing-queue.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { readRuntimeVersion } from "../transcript.js";
-import type { Config, QueuedClosing, SessionEndHookInput, SessionState } from "../types.js";
+import type {
+  Config,
+  QueuedClosing,
+  ReadPosition,
+  SessionEndHookInput,
+  SessionState,
+} from "../types.js";
 
 export async function main(): Promise<void> {
   const input: SessionEndHookInput = await readStdin();
@@ -91,7 +97,7 @@ export async function closeEndedSession(
     sessionState.runtime_version ??
     (expandedTranscript ? readRuntimeVersion(expandedTranscript) : undefined);
 
-  let lastLine = sessionState.last_line;
+  let position: ReadPosition = sessionState;
   let turnsTraced = 0;
 
   // Close the active turn if it was interrupted (Stop never fired for it).
@@ -107,9 +113,9 @@ export async function closeEndedSession(
         customMetadata: config.customMetadata,
         runtimeVersion,
         approvalPolicy: sessionState.approval_policy,
-        cutAtByte: closing.cut_bytes,
+        cutAt: closing.cut_at,
       });
-      lastLine = res.lastLine;
+      position = res.position;
       turnsTraced = res.turnsTraced;
     } catch (err) {
       error(`Failed to close interrupted turn on session end: ${err}`);
@@ -190,7 +196,7 @@ export async function closeEndedSession(
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);
     const counted = {
-      last_line: Math.max(ss.last_line, lastLine),
+      ...furtherRead(ss, position),
       turn_count: ss.turn_count + turnsTraced,
     };
     if (resumed) {

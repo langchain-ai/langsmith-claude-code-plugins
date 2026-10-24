@@ -17,6 +17,7 @@ import type {
   TaskRunEntry,
   TraceTurnOptions,
   TurnRunIdentity,
+  ReadPosition,
 } from "./types.js";
 import {
   readTranscript,
@@ -487,7 +488,7 @@ async function closeTurnRun(id: TurnRunIdentity, error: string): Promise<void> {
  * Used by UserPromptSubmit (on next prompt in same session) and SessionEnd
  * (on session exit after interrupt).
  *
- * @returns The advanced `lastLine` and number of turns traced, so the caller
+ * @returns The advanced read position and number of turns traced, so the caller
  *          can advance `last_line` / `turn_count` in state.
  */
 export async function closeInterruptedTurn(options: {
@@ -508,9 +509,9 @@ export async function closeInterruptedTurn(options: {
   turn?: OpenTurn;
   /** Root-run error/status message. Defaults to "User interrupt". */
   error?: string;
-  cutAtByte?: number;
+  cutAt?: string;
   nextPromptHash?: string;
-}): Promise<{ lastLine: number; turnsTraced: number; consumedToolUseIds?: string[] }> {
+}): Promise<{ position: ReadPosition; turnsTraced: number; consumedToolUseIds?: string[] }> {
   const {
     sessionId,
     sessionState,
@@ -535,7 +536,7 @@ export async function closeInterruptedTurn(options: {
       },
       errorMessage,
     );
-    return { lastLine: sessionState.last_line, turnsTraced: 0 };
+    return { position: sessionState, turnsTraced: 0 };
   }
 
   const tracing = resolveTurnTracingMode(
@@ -546,7 +547,7 @@ export async function closeInterruptedTurn(options: {
       ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing
       : undefined,
   );
-  let lastLine = sessionState.last_line;
+  let position: ReadPosition = sessionState;
   let turnsTraced = 0;
   let consumedToolUseIds: string[] = [];
   let taskRunMap = sessionState.task_run_map ?? {};
@@ -557,11 +558,12 @@ export async function closeInterruptedTurn(options: {
   // Trace LLM calls from the transcript if we have a path.
   if (transcriptPath) {
     try {
-      const { messages, lastLine: newLastLine } = readTranscript(
+      const { messages, lastLine, anchor } = readTranscript(
         transcriptPath,
         sessionState.last_line,
-        options.cutAtByte,
+        options.cutAt,
         { ...turnPrompt(sessionState), nextPromptHash: options.nextPromptHash },
+        sessionState,
       );
       if (messages.length > 0) {
         const turns = groupIntoTurns(messages);
@@ -582,7 +584,7 @@ export async function closeInterruptedTurn(options: {
             runtimeVersion,
             approvalPolicy,
           });
-          lastLine = newLastLine;
+          position = { last_line: lastLine, ...anchor };
           turnsTraced = 1;
           consumedToolUseIds = completedToolUseIds(turns);
         }
@@ -635,7 +637,7 @@ export async function closeInterruptedTurn(options: {
     errorMessage,
   );
 
-  return { lastLine, turnsTraced, consumedToolUseIds };
+  return { position, turnsTraced, consumedToolUseIds };
 }
 
 // ─── Subagent tracing ────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -89,7 +90,11 @@ async function hook(name: keyof typeof HOOKS, payload: Record<string, unknown>):
 
 function line(entry: Record<string, unknown>): void {
   const timestamp = new Date().toISOString();
-  appendFileSync(transcript, `${JSON.stringify({ sessionId: SESSION, timestamp, ...entry })}\n`);
+  const uuid = randomUUID();
+  appendFileSync(
+    transcript,
+    `${JSON.stringify({ sessionId: SESSION, timestamp, uuid, ...entry })}\n`,
+  );
 }
 
 function user(content: unknown, promptId?: string): void {
@@ -204,6 +209,25 @@ it("keeps a slash command turn whose prompt lands after a notification already o
   await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_ANSWER" });
 
   expect(await uploaded()).toContain("PUBLIC_ANSWER");
+});
+
+it("uploads the next turn after the transcript loses lines it already read", async () => {
+  await prompt("FIRST_PROMPT", "Z");
+  assistant([{ type: "text", text: "FIRST_ANSWER" }], "end_turn", "Z");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "FIRST_ANSWER" });
+  await drain();
+  uploads.length = 0;
+  writeFileSync(transcript, readFileSync(transcript, "utf-8").split("\n").slice(1).join("\n"));
+  await prompt("SECOND_PROMPT", "B");
+  assistant([{ type: "text", text: "SECOND_THOUGHT" }], "end_turn", "B");
+  assistant([{ type: "text", text: "SECOND_ANSWER" }], "end_turn", "B");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "SECOND_ANSWER" });
+
+  const sent = await uploaded();
+
+  expect(sent).toContain("SECOND_PROMPT");
+  expect(sent).toContain("SECOND_THOUGHT");
+  expect(sent).not.toContain("FIRST_ANSWER");
 });
 
 describe("a muted turn after an open full turn", () => {

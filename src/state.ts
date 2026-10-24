@@ -6,7 +6,7 @@
 import { createStateStore, pruneStateEntries } from "@langchain/plugins-base/storage";
 import { SESSION_MAX_AGE_MS } from "./constants.js";
 import { warn } from "./logger.js";
-import type { TracingState, SessionState } from "./types.js";
+import type { TracingState, SessionState, ReadPosition } from "./types.js";
 
 type SessionStore = ReturnType<typeof createStateStore<SessionState>>;
 
@@ -89,10 +89,24 @@ export function pruneOldSessions(state: TracingState, now: number = Date.now()):
   return pruneStateEntries(state, SESSION_MAX_AGE_MS, now);
 }
 
+export function readPosition(position: ReadPosition): ReadPosition {
+  const { last_line, last_line_uuid, last_line_at } = position;
+  return { last_line, last_line_uuid, last_line_at };
+}
+
+export function furtherRead(a: ReadPosition, b: ReadPosition): ReadPosition {
+  const aAt = Date.parse(a.last_line_at ?? "");
+  const bAt = Date.parse(b.last_line_at ?? "");
+  if (aAt !== bAt && !Number.isNaN(aAt) && !Number.isNaN(bAt)) {
+    return readPosition(aAt > bAt ? a : b);
+  }
+  return readPosition(a.last_line >= b.last_line ? a : b);
+}
+
 export function updateSessionState(
   state: TracingState,
   sessionId: string,
-  lastLine: number,
+  position: ReadPosition,
   turnCount: number,
   taskRunMap?: Record<string, { run_id: string; dotted_order: string }>,
   currentTurnRunId?: string,
@@ -108,7 +122,7 @@ export function updateSessionState(
     ...state,
     [sessionId]: {
       ...existingSession,
-      last_line: lastLine,
+      ...readPosition(position),
       turn_count: turnCount,
       updated: new Date().toISOString(),
       task_run_map: taskRunMap ?? existingSession.task_run_map,

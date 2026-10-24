@@ -22,6 +22,7 @@ import {
   atomicUpdateState,
   getSessionState,
   updateSessionState,
+  furtherRead,
   pruneOldSessions,
   advanceToolTracingProgress,
 } from "../state.js";
@@ -78,7 +79,7 @@ export async function closeStoppedTurn(
   const live = getSessionState(loadState(config.stateFilePath), input.session_id);
   const sessionState = {
     ...closing.session,
-    last_line: Math.max(closing.session.last_line, live.last_line),
+    ...furtherRead(closing.session, live),
     task_run_map: { ...closing.session.task_run_map, ...live.task_run_map },
     traced_tool_use_ids: [
       ...new Set([
@@ -98,10 +99,10 @@ export async function closeStoppedTurn(
   // model finishes generating, but the JSONL file write may still be in flight.
   await delay(Math.max(0, startTime + STOP_FLUSH_WAIT_MS - Date.now()));
 
-  const { messages, lastLine, laterPrompt } = readTranscript(
+  const { messages, lastLine, laterPrompt, anchor } = readTranscript(
     transcriptPath,
     sessionState.last_line,
-    closing.cut_bytes,
+    closing.cut_at,
     {
       ...turnPrompt(
         sessionState,
@@ -114,6 +115,7 @@ export async function closeStoppedTurn(
           ? live.current_turn_prompt_hash
           : undefined,
     },
+    sessionState,
   );
   const finalMessage = laterPrompt ? undefined : input.last_assistant_message;
   if (messages.length === 0 && !sessionState.current_turn_run_id) {
@@ -268,7 +270,7 @@ export async function closeStoppedTurn(
   // response (e.g. only a file-history-snapshot + user message are on disk).
   // Keeping last_line at its previous value lets the next Stop re-read from
   // the same position and pick up the complete turn.
-  const savedLastLine = tracedTurns > 0 ? lastLine : sessionState.last_line;
+  const savedPosition = tracedTurns > 0 ? { last_line: lastLine, ...anchor } : sessionState;
 
   // Decide — atomically, inside the lock — whether to complete this turn's run
   // now or defer to the last SubagentStop. PostToolUse records each launched Agent
@@ -313,7 +315,7 @@ export async function closeStoppedTurn(
     const updatedState = updateSessionState(
       latestState,
       input.session_id,
-      Math.max(latestSession.last_line, savedLastLine),
+      furtherRead(latestSession, savedPosition),
       Math.max(latestSession.turn_count, sessionState.turn_count + tracedTurns),
       // Merge any late PostToolUse writes with our traced entries. allTaskRunMaps
       // wins on conflicts since it has the fully resolved data from traceTurn.

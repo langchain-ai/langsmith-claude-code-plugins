@@ -104,6 +104,7 @@ export interface UserMessage {
     content: string;
   };
   timestamp: string;
+  uuid?: string;
   promptId?: string;
 }
 
@@ -118,7 +119,12 @@ export interface TranscriptRead {
   messages: TranscriptMessage[];
   lastLine: number;
   laterPrompt: boolean;
+  anchor: ReadAnchor;
 }
+
+export type ReadAnchor = Pick<SessionState, "last_line_uuid" | "last_line_at">;
+
+export type ReadPosition = Pick<SessionState, "last_line"> & ReadAnchor;
 
 /** A tool result message in the transcript (also role: "user"). */
 export interface ToolResultMessage {
@@ -128,6 +134,7 @@ export interface ToolResultMessage {
     content: ToolResultBlock[];
   };
   timestamp: string;
+  uuid?: string;
   promptId?: string;
   /** Present on Task tool results — links to subagent transcript. */
   toolUseResult?: {
@@ -147,6 +154,7 @@ export interface AssistantMessage {
     stop_reason?: string | null;
   };
   timestamp: string;
+  uuid?: string;
   promptId?: string;
   effort?: string;
 }
@@ -272,6 +280,8 @@ export interface SessionState {
   /** Captured by PreCompact for async PostCompact (manual preference or auto turn mode). */
   compaction_tracing?: TracingMode;
   last_line: number;
+  last_line_uuid?: string;
+  last_line_at?: string;
   turn_count: number;
   updated: string;
   /** Current turn's run ID, set by UserPromptSubmit hook */
@@ -390,7 +400,7 @@ export type ClosingInput =
 export interface QueuedClosing {
   kind: ClosingKind;
   at: number;
-  cut_bytes?: number;
+  cut_at?: string;
   input: ClosingInput;
   session: SessionState;
 }

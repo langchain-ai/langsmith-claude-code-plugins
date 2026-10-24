@@ -21,6 +21,7 @@ import {
   atomicUpdateState,
   pruneOldSessions,
   advanceToolTracingProgress,
+  furtherRead,
 } from "./state.js";
 import type { TracingState } from "./types.js";
 
@@ -496,9 +497,18 @@ describe("pruneOldSessions", () => {
   });
 });
 
+describe("furtherRead", () => {
+  it("keeps the later read position by time when line counts disagree", () => {
+    const stale = { last_line: 50, last_line_uuid: "x", last_line_at: "2025-01-01T00:00:00Z" };
+    const fresh = { last_line: 20, last_line_uuid: "y", last_line_at: "2025-01-01T00:01:00Z" };
+    expect(furtherRead(stale, fresh)).toEqual(fresh);
+    expect(furtherRead(fresh, stale)).toEqual(fresh);
+  });
+});
+
 describe("updateSessionState", () => {
   it("adds a new session", () => {
-    const result = updateSessionState({}, "new-session", 10, 3);
+    const result = updateSessionState({}, "new-session", { last_line: 10 }, 3);
     expect(result["new-session"].last_line).toBe(10);
     expect(result["new-session"].turn_count).toBe(3);
     expect(result["new-session"].updated).toBeTruthy();
@@ -508,7 +518,7 @@ describe("updateSessionState", () => {
     const state = {
       s1: { last_line: 0, turn_count: 0, updated: "" },
     };
-    const result = updateSessionState(state, "s1", 20, 5);
+    const result = updateSessionState(state, "s1", { last_line: 20 }, 5);
     expect(result.s1.last_line).toBe(20);
     expect(result.s1.turn_count).toBe(5);
   });
@@ -518,7 +528,7 @@ describe("updateSessionState", () => {
       s1: { last_line: 5, turn_count: 1, updated: "old" },
       s2: { last_line: 10, turn_count: 2, updated: "old" },
     };
-    const result = updateSessionState(state, "s1", 15, 3);
+    const result = updateSessionState(state, "s1", { last_line: 15 }, 3);
     expect(result.s2).toEqual(state.s2);
     expect(result.s1.last_line).toBe(15);
   });

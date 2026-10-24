@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { statSync } from "node:fs";
 import { CLOSING_EVENT_PREFIX, CLOSING_PRIVACY_MODE } from "./constants.js";
 import { atomicUpdateState, getSessionState } from "./state.js";
 import { initTracing, queueJob } from "./tracing-engine.js";
@@ -11,7 +10,6 @@ import type {
   QueuedClosing,
   SessionState,
 } from "./types.js";
-import { expandHome } from "./utils/hook-init.js";
 
 export async function queueClosing(
   config: Config,
@@ -21,7 +19,6 @@ export async function queueClosing(
 ): Promise<void> {
   const id = randomUUID();
   const at = Date.now();
-  const cut = options.transcriptCut ? transcriptSize(input.transcript_path) : undefined;
   let queued = false;
   await atomicUpdateState(config.stateFilePath, (state) => {
     const session = getSessionState(state, input.session_id);
@@ -31,7 +28,7 @@ export async function queueClosing(
     const closing: QueuedClosing = {
       kind,
       at,
-      ...(cut === undefined ? {} : { cut_bytes: cut }),
+      ...(options.transcriptCut ? { cut_at: new Date(at).toISOString() } : {}),
       input,
       session: snapshot,
     };
@@ -54,16 +51,6 @@ export async function queueClosing(
     privacyMode: CLOSING_PRIVACY_MODE,
     turnEvidence: { childRunIds: [], closureState: "open" },
   });
-}
-
-function transcriptSize(path: string | undefined): number | undefined {
-  const expanded = expandHome(path);
-  if (!expanded) return undefined;
-  try {
-    return statSync(expanded).size;
-  } catch {
-    return undefined;
-  }
 }
 
 export function turnClosedReset(session: SessionState): Partial<SessionState> {

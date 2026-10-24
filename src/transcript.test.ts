@@ -124,17 +124,15 @@ describe("readTranscript", () => {
       const first = [0, 1, 2]
         .map((pad) => makeUser("x".repeat(pad) + "\u4e2d".repeat(800_000)))
         .find((line) => (Buffer.from(JSON.stringify(line))[2 * 1024 * 1024] & 0xc0) === 0x80)!;
-      const before = writeJsonl("cut.jsonl", [first, makeAssistant("msg_1", "a")]);
-      const cut = statSync(before).size;
       const path = writeJsonl("cut.jsonl", [
         first,
         makeAssistant("msg_1", "a"),
-        makeAssistant("msg_2", "late"),
-        makeUser("Next"),
-        makeAssistant("msg_3", "c"),
+        makeAssistant("msg_2", "late", { ts: T1 }),
+        makeUser("Next", T1),
+        makeAssistant("msg_3", "c", { ts: T1 }),
       ]);
 
-      const { messages, lastLine } = read(path, -1, cut);
+      const { messages, lastLine } = read(path, -1, T0);
 
       expect(messages.map((m) => m.type)).toEqual(["user", "assistant", "assistant"]);
       expect(messages[0]).toEqual(first);
@@ -164,6 +162,42 @@ describe("readTranscript", () => {
       makeUser("Next", T1, "p2"),
     ]);
     expect(readTranscript(late, 1, undefined, { promptAt: T0 }).lastLine).toBe(3);
+  });
+
+  it("resumes after its last read line when lines before it were removed", () => {
+    const path = writeJsonl("rewritten.jsonl", [
+      { ...makeAssistant("msg_0", "z"), uuid: "u1" },
+      { ...makeUser("Own", T1), uuid: "u2" },
+      { ...makeAssistant("msg_1", "a", { ts: T1 }), uuid: "u3" },
+    ]);
+    const read = readTranscript(path, 1, undefined, {}, { last_line_uuid: "u1", last_line_at: T0 });
+    expect(read.messages.map((m) => m.uuid)).toEqual(["u2", "u3"]);
+    expect(read.anchor).toEqual({ last_line_uuid: "u3", last_line_at: T1 });
+  });
+
+  it("leaves a line still being written for the next read once a cut is set", () => {
+    const own = JSON.stringify(makeUser("Own", T0));
+    const path = join(mkdtempSync(join(tmpdir(), "transcript-tail-")), "tail.jsonl");
+    writeFileSync(path, `${own}\n{"type":"assistant","mess`);
+    expect(readTranscript(path, -1, T1).lastLine).toBe(0);
+  });
+
+  it("keeps the last line id when the read ends on a line without one", () => {
+    const path = writeJsonl("untagged.jsonl", [
+      { ...makeUser("Own", T1), uuid: "u2" },
+      { type: "last-prompt", lastPrompt: "Own" },
+    ]);
+    expect(readTranscript(path).anchor).toEqual({ last_line_uuid: "u2", last_line_at: T1 });
+  });
+
+  it("falls back to time when its last read line is gone", () => {
+    const path = writeJsonl("lost.jsonl", [
+      { ...makeUser("Old", T0), uuid: "u0" },
+      { ...makeUser("Own", T1), uuid: "u2" },
+      { ...makeAssistant("msg_1", "a", { ts: T1 }), uuid: "u3" },
+    ]);
+    const read = readTranscript(path, 1, undefined, {}, { last_line_uuid: "u1", last_line_at: T0 });
+    expect(read.messages.map((m) => m.uuid)).toEqual(["u2", "u3"]);
   });
 
   it("keeps an unfinished earlier prompt and the turn's own prompt already on disk", () => {

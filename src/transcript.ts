@@ -6,6 +6,7 @@
 import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import { MAX_FULL_READ_BYTES, TASK_NOTIFICATION_OPENING } from "./constants.js";
+import { readJson } from "./utils/files.js";
 import { hashPrompt } from "./utils/ids/prompt-hash.js";
 import type {
   TranscriptMessage,
@@ -21,16 +22,18 @@ import type {
   SessionState,
   TranscriptRead,
   TurnPrompt,
+  ReadAnchor,
 } from "./types.js";
 
 // ─── Low-level parsing ─────────────────────────────────────────────────────
 
-/** Read a JSONL file and return parsed lines starting after `afterLine`. */
+/** Read a JSONL file and return parsed lines after the last read position. */
 export function readTranscript(
   filePath: string,
   afterLine: number = -1,
-  cutAtByte?: number,
+  cutAt?: string,
   turn: TurnPrompt = {},
+  anchor: ReadAnchor = {},
 ): TranscriptRead {
   const { promptAt, promptHash, nextPromptHash } = turn;
   let promptSeen = turn.promptRead ?? false;
@@ -57,23 +60,48 @@ export function readTranscript(
     promptId = message.promptId;
     return false;
   };
-  const endsBeforeCut = (offset: number, line: string): boolean => {
-    const pastCut = cutAtByte !== undefined && offset >= cutAtByte;
-    if (!pastCut && promptAt === undefined) return false;
+  const endsBeforeCut = (line: string, unterminated: boolean): boolean => {
+    if (cutAt === undefined && promptAt === undefined) return false;
     let message: TranscriptMessage;
     try {
       message = JSON.parse(line) as TranscriptMessage;
     } catch {
-      return pastCut;
+      return cutAt !== undefined && unterminated;
     }
     if (!isHumanMessage(message)) return false;
+    const pastCut = cutAt !== undefined && !(Date.parse(message.timestamp) <= Date.parse(cutAt));
     return pastCut || opensLaterTurn(message);
   };
+  const needle = anchor.last_line_uuid && `"uuid":"${anchor.last_line_uuid}"`;
+  let anchorFound = false;
+  const alreadyRead = (index: number, line: string): boolean => {
+    if (needle) {
+      if (anchorFound) return false;
+      anchorFound = line.includes(needle);
+      return true;
+    }
+    if (anchor.last_line_at === undefined) return index <= afterLine;
+    const timestamp = (readJson(line) as TranscriptMessage | undefined)?.timestamp;
+    return !(
+      typeof timestamp === "string" && Date.parse(timestamp) > Date.parse(anchor.last_line_at)
+    );
+  };
+  let lastAnchor = anchor;
+  const consume = (messages: TranscriptMessage[], line: string): void => {
+    const message = readJson(line) as TranscriptMessage | undefined;
+    if (message) messages.push(message);
+    if (message?.uuid)
+      lastAnchor = { last_line_uuid: message.uuid, last_line_at: message.timestamp };
+  };
+  const finish = (read: Omit<TranscriptRead, "anchor">): TranscriptRead =>
+    needle && !anchorFound
+      ? readTranscript(filePath, afterLine, cutAt, turn, { last_line_at: anchor.last_line_at })
+      : { ...read, anchor: lastAnchor };
   let size: number;
   try {
     size = statSync(filePath).size;
   } catch {
-    return { messages: [], lastLine: afterLine, laterPrompt };
+    return { messages: [], lastLine: afterLine, laterPrompt, anchor };
   }
 
   // For small-to-moderate files, read the whole thing (simple, fast).
@@ -83,23 +111,18 @@ export function readTranscript(
     const messages: TranscriptMessage[] = [];
     let lastLine = afterLine;
     let i = -1;
-    let offset = 0;
+    const rows = raw.split("\n");
 
-    for (const line of raw.split("\n")) {
-      const lineOffset = offset;
-      offset += Buffer.byteLength(line) + 1;
+    for (const [row, line] of rows.entries()) {
       if (line.trim() === "") continue;
       i++;
-      if (i > afterLine && endsBeforeCut(lineOffset, line)) break;
+      const read = alreadyRead(i, line);
+      if (!read && endsBeforeCut(line, row === rows.length - 1)) break;
       lastLine = i;
-      if (i <= afterLine) continue;
-      try {
-        messages.push(JSON.parse(line) as TranscriptMessage);
-      } catch {
-        // Skip malformed lines.
-      }
+      if (read) continue;
+      consume(messages, line);
     }
-    return { messages, lastLine, laterPrompt };
+    return finish({ messages, lastLine, laterPrompt });
   }
 
   // Large file: stream through in chunks to avoid loading everything at once.
@@ -114,7 +137,6 @@ export function readTranscript(
     let partial = ""; // leftover from previous chunk
     let bytesRead: number;
     let pos = 0;
-    let offset = 0;
     let cut = false;
     const decoder = new StringDecoder("utf-8");
 
@@ -127,44 +149,31 @@ export function readTranscript(
       partial = lines.pop() ?? "";
 
       for (const line of lines) {
-        const lineOffset = offset;
-        offset += Buffer.byteLength(line) + 1;
         const trimmed = line.trim();
         if (trimmed === "") continue;
-        if (lineIndex + 1 > afterLine && endsBeforeCut(lineOffset, trimmed)) {
+        const read = alreadyRead(lineIndex + 1, trimmed);
+        if (!read && endsBeforeCut(trimmed, false)) {
           cut = true;
           break;
         }
         lineIndex++;
         lastLine = lineIndex;
-        if (lineIndex <= afterLine) continue;
-        try {
-          messages.push(JSON.parse(trimmed) as TranscriptMessage);
-        } catch {
-          // Skip malformed lines.
-        }
+        if (read) continue;
+        consume(messages, trimmed);
       }
       pos += bytesRead;
     }
 
     // Handle final partial line (if file doesn't end with newline).
-    if (
-      !cut &&
-      partial.trim() !== "" &&
-      !(lineIndex + 1 > afterLine && endsBeforeCut(offset, partial.trim()))
-    ) {
+    const tail = partial.trim();
+    const tailRead = tail !== "" && alreadyRead(lineIndex + 1, tail);
+    if (!cut && tail !== "" && (tailRead || !endsBeforeCut(tail, true))) {
       lineIndex++;
       lastLine = lineIndex;
-      if (lineIndex > afterLine) {
-        try {
-          messages.push(JSON.parse(partial.trim()) as TranscriptMessage);
-        } catch {
-          // Skip malformed lines.
-        }
-      }
+      if (!tailRead) consume(messages, tail);
     }
 
-    return { messages, lastLine, laterPrompt };
+    return finish({ messages, lastLine, laterPrompt });
   } finally {
     closeSync(fd);
   }
@@ -280,7 +289,7 @@ export function turnPrompt(session: SessionState, promptRead = false): TurnPromp
 }
 
 export function turnOwnsToolUse(path: string, session: SessionState, toolUseId: string): boolean {
-  const read = readTranscript(path, session.last_line, undefined, turnPrompt(session));
+  const read = readTranscript(path, session.last_line, undefined, turnPrompt(session), session);
   return (
     !read.laterPrompt ||
     read.messages.some(
