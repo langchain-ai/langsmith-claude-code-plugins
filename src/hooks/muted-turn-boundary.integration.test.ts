@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -193,6 +193,19 @@ it("keeps a turn whose prompt lands after a notification already on disk", async
   expect(await uploaded()).toContain('"run_type":"llm"');
 });
 
+it("keeps a slash command turn whose prompt lands after a notification already on disk", async () => {
+  await prompt("FIRST_PROMPT", "Z");
+  assistant([{ type: "text", text: "FIRST_ANSWER" }], "end_turn", "Z");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "FIRST_ANSWER" });
+  user(NOTIFICATION);
+  await hook("UserPromptSubmit", { prompt: "/review PUBLIC" });
+  user("<command-message>review</command-message>\n<command-args>PUBLIC</command-args>", "A");
+  assistant([{ type: "text", text: "PUBLIC_ANSWER" }], "end_turn", "A");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_ANSWER" });
+
+  expect(await uploaded()).toContain("PUBLIC_ANSWER");
+});
+
 describe("a muted turn after an open full turn", () => {
   it("keeps the muted turn out of the earlier turn when that turn is closed as interrupted", async () => {
     await openNotificationThenMute();
@@ -291,6 +304,22 @@ describe("a muted turn after an open full turn", () => {
     await finishMutedTurn();
 
     expect(await uploaded()).not.toContain("SECRET");
+  });
+
+  it("keeps the muted turn out of the earlier turn after the transcript is rewritten shorter", async () => {
+    await prompt(`PUBLIC_PROMPT ${"x".repeat(4096)}`, "P");
+    assistant([{ type: "text", text: "PUBLIC_REPLY" }], "end_turn", "P");
+    writeFileSync(transcript, readFileSync(transcript, "utf-8").replace("x".repeat(4096), "x"));
+    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+    user("SECRET_PROMPT", "A");
+    bashLines();
+    await bashHooks();
+    await finishMutedTurn();
+
+    const sent = await uploaded();
+
+    expect(sent).toContain("PUBLIC_REPLY");
+    expect(sent).not.toContain("SECRET");
   });
 
   it("uploads only metadata for a muted prompt delivered into the open turn without its own hook", async () => {

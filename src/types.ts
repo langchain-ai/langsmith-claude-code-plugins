@@ -108,7 +108,7 @@ export interface UserMessage {
 }
 
 export interface TurnPrompt {
-  promptAtByte?: number;
+  promptAt?: string;
   promptHash?: string;
   promptRead?: boolean;
   nextPromptHash?: string;
@@ -286,7 +286,6 @@ export interface SessionState {
   current_turn_number?: number;
   /** Current turn start time (ISO string) for duration calculation */
   current_turn_start?: string;
-  current_turn_prompt_bytes?: number;
   current_turn_prompt_hash?: string;
   read_turn_run_id?: string;
   /** Permission mode for the current turn → coding-agent-v1 `approval_policy` (root/interrupted). */

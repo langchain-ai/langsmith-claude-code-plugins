@@ -23226,25 +23226,26 @@ function hashPrompt(prompt) {
 
 // dist/src/transcript.js
 function readTranscript(filePath, afterLine = -1, cutAtByte, turn = {}) {
-  const { promptAtByte, promptHash, nextPromptHash } = turn;
+  const { promptAt, promptHash, nextPromptHash } = turn;
   let promptSeen = turn.promptRead ?? false;
   let ownSeen = false;
   let promptId;
   let laterPrompt = false;
-  const opensLaterTurn = (offset, message) => {
-    if (promptAtByte === void 0)
+  const opensLaterTurn = (message) => {
+    if (promptAt === void 0)
       return false;
     const hash = typeof message.message.content === "string" ? hashPrompt(message.message.content) : void 0;
     const own = !ownSeen && hash !== void 0 && hash === promptHash;
     if (!own && hash !== void 0 && hash === nextPromptHash)
       return laterPrompt = true;
-    if (!own && promptSeen) {
+    if (!own) {
       if (message.promptId !== void 0 && message.promptId === promptId)
         return false;
       const notification = typeof message.message.content === "string" && message.message.content.startsWith(TASK_NOTIFICATION_OPENING);
-      if (message.promptId === void 0 && (notification || offset < promptAtByte))
+      const earlier = Date.parse(message.timestamp) < Date.parse(promptAt);
+      if (message.promptId === void 0 && (notification || earlier))
         return false;
-      if (offset >= promptAtByte)
+      if (promptSeen && !earlier)
         return laterPrompt = true;
     }
     ownSeen ||= own;
@@ -23254,7 +23255,7 @@ function readTranscript(filePath, afterLine = -1, cutAtByte, turn = {}) {
   };
   const endsBeforeCut = (offset, line) => {
     const pastCut = cutAtByte !== void 0 && offset >= cutAtByte;
-    if (!pastCut && promptAtByte === void 0)
+    if (!pastCut && promptAt === void 0)
       return false;
     let message;
     try {
@@ -23264,7 +23265,7 @@ function readTranscript(filePath, afterLine = -1, cutAtByte, turn = {}) {
     }
     if (!isHumanMessage(message))
       return false;
-    return pastCut || opensLaterTurn(offset, message);
+    return pastCut || opensLaterTurn(message);
   };
   let size;
   try {
@@ -23431,7 +23432,7 @@ function isHumanMessage(msg) {
 }
 function turnPrompt(session, promptRead = false) {
   return {
-    promptAtByte: session.current_turn_prompt_bytes,
+    promptAt: session.current_turn_start,
     promptHash: session.current_turn_prompt_hash,
     promptRead
   };
@@ -24461,66 +24462,7 @@ async function finalizeNotificationChain(opts) {
 
 // dist/src/closing-queue.js
 import { randomUUID as randomUUID7 } from "node:crypto";
-
-// dist/src/utils/files.js
-import { lstatSync as lstatSync4, readdirSync as readdirSync2, readFileSync as readFileSync14, rmdirSync as rmdirSync2, statSync as statSync8, unlinkSync as unlinkSync3 } from "node:fs";
-function listDirectory(path3) {
-  try {
-    return readdirSync2(path3).sort();
-  } catch {
-    return [];
-  }
-}
-function entryInfo(path3) {
-  try {
-    return lstatSync4(path3);
-  } catch {
-    return void 0;
-  }
-}
-function removeFile2(path3) {
-  if (!entryInfo(path3)?.isFile())
-    return false;
-  try {
-    unlinkSync3(path3);
-    return true;
-  } catch {
-    return false;
-  }
-}
-function removeEmptyFolder(path3) {
-  try {
-    rmdirSync2(path3);
-  } catch {
-    return;
-  }
-}
-function readText(path3) {
-  try {
-    return readFileSync14(path3, "utf-8");
-  } catch {
-    return "";
-  }
-}
-function readJson(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return void 0;
-  }
-}
-function transcriptSize(path3) {
-  const expanded = expandHome(path3);
-  if (!expanded)
-    return void 0;
-  try {
-    return statSync8(expanded).size;
-  } catch {
-    return void 0;
-  }
-}
-
-// dist/src/closing-queue.js
+import { statSync as statSync8 } from "node:fs";
 async function queueClosing(config, kind, input, options = {}) {
   const id = randomUUID7();
   const at = Date.now();
@@ -24559,6 +24501,16 @@ async function queueClosing(config, kind, input, options = {}) {
     privacyMode: CLOSING_PRIVACY_MODE,
     turnEvidence: { childRunIds: [], closureState: "open" }
   });
+}
+function transcriptSize(path3) {
+  const expanded = expandHome(path3);
+  if (!expanded)
+    return void 0;
+  try {
+    return statSync8(expanded).size;
+  } catch {
+    return void 0;
+  }
 }
 function turnClosedReset(session) {
   return {
@@ -25194,7 +25146,6 @@ async function main4() {
     return;
   }
   initTracing(config, input.cwd, input.session_id);
-  const promptBytes = transcriptSize(input.transcript_path);
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
   const turnMode = getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
@@ -25291,7 +25242,6 @@ async function main4() {
         current_parent_run_id: parentRunId,
         current_turn_number: turnNum,
         current_turn_start: startTime,
-        current_turn_prompt_bytes: promptBytes,
         current_turn_prompt_hash: hashPrompt(input.prompt),
         // If this is a task-notification turn, record the agent it's for so Stop
         // closes that agent's tool run + launching turn once this turn completes.
@@ -25655,6 +25605,56 @@ async function runQueuedClosings(workerConfig, sessionId) {
 // dist/src/legacy-import.js
 import { createHmac } from "node:crypto";
 import { basename as basename4, dirname as dirname18, join as join22 } from "node:path";
+
+// dist/src/utils/files.js
+import { lstatSync as lstatSync4, readdirSync as readdirSync2, readFileSync as readFileSync14, rmdirSync as rmdirSync2, unlinkSync as unlinkSync3 } from "node:fs";
+function listDirectory(path3) {
+  try {
+    return readdirSync2(path3).sort();
+  } catch {
+    return [];
+  }
+}
+function entryInfo(path3) {
+  try {
+    return lstatSync4(path3);
+  } catch {
+    return void 0;
+  }
+}
+function removeFile2(path3) {
+  if (!entryInfo(path3)?.isFile())
+    return false;
+  try {
+    unlinkSync3(path3);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function removeEmptyFolder(path3) {
+  try {
+    rmdirSync2(path3);
+  } catch {
+    return;
+  }
+}
+function readText(path3) {
+  try {
+    return readFileSync14(path3, "utf-8");
+  } catch {
+    return "";
+  }
+}
+function readJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return void 0;
+  }
+}
+
+// dist/src/legacy-import.js
 function legacyRuns(config) {
   const origin = legacyOrigin(config);
   const root = dirname18(config.stateFilePath);

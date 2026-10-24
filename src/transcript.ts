@@ -32,24 +32,25 @@ export function readTranscript(
   cutAtByte?: number,
   turn: TurnPrompt = {},
 ): TranscriptRead {
-  const { promptAtByte, promptHash, nextPromptHash } = turn;
+  const { promptAt, promptHash, nextPromptHash } = turn;
   let promptSeen = turn.promptRead ?? false;
   let ownSeen = false;
   let promptId: string | undefined;
   let laterPrompt = false;
-  const opensLaterTurn = (offset: number, message: UserMessage): boolean => {
-    if (promptAtByte === undefined) return false;
+  const opensLaterTurn = (message: UserMessage): boolean => {
+    if (promptAt === undefined) return false;
     const hash =
       typeof message.message.content === "string" ? hashPrompt(message.message.content) : undefined;
     const own = !ownSeen && hash !== undefined && hash === promptHash;
     if (!own && hash !== undefined && hash === nextPromptHash) return (laterPrompt = true);
-    if (!own && promptSeen) {
+    if (!own) {
       if (message.promptId !== undefined && message.promptId === promptId) return false;
       const notification =
         typeof message.message.content === "string" &&
         message.message.content.startsWith(TASK_NOTIFICATION_OPENING);
-      if (message.promptId === undefined && (notification || offset < promptAtByte)) return false;
-      if (offset >= promptAtByte) return (laterPrompt = true);
+      const earlier = Date.parse(message.timestamp) < Date.parse(promptAt);
+      if (message.promptId === undefined && (notification || earlier)) return false;
+      if (promptSeen && !earlier) return (laterPrompt = true);
     }
     ownSeen ||= own;
     promptSeen = true;
@@ -58,7 +59,7 @@ export function readTranscript(
   };
   const endsBeforeCut = (offset: number, line: string): boolean => {
     const pastCut = cutAtByte !== undefined && offset >= cutAtByte;
-    if (!pastCut && promptAtByte === undefined) return false;
+    if (!pastCut && promptAt === undefined) return false;
     let message: TranscriptMessage;
     try {
       message = JSON.parse(line) as TranscriptMessage;
@@ -66,7 +67,7 @@ export function readTranscript(
       return pastCut;
     }
     if (!isHumanMessage(message)) return false;
-    return pastCut || opensLaterTurn(offset, message);
+    return pastCut || opensLaterTurn(message);
   };
   let size: number;
   try {
@@ -272,7 +273,7 @@ export function isHumanMessage(msg: TranscriptMessage): msg is UserMessage {
 
 export function turnPrompt(session: SessionState, promptRead = false): TurnPrompt {
   return {
-    promptAtByte: session.current_turn_prompt_bytes,
+    promptAt: session.current_turn_start,
     promptHash: session.current_turn_prompt_hash,
     promptRead,
   };
