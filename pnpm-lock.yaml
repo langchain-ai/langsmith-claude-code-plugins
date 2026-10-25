@@ -16,8 +16,8 @@ importers:
         version: 0.10.11
     devDependencies:
       '@langchain/plugins-base':
-        specifier: 0.4.7
-        version: 0.4.7(langsmith@0.10.11)
+        specifier: 0.5.0
+        version: 0.5.0(langsmith@0.10.11)
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
@@ -211,8 +211,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@langchain/plugins-base@0.4.7':
-    resolution: {integrity: sha512-gUEDFZD/+8FHH+w9OEaCJLxiISIHmcDZtLJRDn5KVhIO/dSdTf+CIUFeVTCSSijdISM0jqrJsC9rEO4WWFnhGg==}
+  '@langchain/plugins-base@0.5.0':
+    resolution: {integrity: sha512-1G6B7zqzVq0eOBk2FaKE/MEk8YTXRq952KGOgKLu3Um8hlUjIZ46EMJY6DbWrIECLTN7kIGFUigiV9zKNYkRlQ==}
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
@@ -1128,7 +1128,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@langchain/plugins-base@0.4.7(langsmith@0.10.11)':
+  '@langchain/plugins-base@0.5.0(langsmith@0.10.11)':
     dependencies:
       langsmith: 0.10.11
 
