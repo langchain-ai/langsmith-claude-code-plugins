@@ -10,7 +10,9 @@ import { waitFor } from "./fixtures/wait-for.js";
 import { USER_PROMPT_TURN_NAME } from "./constants.js";
 
 // Claude Code runs the built bundle, so drive that, one real process per hook.
-const bundle = fileURLToPath(new URL("../bundle/dispatch.js", import.meta.url));
+const bundle = fileURLToPath(
+  new URL("../plugins/langsmith-tracing/bundle/dispatch.js", import.meta.url),
+);
 
 type Run = { id?: string; name?: string; extra?: { metadata?: Record<string, unknown> } };
 const settled = (check: () => void) => vi.waitFor(check, { timeout: 30_000, interval: 100 });

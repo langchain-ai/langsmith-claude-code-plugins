@@ -2,8 +2,8 @@ import { build } from "esbuild";
 import { chmodSync, readFileSync } from "node:fs";
 
 // Read the plugin version at BUILD TIME and inject it as a global constant.
-// The runtime bundle has no package.json, so we cannot require("./package.json")
-// at runtime — esbuild `define` substitutes the literal into the bundle instead.
+// The plugin's package.json carries no version, so we cannot read it at runtime and
+// esbuild `define` substitutes the literal into the bundle instead.
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"));
 
 // esbuild keeps every key of an imported JSON file, so drop the build and signing
@@ -25,7 +25,7 @@ await build({
   bundle: true,
   platform: "node",
   format: "esm",
-  outdir: "bundle",
+  outdir: "plugins/langsmith-tracing/bundle",
   // Mark node builtins as external (they're available at runtime)
   external: ["node:*"],
   plugins: [runtimeBinaryConfig],
@@ -34,14 +34,14 @@ await build({
     // constants.ts via `typeof __LS_INTEGRATION_VERSION__`.
     __LS_INTEGRATION_VERSION__: JSON.stringify(pkg.version),
     __LS_BINARY_HOOKS__: JSON.stringify(
-      readFileSync(new URL("./hooks/hooks.binary.json", import.meta.url), "utf-8"),
+      readFileSync(new URL("./plugins/langsmith-tracing/hooks/hooks.binary.json", import.meta.url), "utf-8"),
     ),
   },
 });
 
-chmodSync("bundle/dispatch.js", 0o755);
+chmodSync("plugins/langsmith-tracing/bundle/dispatch.js", 0o755);
 
-console.log("Bundled the tracing hook dispatcher into bundle/");
+console.log("Bundled the tracing hook dispatcher into plugins/langsmith-tracing/bundle/");
 
 // A separate installable plugin; all runtime code is bundled within its root.
 // Its package.json supplies ESM mode on Node 20 without the tracing package.

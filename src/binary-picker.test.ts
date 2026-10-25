@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { binary } from "./binary-target.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const picker = join(root, "hooks/langsmith-tracing");
+const picker = join(root, "plugins/langsmith-tracing/hooks/langsmith-tracing");
 const executable = binary.target.executableName;
 const SLOW_BUILD_TIMEOUT_MS = 15_000;
 
@@ -158,17 +158,27 @@ function inSandbox(
 
 describe("the build picker", () => {
   it("survives a clone runnable, so the hooks can start it", () => {
-    const tracked = execFileSync("git", ["ls-files", "--stage", "--", "hooks/langsmith-tracing"], {
-      cwd: root,
-      encoding: "utf8",
-    });
+    const tracked = execFileSync(
+      "git",
+      ["ls-files", "--stage", "--", "plugins/langsmith-tracing/hooks/langsmith-tracing"],
+      {
+        cwd: root,
+        encoding: "utf8",
+      },
+    );
     expect(tracked.slice(0, 6)).toBe("100755");
   });
 
   it("survives a Windows clone runnable, where Git rewrites line endings", () => {
     const converted = execFileSync(
       "git",
-      ["-c", "core.autocrlf=true", "cat-file", "--filters", ":hooks/langsmith-tracing"],
+      [
+        "-c",
+        "core.autocrlf=true",
+        "cat-file",
+        "--filters",
+        ":plugins/langsmith-tracing/hooks/langsmith-tracing",
+      ],
       { cwd: root },
     );
     inSandbox(["darwin-arm64"], (dir) => {

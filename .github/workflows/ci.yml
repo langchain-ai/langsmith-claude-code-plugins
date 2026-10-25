@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-      - run: shellcheck hooks/langsmith-tracing
+      - run: shellcheck plugins/langsmith-tracing/hooks/langsmith-tracing
 
   hooks:
     name: Hook Command on ${{ matrix.os }}
@@ -53,11 +53,11 @@ jobs:
       - run: pnpm build
       - name: Check both plugin bundles are up to date
         run: |
-          git diff --exit-code HEAD -- bundle/ plugins/langsmith-gateway/bundle/ || {
+          git diff --exit-code HEAD -- plugins/langsmith-tracing/bundle/ plugins/langsmith-gateway/bundle/ || {
             echo "::error::Plugin bundles are out of date. Run 'pnpm build' and commit the result."
             exit 1
           }
-          if [ -n "$(git ls-files --others --exclude-standard -- bundle/ plugins/langsmith-gateway/bundle/)" ]; then
+          if [ -n "$(git ls-files --others --exclude-standard -- plugins/langsmith-tracing/bundle/ plugins/langsmith-gateway/bundle/)" ]; then
             echo "::error::Untracked plugin bundles. Run 'pnpm build' and include both bundle directories."
             exit 1
           fi
@@ -79,8 +79,8 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         if: runner.os == 'macOS'
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: git diff --exit-code HEAD -- bundle/ plugins/langsmith-gateway/bundle/
+      - run: git diff --exit-code HEAD -- plugins/langsmith-tracing/bundle/ plugins/langsmith-gateway/bundle/
       - run: node .github/scripts/test-engine.mjs src/state.test.ts src/tracing-engine.test.ts

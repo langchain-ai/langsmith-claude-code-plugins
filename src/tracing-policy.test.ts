@@ -306,7 +306,7 @@ describe("actual UserPromptSubmit command prefix", () => {
     "handles the actual %s command definition body without a model turn",
     async (command) => {
       const definition = readFileSync(
-        new URL(`../commands/${command}.md`, import.meta.url),
+        new URL(`../plugins/langsmith-tracing/commands/${command}.md`, import.meta.url),
         "utf8",
       );
       const frontmatter = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(definition)!;
@@ -374,9 +374,49 @@ describe("actual UserPromptSubmit command prefix", () => {
   });
 
   it("blocks commands with master enabled but credentials missing", async () => {
-    mocks.config.mockReturnValue({ stateFilePath: state, apiKey: "", enabled: true });
+    mocks.config.mockReturnValue({
+      stateFilePath: state,
+      apiKey: "",
+      enabled: true,
+      credentialProblem: "No credential",
+    });
     expect(await submit("/langsmith-tracing:mute", "true")).toContain("credentials");
     expect(getThreadTracingMode(state, "session")).toBe("metadata");
+  });
+
+  it("refuses to unmute when the managed file locks muting on", async () => {
+    mocks.config.mockReturnValue({
+      stateFilePath: state,
+      apiKey: "test",
+      enabled: true,
+      defaultMuted: true,
+      mutedLocked: true,
+    });
+    expect(await submit("/langsmith-tracing:unmute", "true")).toContain("locked muting");
+    expect(getThreadTracingMode(state, "session", true)).toBe("metadata");
+    await submit("/langsmith-tracing:mute", "true");
+    expect(getThreadTracingMode(state, "session", false)).toBe("metadata");
+  });
+
+  it("says credentials are missing when no replica brings its own key", async () => {
+    mocks.config.mockReturnValue({
+      stateFilePath: state,
+      apiKey: "",
+      enabled: true,
+      credentialProblem: "LangSmith isn't signed in.",
+      replicas: [{ projectName: "keyless" }],
+    });
+    expect(await submit("/langsmith-tracing:mute", "true")).toContain("credentials");
+  });
+
+  it("doesn't call a CLI login user's credentials missing", async () => {
+    mocks.config.mockReturnValue({
+      stateFilePath: state,
+      apiKey: "",
+      enabled: true,
+      login: { configPath: "/login/config.json", profile: "work" },
+    });
+    expect(await submit("/langsmith-tracing:mute", "true")).not.toContain("credentials");
   });
 
   it("accepts legacy setter mocks returning undefined", async () => {

@@ -15,9 +15,10 @@ pnpm build
 
 ## How it works
 
-The plugin is a set of Claude Code lifecycle hooks that read the session's JSONL transcript and
-emit [LangSmith](https://smith.langchain.com) runs. All nine events are wired in `hooks/hooks.json`
-to the same bundled entry point and `dispatch.js` runs whichever handler its argument names.
+The plugin is a set of Claude Code lifecycle hooks that read the session's JSONL transcript and emit
+[LangSmith](https://smith.langchain.com) runs. All nine events are wired in
+`plugins/langsmith-tracing/hooks/hooks.json` to the same bundled entry point and `dispatch.js` runs
+whichever handler its argument names.
 
 Inside `src/` the handlers live in `hooks/` with `registry.ts` mapping each event to one of them.
 `transcript.ts` turns the JSONL into turns and `langsmith.ts` builds the run tree and submits it.
@@ -30,17 +31,18 @@ nested under an `Agent` tool run and workflow stages under a `Workflow` tool run
 
 ## Two plugins in one repository
 
-`langsmith-tracing` is this repository root and `langsmith-gateway` is its own package under
-`plugins/langsmith-gateway`. Point `--plugin-dir` at that nested directory to work on it, since the
-root loads tracing only, and [GATEWAY.md](./GATEWAY.md) covers the rest.
+Each plugin is its own package, `langsmith-tracing` under `plugins/langsmith-tracing` and
+`langsmith-gateway` under `plugins/langsmith-gateway`. Point `--plugin-dir` at the one you are
+working on, and [GATEWAY.md](./GATEWAY.md) covers the gateway.
 
 ## The bundles are what actually run
 
-`pnpm build` compiles with `tsc` and then bundles into `bundle/dispatch.js` and
-`plugins/langsmith-gateway/bundle/gateway.js`. **Both directories are committed and are what Claude
-Code executes**, not `src/`, so never hand-edit them and always include the rebuilt output in your
-PR. CI fails the build if either one is stale or untracked. Hooks re-read the bundle on every
-invocation so a rebuild reaches your next hook without restarting the session.
+`pnpm build` compiles with `tsc` and then bundles into
+`plugins/langsmith-tracing/bundle/dispatch.js` and `plugins/langsmith-gateway/bundle/gateway.js`.
+**Both directories are committed and are what Claude Code executes**, not `src/`, so never hand-edit
+them and always include the rebuilt output in your PR. CI fails the build if either one is stale or
+untracked. Hooks re-read the bundle on every invocation so a rebuild reaches your next hook without
+restarting the session.
 
 ## Dev loop
 
@@ -57,7 +59,7 @@ The binary build and signing scripts are in `package.json` alongside these.
 To try the plugin against a real session, build it and point Claude Code at your clone:
 
 ```bash
-claude --plugin-dir /path/to/langsmith-claude-code-plugins
+claude --plugin-dir /path/to/langsmith-claude-code-plugins/plugins/langsmith-tracing
 ```
 
 Set `TRACE_TO_LANGSMITH=true` along with `CC_LANGSMITH_API_KEY` and `CC_LANGSMITH_PROJECT` and see
@@ -81,9 +83,9 @@ the signing and the release all come from
 needs to know about this plugin lives in `binary.config.json`, so go to that repository rather than
 this one for how any of it works.
 
-The binary gets its hooks compiled in from `hooks/hooks.binary.json`, which mirrors
-`hooks/hooks.json` and changes only the command, so a test fails if you add an event to one and not
-the other.
+The binary gets its hooks compiled in from `plugins/langsmith-tracing/hooks/hooks.binary.json`,
+which mirrors `hooks/hooks.json` beside it and changes only the command, so a test fails if you add
+an event to one and not the other.
 
 Publishing is manual and a tag on its own attaches nothing. Run the Build Binary workflow from the
 Actions tab against a release tag and it attaches an arm64 and an x64 build to that tag's release
@@ -96,14 +98,14 @@ the same commit so reviewers and CI see one consistent state.
 
 ## Releasing
 
-There is no publish step. The marketplace entry's source is this repository itself, so **merging to
-`main` is what ships the plugin** and the next `/plugin marketplace update` on any client picks it
-up.
+There is no publish step. The marketplace entries point at folders in this repository, so **merging
+to `main` is what ships the plugin** and the next `/plugin marketplace update` on any client picks
+it up.
 
 Two things are therefore load-bearing on every merge. Both bundles have to be fresh and committed
 since CI enforces it, and the tracing version has to be the same in `package.json` and
-`.claude-plugin/plugin.json` since a test compares them. Rebuild after a version bump so the version
-injected into the bundle matches the manifest.
+`plugins/langsmith-tracing/.claude-plugin/plugin.json` since a test compares them. Rebuild after a
+version bump so the version injected into the bundle matches the manifest.
 
 The gateway version is independent and lives only in
 `plugins/langsmith-gateway/.claude-plugin/plugin.json`.

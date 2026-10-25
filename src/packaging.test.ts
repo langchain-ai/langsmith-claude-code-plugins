@@ -61,20 +61,31 @@ describe("the caller workflow", () => {
     const installed: string = json(join(root, "package.json")).devDependencies[
       "@langchain/plugins-base"
     ];
-    const pinned = /uses: langchain-ai\/langsmith-plugin-binary\/\S+@[0-9a-f]{40} # v(\S+)/.exec(
-      workflow,
+    const [, sha, label] =
+      /uses: langchain-ai\/langsmith-plugin-binary\/\S+@([0-9a-f]{40}) # (\S+)/.exec(workflow) ??
+      [];
+    const commit = /^github:langchain-ai\/langsmith-plugin-binary#([0-9a-f]{40})$/.exec(
+      installed,
     )?.[1];
+    if (commit !== undefined) {
+      expect(sha).toBe(commit);
+      expect(label).toBe(commit.slice(0, 7));
+      expect(lockfile).toContain(`tar.gz/${commit}(`);
+      return;
+    }
 
     expect(installed).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(pinned).toBe(installed);
+    expect(label).toBe(`v${installed}`);
     expect(lockfile).toContain(`'@langchain/plugins-base@${installed}'`);
   });
 });
 
 describe("the standalone binary manifest", () => {
   it("mirrors the Node manifest and changes only the command", () => {
-    const node: Hooks = json(join(root, "hooks/hooks.json")).hooks;
-    const compiled: Hooks = json(join(root, "hooks/hooks.binary.json")).hooks;
+    const node: Hooks = json(join(root, "plugins/langsmith-tracing/hooks/hooks.json")).hooks;
+    const compiled: Hooks = json(
+      join(root, "plugins/langsmith-tracing/hooks/hooks.binary.json"),
+    ).hooks;
     expect(Object.keys(compiled)).toEqual(Object.keys(node));
     for (const [event, groups] of Object.entries(node)) {
       expect(compiled[event]).toEqual(
@@ -99,7 +110,9 @@ describe("separate marketplace packages", () => {
     ]);
     for (const entry of entries) {
       expect(entry.source).toBe(
-        entry.name === "langsmith-tracing" ? "./" : "./plugins/langsmith-gateway",
+        entry.name === "langsmith-tracing"
+          ? "./plugins/langsmith-tracing"
+          : "./plugins/langsmith-gateway",
       );
       const pluginRoot = resolve(root, entry.source);
       const manifest = json(join(pluginRoot, ".claude-plugin/plugin.json"));
@@ -119,6 +132,23 @@ describe("separate marketplace packages", () => {
         );
         expect(hookBundles(pluginRoot)).toEqual(events.map(() => "bundle/gateway.js"));
       }
+    }
+  });
+
+  it("runs the tracing bundle copied out of the repository on Node without module detection", () => {
+    const sandbox = mkdtempSync(join(tmpdir(), "langsmith-installed-tracing-"));
+    try {
+      const installed = join(sandbox, "plugin");
+      cpSync(join(root, "plugins/langsmith-tracing"), installed, { recursive: true });
+      const result = spawnSync(
+        process.execPath,
+        ["--no-experimental-detect-module", join(installed, "bundle/dispatch.js"), "--version"],
+        { encoding: "utf8" },
+      );
+      expect(result.stderr).toBe("");
+      expect(result.stdout.trim()).toBe(json(join(root, "package.json")).version);
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
     }
   });
 
@@ -158,7 +188,9 @@ describe("separate marketplace packages", () => {
         expect(expanded).toBe(`/langsmith-gateway:${name} ${args.join(" ")}`);
         expect(parseGatewayCommand(expanded)).toEqual({ command: name, args });
       }
-      expect(existsSync(join(root, "commands", `${name}.md`))).toBe(false);
+      expect(existsSync(join(root, "plugins/langsmith-tracing/commands", `${name}.md`))).toBe(
+        false,
+      );
     }
   });
 

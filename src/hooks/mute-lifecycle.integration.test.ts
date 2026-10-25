@@ -3,7 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HookEventName, TracingMode, TracingState, TranscriptMessage } from "../types.js";
+import type { UploadLogin } from "@langchain/plugins-base/auth";
+import type {
+  Config,
+  HookEventName,
+  TracingMode,
+  TracingState,
+  TranscriptMessage,
+} from "../types.js";
 import { tracingPolicyPath } from "../tracing-policy.js";
 import { STOP_FLUSH_WAIT_MS } from "../constants.js";
 
@@ -26,6 +33,37 @@ const h = vi.hoisted(() => ({
   readAt: 0,
   endLine: -1,
   managedProblem: undefined as string | undefined,
+  login: undefined as UploadLogin | undefined,
+  loginNotice: undefined as string | undefined,
+  keyRejected: undefined as string | undefined,
+  credentialProblem: undefined as string | undefined,
+  noticeCooldown: undefined as number | "off" | undefined,
+  noticeCalls: [] as unknown[],
+  shownKinds: new Set<string>(),
+  replicas: undefined as Config["replicas"],
+  mutedLocked: false,
+  strictAuth: false,
+  enabled: true,
+}));
+vi.mock("@langchain/plugins-base/plugin", async (original) => ({
+  ...(await original<typeof import("@langchain/plugins-base/plugin")>()),
+  shouldShowNotice: async (options: { kind: string; cooldown?: number | "off" }) => {
+    h.noticeCalls.push(options);
+    if (options.cooldown === "off" || h.shownKinds.has(options.kind)) return false;
+    h.shownKinds.add(options.kind);
+    return true;
+  },
+}));
+vi.mock("@langchain/plugins-base/auth", async (original) => ({
+  ...(await original<typeof import("@langchain/plugins-base/auth")>()),
+  readLoginNotice: (root: string, _env: unknown, rejected?: { apiKey: string; apiUrl: string }) =>
+    root !== "/langsmith_engine"
+      ? undefined
+      : rejected === undefined
+        ? h.loginNotice
+        : rejected.apiUrl === "https://login.example"
+          ? h.keyRejected
+          : undefined,
 }));
 vi.mock("langsmith", () => ({
   Client: class {
@@ -83,7 +121,7 @@ vi.mock("../repo-attribution.js", async (original) => ({
 vi.mock("../utils/stdin.js", () => ({ readStdin: async () => h.input }));
 vi.mock("../utils/hook-init.js", () => ({
   initHook: () =>
-    h.managedProblem
+    h.managedProblem || (h.credentialProblem && !h.replicas)
       ? null
       : {
           apiKey: "test",
@@ -93,6 +131,13 @@ vi.mock("../utils/hook-init.js", () => ({
           parentDottedOrder: h.parentDottedOrder,
           redact: false,
           customMetadata: { custom: "PRIVATE_MARKER", ls_model_name: "PRIVATE_MARKER" },
+          login: h.login,
+          apiBaseUrl: "https://login.example",
+          credentialProblem: h.credentialProblem,
+          noticeCooldown: h.noticeCooldown,
+          replicas: h.replicas,
+          mutedLocked: h.mutedLocked,
+          strictAuth: h.strictAuth,
         },
   expandHome: (path: string) => path,
 }));
@@ -101,8 +146,12 @@ vi.mock("../config.js", async (original) => ({
   loadConfig: () => ({
     stateFilePath: "/unused",
     apiKey: "test",
-    enabled: !h.managedProblem,
+    enabled: h.enabled && !h.managedProblem,
     managedConfigProblem: h.managedProblem,
+    credentialProblem: h.credentialProblem,
+    noticeCooldown: h.noticeCooldown,
+    strictAuth: h.strictAuth,
+    defaultMuted: h.defaultMuted,
   }),
 }));
 vi.mock("../tracing-policy.js", async (original) => {
@@ -208,6 +257,18 @@ function reset(mode: TracingMode) {
   h.parentDottedOrder = undefined;
   h.endLine = -1;
   h.managedProblem = undefined;
+  h.login = undefined;
+  h.loginNotice = undefined;
+  h.keyRejected = undefined;
+  h.credentialProblem = undefined;
+  h.noticeCooldown = undefined;
+  h.noticeCalls = [];
+  h.shownKinds = new Set();
+  h.replicas = undefined;
+  h.mutedLocked = false;
+  h.strictAuth = false;
+  h.enabled = true;
+  vi.unstubAllEnvs();
 }
 const HOOK_EVENT_BY_NAME = {
   prompt: "UserPromptSubmit",
@@ -466,19 +527,207 @@ describe("closing hooks hand their work to the uploader", () => {
     expect(h.errors).toEqual([]);
   });
 
-  it("shows a broken managed file's reason once per session without blocking the prompt", async () => {
+  it("shows a broken managed file's reason through the shared cooldown without blocking the prompt", async () => {
     reset("full");
     h.managedProblem = "Managed config is broken";
+    h.noticeCooldown = 7;
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
-    await hook("prompt", {}, { closings: false });
     await hook("prompt", {}, { closings: false });
     await hook("prompt", { session_id: "next" }, { closings: false });
     expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
       { systemMessage: "Managed config is broken" },
-      { systemMessage: "Managed config is broken" },
+    ]);
+    expect(h.noticeCalls[0]).toEqual({
+      plugin: "claude-code",
+      kind: "managed-invalid",
+      cooldown: 7,
+      storageRoot: "/langsmith_engine",
+    });
+    expect(h.operations).toEqual([]);
+    output.mockRestore();
+  });
+
+  it("shows a rejected API key's notice as a chat line without holding back the prompt", async () => {
+    reset("full");
+    h.keyRejected = "LangSmith API key was rejected.";
+    h.noticeCooldown = 7;
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "LangSmith API key was rejected." },
+    ]);
+    expect(h.noticeCalls[0]).toEqual({
+      plugin: "claude-code",
+      kind: "login-expired",
+      cooldown: 7,
+      storageRoot: "/langsmith_engine",
+    });
+    expect(h.operations).toHaveLength(2);
+    output.mockRestore();
+  });
+
+  it("shows a CLI login user their login notice, not a stale rejected-key one", async () => {
+    reset("full");
+    h.login = { configPath: "/login/config.json", profile: "work" };
+    h.loginNotice = "Tracing is paused";
+    h.keyRejected = "LangSmith API key was rejected.";
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "Tracing is paused" },
+    ]);
+    output.mockRestore();
+  });
+
+  it("refuses every prompt with the login notice in strict mode until the user signs in again", async () => {
+    reset("full");
+    h.strictAuth = true;
+    h.login = { configPath: "/login/config.json", profile: "work" };
+    h.loginNotice = "Tracing is paused";
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { decision: "block", reason: "Tracing is paused" },
+      { decision: "block", reason: "Tracing is paused" },
+    ]);
+    expect(h.operations).toEqual([]);
+    h.loginNotice = undefined;
+    await hook("prompt", {}, { closings: false });
+    expect(output).toHaveBeenCalledTimes(2);
+    expect(h.operations).toHaveLength(1);
+    output.mockRestore();
+  });
+
+  it("only reminds when strict mode is off", async () => {
+    reset("full");
+    h.keyRejected = "LangSmith API key was rejected.";
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "LangSmith API key was rejected." },
+    ]);
+    output.mockRestore();
+  });
+
+  it("refuses a headless or muted conversation in strict mode too", async () => {
+    reset("full");
+    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "0");
+    h.strictAuth = true;
+    h.keyRejected = "LangSmith API key was rejected.";
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    reset("metadata");
+    h.strictAuth = true;
+    h.keyRejected = "LangSmith API key was rejected.";
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { decision: "block", reason: "LangSmith API key was rejected." },
+      { decision: "block", reason: "LangSmith API key was rejected." },
+    ]);
+    output.mockRestore();
+  });
+
+  it("prints no notice at all when the cooldown is off", async () => {
+    reset("full");
+    h.noticeCooldown = "off";
+    h.loginNotice = "Tracing is paused";
+    h.login = { configPath: "/login/config.json", profile: "work" };
+    h.replicas = [{ apiUrl: "https://other.example" }];
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    h.login = undefined;
+    h.replicas = undefined;
+    h.managedProblem = "Managed config is broken";
+    await hook("prompt", {}, { closings: false });
+    expect(output).not.toHaveBeenCalled();
+    output.mockRestore();
+  });
+
+  it("keeps a working replica setup quiet about the missing main credential", async () => {
+    reset("full");
+    h.credentialProblem = "LangSmith isn't signed in.";
+    h.replicas = [{ projectName: "own", apiKey: "replica-key" }];
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    expect(output).not.toHaveBeenCalled();
+    expect(h.operations).toHaveLength(1);
+    output.mockRestore();
+  });
+
+  it("refuses every prompt with no sign-in at all in strict mode, even muted or headless", async () => {
+    reset("metadata");
+    h.credentialProblem = "LangSmith isn't signed in.";
+    h.strictAuth = true;
+    vi.stubEnv("CLAUDE_CODE_SESSION_ATTENDED", "0");
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { decision: "block", reason: "LangSmith isn't signed in." },
+    ]);
+    output.mockRestore();
+  });
+
+  it("shows why tracing can't upload only when tracing is on", async () => {
+    reset("full");
+    h.credentialProblem = "LangSmith isn't signed in.";
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    h.enabled = false;
+    await hook("prompt", {}, { closings: false });
+    expect(output).not.toHaveBeenCalled();
+    h.enabled = true;
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "LangSmith isn't signed in." },
     ]);
     expect(h.operations).toEqual([]);
     output.mockRestore();
+  });
+
+  it("names the keyless replicas the login can't reach only for a CLI login user", async () => {
+    reset("full");
+    h.replicas = [{ apiUrl: "https://other.example" }];
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    h.login = { configPath: "/login/config.json", profile: "work" };
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line).systemMessage)).toEqual([
+      expect.stringContaining("replicas on https://other.example need their own API key"),
+    ]);
+    expect(h.operations).toHaveLength(2);
+    output.mockRestore();
+  });
+
+  it("shows a replica notice on the next prompt when an expired login notice took this one", async () => {
+    reset("full");
+    h.login = { configPath: "/login/config.json", profile: "work" };
+    h.loginNotice = "Tracing is paused";
+    h.replicas = [{ apiUrl: "https://other.example" }];
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    expect(output).toHaveBeenCalledTimes(1);
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line).systemMessage)).toEqual([
+      "Tracing is paused",
+      expect.stringContaining("replicas on https://other.example need their own API key"),
+    ]);
+    output.mockRestore();
+  });
+
+  it("keeps a conversation unmuted before the lock from tracing content while muting is locked", async () => {
+    reset("full");
+    h.mutedLocked = true;
+    await hook("prompt");
+    await hook("pre");
+    await hook("post");
+    h.messages = transcript({ id: "tool", name: "Bash" });
+    await hook("stop");
+    expect(h.operations.length).toBeGreaterThan(0);
+    expectPrivate();
+    legacyParent();
+    await hook("pre");
+    expect(h.state.session.tool_tracing_modes?.tool).toBe("metadata");
   });
 
   it("an interrupted turn is counted at once and later closed with the session's repository", async () => {

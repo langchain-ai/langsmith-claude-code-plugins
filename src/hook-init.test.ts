@@ -17,6 +17,9 @@ vi.mock("./logger.js", () => ({
 
 import { execFileSync } from "node:child_process";
 import { HOOK_EVENT_NAMES } from "./constants.js";
+import { writerOptions } from "./engine-writer.js";
+import { writeLoginConfig } from "./fixtures/login-config.js";
+import { createLangSmithUploadWriter } from "@langchain/plugins-base/tracing/upload";
 import { initHook } from "./utils/hook-init.js";
 import { readStdin } from "./utils/stdin.js";
 import { captureRun, initTracing } from "./tracing-engine.js";
@@ -134,6 +137,68 @@ describe("initHook", () => {
     const config = initHook();
     expect(config).not.toBeNull();
     expect(config!.apiKey).toBe("test-key");
+  });
+
+  it("traces through the CLI login when no API key is set", () => {
+    process.env.TRACE_TO_LANGSMITH = "true";
+    process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://login.example");
+    const config = initHook(cwd);
+    expect(config).not.toBeNull();
+    expect(writerOptions(config!)).toMatchObject({
+      destinations: [
+        {
+          login: { configPath: process.env.LANGSMITH_CONFIG_FILE, profile: "work" },
+          apiUrl: "https://login.example",
+        },
+      ],
+    });
+    expect(writerOptions(config!).destinations[0]).not.toHaveProperty("apiKey");
+  });
+
+  it("traces through the CLI login over a generic API key", () => {
+    process.env.TRACE_TO_LANGSMITH = "true";
+    process.env.LANGSMITH_API_KEY = "generic-key";
+    process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://login.example");
+    const destination = writerOptions(initHook(cwd)!).destinations[0];
+    expect(destination).toMatchObject({ login: { profile: "work" } });
+    expect(destination).not.toHaveProperty("apiKey");
+  });
+
+  it("uploads only to replicas with their own key when the login is refused", () => {
+    process.env.TRACE_TO_LANGSMITH = "true";
+    process.env.LANGSMITH_ENDPOINT = "https://endpoint.example";
+    process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://login.example");
+    const inherits = { apiUrl: "https://login.example", projectName: "inherits" };
+    const blank = { apiUrl: "https://replica.example", apiKey: "   ", projectName: "blank" };
+    process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([inherits, blank]);
+    expect(initHook(cwd)).toBeNull();
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("login is for https://login.example"),
+    );
+
+    const own = { apiUrl: "https://replica.example", apiKey: "replica-key", projectName: "own" };
+    process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([own, inherits]);
+    const writer = createLangSmithUploadWriter(writerOptions(initHook(cwd)!));
+    expect(writer.destinations).toHaveLength(1);
+    expect(writer.routes[writer.destinations[0]!.id]).toMatchObject({ projectName: "own" });
+  });
+
+  it("stops before uploading when the login can't reach any replica", () => {
+    process.env.TRACE_TO_LANGSMITH = "true";
+    process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://login.example");
+    process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([{ apiUrl: "https://other.example" }]);
+    expect(initHook(cwd)).toBeNull();
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("replicas on https://other.example"),
+    );
+    process.env.CC_LANGSMITH_RUNS_ENDPOINTS = JSON.stringify([
+      { apiUrl: "https://other.example" },
+      { projectName: "same-server" },
+    ]);
+    expect(initHook(cwd)).not.toBeNull();
+    delete process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
+    process.env.LANGSMITH_RUNS_ENDPOINTS = JSON.stringify({ "https://other.example": "" });
+    expect(initHook(cwd)).toBeNull();
   });
 
   it("returns config when replicas are set but no API key", () => {
