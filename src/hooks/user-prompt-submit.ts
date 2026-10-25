@@ -10,6 +10,13 @@
  * transcript before closing it with "User interrupt".
  */
 
+import {
+  LOGIN_NOTICE_KIND,
+  readLoginNotice,
+  sdkSetting,
+  refusedLoginReplicas,
+} from "@langchain/plugins-base/auth";
+import { shouldShowNotice } from "@langchain/plugins-base/plugin";
 import { debug, error } from "../logger.js";
 import {
   closeInterruptedTurn,
@@ -29,7 +36,15 @@ import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
-import { KILLED_NOTIFICATION_STATUS, USER_PROMPT_TURN_NAME } from "../constants.js";
+import {
+  KILLED_NOTIFICATION_STATUS,
+  LS_INTEGRATION,
+  NOTICE_KINDS,
+  MUTE_LOCKED_REPLY,
+  USER_PROMPT_TURN_NAME,
+} from "../constants.js";
+import { engineStorageRoot, writerOptions } from "../engine-writer.js";
+import { hasUsableDestination } from "../utils/replicas.js";
 import { codingAgentMetadata } from "../metadata.js";
 import { loadConfig } from "../config.js";
 import { describeThreadLinks } from "../thread-link.js";
@@ -60,6 +75,8 @@ export async function main(): Promise<void> {
       const commandConfig = loadConfig({ cwd: input.cwd });
       if (command === "trace") {
         reason = await describeThreadLinks(commandConfig, input.session_id);
+      } else if (command === "unmute" && commandConfig.mutedLocked) {
+        reason = MUTE_LOCKED_REPLY;
       } else {
         const mode = command === "mute" ? "metadata" : "full";
         const result = await setThreadTracingMode(
@@ -74,10 +91,7 @@ export async function main(): Promise<void> {
           reason += ` ${commandConfig.managedConfigProblem}`;
         } else if (!commandConfig.enabled) {
           reason += " Master tracing is disabled; this preference does not enable it.";
-        } else if (
-          !commandConfig.apiKey &&
-          (!commandConfig.replicas || commandConfig.replicas.length === 0)
-        ) {
+        } else if (!hasUsableDestination(commandConfig)) {
           reason += " Tracing remains inactive until credentials are configured.";
         }
       }
@@ -97,18 +111,20 @@ export async function main(): Promise<void> {
 
   const config = initHook(input.cwd);
   if (!config) {
-    const { managedConfigProblem, stateFilePath } = loadConfig({ cwd: input.cwd });
-    if (managedConfigProblem) {
-      let firstInSession = false;
-      await atomicUpdateState(stateFilePath, (s) => {
-        const ss = getSessionState(s, input.session_id);
-        if (ss.managed_notice_shown) return s;
-        firstInSession = true;
-        const updated = new Date().toISOString();
-        return { ...s, [input.session_id]: { ...ss, managed_notice_shown: true, updated } };
-      });
-      if (firstInSession) console.log(JSON.stringify({ systemMessage: managedConfigProblem }));
+    const setup = loadConfig({ cwd: input.cwd });
+    if (
+      setup.enabled &&
+      setup.credentialProblem &&
+      setup.strictAuth &&
+      !setup.managedConfigProblem
+    ) {
+      console.log(JSON.stringify({ decision: "block", reason: setup.credentialProblem }));
+      return;
     }
+    if (setup.managedConfigProblem)
+      await showNotice(NOTICE_KINDS.managed, setup.managedConfigProblem, setup);
+    else if (setup.enabled)
+      await showNotice(NOTICE_KINDS.credential, setup.credentialProblem, setup);
     return;
   }
 
@@ -127,11 +143,25 @@ export async function main(): Promise<void> {
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
-  const turnMode = getThreadTracingMode(
-    config.stateFilePath,
-    input.session_id,
-    config.defaultMuted,
+  const apiKey = sdkSetting(config.apiKey);
+  const loginNotice = readLoginNotice(
+    engineStorageRoot(config.stateFilePath),
+    process.env,
+    config.login || apiKey === undefined ? undefined : { apiKey, apiUrl: config.apiBaseUrl },
   );
+  const credentialNotice = config.login
+    ? refusedLoginReplicas(writerOptions(config).replicas, config.apiBaseUrl)
+    : undefined;
+  const turnMode = config.mutedLocked
+    ? "metadata"
+    : getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
+  if (loginNotice && config.strictAuth) {
+    console.log(JSON.stringify({ decision: "block", reason: loginNotice }));
+    return;
+  }
+  if (!(await showNotice(LOGIN_NOTICE_KIND, loginNotice, config))) {
+    await showNotice(NOTICE_KINDS.credential, credentialNotice, config);
+  }
 
   // CLI version (ls_agent_runtime_version); best-effort, Stop backfills if empty.
   const expandedTranscript = expandHome(input.transcript_path);
@@ -329,6 +359,22 @@ export async function main(): Promise<void> {
 
   const duration = ((Date.now() - hookStartTime) / 1000).toFixed(1);
   debug(`UserPromptSubmit hook completed in ${duration}s`);
+}
+
+async function showNotice(
+  kind: string,
+  notice: string | undefined,
+  config: Pick<Config, "noticeCooldown" | "stateFilePath">,
+): Promise<boolean> {
+  const options = {
+    plugin: LS_INTEGRATION,
+    kind,
+    cooldown: config.noticeCooldown,
+    storageRoot: engineStorageRoot(config.stateFilePath),
+  };
+  if (!notice || !(await shouldShowNotice(options))) return false;
+  console.log(JSON.stringify({ systemMessage: notice }));
+  return true;
 }
 
 export async function closeInterruptedPrompt(

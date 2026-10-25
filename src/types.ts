@@ -8,6 +8,7 @@ import type {
   CodingAgentAgentType,
   CodingAgentMetadataOptions,
 } from "@langchain/plugins-base/metadata";
+import type { UploadLogin } from "@langchain/plugins-base/auth";
 import type { PluginSession } from "@langchain/plugins-base/plugin";
 import type { LifecycleCaptureInput } from "@langchain/plugins-base/tracing/lifecycle";
 import type { RecordedRun, TurnRecord } from "@langchain/plugins-base/tracing/settlement";
@@ -347,7 +348,6 @@ export interface SessionState {
    *  two runs *last* finalizes the agent; this is the notification side's "done"
    *  marker for that join. */
   notification_done_agents?: string[];
-  managed_notice_shown?: boolean;
   queued_closings?: Record<string, QueuedClosing>;
 }
 
@@ -590,9 +590,19 @@ export interface Config {
   /** From CC_LANGSMITH_REDACT_EXTRA or the config file. */
   redactExtraRules?: StringNodeRule[];
   managedConfigProblem?: string;
+  login?: UploadLogin;
+  credentialProblem?: string;
+  noticeCooldown?: number | "off";
+  strictAuth?: boolean;
+  projectLocked?: boolean;
+  mutedLocked?: boolean;
 }
 
 export type BooleanSetting = keyof typeof BOOLEAN_SETTINGS;
+
+export interface SdkClientKey {
+  apiKey?: string;
+}
 
 export interface LegacyQueueEntry {
   tracing: TracingMode;
