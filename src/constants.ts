@@ -62,9 +62,17 @@ const STATE_FILE_DEFAULT = [".claude", "state", "langsmith_state.json"];
 
 const GH_LOGIN_MARKER_FILE = "langsmith_gh_login.json";
 
+const NOTICE_KINDS = {
+  managed: "managed-invalid",
+  credential: "credential-problem",
+} as const;
+const NOTICE_COOLDOWN_OFF = "off";
+const MUTE_LOCKED_REPLY = "An admin locked muting on, so this conversation stays muted.";
+
 const BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
   defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
+  strict_auth: { env: "CC_LANGSMITH_STRICT_AUTH", restrictive: false },
 } as const;
 
 const USAGE_TEMPLATE = `Usage:
@@ -78,6 +86,7 @@ Options:
 const MAX_LOG_BYTES = 5 * 1024 * 1024; // 5 MB
 
 const LOOKUP_TIMEOUT_MS = 4_000;
+const GENERIC_API_KEY_VARIABLES = ["LANGSMITH_API_KEY", "LANGCHAIN_API_KEY"] as const;
 
 /** Larger transcripts are streamed instead of read whole. */
 const MAX_FULL_READ_BYTES = 50 * 1024 * 1024; // 50 MB
@@ -133,8 +142,12 @@ export {
   TURN_RECORD_LINE,
   USAGE_TEMPLATE,
   BOOLEAN_SETTINGS,
+  NOTICE_KINDS,
+  NOTICE_COOLDOWN_OFF,
+  MUTE_LOCKED_REPLY,
   MAX_LOG_BYTES,
   LOOKUP_TIMEOUT_MS,
+  GENERIC_API_KEY_VARIABLES,
   MAX_FULL_READ_BYTES,
   WORKFLOW_TOOL_NAME,
   WORKFLOW_SUBAGENT_TYPE,

@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "./types.js";
 import { LOOKUP_TIMEOUT_MS } from "./constants.js";
 import { describeThreadLinks } from "./thread-link.js";
+import { writeLoginConfig } from "./fixtures/login-config.js";
+import { sdkSetting } from "@langchain/plugins-base/auth";
+
+vi.mock("@langchain/plugins-base/auth", { spy: true });
 
 // Exercise the actual SDK URL handling and requests; only HTTP is replaced.
 const fetchMock = vi.fn<typeof fetch>();
@@ -94,6 +98,103 @@ describe("thread links", () => {
       "x-tenant-id": "eu-workspace",
       "x-api-key": "test-eu",
     });
+  });
+
+  it("looks up a CLI login user's link with the login, but never sends it to another server", async () => {
+    vi.stubEnv("LANGSMITH_API_KEY", undefined);
+    vi.stubEnv("LANGCHAIN_API_KEY", undefined);
+    vi.stubEnv("LANGSMITH_CONFIG_FILE", writeLoginConfig(config.apiBaseUrl));
+    const output = await describeThreadLinks(
+      {
+        ...config,
+        apiKey: "",
+        login: { configPath: process.env.LANGSMITH_CONFIG_FILE!, profile: "work" },
+        replicas: [
+          { projectName: "same-server" },
+          { projectName: "other-server", apiUrl: "https://other.example" },
+        ],
+      },
+      "session",
+    );
+    expect(output).toContain("same-server: \u001b]8;;https://smith.langchain.com/o/workspace-id/");
+    expect(output).toContain("other-server: No LangSmith API key");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(headers.get("authorization")).toBe("Bearer synthetic-access");
+  });
+
+  it("looks up a CLI login user's link with the login while a generic key is exported", async () => {
+    vi.stubEnv("LANGSMITH_API_KEY", "generic-key");
+    vi.stubEnv("LANGSMITH_CONFIG_FILE", writeLoginConfig(config.apiBaseUrl));
+    const login = { configPath: process.env.LANGSMITH_CONFIG_FILE!, profile: "work" };
+    await describeThreadLinks({ ...config, apiKey: "", login }, "session");
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("authorization")).toBe(
+      "Bearer synthetic-access",
+    );
+  });
+
+  it.each(["", "   ", '"  "', '""""', `"''"`, "' '"])(
+    "never sends the login to another server for a replica key of %j",
+    async (apiKey) => {
+      vi.stubEnv("LANGSMITH_API_KEY", undefined);
+      vi.stubEnv("LANGCHAIN_API_KEY", undefined);
+      vi.stubEnv("LANGSMITH_CONFIG_FILE", writeLoginConfig(config.apiBaseUrl));
+      const output = await describeThreadLinks(
+        {
+          ...config,
+          apiKey: "",
+          login: { configPath: process.env.LANGSMITH_CONFIG_FILE!, profile: "work" },
+          replicas: [{ projectName: "other-server", apiUrl: "https://other.example", apiKey }],
+        },
+        "session",
+      );
+      expect(output).toContain("other-server: ");
+      const sent = fetchMock.mock.calls.map(([, init]) => new Headers(init?.headers));
+      expect(sent.map((headers) => headers.get("authorization"))).not.toContain(
+        "Bearer synthetic-access",
+      );
+    },
+  );
+
+  it("links a keyless replica on the login's own server with the login", async () => {
+    vi.stubEnv("LANGSMITH_API_KEY", undefined);
+    vi.stubEnv("LANGCHAIN_API_KEY", undefined);
+    vi.stubEnv("LANGSMITH_CONFIG_FILE", writeLoginConfig(config.apiBaseUrl));
+    const output = await describeThreadLinks(
+      {
+        ...config,
+        apiKey: "",
+        login: { configPath: process.env.LANGSMITH_CONFIG_FILE!, profile: "work" },
+        replicas: [{ projectName: "same", apiUrl: `${config.apiBaseUrl}/api/v1/` }],
+      },
+      "session",
+    );
+    expect(output).toContain("same: \u001b]8;;");
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("authorization")).toBe(
+      "Bearer synthetic-access",
+    );
+  });
+
+  it("hands the SDK the key exactly as written", async () => {
+    await describeThreadLinks({ ...config, apiKey: '""k""' }, "session");
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("x-api-key")).toBe('"k"');
+  });
+
+  it("refuses the lookup when the SDK ends up with no key the check expected", async () => {
+    vi.stubEnv("LANGSMITH_API_KEY", undefined);
+    vi.stubEnv("LANGCHAIN_API_KEY", undefined);
+    vi.stubEnv("LANGSMITH_CONFIG_FILE", writeLoginConfig(config.apiBaseUrl));
+    vi.mocked(sdkSetting).mockReturnValue("decided");
+    const output = await describeThreadLinks(
+      {
+        ...config,
+        apiKey: "   ",
+        login: { configPath: process.env.LANGSMITH_CONFIG_FILE!, profile: "work" },
+      },
+      "session",
+    );
+    expect(output).toContain("No LangSmith API key");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("keeps working links when another destination fails, without retries", async () => {

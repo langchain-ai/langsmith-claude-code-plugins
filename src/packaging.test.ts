@@ -61,12 +61,21 @@ describe("the caller workflow", () => {
     const installed: string = json(join(root, "package.json")).devDependencies[
       "@langchain/plugins-base"
     ];
-    const pinned = /uses: langchain-ai\/langsmith-plugin-binary\/\S+@[0-9a-f]{40} # v(\S+)/.exec(
-      workflow,
+    const [, sha, label] =
+      /uses: langchain-ai\/langsmith-plugin-binary\/\S+@([0-9a-f]{40}) # (\S+)/.exec(workflow) ??
+      [];
+    const commit = /^github:langchain-ai\/langsmith-plugin-binary#([0-9a-f]{40})$/.exec(
+      installed,
     )?.[1];
+    if (commit !== undefined) {
+      expect(sha).toBe(commit);
+      expect(label).toBe(commit.slice(0, 7));
+      expect(lockfile).toContain(`tar.gz/${commit}(`);
+      return;
+    }
 
     expect(installed).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(pinned).toBe(installed);
+    expect(label).toBe(`v${installed}`);
     expect(lockfile).toContain(`'@langchain/plugins-base@${installed}'`);
   });
 });
