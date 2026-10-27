@@ -16,6 +16,7 @@ export function writerOptions(config: Config): LangSmithUploadWriterOptions {
         ...(config.login ? { login: config.login } : { apiKey: config.apiKey }),
         apiUrl: config.apiBaseUrl,
         projectName: config.project,
+        ...(config.agentId === undefined ? {} : { agentId: config.agentId }),
       },
     ],
     ...(replicas.length ? { replicas } : {}),

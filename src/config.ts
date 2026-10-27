@@ -208,6 +208,9 @@ export function loadConfig(options?: { cwd?: string }): Config {
     apiKey: common.api_key,
     apiUrl: common.api_url,
     apiUrlIsDefault: common.defaulted.includes("api_url"),
+    profile: common.profile,
+    workspaceId: common.workspace_id,
+    agentId: common.agent_id,
   });
   const unreachable =
     credential.kind === "login"
@@ -253,6 +256,8 @@ export function loadConfig(options?: { cwd?: string }): Config {
       ? {}
       : { managedConfigProblem: common.managedConfigProblem }),
     ...(credential.kind === "login" ? { login: credential.login } : {}),
+    ...(common.profile === undefined ? {} : { profile: common.profile }),
+    ...(common.agent_id === undefined ? {} : { agentId: common.agent_id }),
     ...(credential.kind === "none" ? { credentialProblem: credential.reason } : {}),
     ...(unreachable ? { credentialProblem: unreachable } : {}),
     ...(common.strict_auth ? { strictAuth: true } : {}),

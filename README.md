@@ -81,6 +81,11 @@ Every setting has a key you can write in the config file and a variable you can 
 | `metadata`           | `CC_LANGSMITH_METADATA`       | none                              | Custom fields on every run              |
 | `replicas`           | `CC_LANGSMITH_RUNS_ENDPOINTS` | none                              | Send the same trace somewhere else too  |
 | `strict_auth`        | `CC_LANGSMITH_STRICT_AUTH`    | `false`                           | Refuse prompts until you sign in again  |
+| `profile`            | none                          | the CLI's current profile         | Which saved CLI login to use            |
+| `workspace_id`       | none                          | the login's workspace             | Workspace for runs sent with a login    |
+| `agent_id`           | none                          | none                              | Trace to this agent, beats project      |
+
+`profile` is personal, so the managed file can't lock it and ignores it with a warning. `LANGSMITH_PROFILE` is only used when no `profile` is set in a settings file.
 
 Unless you turn `redact` off, secrets are stripped before anything is uploaded, covering API keys, JWTs, PEM blocks and common `NAME=value`, `Authorization` and URL-credential shapes. That is not a guarantee that what you upload is safe to share.
 

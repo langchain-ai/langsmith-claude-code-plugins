@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { onTestFinished } from "vitest";
 
-export function writeLoginConfig(apiUrl: string): string {
+export function writeLoginConfig(apiUrl: string, workspaceId?: string): string {
   const root = tmpdir();
   const folder = mkdtempSync(join(root, "ls-login-"));
   const path = join(folder, "config.json");
@@ -12,7 +12,15 @@ export function writeLoginConfig(apiUrl: string): string {
     unlinkSync(path);
     rmdirSync(folder);
   });
-  const profile = { api_url: apiUrl, oauth: { access_token: "synthetic-access" } };
-  writeFileSync(path, JSON.stringify({ current_profile: "work", profiles: { work: profile } }));
+  const profile = {
+    api_url: apiUrl,
+    oauth: { access_token: "synthetic-access" },
+    ...(workspaceId === undefined ? {} : { workspace_id: workspaceId }),
+  };
+  const other = { api_url: apiUrl, oauth: { access_token: "synthetic-other" } };
+  writeFileSync(
+    path,
+    JSON.stringify({ current_profile: "work", profiles: { work: profile, other } }),
+  );
   return path;
 }

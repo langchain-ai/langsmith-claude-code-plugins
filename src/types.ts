@@ -617,6 +617,8 @@ export interface Config {
   redactExtraRules?: StringNodeRule[];
   managedConfigProblem?: string;
   login?: UploadLogin;
+  profile?: string;
+  agentId?: string;
   credentialProblem?: string;
   noticeCooldown?: number | "off";
   strictAuth?: boolean;

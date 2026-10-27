@@ -1,7 +1,12 @@
-import { refusedLoginReplicas, sdkSetting } from "@langchain/plugins-base/auth";
+import { refusedLoginReplicas, sdkSetting, withLoginProfile } from "@langchain/plugins-base/auth";
 import { Client } from "langsmith";
 import type { Config, SdkClientKey } from "./types.js";
-import { GENERIC_API_KEY_VARIABLES, LOOKUP_TIMEOUT_MS } from "./constants.js";
+import {
+  AGENT_ADDRESS_ENVIRONMENT,
+  AGENT_ADDRESS_KIND,
+  GENERIC_API_KEY_VARIABLES,
+  LOOKUP_TIMEOUT_MS,
+} from "./constants.js";
 import { withoutEnvVariables } from "./utils/env.js";
 
 /**
@@ -44,24 +49,38 @@ export async function describeThreadLinks(config: Config, sessionId: string): Pr
       if (!keyed && (otherServer || !config.login)) return missingKey;
 
       try {
-        const client = withoutEnvVariables(
-          keyed ? [] : GENERIC_API_KEY_VARIABLES,
-          () =>
-            new Client({
-              apiKey,
-              apiUrl: destination.apiUrl ?? config.apiBaseUrl,
-              workspaceId: destination.workspaceId,
-              timeout_ms: LOOKUP_TIMEOUT_MS,
-              callerOptions: {
-                // The SDK ignores maxRetries on reads. Throwing here is what stops the retries.
-                onFailedResponseHook: async () => {
-                  throw new Error("Thread link lookup failed");
-                },
+        const login = keyed ? undefined : config.login;
+        const build = () =>
+          new Client({
+            apiKey,
+            apiUrl: destination.apiUrl ?? config.apiBaseUrl,
+            workspaceId: destination.workspaceId ?? (keyed ? "" : login?.workspaceId),
+            timeout_ms: LOOKUP_TIMEOUT_MS,
+            callerOptions: {
+              // The SDK ignores maxRetries on reads. Throwing here is what stops the retries.
+              onFailedResponseHook: async () => {
+                throw new Error("Thread link lookup failed");
               },
-            }),
+            },
+          });
+        const client = withoutEnvVariables(keyed ? [] : GENERIC_API_KEY_VARIABLES, () =>
+          login ? withLoginProfile(login, build) : build(),
         );
         if (keyed && !(client as unknown as SdkClientKey).apiKey) return missingKey;
-        const project = await client.readProject({ projectName });
+        const agentId = destination.projectName === undefined ? config.agentId : undefined;
+        const project = await client.readProject(
+          agentId === undefined
+            ? { projectName }
+            : {
+                projectId: (
+                  await client.sessions.resolve({
+                    kind: AGENT_ADDRESS_KIND,
+                    id: agentId,
+                    environment: AGENT_ADDRESS_ENVIRONMENT,
+                  })
+                ).session_id,
+              },
+        );
         const url = new URL(client.getHostUrl());
         const path = ["o", project.tenant_id, "projects", "p", project.id, "t", sessionId];
         url.pathname = `${url.pathname.replace(/\/$/, "")}/${path.map(encodeURIComponent).join("/")}`;

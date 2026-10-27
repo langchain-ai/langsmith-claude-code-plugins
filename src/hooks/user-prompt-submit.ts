@@ -150,6 +150,7 @@ export async function main(): Promise<void> {
     engineStorageRoot(config.stateFilePath),
     process.env,
     config.login || apiKey === undefined ? undefined : { apiKey, apiUrl: config.apiBaseUrl },
+    config.profile,
   );
   const credentialNotice = config.login
     ? refusedLoginReplicas(writerOptions(config).replicas, config.apiBaseUrl)

@@ -123,6 +123,21 @@ describe("thread links", () => {
     expect(headers.get("authorization")).toBe("Bearer synthetic-access");
   });
 
+  it("looks up a CLI login user's link with the configured profile and workspace", async () => {
+    vi.stubEnv("LANGSMITH_API_KEY", undefined);
+    vi.stubEnv("LANGSMITH_PROFILE", undefined);
+    vi.stubEnv("LANGSMITH_CONFIG_FILE", writeLoginConfig(config.apiBaseUrl));
+    const login = {
+      configPath: process.env.LANGSMITH_CONFIG_FILE!,
+      profile: "other",
+      workspaceId: "11111111-2222-4333-8444-555555555555",
+    };
+    await describeThreadLinks({ ...config, apiKey: "", login }, "session");
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(headers.get("authorization")).toBe("Bearer synthetic-other");
+    expect(headers.get("x-tenant-id")).toBe("11111111-2222-4333-8444-555555555555");
+  });
+
   it("looks up a CLI login user's link with the login while a generic key is exported", async () => {
     vi.stubEnv("LANGSMITH_API_KEY", "generic-key");
     vi.stubEnv("LANGSMITH_CONFIG_FILE", writeLoginConfig(config.apiBaseUrl));
@@ -131,6 +146,50 @@ describe("thread links", () => {
     expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("authorization")).toBe(
       "Bearer synthetic-access",
     );
+  });
+
+  it("looks up the agent's project by its address and keeps replicas on project lookup", async () => {
+    fetchMock.mockImplementation(async (input) =>
+      String(input).includes("/sessions/resolutions")
+        ? Response.json({ session_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" })
+        : Response.json({ id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", tenant_id: "workspace-id" }),
+    );
+    const output = await describeThreadLinks({ ...config, agentId: "my-agent" }, "session");
+    const urls = fetchMock.mock.calls
+      .map(([input]) => String(input))
+      .filter((url) => !url.endsWith("/info"));
+    expect(urls[0]).toContain(
+      "/sessions/resolutions?kind=AGENT&id=my-agent&environment=PRODUCTION",
+    );
+    expect(urls[1]).toContain("/sessions/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
+    expect(output).toContain(
+      "/o/workspace-id/projects/p/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee/t/session",
+    );
+    fetchMock.mockClear();
+    await describeThreadLinks(
+      { ...config, agentId: "my-agent", replicas: [{ projectName: "copy" }] },
+      "session",
+    );
+    expect(fetchMock.mock.calls.map(([input]) => String(input)).join()).not.toContain(
+      "resolutions",
+    );
+    fetchMock.mockClear();
+    await describeThreadLinks(
+      { ...config, agentId: "my-agent", replicas: [{ apiUrl: config.apiBaseUrl }] },
+      "session",
+    );
+    expect(fetchMock.mock.calls.map(([input]) => String(input)).join()).toContain("resolutions");
+  });
+
+  it("looks up an API key user's link without the CLI login's workspace", async () => {
+    vi.stubEnv("LANGSMITH_API_KEY", undefined);
+    vi.stubEnv("LANGSMITH_WORKSPACE_ID", undefined);
+    vi.stubEnv("LANGSMITH_PROFILE", undefined);
+    vi.stubEnv("LANGSMITH_CONFIG_FILE", writeLoginConfig(config.apiBaseUrl, "login-workspace"));
+    await describeThreadLinks(config, "session");
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(headers.get("x-api-key")).toBe("test");
+    expect(headers.has("x-tenant-id")).toBe(false);
   });
 
   it.each(["", "   ", '"  "', '""""', `"''"`, "' '"])(

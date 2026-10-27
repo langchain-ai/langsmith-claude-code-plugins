@@ -96,6 +96,35 @@ describe("loadConfig", () => {
       expect(loadConfig({ cwd: projectDir }).project).toBe("claude-code");
     });
 
+    it("signs in with the configured profile and sends logins to the configured workspace", () => {
+      writeFileSync(
+        join(tmpHome, ".claude", "langsmith.json"),
+        JSON.stringify({ profile: "other", workspace_id: "11111111-2222-4333-8444-555555555555" }),
+      );
+      process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://api.smith.langchain.com");
+      const config = loadConfig({ cwd });
+      expect(config.profile).toBe("other");
+      expect(config.login).toMatchObject({
+        profile: "other",
+        workspaceId: "11111111-2222-4333-8444-555555555555",
+      });
+      expect(writerOptions(config).destinations[0].login).toMatchObject({
+        profile: "other",
+        workspaceId: "11111111-2222-4333-8444-555555555555",
+      });
+    });
+
+    it("sends traces to the configured agent and refuses an invalid agent ID", () => {
+      process.env.CC_LANGSMITH_API_KEY = "lsv2_pt_key";
+      const file = join(tmpHome, ".claude", "langsmith.json");
+      writeFileSync(file, JSON.stringify({ agent_id: "my-agent" }));
+      const config = loadConfig({ cwd });
+      expect(config.agentId).toBe("my-agent");
+      expect(writerOptions(config).destinations[0].agentId).toBe("my-agent");
+      writeFileSync(file, JSON.stringify({ agent_id: "Bad_ID" }));
+      expect(loadConfig({ cwd }).credentialProblem).toContain("Bad_ID");
+    });
+
     it.each(
       settings.flatMap((setting) =>
         ["true", "TRUE", "false", " false ", "1", "yes", ""].map((env) => ({ ...setting, env })),

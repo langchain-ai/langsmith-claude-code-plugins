@@ -34,6 +34,8 @@ const h = vi.hoisted(() => ({
   endLine: -1,
   managedProblem: undefined as string | undefined,
   login: undefined as UploadLogin | undefined,
+  profile: undefined as string | undefined,
+  noticeProfiles: [] as unknown[],
   loginNotice: undefined as string | undefined,
   keyRejected: undefined as string | undefined,
   credentialProblem: undefined as string | undefined,
@@ -56,14 +58,21 @@ vi.mock("@langchain/plugins-base/plugin", async (original) => ({
 }));
 vi.mock("@langchain/plugins-base/auth", async (original) => ({
   ...(await original<typeof import("@langchain/plugins-base/auth")>()),
-  readLoginNotice: (root: string, _env: unknown, rejected?: { apiKey: string; apiUrl: string }) =>
-    root !== "/langsmith_engine"
+  readLoginNotice: (
+    root: string,
+    _env: unknown,
+    rejected?: { apiKey: string; apiUrl: string },
+    profile?: string,
+  ) => {
+    h.noticeProfiles.push(profile);
+    return root !== "/langsmith_engine"
       ? undefined
       : rejected === undefined
         ? h.loginNotice
         : rejected.apiUrl === "https://login.example"
           ? h.keyRejected
-          : undefined,
+          : undefined;
+  },
 }));
 vi.mock("langsmith", () => ({
   Client: class {
@@ -132,6 +141,7 @@ vi.mock("../utils/hook-init.js", () => ({
           redact: false,
           customMetadata: { custom: "PRIVATE_MARKER", ls_model_name: "PRIVATE_MARKER" },
           login: h.login,
+          profile: h.profile,
           apiBaseUrl: "https://login.example",
           credentialProblem: h.credentialProblem,
           noticeCooldown: h.noticeCooldown,
@@ -258,6 +268,8 @@ function reset(mode: TracingMode) {
   h.endLine = -1;
   h.managedProblem = undefined;
   h.login = undefined;
+  h.profile = undefined;
+  h.noticeProfiles = [];
   h.loginNotice = undefined;
   h.keyRejected = undefined;
   h.credentialProblem = undefined;
@@ -578,6 +590,13 @@ describe("closing hooks hand their work to the uploader", () => {
       { systemMessage: "Tracing is paused" },
     ]);
     output.mockRestore();
+  });
+
+  it("checks the login notice for the configured profile", async () => {
+    reset("full");
+    h.profile = "other";
+    await hook("prompt", {}, { closings: false });
+    expect(h.noticeProfiles).toEqual(["other"]);
   });
 
   it("refuses every prompt with the login notice in strict mode until the user signs in again", async () => {
