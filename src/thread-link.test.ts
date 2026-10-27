@@ -126,9 +126,12 @@ describe("thread links", () => {
   it("looks up a CLI login user's link with the configured profile and workspace", async () => {
     vi.stubEnv("LANGSMITH_API_KEY", undefined);
     vi.stubEnv("LANGSMITH_PROFILE", undefined);
-    vi.stubEnv("LANGSMITH_CONFIG_FILE", writeLoginConfig(config.apiBaseUrl));
+    const configPath = writeLoginConfig(config.apiBaseUrl);
+    vi.stubEnv("LANGSMITH_CONFIG_FILE", undefined);
+    vi.stubEnv("HOME", "/nonexistent-home");
+    vi.stubEnv("USERPROFILE", undefined);
     const login = {
-      configPath: process.env.LANGSMITH_CONFIG_FILE!,
+      configPath,
       profile: "other",
       workspaceId: "11111111-2222-4333-8444-555555555555",
     };
@@ -190,6 +193,15 @@ describe("thread links", () => {
     const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
     expect(headers.get("x-api-key")).toBe("test");
     expect(headers.has("x-tenant-id")).toBe(false);
+  });
+
+  it("looks up an API key user's link in the LANGSMITH_WORKSPACE_ID workspace", async () => {
+    vi.stubEnv("LANGSMITH_API_KEY", undefined);
+    vi.stubEnv("LANGSMITH_WORKSPACE_ID", "org-key-workspace");
+    vi.stubEnv("LANGSMITH_CONFIG_FILE", writeLoginConfig(config.apiBaseUrl, "login-workspace"));
+    await describeThreadLinks(config, "session");
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(headers.get("x-tenant-id")).toBe("org-key-workspace");
   });
 
   it.each(["", "   ", '"  "', '""""', `"''"`, "' '"])(

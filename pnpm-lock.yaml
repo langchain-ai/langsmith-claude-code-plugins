@@ -12,12 +12,12 @@ importers:
   .:
     dependencies:
       langsmith:
-        specifier: ^0.10.11
-        version: 0.10.11
+        specifier: ^0.11.4
+        version: 0.11.4
     devDependencies:
       '@langchain/plugins-base':
-        specifier: github:langchain-ai/langsmith-plugin-binary#409bea4f39a40bd5b45c5926c2f6c145aa0438b6
-        version: https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/409bea4f39a40bd5b45c5926c2f6c145aa0438b6(langsmith@0.10.11)
+        specifier: 0.5.1
+        version: 0.5.1(langsmith@0.11.4)
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
@@ -211,13 +211,12 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/409bea4f39a40bd5b45c5926c2f6c145aa0438b6':
-    resolution: {tarball: https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/409bea4f39a40bd5b45c5926c2f6c145aa0438b6}
-    version: 0.5.0
+  '@langchain/plugins-base@0.5.1':
+    resolution: {integrity: sha512-N5B0fwRdLiPeF3nV0YeXT3Oi2E5QZgboWDkfkzL3A5Nz5yF4z9kbLaji43Dcwr7nv6HKUJ8ZqFWoDuHmJp3xwA==}
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
-      langsmith: ^0.9.0 || ^0.10.0
+      langsmith: ^0.11.4
 
   '@oxc-project/types@0.153.0':
     resolution: {integrity: sha512-jSNrRIyvPVLL5E1z/tS5zLAprosGz/FuI1PWwEOz59j3E4TTTzSpqKb/RDGqJhhW0QHYISGXxq582wGx6T11Tw==}
@@ -755,8 +754,8 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
-  langsmith@0.10.11:
-    resolution: {integrity: sha512-99ySd5piFC/y0kyKxlUODamdxYuHs0Sbnz47mop0SypvOaRT8REuB1vd8QpESBag8sHW0QPSXvUbhXpn2+v9yQ==}
+  langsmith@0.11.4:
+    resolution: {integrity: sha512-sasOaKuuZ3OKSE9XIXSAxBUX1/r6t2z0SUe2VgBPLQHKKyLayYzKwU38nKzz0cQoMpN4zpSxz7poQwSTt1OdoA==}
     peerDependencies:
       '@opentelemetry/api': '*'
       '@opentelemetry/exporter-trace-otlp-proto': '*'
@@ -1129,9 +1128,9 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/409bea4f39a40bd5b45c5926c2f6c145aa0438b6(langsmith@0.10.11)':
+  '@langchain/plugins-base@0.5.1(langsmith@0.11.4)':
     dependencies:
-      langsmith: 0.10.11
+      langsmith: 0.11.4
 
   '@oxc-project/types@0.153.0': {}
 
@@ -1432,7 +1431,7 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
-  langsmith@0.10.11:
+  langsmith@0.11.4:
     dependencies:
       p-queue: 6.6.2
 

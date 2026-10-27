@@ -1,13 +1,16 @@
-import { refusedLoginReplicas, sdkSetting, withLoginProfile } from "@langchain/plugins-base/auth";
+import {
+  refusedLoginReplicas,
+  sdkSetting,
+  type UploadLogin,
+} from "@langchain/plugins-base/auth";
 import { Client } from "langsmith";
 import type { Config, SdkClientKey } from "./types.js";
 import {
   AGENT_ADDRESS_ENVIRONMENT,
   AGENT_ADDRESS_KIND,
-  GENERIC_API_KEY_VARIABLES,
   LOOKUP_TIMEOUT_MS,
+  WORKSPACE_ID_VARIABLE,
 } from "./constants.js";
-import { withoutEnvVariables } from "./utils/env.js";
 
 /**
  * OSC 8 hyperlink keeping a wrapped URL clickable. The URL is its own label, so
@@ -17,6 +20,34 @@ function terminalLink(url: string): string {
   const OSC8 = "\u001b]8;;";
   const BEL = "\u0007";
   return `${OSC8}${url}${BEL}${url}${OSC8}${BEL}`;
+}
+
+function lookupOptions(apiUrl: string) {
+  return {
+    apiUrl,
+    timeout_ms: LOOKUP_TIMEOUT_MS,
+    callerOptions: {
+      // The SDK ignores maxRetries on reads. Throwing here is what stops the retries.
+      onFailedResponseHook: async () => {
+        throw new Error("Thread link lookup failed");
+      },
+    },
+  };
+}
+
+function keyClient(apiKey: string | undefined, apiUrl: string, workspaceId?: string): Client {
+  const fallback = sdkSetting(process.env[WORKSPACE_ID_VARIABLE]) ?? "";
+  return new Client({ ...lookupOptions(apiUrl), apiKey, workspaceId: workspaceId ?? fallback });
+}
+
+function loginClient(login: UploadLogin, apiUrl: string, workspaceId?: string): Client {
+  return new Client({
+    ...lookupOptions(apiUrl),
+    profile: login.profile,
+    profileConfigPath: login.configPath,
+    preferProfileAuth: true,
+    workspaceId: workspaceId ?? login.workspaceId,
+  });
 }
 
 /**
@@ -49,23 +80,10 @@ export async function describeThreadLinks(config: Config, sessionId: string): Pr
       if (!keyed && (otherServer || !config.login)) return missingKey;
 
       try {
-        const login = keyed ? undefined : config.login;
-        const build = () =>
-          new Client({
-            apiKey,
-            apiUrl: destination.apiUrl ?? config.apiBaseUrl,
-            workspaceId: destination.workspaceId ?? (keyed ? "" : login?.workspaceId),
-            timeout_ms: LOOKUP_TIMEOUT_MS,
-            callerOptions: {
-              // The SDK ignores maxRetries on reads. Throwing here is what stops the retries.
-              onFailedResponseHook: async () => {
-                throw new Error("Thread link lookup failed");
-              },
-            },
-          });
-        const client = withoutEnvVariables(keyed ? [] : GENERIC_API_KEY_VARIABLES, () =>
-          login ? withLoginProfile(login, build) : build(),
-        );
+        const apiUrl = destination.apiUrl ?? config.apiBaseUrl;
+        const client = keyed
+          ? keyClient(apiKey, apiUrl, destination.workspaceId)
+          : loginClient(config.login!, apiUrl, destination.workspaceId);
         if (keyed && !(client as unknown as SdkClientKey).apiKey) return missingKey;
         const agentId = destination.projectName === undefined ? config.agentId : undefined;
         const project = await client.readProject(
