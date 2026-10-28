@@ -20,7 +20,7 @@ In a desktop Cowork task the plugin's hooks run on your computer, so it reads th
 langsmith auth login
 ```
 
-If you use the CLI sign-in and have more than one profile set `profile` to the one the plugin should use. API keys ignore this setting.
+If you use the CLI sign-in and have more than one profile set `profile` to the one the plugin should use. Your own `api_key` ignores this setting, but a generic `LANGSMITH_API_KEY` isn't used as a fallback while `profile` is set.
 
 Then switch tracing on in `~/.claude/langsmith.json`, unless your admin already turned it on with a managed file. Send traces to an agent with `agent_id`:
 

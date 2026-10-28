@@ -52,7 +52,7 @@ The simplest option is to sign in once with the LangSmith CLI, which you can [in
 langsmith auth login
 ```
 
-If you use the CLI sign-in and have more than one profile set `profile` to the one the plugin should use. API keys ignore this setting.
+If you use the CLI sign-in and have more than one profile set `profile` to the one the plugin should use. Your own `api_key` ignores this setting, but a generic `LANGSMITH_API_KEY` isn't used as a fallback while `profile` is set.
 
 You can use an API key instead by setting `api_key` in your config file. Create one at [smith.langchain.com](https://smith.langchain.com) under **Settings** then **API Keys**.
 
@@ -62,7 +62,7 @@ If more than one credential is set the plugin uses the first one it finds:
 2. Your `langsmith auth login` sign-in
 3. A generic `LANGSMITH_API_KEY` in your shell
 
-When your sign-in expires or your key is rejected the plugin stops uploading but still lets your prompts through. Turns from that gap are never uploaded, and Claude Code shows a reminder in the chat at most every 2 minutes until you fix it. Use `notice_cooldown` to change that interval or set it to `off` to hide the reminders.
+When your sign-in expires or your key is rejected the plugin stops uploading but still lets your prompts through. Turns from that gap never upload their content, and Claude Code shows a reminder in the chat at most every 2 minutes until you fix it. Use `notice_cooldown` to change that interval or set it to `off` to hide the reminders.
 
 ### Strict auth
 
@@ -145,7 +145,7 @@ Each setting has a config file key and an environment variable. The environment 
 | `profile`            | none                           | the CLI's current one             | Which CLI login to use                  |
 | `workspace_id`       | none                           | the login's own                   | Workspace for a login's traces          |
 
-`profile` is personal so the managed file can't lock it. `LANGSMITH_PROFILE` is only used when no `profile` is set in a settings file.
+`profile` is personal so the managed file can't lock it. `LANGSMITH_PROFILE` and `LANGSMITH_WORKSPACE_ID` are only used when no `profile` or `workspace_id` is set in a settings file.
 
 ## More
 
