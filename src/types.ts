@@ -83,10 +83,21 @@ export interface ToolUseBlock {
 export interface ToolResultBlock {
   type: "tool_result";
   tool_use_id: string;
-  content: string | Array<{ type: "text"; text: string }>;
+  content: ToolResultContent;
 }
 
-export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock;
+/** Text, or blocks such as images and documents a tool returned. */
+export type ToolResultContent = string | Array<{ type: string; [key: string]: unknown }>;
+
+/** A tool the API ran itself, such as web search. */
+export interface ServerToolUseBlock {
+  type: "server_tool_use";
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+}
+
+export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ServerToolUseBlock;
 
 /** Token usage data from an assistant message. */
 export interface Usage {
@@ -107,6 +118,8 @@ export interface UserMessage {
   timestamp: string;
   uuid?: string;
   promptId?: string;
+  isMeta?: boolean;
+  isCompactSummary?: boolean;
 }
 
 export interface TurnPrompt {
@@ -168,7 +181,7 @@ export type TranscriptMessage = UserMessage | ToolResultMessage | AssistantMessa
 export interface ToolCall {
   tool_use: ToolUseBlock;
   result?: {
-    content: string;
+    content: ToolResultContent;
     timestamp: string;
   };
   /** If this was a Task tool, the agent ID for subagent tracing. */
@@ -191,6 +204,8 @@ export interface LLMCall {
   effort?: string;
   /** Tool calls made in this response. */
   toolCalls: ToolCall[];
+  /** User-side messages that reached the model after the previous call, such as a skill body. */
+  userMessagesBefore?: Turn["userContent"][];
   /** True if this LLM call was synthesized (not from the transcript). */
   synthetic?: boolean;
 }
@@ -278,6 +293,8 @@ export interface SessionState {
   /** First side of the privacy-snapshot cleanup join; removed when both sides finish.
    *  Independent of turn-local dedup IDs (Agent PostToolUse doesn't record those). */
   tool_tracing_progress?: Record<string, "post" | "transcript">;
+  /** The last Stop-closed turn's mode, for a reply a blocking Stop hook adds to that turn. */
+  closed_turn_tracing?: TracingMode;
   /** Captured by PreCompact for async PostCompact (manual preference or auto turn mode). */
   compaction_tracing?: TracingMode;
   last_line: number;

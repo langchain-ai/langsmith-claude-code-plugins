@@ -18,6 +18,7 @@ import type {
   TraceTurnOptions,
   TurnRunIdentity,
   ReadPosition,
+  ToolResultContent,
 } from "./types.js";
 import {
   readTranscript,
@@ -29,7 +30,8 @@ import {
 } from "./transcript.js";
 import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
-import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
+import { ASSISTANT_RUN_NAME, SERVER_TOOL_RESULT_TYPE, USER_PROMPT_TURN_NAME } from "./constants.js";
+import { stripContentMarkup } from "./utils/harness.js";
 import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import {
   repoScopedMetadata,
@@ -82,17 +84,51 @@ export function parseDottedOrder(dottedOrder: string): { traceId: string; runId:
 
 /** Convert ContentBlocks to LangSmith message format. */
 function formatContent(blocks: ContentBlock[]): Array<Record<string, unknown>> {
-  return blocks.map((block) => {
+  return blocks.flatMap<Record<string, unknown>>((block) => {
     switch (block.type) {
       case "text":
-        return { type: "text", text: block.text };
+        return block.text ? [{ type: "text", text: block.text }] : [];
       case "thinking":
         return { type: "thinking", thinking: block.thinking };
       case "tool_use":
+      case "server_tool_use":
         return { type: "tool_call", name: block.name, args: block.input, id: block.id };
       default:
         return block as Record<string, unknown>;
     }
+  });
+}
+
+/** Split assistant content so each result of a tool the API ran itself is its own tool message. */
+function assistantMessages(blocks: ContentBlock[]): Array<Record<string, unknown>> {
+  const messages: Array<Record<string, unknown>> = [];
+  let content: Array<Record<string, unknown>> = [];
+  for (const block of formatContent(blocks)) {
+    if (!SERVER_TOOL_RESULT_TYPE.test(String(block.type))) {
+      content.push(block);
+      continue;
+    }
+    if (content.length > 0) messages.push({ role: "assistant", content });
+    content = [];
+    const text = JSON.stringify(block.content);
+    messages.push({ role: "tool", tool_call_id: block.tool_use_id, content: textBlocks(text) });
+  }
+  if (content.length > 0) messages.push({ role: "assistant", content });
+  return messages;
+}
+
+function textBlocks(content: Turn["userContent"]): Array<Record<string, unknown>> {
+  return typeof content === "string" ? [{ type: "text", text: content }] : content;
+}
+
+/** Tool reference and search result blocks have no LangSmith form, so they become text. */
+function toolResultBlocks(content: ToolResultContent | undefined): Array<Record<string, unknown>> {
+  if (content === undefined || typeof content === "string") return textBlocks(content ?? "");
+  return content.map((block) => {
+    if (block.type === "tool_reference") return { type: "text", text: String(block.tool_name) };
+    if (block.type !== "search_result") return block;
+    const texts = textBlocks(block.content as Turn["userContent"]).map((part) => part.text);
+    return { type: "text", text: [block.title, block.source, ...texts].join("\n") };
   });
 }
 
@@ -154,10 +190,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
 
-  const userContent =
-    typeof turn.userContent === "string"
-      ? [{ type: "text", text: turn.userContent }]
-      : turn.userContent;
+  const userContent = textBlocks(stripContentMarkup(turn.userContent) ?? turn.userContent);
 
   // Determine the turn run ID and whether we need to create it
   let turnRunId: string;
@@ -204,7 +237,11 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
 
   // 2. Process each LLM call - create as children of the turn run
   for (const [llmIndex, llmCall] of turn.llmCalls.entries()) {
-    const assistantContent = formatContent(llmCall.content);
+    for (const content of llmCall.userMessagesBefore ?? []) {
+      const shown = stripContentMarkup(content);
+      if (shown) accumulatedMessages.push({ role: "user", content: textBlocks(shown) });
+    }
+    const outputMessages = assistantMessages(llmCall.content);
     const assistantInputs = { messages: [...accumulatedMessages] };
 
     // Generate run ID for this LLM call
@@ -318,9 +355,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
         name: ASSISTANT_RUN_NAME,
         run_type: "llm",
         inputs: assistantInputs,
-        outputs: {
-          messages: [{ role: "assistant", content: assistantContent }],
-        },
+        outputs: { messages: outputMessages },
         start_time: llmCall.startTime,
         end_time: assistantEndTime,
         parent_run_id: turnRunId,
@@ -333,12 +368,12 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     );
 
     // Accumulate context for next LLM call.
-    accumulatedMessages.push({ role: "assistant", content: assistantContent });
+    accumulatedMessages.push(...outputMessages);
     for (const tc of llmCall.toolCalls) {
       accumulatedMessages.push({
         role: "tool",
         tool_call_id: tc.tool_use.id,
-        content: [{ type: "text", text: tc.result?.content ?? "" }],
+        content: toolResultBlocks(tc.result?.content),
       });
     }
 
@@ -397,6 +432,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
 async function patchTurnRun(
   id: TurnRunIdentity,
   result: { lastAssistantMessage?: string } | { error: string },
+  eventKey: string = id.runId,
 ): Promise<void> {
   await captureRun(
     {
@@ -410,7 +446,13 @@ async function patchTurnRun(
       end_time: new Date().toISOString(),
       ...("error" in result
         ? { error: result.error }
-        : { outputs: { messages: [{ role: "assistant", content: result.lastAssistantMessage }] } }),
+        : {
+            outputs: {
+              messages: result.lastAssistantMessage
+                ? [{ role: "assistant", content: result.lastAssistantMessage }]
+                : [],
+            },
+          }),
       metadata: codingAgentMetadata({
         sessionId: id.sessionId,
         base: id.customMetadata,
@@ -424,6 +466,7 @@ async function patchTurnRun(
     id.tracing,
     id.runId,
     "patch",
+    eventKey,
   );
 }
 
@@ -469,8 +512,13 @@ export async function completeTurnRun(options: {
   turnNumber?: number;
   runtimeVersion?: string;
   approvalPolicy?: string;
+  eventKey?: string;
 }): Promise<void> {
-  await patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage });
+  await patchTurnRun(
+    options,
+    { lastAssistantMessage: options.lastAssistantMessage },
+    options.eventKey,
+  );
 }
 
 /** Force-close a turn's root run with an error/status (e.g. session ended). */

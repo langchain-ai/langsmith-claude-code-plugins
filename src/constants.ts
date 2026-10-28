@@ -92,6 +92,17 @@ const GENERIC_API_KEY_VARIABLES = ["LANGSMITH_API_KEY", "LANGCHAIN_API_KEY"] as 
 const TASK_NOTIFICATION_OPENING = "<task-notification>";
 const MAX_FULL_READ_BYTES = 50 * 1024 * 1024; // 50 MB
 
+const HARNESS_DROPPED_ELEMENT =
+  /<(system-reminder|local-command-caveat|command-message|ide_opened_file|ide_selection)>[\s\S]*?<\/\1>/g;
+const HARNESS_COMMAND =
+  /<command-name>([\s\S]*?)<\/command-name>\s*(?:<command-args>([\s\S]*?)<\/command-args>)?/g;
+const HARNESS_TASK_NOTIFICATION =
+  /^(?:\s*<task-notification>\s*<task-id>(?:(?!<\/task-notification>)[\s\S])*<\/task-notification>)+\s*$/;
+const HARNESS_TASK_NOTIFICATION_KEPT = /<(summary|result)>([\s\S]*?)<\/\1>/g;
+const HARNESS_UNWRAPPED_TAG =
+  /<\/?(bash-input|bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|<\/?pasted_content(\s[^>]*)?>/g;
+const SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
+
 const WORKFLOW_TOOL_NAME = "Workflow";
 
 const WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
@@ -151,6 +162,12 @@ export {
   GENERIC_API_KEY_VARIABLES,
   MAX_FULL_READ_BYTES,
   TASK_NOTIFICATION_OPENING,
+  HARNESS_DROPPED_ELEMENT,
+  HARNESS_COMMAND,
+  HARNESS_TASK_NOTIFICATION,
+  HARNESS_TASK_NOTIFICATION_KEPT,
+  HARNESS_UNWRAPPED_TAG,
+  SERVER_TOOL_RESULT_TYPE,
   WORKFLOW_TOOL_NAME,
   WORKFLOW_SUBAGENT_TYPE,
   KILLED_NOTIFICATION_STATUS,

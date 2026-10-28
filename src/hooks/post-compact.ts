@@ -7,7 +7,7 @@
 
 import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { debug, error } from "../logger.js";
-import { generateDottedOrderSegment } from "../langsmith.js";
+import { generateDottedOrderSegment, parseDottedOrder } from "../langsmith.js";
 import { captureRun, initTracing } from "../tracing-engine.js";
 import { stableRunId } from "../utils/ids/run-id.js";
 import { queueClosing } from "../closing-queue.js";
@@ -49,12 +49,15 @@ export async function traceCompaction(
   const runId = stableRunId(startTime, input.session_id, input.trigger);
   const segment = generateDottedOrderSegment(startTime, runId);
 
-  // Nest under the current turn's trace if one is active, otherwise standalone.
-  const parentRunId = sessionState.current_turn_run_id;
-  const traceId = sessionState.current_trace_id ?? runId;
-  const dottedOrder = sessionState.current_dotted_order
-    ? `${sessionState.current_dotted_order}.${segment}`
-    : segment;
+  // Nest under the current turn, or the last one when compacting between turns.
+  const turnDottedOrder = sessionState.current_dotted_order;
+  if (!turnDottedOrder || !sessionState.current_trace_id) {
+    debug(`Skipping compaction run ${runId}: no turn to nest it under`);
+    return;
+  }
+  const parentRunId = sessionState.current_turn_run_id ?? parseDottedOrder(turnDottedOrder).runId;
+  const traceId = sessionState.current_trace_id;
+  const dottedOrder = `${turnDottedOrder}.${segment}`;
 
   try {
     await captureRun(
@@ -68,7 +71,7 @@ export async function traceCompaction(
         end_time: endTime,
         trace_id: traceId,
         dotted_order: dottedOrder,
-        ...(parentRunId ? { parent_run_id: parentRunId } : {}),
+        parent_run_id: parentRunId,
         metadata: codingAgentMetadata({
           sessionId: input.session_id,
           base: config.customMetadata,
@@ -81,6 +84,9 @@ export async function traceCompaction(
       resolveTurnTracingMode(
         config,
         input.session_id,
+        !sessionState.current_turn_run_id && sessionState.closed_turn_tracing === "metadata"
+          ? "metadata"
+          : undefined,
         sessionState.compaction_tracing,
         sessionState.current_turn_tracing,
         sessionState.current_turn_run_id

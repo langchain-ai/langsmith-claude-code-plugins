@@ -23,6 +23,7 @@ import type {
   TranscriptRead,
   TurnPrompt,
   ReadAnchor,
+  ToolResultContent,
 } from "./types.js";
 
 // ─── Low-level parsing ─────────────────────────────────────────────────────
@@ -40,6 +41,7 @@ export function readTranscript(
   let ownSeen = false;
   let promptId: string | undefined;
   let laterPrompt = false;
+  let ended = false;
   const opensLaterTurn = (message: UserMessage): boolean => {
     if (promptAt === undefined) return false;
     const hash =
@@ -48,6 +50,7 @@ export function readTranscript(
     if (!own && hash !== undefined && hash === nextPromptHash) return (laterPrompt = true);
     if (!own) {
       if (message.promptId !== undefined && message.promptId === promptId) return false;
+      if (isInsertedMessage(message) && !ended) return false;
       const notification =
         typeof message.message.content === "string" &&
         message.message.content.startsWith(TASK_NOTIFICATION_OPENING);
@@ -57,6 +60,7 @@ export function readTranscript(
     }
     ownSeen ||= own;
     promptSeen = true;
+    ended = false;
     promptId = message.promptId;
     return false;
   };
@@ -68,6 +72,7 @@ export function readTranscript(
     } catch {
       return cutAt !== undefined && unterminated;
     }
+    if (isAssistantMessage(message)) ended ||= message.message.stop_reason === "end_turn";
     if (!isHumanMessage(message)) return false;
     const pastCut = cutAt !== undefined && !(Date.parse(message.timestamp) <= Date.parse(cutAt));
     return pastCut || opensLaterTurn(message);
@@ -280,6 +285,16 @@ export function isHumanMessage(msg: TranscriptMessage): msg is UserMessage {
   return false;
 }
 
+/** Check if Claude Code added a human-side message itself, such as a compaction summary or a teammate message. */
+export function isInsertedMessage(msg: UserMessage): boolean {
+  return (
+    msg.isMeta === true ||
+    msg.isCompactSummary === true ||
+    (typeof msg.message.content === "string" &&
+      msg.message.content.startsWith(TASK_NOTIFICATION_OPENING))
+  );
+}
+
 export function turnPrompt(session: SessionState, promptRead = false): TurnPrompt {
   return {
     promptAt: session.current_turn_start,
@@ -402,17 +417,14 @@ function mergeAdjacentTextBlocks(blocks: ContentBlock[]): ContentBlock[] {
 function findToolResult(
   toolUseId: string,
   toolResults: ToolResultMessage[],
-): { content: string; timestamp: string; agentId?: string } | undefined {
+): { content: ToolResultContent; timestamp: string; agentId?: string } | undefined {
   for (const msg of toolResults) {
     for (const block of msg.message.content) {
       if (block.type === "tool_result" && block.tool_use_id === toolUseId) {
         const content =
-          typeof block.content === "string"
+          typeof block.content === "string" || block.content.some((c) => c.type !== "text")
             ? block.content
-            : (block.content as Array<{ type: string; text: string }>)
-                .filter((c) => c.type === "text")
-                .map((c) => c.text)
-                .join(" ");
+            : block.content.map((c) => c.text).join(" ");
 
         return {
           content,
@@ -433,7 +445,8 @@ function findToolResult(
  * A Turn starts with a human user message and includes all subsequent
  * assistant messages and tool results. If messages have promptId metadata,
  * turn boundaries are determined by promptId changes. Otherwise, turns are
- * split whenever a new human message arrives.
+ * split whenever a new human message arrives. A message Claude Code inserts
+ * before the turn ends stays in that turn.
  *
  * Turns are only finalized if the assistant completes with stop_reason: "end_turn"
  * (or if stop_reason is not present, for backward compatibility).
@@ -447,6 +460,8 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
   let assistantOrder: string[] = []; // preserve insertion order of message IDs
   let toolResults: ToolResultMessage[] = [];
   let hasStopReasonEndTurn = false;
+  let userMessages: Turn["userContent"][] = [];
+  let userMessagesBefore = new Map<string, Turn["userContent"][]>();
 
   function finalizeTurn(forceIncomplete = false): void {
     if (!currentUser) return;
@@ -490,6 +505,7 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         startTime: merged.startTime,
         endTime: merged.endTime,
         toolCalls,
+        userMessagesBefore: userMessagesBefore.get(msgId),
       });
     }
 
@@ -506,11 +522,11 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
     if (isHumanMessage(msg)) {
       // Determine if this is a new turn
       // If promptId is available, use it to detect turn boundaries
-      // Otherwise, any new human message starts a new turn
+      // Otherwise, any new human message starts a new turn unless Claude Code inserted it mid-turn
       const isNewTurn =
         currentUser === null ||
-        (msg.promptId !== undefined && msg.promptId !== currentPromptId) ||
-        msg.promptId === undefined;
+        ((msg.promptId === undefined || msg.promptId !== currentPromptId) &&
+          !(isInsertedMessage(msg) && !hasStopReasonEndTurn));
 
       if (isNewTurn) {
         // Finalize previous turn and start a new one
@@ -521,6 +537,10 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         assistantOrder = [];
         toolResults = [];
         hasStopReasonEndTurn = false;
+        userMessages = [];
+        userMessagesBefore = new Map();
+      } else {
+        userMessages.push(msg.message.content);
       }
     } else if (isToolResult(msg)) {
       toolResults.push(msg);
@@ -529,6 +549,8 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
       if (!assistantChunks.has(id)) {
         assistantChunks.set(id, []);
         assistantOrder.push(id);
+        if (userMessages.length > 0) userMessagesBefore.set(id, userMessages);
+        userMessages = [];
       }
       assistantChunks.get(id)!.push(msg);
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { writeFileSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { writeFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -219,6 +219,16 @@ describe("readTranscript", () => {
     ]);
     const turn = { promptAt: T0, promptHash: hashPrompt("Same") };
     expect(readTranscript(path, -1, undefined, turn).lastLine).toBe(1);
+  });
+
+  it("ends the turn at a teammate message that arrives after it finished", () => {
+    const path = writeJsonl("teammate.jsonl", [
+      makeUser("Own", T0, "p1"),
+      makeAssistant("msg_1", "a", { stop_reason: "end_turn" }),
+      { ...makeUser("Teammate", T1, "p2"), isMeta: true },
+      makeAssistant("msg_2", "b", { stop_reason: "end_turn" }),
+    ]);
+    expect(readTranscript(path, -1, undefined, { promptAt: T0 }).lastLine).toBe(1);
   });
 
   it("reads past a malformed line inside the turn", () => {
@@ -581,6 +591,34 @@ describe("groupIntoTurns", () => {
       makeAssistant("msg_1", "Hello", overrides),
     ];
     expect(groupIntoTurns(messages)[0].llmCalls[0].effort).toBe(expected);
+  });
+
+  it("starts a new turn for a teammate message that arrives after the turn finished", () => {
+    const messages: TranscriptMessage[] = [
+      makeUser("Q1", T0, "p1"),
+      makeAssistant("msg_1", "A1", { stop_reason: "end_turn" }),
+      { ...makeUser("Teammate", T1, "p2"), isMeta: true },
+      makeAssistant("msg_2", "A2", { stop_reason: "end_turn" }),
+    ];
+    expect(groupIntoTurns(messages).map((turn) => turn.userContent)).toEqual(["Q1", "Teammate"]);
+  });
+
+  it("keeps an image a tool returned", () => {
+    const image = {
+      type: "image",
+      source: { type: "base64", media_type: "image/png", data: "AA==" },
+    };
+    const result = makeToolResult("tool_1", "");
+    result.message.content[0].content = [{ type: "text", text: "shot" }, image];
+    const messages: TranscriptMessage[] = [
+      makeUser("Screenshot"),
+      makeAssistant("msg_1", "", { toolUses: [{ id: "tool_1", name: "Read", input: {} }] }),
+      result,
+    ];
+    expect(groupIntoTurns(messages)[0].llmCalls[0].toolCalls[0].result?.content).toEqual([
+      { type: "text", text: "shot" },
+      image,
+    ]);
   });
 
   it("returns empty array for no messages", () => {

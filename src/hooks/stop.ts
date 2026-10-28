@@ -6,6 +6,7 @@
  * groups them into turns, and sends traces to LangSmith.
  */
 
+import { randomUUID } from "node:crypto";
 import { resolveTurnTracingMode } from "../tracing-mode.js";
 import {
   readTranscript,
@@ -26,7 +27,12 @@ import {
   pruneOldSessions,
   advanceToolTracingProgress,
 } from "../state.js";
-import { traceTurn, tracePendingSubagents, completeTurnRun } from "../langsmith.js";
+import {
+  traceTurn,
+  tracePendingSubagents,
+  completeTurnRun,
+  parseDottedOrder,
+} from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
@@ -47,12 +53,6 @@ export async function main(): Promise<void> {
   if (!config) return;
 
   debug(`Stop hook started, session=${input.session_id}`);
-
-  // Skip recursive hook calls.
-  if (input.stop_hook_active) {
-    debug("stop_hook_active=true, skipping");
-    return;
-  }
 
   // Validate input.
   const transcriptPath = expandHome(input.transcript_path);
@@ -132,12 +132,18 @@ export async function closeStoppedTurn(
     : undefined;
   const sessionMetadata = await settledFromTurn(config.customMetadata, notifiedFrom);
 
+  // A blocking Stop hook makes Claude reply again after the turn closed, so that reply joins it.
+  const continuedRunId =
+    input.stop_hook_active && !sessionState.current_turn_run_id && sessionState.current_dotted_order
+      ? parseDottedOrder(sessionState.current_dotted_order).runId
+      : undefined;
+
   // Group into turns and trace each one.
   const turns = groupIntoTurns(messages);
   const currentTracing = resolveTurnTracingMode(
     config,
     input.session_id,
-    sessionState.current_turn_tracing,
+    continuedRunId ? sessionState.closed_turn_tracing : sessionState.current_turn_tracing,
     sessionState.current_turn_run_id
       ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing
       : undefined,
@@ -189,10 +195,13 @@ export async function closeStoppedTurn(
   for (let i = 0; i < turns.length; i++) {
     const turn = turns[i];
     const isLastTurn = i === turns.length - 1;
-    const turnNum = sessionState.turn_count + tracedTurns + 1;
+    const turnNum =
+      isLastTurn && continuedRunId
+        ? (sessionState.current_turn_number ?? sessionState.turn_count)
+        : sessionState.turn_count + tracedTurns + 1;
 
     // Only the last turn gets nested under the UserPromptSubmit run
-    const parentRunId = isLastTurn ? currentRunId : undefined;
+    const parentRunId = isLastTurn ? (currentRunId ?? continuedRunId) : undefined;
     const traceId = isLastTurn ? currentTraceId : undefined;
     const dottedOrder = isLastTurn ? currentDottedOrder : undefined;
 
@@ -284,6 +293,7 @@ export async function closeStoppedTurn(
   // lives on in open_turns until its subagents drain. Whoever removes the turn from
   // open_turns / clears current_turn_run_id under the lock owns the one completion.
   let completeNow = false;
+  let continuedDeferred = false;
   // If this turn is a task-notification turn, the async agent it reports on —
   // claimed atomically below so only the Stop that actually completes the turn
   // runs the finalize (guards against a concurrent/re-fired Stop doing it twice).
@@ -316,7 +326,10 @@ export async function closeStoppedTurn(
       latestState,
       input.session_id,
       furtherRead(latestSession, savedPosition),
-      Math.max(latestSession.turn_count, sessionState.turn_count + tracedTurns),
+      Math.max(
+        latestSession.turn_count,
+        sessionState.turn_count + tracedTurns - (continuedRunId ? 1 : 0),
+      ),
       // Merge any late PostToolUse writes with our traced entries. allTaskRunMaps
       // wins on conflicts since it has the fully resolved data from traceTurn.
       { ...latestSession.task_run_map, ...allTaskRunMaps },
@@ -374,6 +387,14 @@ export async function closeStoppedTurn(
         notificationInterrupted = notifInterrupted;
         delete openTurns[currentRunId];
       }
+    } else if (continuedRunId && openTurns[continuedRunId]) {
+      const waiting = openTurns[continuedRunId];
+      openTurns[continuedRunId] = {
+        ...waiting,
+        last_assistant_message:
+          (waiting.tracing ?? currentTracing) === "metadata" ? MUTED_TRACE_CONTENT : finalMessage,
+      };
+      continuedDeferred = true;
     } else {
       // No background subagents for this turn — normal inline completion.
       completeNow = Boolean(currentRunId);
@@ -387,13 +408,15 @@ export async function closeStoppedTurn(
   });
 
   // Complete the Turn run created by UserPromptSubmit (unless deferred above).
-  if (completeNow && currentRunId) {
-    debug(`Completing Turn run ${currentRunId}`);
+  const turnRunId = completeNow ? currentRunId : continuedDeferred ? undefined : continuedRunId;
+  if (turnRunId) {
+    debug(`Completing Turn run ${turnRunId}`);
     try {
       await completeTurnRun({
         tracing: currentTracing,
         sessionId: input.session_id,
-        runId: currentRunId,
+        runId: turnRunId,
+        eventKey: completeNow ? turnRunId : `${turnRunId}:${randomUUID()}`,
         traceId: currentTraceId,
         dottedOrder: currentDottedOrder,
         parentRunId: currentParentRunId,
@@ -405,7 +428,7 @@ export async function closeStoppedTurn(
         runtimeVersion,
         approvalPolicy,
       });
-      debug(`Turn run ${currentRunId} completed`);
+      debug(`Turn run ${turnRunId} completed`);
     } catch (err) {
       error(`Failed to complete turn run: ${err}`);
     }

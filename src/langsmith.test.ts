@@ -55,6 +55,19 @@ describe("completeTurnRun", () => {
     allRunTreeInstances = [];
   });
 
+  it("writes no assistant message when the turn ended with an empty reply", async () => {
+    await completeTurnRun({
+      sessionId: "session-123",
+      runId: "turn-run-1",
+      traceId: "trace-1",
+      dottedOrder: "20250101T000000000000Zturn-run-1",
+      startTime: "2025-01-01T00:00:00Z",
+      lastAssistantMessage: "",
+    });
+
+    expect(mockUpdateRun.mock.calls[0][1].outputs).toEqual({ messages: [] });
+  });
+
   it("patches the existing Turn run with the real assistant outputs", async () => {
     await completeTurnRun({
       sessionId: "session-123",
@@ -451,6 +464,114 @@ describe("traceTurn", () => {
     expect(assistant2Call.inputs.messages[0].role).toBe("user");
     expect(assistant2Call.inputs.messages[1].role).toBe("assistant");
     expect(assistant2Call.inputs.messages[2].role).toBe("tool");
+  });
+
+  const call = (content: Turn["llmCalls"][number]["content"], extra = {}) => ({
+    content,
+    model: "claude-sonnet-4-5",
+    usage: { input_tokens: 10, output_tokens: 5 },
+    startTime: "2025-01-01T00:00:01Z",
+    endTime: "2025-01-01T00:00:02Z",
+    toolCalls: [],
+    ...extra,
+  });
+  const llmRuns = () =>
+    mockCreateRun.mock.calls.map(([run]) => run).filter((run) => run.name === ASSISTANT_RUN_NAME);
+
+  it("shows a slash command and its instructions without Claude Code's markup", async () => {
+    const turn: Turn = {
+      userContent: "<command-name>/review</command-name>\n<command-args>a.ts</command-args>",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        call([{ type: "text", text: "Done." }], {
+          userMessagesBefore: [
+            [{ type: "text", text: "<system-reminder>internal</system-reminder>" }],
+            [{ type: "text", text: "Review a.ts carefully." }],
+          ],
+        }),
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({ turn, sessionId: "session-123", turnNum: 1 });
+
+    expect(llmRuns()[0].inputs.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "/review a.ts" }] },
+      { role: "user", content: [{ type: "text", text: "Review a.ts carefully." }] },
+    ]);
+  });
+
+  it("shows server tool results and non-text tool results as tool messages", async () => {
+    const image = {
+      type: "image",
+      source: { type: "base64", media_type: "image/png", data: "AA==" },
+    };
+    const read = { type: "tool_use" as const, id: "tool_1", name: "Read", input: {} };
+    const search = {
+      type: "search_result",
+      title: "A",
+      source: "kb://a",
+      content: [{ type: "text", text: "hit" }],
+    };
+    const turn: Turn = {
+      userContent: "Look",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        call(
+          [
+            { type: "server_tool_use", id: "srv_1", name: "web_search", input: { query: "q" } },
+            { type: "web_search_tool_result", tool_use_id: "srv_1", content: [{ url: "u" }] },
+            read,
+          ] as Turn["llmCalls"][number]["content"],
+          {
+            toolCalls: [
+              {
+                tool_use: read,
+                result: {
+                  content: [image, { type: "tool_reference", tool_name: "mcp__git__log" }, search],
+                  timestamp: "2025-01-01T00:00:03Z",
+                },
+              },
+            ],
+          },
+        ),
+        call([{ type: "text", text: "Done." }]),
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({ turn, sessionId: "session-123", turnNum: 1 });
+
+    expect(llmRuns()[1].inputs.messages.slice(1)).toEqual([
+      {
+        role: "assistant",
+        content: [{ type: "tool_call", name: "web_search", args: { query: "q" }, id: "srv_1" }],
+      },
+      { role: "tool", tool_call_id: "srv_1", content: [{ type: "text", text: '[{"url":"u"}]' }] },
+      { role: "assistant", content: [{ type: "tool_call", name: "Read", args: {}, id: "tool_1" }] },
+      {
+        role: "tool",
+        tool_call_id: "tool_1",
+        content: [
+          image,
+          { type: "text", text: "mcp__git__log" },
+          { type: "text", text: "A\nkb://a\nhit" },
+        ],
+      },
+    ]);
+  });
+
+  it("uploads no assistant message for an empty reply", async () => {
+    const turn: Turn = {
+      userContent: "Say nothing",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [call([{ type: "text", text: "" }])],
+      isComplete: true,
+    };
+
+    await traceTurn({ turn, sessionId: "session-123", turnNum: 1 });
+
+    expect(llmRuns()[0].outputs.messages).toEqual([]);
   });
 
   it("includes usage_metadata in assistant run update", async () => {

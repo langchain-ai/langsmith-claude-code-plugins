@@ -34,8 +34,9 @@ export async function captureRun(
   mode: TracingMode = "full",
   rootRunId: string = run.id,
   operation: RunOperation = "post",
+  eventKey: string = run.id,
 ): Promise<void> {
-  await captureInto(started(), run, mode, rootRunId, operation);
+  await captureInto(started(), run, mode, rootRunId, operation, eventKey);
 }
 
 export async function captureToolRun(

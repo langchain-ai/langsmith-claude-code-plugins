@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 
-import { isCursorPayload, isPayloadForHook } from "./harness.js";
+import {
+  isCursorPayload,
+  isPayloadForHook,
+  stripContentMarkup,
+  stripHarnessMarkup,
+} from "./harness.js";
 import cursorHooks from "../fixtures/cursor-hooks.json" with { type: "json" };
 
 const CLAUDE_PAYLOAD = {
@@ -46,5 +51,48 @@ describe("isPayloadForHook", () => {
 
   it("runs when a payload names no event at all", () => {
     expect(isPayloadForHook({}, "Stop")).toBe(true);
+  });
+});
+
+describe("stripHarnessMarkup", () => {
+  it.each([
+    [
+      "shows a slash command as typed",
+      "<command-message>review is running…</command-message>\n<command-name>/review</command-name>\n<command-args>src/app.ts</command-args>",
+      "/review src/app.ts",
+    ],
+    ["unwraps bash mode input", "<bash-input>git status</bash-input>", "git status"],
+    ["drops a paste marker", '<pasted_content id="1">\nlog line', "log line"],
+    [
+      "leaves a notification tag the person typed",
+      "<task-notification>my log</task-notification>",
+      "<task-notification>my log</task-notification>",
+    ],
+    [
+      "leaves a full notification the person typed inside a question",
+      "Explain <task-notification><task-id>b1</task-id><summary>Exited</summary></task-notification>",
+      "Explain <task-notification><task-id>b1</task-id><summary>Exited</summary></task-notification>",
+    ],
+  ])("%s", (_, text, shown) => {
+    expect(stripHarnessMarkup(text)).toBe(shown);
+  });
+
+  it("stays fast on a prompt built to make the notification match backtrack", () => {
+    const unit = "</task-notification><task-notification><task-id>";
+    const text = `<task-notification><task-id>${unit.repeat(26)}x`;
+    const start = performance.now();
+    stripHarnessMarkup(text);
+    expect(performance.now() - start).toBeLessThan(200);
+  });
+});
+
+describe("stripContentMarkup", () => {
+  it("drops text blocks that were only scaffolding and keeps the rest", () => {
+    const content = [
+      { type: "text", text: "<ide_opened_file>The user opened a.ts</ide_opened_file>" },
+      { type: "text", text: "what does this do" },
+    ];
+    expect(stripContentMarkup(content)).toEqual([{ type: "text", text: "what does this do" }]);
+    expect(stripContentMarkup("<system-reminder>x</system-reminder>")).toBeUndefined();
   });
 });

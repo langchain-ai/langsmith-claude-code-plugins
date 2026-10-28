@@ -51,12 +51,13 @@ export async function captureInto(
   mode: TracingMode,
   rootRunId: string,
   operation: RunOperation,
+  eventKey: string = run.id,
 ): Promise<void> {
   const { session, sessionId, store, fingerprint } = context;
   const turnRunId =
     run.id === rootRunId || (await posted(context, rootRunId, rootRunId)) ? rootRunId : run.id;
   const afterPost = operation === "patch" && (await posted(context, turnRunId, run.id));
-  const input = captureInput(run, mode, turnRunId, operation, sessionId, afterPost);
+  const input = captureInput(run, mode, turnRunId, operation, sessionId, afterPost, eventKey);
   await saveOrWarn(
     run.id,
     () => session.capture(input),
@@ -79,6 +80,7 @@ export function captureInput(
   operation: RunOperation,
   sessionId: string,
   afterPost: boolean,
+  eventKey: string = run.id,
 ): LifecycleCaptureInput {
   const after = [
     ...(afterPost ? [run.id] : []),
@@ -86,7 +88,7 @@ export function captureInput(
   ];
   return {
     turnId: rootRunId,
-    eventId: `${RUN_EVENT_PREFIXES[operation]}${run.id}`,
+    eventId: `${RUN_EVENT_PREFIXES[operation]}${eventKey}`,
     submission: runSubmission(run, mode, operation),
     turnEvidence: runTurnEvidence(run, rootRunId),
     ...(after.length > 0

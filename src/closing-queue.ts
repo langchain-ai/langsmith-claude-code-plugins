@@ -57,6 +57,7 @@ export function turnClosedReset(session: SessionState): Partial<SessionState> {
   return {
     current_turn_run_id: undefined,
     current_turn_tracing: undefined,
+    closed_turn_tracing: session.current_turn_tracing ?? session.closed_turn_tracing,
     current_notification_agent_id: undefined,
     current_notification_interrupted: undefined,
     traced_tool_use_ids: [],

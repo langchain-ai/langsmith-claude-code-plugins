@@ -25,6 +25,8 @@ const HOOKS = {
   PreToolUse: "./pre-tool-use.js",
   PostToolUse: "./post-tool-use.js",
   Stop: "./stop.js",
+  PreCompact: "./pre-compact.js",
+  PostCompact: "./post-compact.js",
 } as const;
 const NOTIFICATION =
   "<task-notification>\n<task-id>bgtask1</task-id>\n<status>completed</status>\n<summary>PUBLIC_NOTIFICATION</summary>\n</task-notification>";
@@ -139,6 +141,11 @@ async function uploaded(): Promise<string> {
   return JSON.stringify(uploads);
 }
 
+async function sentRuns(): Promise<Array<Record<string, any>>> {
+  await drain();
+  return uploads.flatMap((body: any) => [...(body.post ?? []), ...(body.patch ?? [])]);
+}
+
 async function openNotificationThenMute(): Promise<void> {
   await prompt(NOTIFICATION);
   assistant([{ type: "text", text: "PUBLIC_REPLY" }], "end_turn");
@@ -160,6 +167,151 @@ it("keeps an unmuted turn whole when a task notification lands mid-turn", async 
 
   expect(sent).toContain("PUBLIC_NOTIFICATION");
   expect(sent).toContain("PUBLIC_CONTENTS");
+  expect(sent).toContain("PUBLIC_BASH");
+});
+
+it("keeps a turn whole when Claude Code adds a compaction summary and a skill body mid-turn", async () => {
+  await prompt("PUBLIC_PROMPT", "A");
+  assistant([{ type: "tool_use", id: "toolu_bash", name: "Bash", input: {} }], "tool_use", "A");
+  user([{ type: "tool_result", tool_use_id: "toolu_bash", content: "PUBLIC_BASH" }], "A");
+  line({ type: "user", isCompactSummary: true, message: { role: "user", content: "SUMMARY" } });
+  line({ type: "user", isMeta: true, message: { role: "user", content: "PUBLIC_SUMMARY" } });
+  assistant([{ type: "tool_use", id: "toolu_read", name: "Read", input: {} }], "tool_use", "A");
+  user([{ type: "tool_result", tool_use_id: "toolu_read", content: "PUBLIC_CONTENTS" }], "A");
+  assistant([{ type: "text", text: "PUBLIC_ANSWER" }], "end_turn", "A");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_ANSWER" });
+
+  const sent = await sentRuns();
+  const roots = sent.filter((run) => run.name === "Claude Code Turn" && !run.parent_run_id);
+  const read = sent.find(
+    (run) => run.run_type === "llm" && JSON.stringify(run).includes("PUBLIC_SUMMARY"),
+  );
+
+  expect(new Set(roots.map((run) => run.id)).size).toBe(1);
+  expect(JSON.stringify(read?.inputs)).toContain("PUBLIC_BASH");
+});
+
+it("adds the reply a blocking Stop hook asks for to the turn it continues", async () => {
+  await prompt("PUBLIC_PROMPT", "A");
+  assistant([{ type: "text", text: "PUBLIC_FIRST" }], "end_turn", "A");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_FIRST" });
+  line({
+    type: "user",
+    isMeta: true,
+    promptId: "A",
+    message: { role: "user", content: "PUBLIC_FEEDBACK" },
+  });
+  assistant([{ type: "text", text: "PUBLIC_RETRY" }], "end_turn", "A");
+  await hook("Stop", { stop_hook_active: true, last_assistant_message: "PUBLIC_RETRY" });
+  await drain();
+  await prompt("PUBLIC_NEXT", "B");
+
+  const sent = await sentRuns();
+  const [root, next] = sent.filter((run) => run.name === "Claude Code Turn");
+  const retry = sent.find(
+    (run) => run.run_type === "llm" && JSON.stringify(run.outputs).includes("PUBLIC_RETRY"),
+  );
+
+  expect(retry?.parent_run_id).toBe(root?.id);
+  expect(JSON.stringify(sent.filter((run) => run.id === root?.id).at(-1)?.outputs)).toContain(
+    "PUBLIC_RETRY",
+  );
+  expect(retry?.extra?.metadata?.turn_number).toBe(1);
+  expect(next?.extra?.metadata?.turn_number).toBe(2);
+});
+
+it("saves a blocking Stop hook's retried reply for a turn still waiting on a background subagent", async () => {
+  await prompt("PUBLIC_PROMPT", "A");
+  assistant([{ type: "text", text: "PUBLIC_FIRST" }], "end_turn", "A");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_FIRST" });
+  await drain();
+  const { atomicUpdateState, loadState } = await import("../state.js");
+  const stateFile = process.env.STATE_FILE!;
+  const { parseDottedOrder } = await import("../langsmith.js");
+  const { runId: turnRunId } = parseDottedOrder(loadState(stateFile)[SESSION]!.current_dotted_order!);
+  await atomicUpdateState(stateFile, (state) => {
+    const waiting = {
+      run_id: turnRunId,
+      agent_ids: ["bg1"],
+      stop_seen: true,
+      last_assistant_message: "PUBLIC_FIRST",
+    };
+    return { ...state, [SESSION]: { ...state[SESSION]!, open_turns: { [turnRunId]: waiting } } };
+  });
+  assistant([{ type: "text", text: "PUBLIC_RETRY" }], "end_turn", "A");
+  await hook("Stop", { stop_hook_active: true, last_assistant_message: "PUBLIC_RETRY" });
+  await drain();
+
+  const saved = loadState(stateFile)[SESSION]?.open_turns?.[turnRunId];
+  expect(saved?.last_assistant_message).toBe("PUBLIC_RETRY");
+});
+
+it("traces a teammate's reply once when the next prompt is interrupted before the uploader runs", async () => {
+  await prompt("PUBLIC_PROMPT", "A");
+  assistant([{ type: "text", text: "PUBLIC_ANSWER" }], "end_turn", "A");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_ANSWER" });
+  line({
+    type: "user",
+    isMeta: true,
+    promptId: "T",
+    message: { role: "user", content: "PUBLIC_PEER" },
+  });
+  assistant([{ type: "text", text: "PUBLIC_PEER_REPLY" }], "end_turn", "T");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_PEER_REPLY" });
+  await prompt("PUBLIC_NEXT", "B");
+  await prompt("PUBLIC_LAST", "C");
+
+  const replies = (await sentRuns()).filter(
+    (run) => run.run_type === "llm" && JSON.stringify(run.outputs).includes("PUBLIC_PEER_REPLY"),
+  );
+
+  expect(new Set(replies.map((run) => run.id)).size).toBe(1);
+});
+
+it("nests a compaction between turns under the turn before it", async () => {
+  await prompt("PUBLIC_PROMPT", "A");
+  assistant([{ type: "text", text: "PUBLIC_ANSWER" }], "end_turn", "A");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_ANSWER" });
+  await hook("PreCompact", { trigger: "manual", custom_instructions: "" });
+  await hook("PostCompact", { trigger: "manual", compact_summary: "PUBLIC_SUMMARY" });
+
+  const sent = await sentRuns();
+  const root = sent.find((run) => run.name === "Claude Code Turn");
+  const compaction = sent.find((run) => run.name === "Context Compaction (manual)");
+
+  expect(compaction?.parent_run_id).toBe(root?.id);
+  expect(compaction?.trace_id).toBe(root?.trace_id);
+});
+
+it("keeps a compaction nested under a muted turn muted after an unmute", async () => {
+  await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+  await prompt("SECRET_PROMPT", "A");
+  await finishMutedTurn();
+  await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:unmute" });
+  await hook("PreCompact", { trigger: "manual", custom_instructions: "" });
+  await hook("PostCompact", { trigger: "manual", compact_summary: "SECRET_SUMMARY" });
+
+  const sent = await uploaded();
+
+  expect(sent).toContain("Context Compaction (manual)");
+  expect(sent).not.toContain("SECRET");
+});
+
+it("leaves out a compaction that comes before any turn", async () => {
+  await hook("PreCompact", { trigger: "manual", custom_instructions: "" });
+  await hook("PostCompact", { trigger: "manual", compact_summary: "PUBLIC_SUMMARY" });
+
+  expect(await uploaded()).not.toContain("PUBLIC_SUMMARY");
+});
+
+it("shows a task notification turn's prompt as its summary", async () => {
+  await prompt(NOTIFICATION);
+  assistant([{ type: "text", text: "PUBLIC_REPLY" }], "end_turn");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_REPLY" });
+
+  const root = (await sentRuns()).find((run) => run.name === "Claude Code Turn" && run.inputs);
+
+  expect(root?.inputs.messages[0].content).toBe("PUBLIC_NOTIFICATION");
 });
 
 it("keeps a turn whose prompt reaches the transcript after its hook fires", async () => {
@@ -209,6 +361,14 @@ it("keeps a slash command turn whose prompt lands after a notification already o
   await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_ANSWER" });
 
   expect(await uploaded()).toContain("PUBLIC_ANSWER");
+});
+
+it("keeps a new session's open turn when another session prunes the shared state", async () => {
+  await prompt("PUBLIC_PROMPT", "P");
+  const { atomicUpdateState, loadState, pruneOldSessions } = await import("../state.js");
+  await atomicUpdateState(process.env.STATE_FILE!, pruneOldSessions);
+
+  expect(loadState(process.env.STATE_FILE!)[SESSION]?.current_turn_run_id).toBeDefined();
 });
 
 it("uploads the next turn after the transcript loses lines it already read", async () => {
@@ -374,6 +534,26 @@ describe("a muted turn after an open full turn", () => {
     const sent = await uploaded();
 
     expect(sent).toContain("PUBLIC_REPLY");
+    expect(sent).not.toContain("SECRET");
+  });
+
+  it("keeps the reply a blocking Stop hook asks for muted after an unmute typed mid-turn", async () => {
+    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+    await prompt("SECRET_PROMPT", "A");
+    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:unmute" });
+    await finishMutedTurn();
+    line({
+      type: "user",
+      isMeta: true,
+      promptId: "A",
+      message: { role: "user", content: "SECRET_FEEDBACK" },
+    });
+    assistant([{ type: "text", text: "SECRET_RETRY" }], "end_turn", "A");
+    await hook("Stop", { stop_hook_active: true, last_assistant_message: "SECRET_RETRY" });
+
+    const sent = await uploaded();
+
+    expect(sent).toContain('"run_type":"llm"');
     expect(sent).not.toContain("SECRET");
   });
 
