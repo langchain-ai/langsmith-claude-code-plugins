@@ -1,4 +1,5 @@
 import { COMMON_BOOLEAN_SETTINGS } from "@langchain/plugins-base/settings";
+import type { HookPlacement } from "./types.js";
 
 const USER_PROMPT_TURN_NAME = "Claude Code Turn";
 const ASSISTANT_RUN_NAME = "Claude";
@@ -17,6 +18,12 @@ const TRACING_NOT_STARTED_MESSAGE = "Tracing has not started for this hook";
 const CLOSING_EVENT_PREFIX = "closing:";
 const CLOSING_PRIVACY_MODE = "metadata" as const;
 const STOP_FLUSH_WAIT_MS = 200;
+const OWN_PROMPT_LINE_MAX_AGE_MS = 5_000;
+const HOOK_ENTRY_TYPE = "attachment";
+const HOOK_CONTEXT_ATTACHMENT = "hook_additional_context";
+const ASYNC_HOOK_ATTACHMENT = "async_hook_response";
+const PLUGIN_CONTEXT_SUFFIX = /-context$/;
+const SESSION_START_HOOK = "SessionStart";
 const RUN_CONTEXT_FIELDS = [
   "id",
   "name",
@@ -28,6 +35,47 @@ const RUN_CONTEXT_FIELDS = [
 ] as const;
 const RUN_PATCH_FIELDS = ["outputs", "end_time", "error"] as const;
 const RUN_SNAPSHOT_FIELDS = [...RUN_CONTEXT_FIELDS, "inputs", ...RUN_PATCH_FIELDS] as const;
+const HOOK_PATCH_FIELDS = ["inputs", ...RUN_PATCH_FIELDS] as const;
+const HOOK_OUTPUTS_KEY = "hooks";
+const TOOL_INPUT_HOOK: HookPlacement = { direction: "input", scope: "tool" };
+const TOOL_OUTPUT_HOOK: HookPlacement = { direction: "output", scope: "tool" };
+const TURN_INPUT_HOOK: HookPlacement = { direction: "input", scope: "turn" };
+const TURN_OUTPUT_HOOK: HookPlacement = { direction: "output", scope: "turn" };
+const HOOK_PLACEMENTS: ReadonlyMap<string, HookPlacement> = new Map([
+  ["SessionStart", TURN_INPUT_HOOK],
+  ["Setup", TURN_INPUT_HOOK],
+  ["UserPromptSubmit", TURN_INPUT_HOOK],
+  ["UserPromptExpansion", TURN_INPUT_HOOK],
+  ["PreToolUse", TOOL_INPUT_HOOK],
+  ["PermissionRequest", TOOL_INPUT_HOOK],
+  ["PermissionDenied", TOOL_OUTPUT_HOOK],
+  ["PostToolUse", TOOL_OUTPUT_HOOK],
+  ["PostToolUseFailure", TOOL_OUTPUT_HOOK],
+  ["PostToolBatch", TURN_OUTPUT_HOOK],
+  ["Notification", TURN_OUTPUT_HOOK],
+  ["MessageDisplay", TURN_OUTPUT_HOOK],
+  ["SubagentStart", TURN_INPUT_HOOK],
+  ["SubagentStop", TURN_OUTPUT_HOOK],
+  ["TaskCreated", TURN_INPUT_HOOK],
+  ["TaskCompleted", TURN_OUTPUT_HOOK],
+  ["Stop", TURN_OUTPUT_HOOK],
+  ["StopFailure", TURN_OUTPUT_HOOK],
+  ["TeammateIdle", TURN_OUTPUT_HOOK],
+  ["InstructionsLoaded", TURN_INPUT_HOOK],
+  ["ConfigChange", TURN_OUTPUT_HOOK],
+  ["CwdChanged", TURN_OUTPUT_HOOK],
+  ["DirectoryAdded", TURN_OUTPUT_HOOK],
+  ["FileChanged", TURN_OUTPUT_HOOK],
+  ["WorktreeCreate", TURN_INPUT_HOOK],
+  ["WorktreeRemove", TURN_OUTPUT_HOOK],
+  ["PreCompact", TURN_INPUT_HOOK],
+  ["PostCompact", TURN_OUTPUT_HOOK],
+  ["PreModelSwitch", TURN_INPUT_HOOK],
+  ["PostModelSwitch", TURN_INPUT_HOOK],
+  ["Elicitation", TOOL_INPUT_HOOK],
+  ["ElicitationResult", TOOL_INPUT_HOOK],
+  ["SessionEnd", TURN_OUTPUT_HOOK],
+]);
 
 /** `hooks/hooks.json` is tested against this list. */
 const BINARY_COLD_START_TIMEOUT_MS = 60_000;
@@ -73,6 +121,7 @@ const BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
   defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
   strict_auth: { env: "CC_LANGSMITH_STRICT_AUTH", restrictive: false },
+  capture_hook_outputs: { env: "CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS", restrictive: false },
 } as const;
 
 const USAGE_TEMPLATE = `Usage:
@@ -191,9 +240,19 @@ export {
   CLOSING_EVENT_PREFIX,
   CLOSING_PRIVACY_MODE,
   STOP_FLUSH_WAIT_MS,
+  OWN_PROMPT_LINE_MAX_AGE_MS,
+  HOOK_ENTRY_TYPE,
+  HOOK_CONTEXT_ATTACHMENT,
+  ASYNC_HOOK_ATTACHMENT,
+  PLUGIN_CONTEXT_SUFFIX,
+  SESSION_START_HOOK,
   RUN_CONTEXT_FIELDS,
   RUN_PATCH_FIELDS,
   RUN_SNAPSHOT_FIELDS,
+  HOOK_PATCH_FIELDS,
+  HOOK_OUTPUTS_KEY,
+  TURN_INPUT_HOOK,
+  HOOK_PLACEMENTS,
   BINARY_COLD_START_TIMEOUT_MS,
   HOOK_EVENT_NAMES,
   CURSOR_VERSION_FIELD,

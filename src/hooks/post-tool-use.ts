@@ -24,7 +24,7 @@ import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
 import { captureToolRun, initTracing } from "../tracing-engine.js";
 import { stableRunId } from "../utils/ids/run-id.js";
-import type { PostToolUseHookInput } from "../types.js";
+import type { ClaudeRun, HeldToolRun, PostToolUseHookInput } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: PostToolUseHookInput = await readStdin();
@@ -92,6 +92,7 @@ export async function main(): Promise<void> {
     : undefined;
 
   const origin = toolOrigin(input.tool_input, input.cwd);
+  let held: HeldToolRun | undefined;
 
   if (agentId) {
     // Agent tool: defer LangSmith run creation to the Stop hook, which will
@@ -132,38 +133,44 @@ export async function main(): Promise<void> {
     );
   } else {
     initTracing(config, input.cwd, input.session_id);
-    await captureToolRun(
-      {
-        id: toolRunId,
-        name: input.tool_name,
-        run_type: "tool",
-        inputs: { input: input.tool_input },
-        outputs: { output: input.tool_response },
-        start_time: startTimeIso,
-        end_time: toolEndTimeIso,
-        parent_run_id: parentRunId,
-        trace_id: traceId,
-        dotted_order: toolDottedOrder,
-        metadata: codingAgentMetadata({
-          sessionId: input.session_id,
-          base: config.customMetadata,
-          turnNumber: sessionState.current_turn_number,
-          runtimeVersion: sessionState.runtime_version,
-          agentType: "root",
-          toolName: input.tool_name,
-          runName: input.tool_name,
-          skillName: skillNameFromTool(input.tool_name, input.tool_input),
-        }),
-      },
-      tracing,
-      parentRunId,
-      origin,
-    );
+    const run: ClaudeRun = {
+      id: toolRunId,
+      name: input.tool_name,
+      run_type: "tool",
+      inputs: { input: input.tool_input },
+      outputs: { output: input.tool_response },
+      start_time: startTimeIso,
+      end_time: toolEndTimeIso,
+      parent_run_id: parentRunId,
+      trace_id: traceId,
+      dotted_order: toolDottedOrder,
+      metadata: codingAgentMetadata({
+        sessionId: input.session_id,
+        base: config.customMetadata,
+        turnNumber: sessionState.current_turn_number,
+        runtimeVersion: sessionState.runtime_version,
+        agentType: "root",
+        toolName: input.tool_name,
+        runName: input.tool_name,
+        skillName: skillNameFromTool(input.tool_name, input.tool_input),
+      }),
+    };
+    if (!config.captureHookOutputs) await captureToolRun(run, tracing, parentRunId, origin);
+    else
+      held = {
+        run: tracing === "full" ? run : { ...run, inputs: {}, outputs: {} },
+        tracing,
+        origin,
+      };
   }
 
   // Save state atomically so concurrent PostToolUse hooks don't clobber each other.
   await atomicUpdateState(config.stateFilePath, (freshState) => {
     const freshSession = getSessionState(freshState, input.session_id);
+    const closings = Object.values(freshSession.queued_closings ?? {}).map((c) => c.session);
+    const willClose = [freshSession, ...closings].some(
+      (s) => s.current_turn_run_id === parentRunId,
+    );
 
     // Both the Agent and Workflow tools launch work that outlives this turn's
     // Stop. Register either the same way — under its launching turn in open_turns
@@ -207,6 +214,7 @@ export async function main(): Promise<void> {
           run_id: toolRunId,
           dotted_order: toolDottedOrder,
           deferred,
+          ...(config.captureHookOutputs ? { tool_use_id: input.tool_use_id } : {}),
           ...(workflow
             ? { workflow_run_id: workflow.runId, is_workflow: true, subagent_done: true }
             : {}),
@@ -235,6 +243,9 @@ export async function main(): Promise<void> {
               "post",
             )),
         last_tool_end_time: toolEndTime,
+        ...(held && willClose
+          ? { held_tool_runs: { ...freshSession.held_tool_runs, [input.tool_use_id]: held } }
+          : {}),
         ...backgroundUpdate,
         // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this
         // tool call from the transcript. A deferred Agent tool is skipped there

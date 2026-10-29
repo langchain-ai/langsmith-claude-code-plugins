@@ -659,6 +659,12 @@ describe("loadConfig", () => {
       expect(loadConfig({ cwd }).strictAuth).toBe(true);
     });
 
+    it("leaves hook capture off until its variable turns it on", () => {
+      expect(loadConfig({ cwd }).captureHookOutputs).toBeUndefined();
+      process.env.CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS = "true";
+      expect(loadConfig({ cwd }).captureHookOutputs).toBe(true);
+    });
+
     it("keeps environment redaction rules from bypassing the lock", () => {
       lock({
         status: "valid",

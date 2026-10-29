@@ -32,6 +32,9 @@ import {
   tracePendingSubagents,
   completeTurnRun,
   parseDottedOrder,
+  flushHeldToolRuns,
+  turnHooks,
+  withTaskRunHooks,
 } from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
@@ -99,7 +102,7 @@ export async function closeStoppedTurn(
   // model finishes generating, but the JSONL file write may still be in flight.
   await delay(Math.max(0, startTime + STOP_FLUSH_WAIT_MS - Date.now()));
 
-  const { messages, lastLine, laterPrompt, anchor } = readTranscript(
+  const { messages, lastLine, laterPrompt, anchor, promptId } = readTranscript(
     transcriptPath,
     sessionState.last_line,
     closing.cut_at,
@@ -230,6 +233,7 @@ export async function closeStoppedTurn(
         tracedToolUseIds,
         traceId,
         parentDottedOrder: dottedOrder,
+        captureHookOutputs: config.captureHookOutputs,
       });
       allTaskRunMaps = { ...allTaskRunMaps, ...taskRunMap };
       tracedTurns++;
@@ -238,12 +242,21 @@ export async function closeStoppedTurn(
     }
   }
 
+  const found = config.captureHookOutputs
+    ? turnHooks(sessionState, { messages, promptId })
+    : undefined;
+  const earlier = continuedRunId ? (live.closed_turn_hooks ?? []) : [];
+  const hooks = earlier.length > 0 ? [...earlier, ...(found ?? [])] : found;
+
   // Re-read state so we pick up PostToolUse writes that may have landed after the Stop hook.
   const freshState = loadState(config.stateFilePath);
   const freshSession = getSessionState(freshState, input.session_id);
 
   // Merge task_run_map entries written by PostToolUse with those from traceTurn
-  const mergedTaskRunMap = { ...freshSession.task_run_map, ...allTaskRunMaps };
+  const mergedTaskRunMap = withTaskRunHooks(
+    { ...freshSession.task_run_map, ...allTaskRunMaps },
+    turns,
+  );
 
   const lastTurnId = turns[turns.length - 1]?.promptId;
   const closingTurn = turns[turns.length - 1];
@@ -267,6 +280,7 @@ export async function closeStoppedTurn(
       runtimeVersion,
       turnId: lastTurnId,
       turnNumber: sessionState.current_turn_number,
+      captureHookOutputs: config.captureHookOutputs,
     });
     for (const sa of pendingSubagents) processedAgentIds.add(sa.agent_id);
   }
@@ -332,9 +346,10 @@ export async function closeStoppedTurn(
       ),
       // Merge any late PostToolUse writes with our traced entries. allTaskRunMaps
       // wins on conflicts since it has the fully resolved data from traceTurn.
-      { ...latestSession.task_run_map, ...allTaskRunMaps },
+      withTaskRunHooks({ ...latestSession.task_run_map, ...allTaskRunMaps }, turns),
     );
     const s = updatedState[input.session_id];
+    s.closed_turn_hooks = currentTracing === "full" ? hooks : undefined;
     // Match cursor semantics: if any turn traced, all parsed messages are consumed,
     // including failed turns. If none traced, retain modes for the next replay.
     if (tracedTurns > 0) {
@@ -378,6 +393,7 @@ export async function closeStoppedTurn(
           // If this turn is itself a task-notification turn that spawned its own
           // background subagent, remember the agent to finalize once it drains.
           notification_for_agent_id: notifAgentId ?? entry.notification_for_agent_id,
+          ...(hooks && (entry.tracing ?? currentTracing) === "full" ? { hooks } : {}),
         };
         debug(`${remaining.length} background subagent(s) in flight, deferring turn completion`);
       } else {
@@ -407,6 +423,14 @@ export async function closeStoppedTurn(
     return pruneOldSessions(updatedState);
   });
 
+  await flushHeldToolRuns(
+    config.stateFilePath,
+    input.session_id,
+    currentRunId,
+    messages,
+    config.captureHookOutputs,
+  );
+
   // Complete the Turn run created by UserPromptSubmit (unless deferred above).
   const turnRunId = completeNow ? currentRunId : continuedDeferred ? undefined : continuedRunId;
   if (turnRunId) {
@@ -427,6 +451,7 @@ export async function closeStoppedTurn(
         turnNumber: sessionState.current_turn_number,
         runtimeVersion,
         approvalPolicy,
+        hooks,
       });
       debug(`Turn run ${turnRunId} completed`);
     } catch (err) {

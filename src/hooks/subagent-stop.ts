@@ -89,6 +89,7 @@ export async function traceStoppedSubagent(
       agentTranscriptPath,
       stateFilePath: config.stateFilePath,
       customMetadata: config.customMetadata,
+      captureHookOutputs: config.captureHookOutputs,
     });
     return;
   }
@@ -142,6 +143,7 @@ export async function traceStoppedSubagent(
       turnNumber: launchingTurn?.turn_number ?? sessionState.current_turn_number,
       // Leave the Agent tool run open — the task-notification turn nests under it.
       keepAgentToolRunOpen: true,
+      captureHookOutputs: config.captureHookOutputs,
     });
     debug(`Traced background subagent ${input.agent_type} (${input.agent_id})`);
   } catch (err) {

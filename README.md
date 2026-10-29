@@ -147,6 +147,8 @@ Each setting has a config file key and an environment variable. The environment 
 
 `profile` is personal so the managed file can't lock it. `LANGSMITH_PROFILE` and `LANGSMITH_WORKSPACE_ID` are only used when no `profile` or `workspace_id` is set in a settings file.
 
+Set `capture_hook_outputs` (`CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS`) to `true` to add the text your own hooks give Claude to the turn or tool call it belongs to, which is off by default.
+
 ## More
 
 - [Running in CI, nesting under another run, sending to a second project and where settings can live](./ADVANCED.md)

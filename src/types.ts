@@ -12,6 +12,7 @@ import type { UploadLogin } from "@langchain/plugins-base/auth";
 import type { PluginSession } from "@langchain/plugins-base/plugin";
 import type { LifecycleCaptureInput } from "@langchain/plugins-base/tracing/lifecycle";
 import type { RecordedRun, TurnRecord } from "@langchain/plugins-base/tracing/settlement";
+import type { HookOutput } from "@langchain/plugins-base/tracing";
 import type { BOOLEAN_SETTINGS, HOOK_EVENT_NAMES, PINNED_REPOSITORY_KEYS } from "./constants.js";
 
 export type TracingMode = "full" | "metadata";
@@ -134,6 +135,7 @@ export interface TranscriptRead {
   lastLine: number;
   laterPrompt: boolean;
   anchor: ReadAnchor;
+  promptId?: string;
 }
 
 export type ReadAnchor = Pick<SessionState, "last_line_uuid" | "last_line_at">;
@@ -173,7 +175,21 @@ export interface AssistantMessage {
   effort?: string;
 }
 
-export type TranscriptMessage = UserMessage | ToolResultMessage | AssistantMessage;
+export interface HookEntry {
+  type: "attachment";
+  attachment?: {
+    type: string;
+    content?: string | string[];
+    hookEvent?: string;
+    hookName?: string;
+    toolUseID?: string;
+    response?: { hookSpecificOutput?: { additionalContext?: string } };
+  };
+  timestamp: string;
+  uuid: string;
+}
+
+export type TranscriptMessage = UserMessage | ToolResultMessage | AssistantMessage | HookEntry;
 
 // ─── Parsed Turn (grouped messages) ────────────────────────────────────────
 
@@ -186,6 +202,7 @@ export interface ToolCall {
   };
   /** If this was a Task tool, the agent ID for subagent tracing. */
   agentId?: string;
+  hooks?: HookOutput[];
 }
 
 /** A single LLM response, possibly with tool calls. */
@@ -219,6 +236,7 @@ export interface Turn {
   isComplete: boolean;
   /** Claude Code prompt id for this turn → coding-agent-v1 `turn_id`. */
   promptId?: string;
+  hooks?: HookOutput[];
 }
 
 // ─── Repository Attribution ────────────────────────────────────────────────
@@ -295,6 +313,8 @@ export interface SessionState {
   tool_tracing_progress?: Record<string, "post" | "transcript">;
   /** The last Stop-closed turn's mode, for a reply a blocking Stop hook adds to that turn. */
   closed_turn_tracing?: TracingMode;
+  closed_turn_hooks?: HookOutput[];
+  held_tool_runs?: Record<string, HeldToolRun>;
   /** Captured by PreCompact for async PostCompact (manual preference or auto turn mode). */
   compaction_tracing?: TracingMode;
   last_line: number;
@@ -458,6 +478,23 @@ export interface OpenTurn {
    *  whose tool run + launching turn must be finalized once this turn completes
    *  (handles a notification turn that spawns its own background subagent). */
   notification_for_agent_id?: string;
+  hooks?: HookOutput[];
+}
+
+export interface HeldToolRun {
+  run: ClaudeRun;
+  tracing: TracingMode;
+  origin: ToolOrigin;
+}
+
+export interface PostedRunPayload {
+  privacyMode: TracingMode;
+  run: { inputs?: Record<string, unknown> };
+}
+
+export interface HookPlacement {
+  direction: "input" | "output";
+  scope: "tool" | "turn";
 }
 
 export interface TracingState {
@@ -498,6 +535,7 @@ export interface TraceTurnOptions {
   agentType?: CodingAgentAgentType;
   rootRunId?: string;
   hookCwd?: string;
+  captureHookOutputs?: boolean;
 }
 
 /** What it takes to close a turn run. */
@@ -514,6 +552,7 @@ export interface TurnRunIdentity {
   runtimeVersion?: string;
   approvalPolicy?: string;
   customMetadata?: Record<string, unknown>;
+  hooks?: HookOutput[];
 }
 
 export interface PendingSubagent {
@@ -535,6 +574,8 @@ export interface TaskRunEntry {
   /** Matches workflow stage SubagentStops, which carry it in their path. */
   workflow_run_id?: string;
   is_workflow?: boolean;
+  tool_use_id?: string;
+  hooks?: HookOutput[];
 }
 
 export interface PreToolUseHookInput {
@@ -639,6 +680,7 @@ export interface Config {
   credentialProblem?: string;
   noticeCooldown?: number | "off";
   strictAuth?: boolean;
+  captureHookOutputs?: boolean;
   projectLocked?: boolean;
   mutedLocked?: boolean;
 }

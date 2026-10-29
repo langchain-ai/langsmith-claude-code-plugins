@@ -42,6 +42,11 @@ export async function main(): Promise<void> {
   debug(`SessionEnd hook: session=${input.session_id}, reason=${input.reason}`);
 
   const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
+  if (sessionState.closed_turn_hooks)
+    await atomicUpdateState(config.stateFilePath, (s) => ({
+      ...s,
+      [input.session_id]: { ...s[input.session_id], closed_turn_hooks: undefined },
+    }));
   if (hasOpenWork(sessionState)) {
     await queueClosing(config, "session-end", input, { transcriptCut: true });
     return;
@@ -114,6 +119,7 @@ export async function closeEndedSession(
         runtimeVersion,
         approvalPolicy: sessionState.approval_policy,
         cutAt: closing.cut_at,
+        captureHookOutputs: config.captureHookOutputs,
       });
       position = res.position;
       turnsTraced = res.turnsTraced;
@@ -185,6 +191,7 @@ export async function closeEndedSession(
           runtimeVersion,
           turn: entry,
           error: "Session ended before turn completed",
+          captureHookOutputs: config.captureHookOutputs,
         });
         debug(`Closed interrupted deferred turn ${turnRunId} on session end`);
       }

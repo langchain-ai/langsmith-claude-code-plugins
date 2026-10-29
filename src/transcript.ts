@@ -5,7 +5,18 @@
 
 import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
-import { MAX_FULL_READ_BYTES, TASK_NOTIFICATION_OPENING } from "./constants.js";
+import type { HookOutput } from "@langchain/plugins-base/tracing";
+import {
+  ASYNC_HOOK_ATTACHMENT,
+  HOOK_CONTEXT_ATTACHMENT,
+  HOOK_ENTRY_TYPE,
+  HOOK_PLACEMENTS,
+  MAX_FULL_READ_BYTES,
+  PLUGIN_CONTEXT_SUFFIX,
+  SESSION_START_HOOK,
+  TASK_NOTIFICATION_OPENING,
+  TURN_INPUT_HOOK,
+} from "./constants.js";
 import { readJson } from "./utils/files.js";
 import { hashPrompt } from "./utils/ids/prompt-hash.js";
 import type {
@@ -19,6 +30,8 @@ import type {
   ContentBlock,
   ToolUseBlock,
   Usage,
+  HookEntry,
+  HookPlacement,
   SessionState,
   TranscriptRead,
   TurnPrompt,
@@ -101,7 +114,7 @@ export function readTranscript(
   const finish = (read: Omit<TranscriptRead, "anchor">): TranscriptRead =>
     needle && !anchorFound
       ? readTranscript(filePath, afterLine, cutAt, turn, { last_line_at: anchor.last_line_at })
-      : { ...read, anchor: lastAnchor };
+      : { ...read, anchor: lastAnchor, promptId };
   let size: number;
   try {
     size = statSync(filePath).size;
@@ -321,6 +334,17 @@ export function isToolResult(msg: TranscriptMessage): msg is ToolResultMessage {
   return msg.message.content.some((b: { type: string }) => b.type === "tool_result");
 }
 
+function transcriptHooks({ attachment }: HookEntry): HookOutput[] {
+  const late =
+    attachment?.type === ASYNC_HOOK_ATTACHMENT
+      ? attachment.response?.hookSpecificOutput?.additionalContext
+      : undefined;
+  if (attachment?.type !== HOOK_CONTEXT_ATTACHMENT && late === undefined) return [];
+  const name = attachment!.hookEvent ?? attachment!.hookName?.split(":")[0];
+  const texts = [late ?? attachment!.content ?? []].flat().filter((text) => text !== "");
+  return name ? texts.map((output) => ({ name, output })) : [];
+}
+
 /** Check if a message is an assistant message. */
 export function isAssistantMessage(msg: TranscriptMessage): msg is AssistantMessage {
   return msg.type === "assistant";
@@ -337,6 +361,23 @@ export function resolveProvider(model: string): string {
   if (flag("CLAUDE_CODE_USE_BEDROCK")) return "amazon_bedrock";
   if (flag("CLAUDE_CODE_USE_VERTEX")) return "google_vertex_ai";
   return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
+}
+
+export function hookPlacement(name: string): HookPlacement {
+  return HOOK_PLACEMENTS.get(name) ?? TURN_INPUT_HOOK;
+}
+
+const hookToolUseId = (entry: HookEntry) =>
+  entry.attachment?.toolUseID?.replace(PLUGIN_CONTEXT_SUFFIX, "");
+
+export function windowHooks(messages: TranscriptMessage[], toolUseId?: string): HookOutput[] {
+  return messages
+    .flatMap((m) =>
+      m.type === HOOK_ENTRY_TYPE && (toolUseId === undefined || hookToolUseId(m) === toolUseId)
+        ? transcriptHooks(m)
+        : [],
+    )
+    .filter((hook) => (hookPlacement(hook.name).scope === "tool") === (toolUseId !== undefined));
 }
 
 export function turnToolInputs(turn: Turn): unknown[] {
@@ -452,6 +493,14 @@ function findToolResult(
  * (or if stop_reason is not present, for backward compatibility).
  */
 export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
+  return groupTurns(messages, false);
+}
+
+export function groupPromptTurns(messages: TranscriptMessage[]): Turn[] {
+  return groupTurns(messages, true);
+}
+
+function groupTurns(messages: TranscriptMessage[], keepUnanswered: boolean): Turn[] {
   const turns: Turn[] = [];
 
   let currentPromptId: string | undefined | null = null;
@@ -462,10 +511,13 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
   let hasStopReasonEndTurn = false;
   let userMessages: Turn["userContent"][] = [];
   let userMessagesBefore = new Map<string, Turn["userContent"][]>();
+  let turnHooks: HookOutput[] = [];
+  let hooksByTool = new Map<string, HookOutput[]>();
+  let toolUseIds = new Set<string>();
 
   function finalizeTurn(forceIncomplete = false): void {
     if (!currentUser) return;
-    if (assistantChunks.size === 0) return;
+    if (assistantChunks.size === 0 && !keepUnanswered) return;
 
     // Check if turn is complete
     const assistantMessages = Array.from(assistantChunks.values()).flat();
@@ -494,6 +546,7 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
           tool_use: tu,
           result: result ? { content: result.content, timestamp: result.timestamp } : undefined,
           agentId: result?.agentId,
+          hooks: hooksByTool.get(tu.id),
         };
       });
 
@@ -515,6 +568,7 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
       llmCalls,
       isComplete,
       promptId: currentUser.promptId,
+      ...(turnHooks.length > 0 ? { hooks: turnHooks } : {}),
     });
   }
 
@@ -530,7 +584,18 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
 
       if (isNewTurn) {
         // Finalize previous turn and start a new one
+        const carried =
+          currentUser && assistantChunks.size === 0
+            ? turnHooks.filter((hook) => hook.name === SESSION_START_HOOK)
+            : [];
+        turnHooks = turnHooks.filter((hook) => !carried.includes(hook));
         finalizeTurn();
+        if (currentUser) turnHooks = carried;
+        else
+          turnHooks = turnHooks.filter((hook) => {
+            const { direction, scope } = hookPlacement(hook.name);
+            return direction === "input" && scope === "turn";
+          });
         currentPromptId = msg.promptId;
         currentUser = msg;
         assistantChunks = new Map();
@@ -539,8 +604,17 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         hasStopReasonEndTurn = false;
         userMessages = [];
         userMessagesBefore = new Map();
+        hooksByTool = new Map();
+        toolUseIds = new Set();
       } else {
         userMessages.push(msg.message.content);
+      }
+    } else if (msg.type === HOOK_ENTRY_TYPE) {
+      const toolUseId = hookToolUseId(msg) ?? "";
+      for (const hook of transcriptHooks(msg)) {
+        if (toolUseIds.has(toolUseId) && hookPlacement(hook.name).scope === "tool")
+          hooksByTool.set(toolUseId, [...(hooksByTool.get(toolUseId) ?? []), hook]);
+        else turnHooks.push(hook);
       }
     } else if (isToolResult(msg)) {
       toolResults.push(msg);
@@ -553,6 +627,8 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         userMessages = [];
       }
       assistantChunks.get(id)!.push(msg);
+      for (const block of msg.message.content)
+        if (block.type === "tool_use") toolUseIds.add(block.id);
 
       // Check if this is the final chunk with stop_reason: "end_turn"
       if (msg.message.stop_reason === "end_turn") {

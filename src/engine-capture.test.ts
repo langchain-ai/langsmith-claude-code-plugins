@@ -56,6 +56,13 @@ describe("captureInput", () => {
     ]);
   });
 
+  it("patches inputs only when they carry hook output", () => {
+    const closing = run({ inputs: { messages: [], hooks: [{ name: "Stop", output: "x" }] } });
+    const input = captureInput(closing, "full", "turn", "patch", "s1", false);
+
+    expect(input.submission).toMatchObject({ patch: { fields: ["inputs"] } });
+  });
+
   it("names its turn's saved post as the parent so the engine skips scanning the session", () => {
     const child = captureInput(run({ parent_run_id: "turn" }), "full", "turn", "post", "s1", false);
 
