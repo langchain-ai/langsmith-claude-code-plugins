@@ -1,0 +1,14 @@
+{
+  "executableName": "langsmith-claude-code-gateway",
+  "repository": "langchain-ai/langsmith-claude-code-plugins",
+  "build": {
+    "entryPoint": "src/hooks/gateway.ts",
+    "outputDirectory": "bin",
+    "versionFile": "package.json",
+    "minify": false,
+    "stampedVersionFiles": ["plugins/langsmith-gateway/hooks/langsmith-gateway"]
+  },
+  "sign": {
+    "entitlements": "macos-entitlements.plist"
+  }
+}

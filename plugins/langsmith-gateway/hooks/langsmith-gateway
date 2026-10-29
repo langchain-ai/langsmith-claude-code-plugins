@@ -1,0 +1,105 @@
+#!/bin/sh
+set -eu
+
+RAN_CODES="0"
+VERSION="0.6.1"
+REPOSITORY="langchain-ai/langsmith-claude-code-plugins"
+STALE_DOWNLOAD_MINUTES="10"
+
+root="${CLAUDE_PLUGIN_ROOT:-}"
+if [ -z "$root" ]; then
+  root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
+fi
+
+executable="langsmith-claude-code-gateway"
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64) asset="$executable-darwin-arm64-$VERSION" ;;
+  Darwin-x86_64) asset="$executable-darwin-x64-$VERSION" ;;
+  *) asset="" ;;
+esac
+
+data="${CLAUDE_PLUGIN_DATA:-}"
+build=""
+if [ -n "$data" ] && [ -n "$asset" ]; then
+  build="$data/bin/$asset"
+fi
+
+claim_download() {
+  if mkdir "$lock" 2>/dev/null; then return 0; fi
+  [ -n "$(find "$lock" -prune -mmin +"$STALE_DOWNLOAD_MINUTES" 2>/dev/null)" ] || return 1
+  rmdir "$lock" 2>/dev/null && mkdir "$lock" 2>/dev/null
+}
+
+download() {
+  lock="$build.lock"
+  claim_download || return 0
+  partial="$build.partial.$$"
+  release="https://github.com/$REPOSITORY/releases/download/$VERSION"
+  if curl -fsSL --proto '=https' --max-time 300 -o "$partial" "$release/$asset" &&
+    expected="$(curl -fsSL --proto '=https' --max-time 30 "$release/$asset.sha256" | cut -d' ' -f1)" &&
+    [ -n "$expected" ] &&
+    [ "$(shasum -a 256 "$partial" | cut -d' ' -f1)" = "$expected" ] &&
+    chmod +x "$partial" &&
+    mv -f "$partial" "$build"; then
+    for old in "$data/bin/$executable"-darwin-*; do
+      case "$old" in
+        "$build" | *.lock | *.partial.*) ;;
+        *) rm -f "$old" ;;
+      esac
+    done
+  fi
+  rm -f "$partial" || :
+  rmdir "$lock" || :
+}
+
+if [ -n "$build" ] && [ ! -x "$build" ] && mkdir -p "$data/bin" 2>/dev/null; then
+  ( download ) </dev/null >/dev/null 2>&1 &
+fi
+
+ran() {
+  case " $RAN_CODES " in
+    *" $1 "*) return 0 ;;
+  esac
+  return 1
+}
+
+if [ -z "$build" ] || [ ! -x "$build" ] || ! ( exec 4<&0 ) 2>/dev/null; then
+  exec node "$root/bundle/gateway.js" "$@"
+fi
+
+child=""
+clean() {
+  if [ -n "$child" ]; then kill "$child" 2>/dev/null || :; fi
+  rm -f "$event" || :
+}
+
+if event="$(mktemp "${TMPDIR:-/tmp}/langsmith-event.XXXXXX" 2>/dev/null)"; then
+  trap clean EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 131' QUIT
+  trap 'exit 143' TERM
+  exec 4<&0
+  cat <&4 > "$event" &
+  child=$!
+  wait "$child"
+  child=""
+  exec 4<&-
+else
+  exec node "$root/bundle/gateway.js" "$@"
+fi
+
+"$build" "$@" < "$event" &
+child=$!
+code=0
+wait "$child" || code=$?
+child=""
+if ran "$code"; then
+  exit "$code"
+fi
+
+( printf '%s\n' "langsmith gateway: downloaded build did not run ($build exited $code); handing the event to node" >&2 ) || :
+
+exec 3< "$event"
+rm -f "$event" || :
+exec node "$root/bundle/gateway.js" "$@" <&3

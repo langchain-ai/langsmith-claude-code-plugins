@@ -9,6 +9,8 @@ on:
     paths:
       - .github/workflows/build-binary.yml
       - binary.config.json
+      - gateway.binary.config.json
+      - plugins/langsmith-gateway/hooks/langsmith-gateway
       - plugins/langsmith-tracing/hooks/hooks.binary.json
       - macos-entitlements.plist
       - package.json
@@ -24,6 +26,23 @@ jobs:
     with:
       bun-version: 1.4.4
       binary-directory: plugins/langsmith-tracing/binary
+    secrets:
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+
+  gateway:
+    needs: binary
+    permissions:
+      contents: write
+    uses: langchain-ai/langsmith-plugin-binary/.github/workflows/build-binary.yml@183d4fb9ad5137027f5c88ac61507c66a98bd221 # 183d4fb
+    with:
+      config: gateway.binary.config.json
+      bun-version: 1.4.4
+      commit-binaries: false
+      binary-test: test:gateway-binary
     secrets:
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
       APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
