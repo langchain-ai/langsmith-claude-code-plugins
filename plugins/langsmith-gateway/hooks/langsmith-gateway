@@ -23,6 +23,8 @@ build=""
 if [ -n "$data" ] && [ -n "$asset" ]; then
   build="$data/bin/$asset"
 fi
+preferred="$build"
+alternate=""
 
 claim_download() {
   if mkdir "$lock" 2>/dev/null; then return 0; fi
@@ -63,7 +65,15 @@ ran() {
   return 1
 }
 
-if [ -z "$build" ] || [ ! -x "$build" ] || ! ( exec 4<&0 ) 2>/dev/null; then
+first=""
+for candidate in "$preferred" "$alternate"; do
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+    first="$candidate"
+    break
+  fi
+done
+
+if [ -z "$first" ] || ! ( exec 4<&0 ) 2>/dev/null; then
   exec node "$root/bundle/gateway.js" "$@"
 fi
 
@@ -89,16 +99,22 @@ else
   exec node "$root/bundle/gateway.js" "$@"
 fi
 
-"$build" "$@" < "$event" &
-child=$!
-code=0
-wait "$child" || code=$?
-child=""
-if ran "$code"; then
-  exit "$code"
-fi
+unstarted=""
+for candidate in "$preferred" "$alternate"; do
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+    "$candidate" "$@" < "$event" &
+    child=$!
+    code=0
+    wait "$child" || code=$?
+    child=""
+    if ran "$code"; then
+      exit "$code"
+    fi
+    unstarted="$candidate exited $code"
+  fi
+done
 
-( printf '%s\n' "langsmith gateway: downloaded build did not run ($build exited $code); handing the event to node" >&2 ) || :
+( printf '%s\n' "langsmith gateway: downloaded build did not run ($unstarted); handing the event to node" >&2 ) || :
 
 exec 3< "$event"
 rm -f "$event" || :
