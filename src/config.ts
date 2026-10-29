@@ -19,6 +19,7 @@ import {
   withBothGitMetadataNames,
 } from "@langchain/plugins-base/metadata";
 import {
+  AGENT_ID_VARIABLE,
   BOOLEAN_SETTINGS,
   NO_PINNED_KEYS,
   NOTICE_COOLDOWN_OFF,
@@ -191,6 +192,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
         api_key: process.env.CC_LANGSMITH_API_KEY,
         api_url: process.env.LANGSMITH_ENDPOINT,
         project: process.env.CC_LANGSMITH_PROJECT,
+        agent_id: process.env[AGENT_ID_VARIABLE],
         metadata: customMetadata,
         redact: process.env.CC_LANGSMITH_REDACT === undefined ? undefined : redact,
         redact_extra_rules: redactExtraRules,

@@ -35,6 +35,7 @@ describe("loadConfig", () => {
     delete process.env.CC_LANGSMITH_API_KEY;
     delete process.env.LANGSMITH_API_KEY;
     delete process.env.CC_LANGSMITH_PROJECT;
+    delete process.env.LANGSMITH_AGENT_ID;
     delete process.env.LANGSMITH_ENDPOINT;
     delete process.env.STATE_FILE;
     delete process.env.CC_LANGSMITH_DEBUG;
@@ -123,6 +124,13 @@ describe("loadConfig", () => {
       expect(writerOptions(config).destinations[0].agentId).toBe("my-agent");
       writeFileSync(file, JSON.stringify({ agent_id: "Bad_ID" }));
       expect(loadConfig({ cwd }).credentialProblem).toContain("Bad_ID");
+    });
+
+    it("sends traces to the agent its variable names over the file's agent", () => {
+      process.env.CC_LANGSMITH_API_KEY = "lsv2_pt_key";
+      writeFileSync(join(tmpHome, ".claude", "langsmith.json"), JSON.stringify({ agent_id: "file-agent" }));
+      process.env.LANGSMITH_AGENT_ID = "env-agent";
+      expect(writerOptions(loadConfig({ cwd })).destinations[0].agentId).toBe("env-agent");
     });
 
     it.each(
@@ -644,6 +652,14 @@ describe("loadConfig", () => {
       expect(loadConfig({ cwd }).mutedLocked).toBeUndefined();
       lock({ status: "valid", common: { defaultMuted: true }, diagnostics: [] });
       expect(loadConfig({ cwd }).mutedLocked).toBe(true);
+    });
+
+    it("drops the agent variable when the managed file locks the project", () => {
+      process.env.CC_LANGSMITH_API_KEY = "lsv2_pt_key";
+      process.env.LANGSMITH_AGENT_ID = "env-agent";
+      expect(loadConfig({ cwd }).agentId).toBe("env-agent");
+      lock({ status: "valid", common: { project: "locked" }, diagnostics: [] });
+      expect(loadConfig({ cwd }).agentId).toBeUndefined();
     });
 
     it("sends runs saved before a project lock to the locked project", () => {

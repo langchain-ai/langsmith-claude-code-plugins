@@ -16,8 +16,8 @@ importers:
         version: 0.11.4
     devDependencies:
       '@langchain/plugins-base':
-        specifier: 0.5.1
-        version: 0.5.1(langsmith@0.11.4)
+        specifier: github:langchain-ai/langsmith-plugin-binary#f666dd2f3c19b17d01599f1f0a1a67a713ab73f9
+        version: https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/f666dd2f3c19b17d01599f1f0a1a67a713ab73f9(langsmith@0.11.4)
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
@@ -211,8 +211,9 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@langchain/plugins-base@0.5.1':
-    resolution: {integrity: sha512-N5B0fwRdLiPeF3nV0YeXT3Oi2E5QZgboWDkfkzL3A5Nz5yF4z9kbLaji43Dcwr7nv6HKUJ8ZqFWoDuHmJp3xwA==}
+  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/f666dd2f3c19b17d01599f1f0a1a67a713ab73f9':
+    resolution: {tarball: https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/f666dd2f3c19b17d01599f1f0a1a67a713ab73f9}
+    version: 0.5.1
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
@@ -1128,7 +1129,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@langchain/plugins-base@0.5.1(langsmith@0.11.4)':
+  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugin-binary/tar.gz/f666dd2f3c19b17d01599f1f0a1a67a713ab73f9(langsmith@0.11.4)':
     dependencies:
       langsmith: 0.11.4
 
