@@ -37,6 +37,7 @@ jobs:
     needs: binary
     permissions:
       contents: write
+      pull-requests: write
     uses: langchain-ai/langsmith-plugin-binary/.github/workflows/build-binary.yml@183d4fb9ad5137027f5c88ac61507c66a98bd221 # 183d4fb
     with:
       config: gateway.binary.config.json
