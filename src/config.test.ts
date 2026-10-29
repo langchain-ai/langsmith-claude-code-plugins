@@ -131,6 +131,8 @@ describe("loadConfig", () => {
       writeFileSync(join(tmpHome, ".claude", "langsmith.json"), JSON.stringify({ agent_id: "file-agent" }));
       process.env.LANGSMITH_AGENT_ID = "env-agent";
       expect(writerOptions(loadConfig({ cwd })).destinations[0].agentId).toBe("env-agent");
+      process.env.LANGSMITH_AGENT_ID = " ";
+      expect(writerOptions(loadConfig({ cwd })).destinations[0].agentId).toBe("file-agent");
     });
 
     it.each(
