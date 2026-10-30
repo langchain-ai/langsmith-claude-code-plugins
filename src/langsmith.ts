@@ -300,6 +300,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
               turnMetadataBase,
               toolCall.tool_use.input,
               llmCall.cwd ?? sessionCwd,
+              toolCall.tool_use.name,
             ),
             turnId,
             turnNumber: turnNum,

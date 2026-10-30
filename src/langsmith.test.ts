@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Turn } from "./types.js";
+import { createGitSandbox } from "./fixtures/git-sandbox.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 
 const mockCreateRun = vi.fn().mockResolvedValue(undefined);
@@ -531,6 +532,67 @@ describe("traceTurn", () => {
       undefined,
       undefined,
     ]);
+  });
+
+  it("tags only the first model call of a typed skill's turn", async () => {
+    const typed =
+      "<command-message>review-pr</command-message>\n<command-name>/review-pr</command-name>";
+    const inserted = [[{ type: "text", text: "More instructions." }]];
+    const turn = (first: object): Turn => ({
+      userContent: typed,
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        call([{ type: "text", text: "a" }], first),
+        call([{ type: "text", text: "b" }], { userMessagesBefore: inserted }),
+      ],
+      isComplete: true,
+    });
+
+    await traceTurn({ turn: turn({ userMessagesBefore: inserted }), sessionId: "s", turnNum: 1 });
+    expect(llmRuns().map((run) => run.extra.metadata.ls_skill_name)).toEqual([
+      "review-pr",
+      undefined,
+    ]);
+
+    mockCreateRun.mockClear();
+    await traceTurn({ turn: turn({}), sessionId: "s", turnNum: 1 });
+    expect(llmRuns().map((run) => run.extra.metadata.ls_skill_name)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it("attributes a tool run to the folder its model call ran in", async () => {
+    const sandbox = createGitSandbox("ls call cwd ");
+    const repo = sandbox.makeRepo("repo", "main", "Owner", "git@github.com:acme/callcwd.git");
+    const bash = {
+      type: "tool_use" as const,
+      id: "tool_1",
+      name: "Bash",
+      input: { command: "ls" },
+    };
+    const turn: Turn = {
+      userContent: "go",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        call([bash], {
+          cwd: repo,
+          toolCalls: [
+            { tool_use: bash, result: { content: "ok", timestamp: "2025-01-01T00:00:03Z" } },
+          ],
+        }),
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({
+      turn,
+      sessionId: "s",
+      turnNum: 1,
+      customMetadata: { cwd: sandbox.root },
+    });
+    expect(created("Bash").extra.metadata.ls_git_repo).toBe("acme/callcwd");
+    sandbox.remove();
   });
 
   it("leaves a failed Skill call untagged", async () => {

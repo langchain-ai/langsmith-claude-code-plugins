@@ -3,14 +3,21 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { GIT_DIR_COMMAND, GLOB_CHARACTER, TOOL_PATH_INPUT_KEYS } from "./constants.js";
 import type { ToolPathLookup } from "./types.js";
 
-export function toolPathFromInput(toolInput: unknown, sessionCwd?: string): ToolPathLookup {
+export function toolPathFromInput(
+  toolInput: unknown,
+  sessionCwd?: string,
+  toolName?: string,
+): ToolPathLookup {
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
     return { namedAPath: false };
   }
   const named = toolInput as Record<string, unknown>;
   const gitDir = typeof named.command === "string" ? GIT_DIR_COMMAND.exec(named.command)?.[1] : "";
   const globDir =
-    typeof named.pattern === "string" && isAbsolute(named.pattern) && named.path === undefined
+    toolName === "Glob" &&
+    typeof named.pattern === "string" &&
+    isAbsolute(named.pattern) &&
+    named.path === undefined
       ? dirname(`${named.pattern.split(GLOB_CHARACTER)[0]}_`)
       : "";
   const input =

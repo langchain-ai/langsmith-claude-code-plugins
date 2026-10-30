@@ -24519,13 +24519,13 @@ function loadConfig(options) {
 // dist/src/repo-attribution-paths.js
 import { existsSync as existsSync3 } from "node:fs";
 import { dirname as dirname17, isAbsolute as isAbsolute5, resolve as resolve14 } from "node:path";
-function toolPathFromInput(toolInput, sessionCwd) {
+function toolPathFromInput(toolInput, sessionCwd, toolName) {
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
     return { namedAPath: false };
   }
   const named = toolInput;
   const gitDir = typeof named.command === "string" ? GIT_DIR_COMMAND.exec(named.command)?.[1] : "";
-  const globDir = typeof named.pattern === "string" && isAbsolute5(named.pattern) && named.path === void 0 ? dirname17(`${named.pattern.split(GLOB_CHARACTER)[0]}_`) : "";
+  const globDir = toolName === "Glob" && typeof named.pattern === "string" && isAbsolute5(named.pattern) && named.path === void 0 ? dirname17(`${named.pattern.split(GLOB_CHARACTER)[0]}_`) : "";
   const input = gitDir || globDir && existsSync3(globDir) ? { ...named, path: gitDir || globDir } : named;
   let namedAPath = false;
   for (const key of TOOL_PATH_INPUT_KEYS) {
@@ -24567,14 +24567,14 @@ function withPinsOf(base, scoped) {
   }
   return scoped;
 }
-function toolOrigin(toolInput, sessionCwd) {
-  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd) };
+function toolOrigin(toolInput, sessionCwd, toolName) {
+  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd, toolName) };
 }
 function sessionScopedMetadata(base, sessionCwd) {
   return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, []));
 }
-function repoScopedMetadata(base, toolInput, sessionCwd) {
-  return repositoryAttributor().toolMetadata(withoutUnpinnedRepositoryKeys(base), toolOrigin(toolInput, sessionCwd));
+function repoScopedMetadata(base, toolInput, sessionCwd, toolName) {
+  return repositoryAttributor().toolMetadata(withoutUnpinnedRepositoryKeys(base), toolOrigin(toolInput, sessionCwd, toolName));
 }
 function settledRepositoryMetadata(base, origin) {
   return repositoryAttributor().toolMetadata(base, origin);
@@ -25574,7 +25574,7 @@ async function traceTurn(options) {
         dotted_order: toolDottedOrder,
         metadata: codingAgentMetadata({
           sessionId,
-          base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, llmCall.cwd ?? sessionCwd),
+          base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, llmCall.cwd ?? sessionCwd, toolCall.tool_use.name),
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
@@ -27586,7 +27586,7 @@ async function main7() {
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
   const agentId = input.tool_response.agentId;
   const workflow = !agentId ? detectWorkflowLaunch(input.tool_name, input.tool_response) : void 0;
-  const origin = toolOrigin(input.tool_input, input.cwd);
+  const origin = toolOrigin(input.tool_input, input.cwd, input.tool_name);
   if (agentId) {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
   } else if (workflow) {

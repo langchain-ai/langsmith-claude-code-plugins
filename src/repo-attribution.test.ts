@@ -63,7 +63,13 @@ const everythingBetaReveals = {
 };
 
 type Row = Record<string, unknown>;
-type Case = [name: string, input: Record<string, string>, want: Row, cwd?: string];
+type Case = [
+  name: string,
+  input: Record<string, string>,
+  want: Row,
+  cwd?: string,
+  toolName?: string,
+];
 
 afterAll(() => sandbox.remove());
 
@@ -83,7 +89,7 @@ describe("repoScopedMetadata", () => {
     ["a bare path", { path: betaSeed }, inBeta],
     ["a relative directory", { cwd: "beta repo" }, inBeta, root],
     ["a git -C command", { command: "git -C gamma log -1" }, { ls_git_repo: "acme/gamma" }, root],
-    ["an absolute glob pattern", { pattern: join(beta, "**", "*.ts") }, inBeta],
+    ["an absolute glob pattern", { pattern: join(beta, "**", "*.ts") }, inBeta, undefined, "Glob"],
     ["a file nothing has created yet", { file_path: join(alpha, "new", "deep", "x.txt") }, inAlpha],
     ["a file in the git directory", { file_path: join(alpha, ".git", "config") }, inAlpha],
     [
@@ -91,8 +97,8 @@ describe("repoScopedMetadata", () => {
       { file_path: join(worktree, "seed.txt") },
       { ls_git_repo: "acme/alpha", ls_git_branch: "side-branch" },
     ],
-  ])("attributes %s", (_name, input, want, cwd) => {
-    expect(repoScopedMetadata(session, input, cwd)).toMatchObject(want);
+  ])("attributes %s", (_name, input, want, cwd, toolName) => {
+    expect(repoScopedMetadata(session, input, cwd, toolName)).toMatchObject(want);
   });
 
   it("keeps the session repository's author on a tool naming a path nothing sits at", () => {
@@ -101,6 +107,14 @@ describe("repoScopedMetadata", () => {
     expect(repoScopedMetadata(base, { path: "notion/page/abc123" }, alpha)).toMatchObject({
       ls_attribution_identifier: "Alpha Owner",
     });
+  });
+
+  it("keeps the session repository on a Grep whose regex looks like an absolute path", () => {
+    const base = sessionScopedMetadata(noRepository, alpha);
+
+    expect(repoScopedMetadata(base, { pattern: "/etc/hosts" }, alpha, "Grep")).toMatchObject(
+      inAlpha,
+    );
   });
 
   it("keeps a chained git -C command with the folder it ran in", () => {
