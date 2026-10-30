@@ -29,8 +29,7 @@ import {
   UNUSABLE_LOGIN_REASON,
   UPSTREAM,
 } from "./proxy-constants.js";
-import { logFailure, startLog } from "./log.js";
-import { loginGuidance, loginToken, TokenCache } from "./token.js";
+import { loginGuidance, loginToken, SignInFailure, TokenCache } from "./token.js";
 import { control, ensure, gatewayHook, waitForStopped } from "./lifecycle.js";
 import { createConfig } from "./setup.js";
 import {
@@ -840,27 +839,32 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     if (profile !== undefined) saveLogin(home, profile);
     await expect(loginToken(base)).rejects.toThrow(reason);
   });
+  it("logs a failed sign-in when a request reaches the gateway", async () => {
+    const log = vi.fn();
+    const config = { ...base, useClaudeSubscription: false };
+    const token = async () => {
+      throw new SignInFailure(NO_LOGIN_REASON);
+    };
+    const proxy = createProxy(config, { token, log });
+    config.port = await listen(proxy.server);
+    const response = await request(config, undefined, { headers: { authorization: undefined } });
+    expect(response.status).toBe(503);
+    expect(log).toHaveBeenCalledWith(SIGN_IN_FAILED_LOG + NO_LOGIN_REASON);
+  });
   it("logs why sign-in failed and when the gateway refused a token, never the token", async () => {
-    startLog(home);
+    const log = vi.fn();
     const expired = jwt(1);
-    const failing = new TokenCache(async () => expired);
-    await expect(failing.get()).rejects.toThrow();
+    await expect(
+      new TokenCache(async () => expired, Date.now, 60_000, log).get(),
+    ).rejects.toThrow();
     const token = jwt();
-    const refused = new TokenCache(async () => token);
+    const refused = new TokenCache(async () => token, Date.now, 60_000, log);
     await refused.get();
     refused.reject(token);
-    const log = readFileSync(join(home, "gateway.log"), "utf8");
-    expect(log).toContain(SIGN_IN_FAILED_LOG + EXPIRED_TOKEN_REASON);
-    expect(log).toContain(GATEWAY_REFUSED_LOG);
-    expect(log).not.toContain(expired);
-    expect(log).not.toContain(token);
-  });
-  it("starts a fresh gateway log once it reaches its size limit", () => {
-    startLog(home);
-    writeFileSync(join(home, "gateway.log"), "x".repeat(1024 * 1024));
-    logFailure("after the limit");
-    expect(readFileSync(join(home, "gateway.log"), "utf8")).toMatch(/after the limit\n$/);
-    expect(statSync(join(home, "gateway.log.1")).size).toBe(1024 * 1024);
+    expect(log.mock.calls).toEqual([
+      [SIGN_IN_FAILED_LOG + EXPIRED_TOKEN_REASON],
+      [GATEWAY_REFUSED_LOG],
+    ]);
   });
 });
 describe("shared lifecycle and explicit configuration", () => {

@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { endpoints, userHome } from "./config.js";
 import { bearerCredential } from "./header-slots.js";
-import { logFailure } from "./log.js";
 import {
   BEARER_TOKEN,
   CREDENTIAL_TIMEOUT_MS,
@@ -117,6 +116,7 @@ export class TokenCache {
     private readonly load: () => Promise<string>,
     private readonly now = Date.now,
     private readonly ttlMs = LOGIN_TOKEN_TTL_MS,
+    private readonly log: (message: string) => void = () => undefined,
   ) {}
   get loading(): boolean {
     return this.pending !== undefined;
@@ -136,7 +136,7 @@ export class TokenCache {
     if (this.now() < this.rejectedAt + REJECTION_RECHECK_MS) return;
     this.cached = undefined;
     this.rejectedAt = this.now();
-    logFailure(GATEWAY_REFUSED_LOG);
+    this.log(GATEWAY_REFUSED_LOG);
   }
   get(): Promise<string> {
     if (this.cached && this.now() < this.cached.until) return Promise.resolve(this.cached.token);
@@ -159,7 +159,7 @@ export class TokenCache {
         return token;
       })
       .catch((error: unknown) => {
-        logFailure(
+        this.log(
           SIGN_IN_FAILED_LOG +
             (error instanceof SignInFailure ? error.message : UNREADABLE_TOKEN_REASON),
         );

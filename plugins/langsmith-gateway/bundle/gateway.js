@@ -2550,13 +2550,13 @@ var init_utils = __esm({
 function is_non_nullish_primitive(v) {
   return typeof v === "string" || typeof v === "number" || typeof v === "boolean" || typeof v === "symbol" || typeof v === "bigint";
 }
-function inner_stringify(object2, prefix, generateArrayPrefix, commaRoundTrip, allowEmptyArrays, strictNullHandling, skipNulls, encodeDotInKeys, encoder3, filter, sort, allowDots, serializeDate, format, formatter, encodeValuesOnly, charset, sideChannel) {
-  let obj = object2;
+function inner_stringify(object3, prefix, generateArrayPrefix, commaRoundTrip, allowEmptyArrays, strictNullHandling, skipNulls, encodeDotInKeys, encoder3, filter, sort, allowDots, serializeDate, format, formatter, encodeValuesOnly, charset, sideChannel) {
+  let obj = object3;
   let tmp_sc = sideChannel;
   let step = 0;
   let find_flag = false;
   while ((tmp_sc = tmp_sc.get(sentinel)) !== void 0 && !find_flag) {
-    const pos = tmp_sc.get(object2);
+    const pos = tmp_sc.get(object3);
     step += 1;
     if (typeof pos !== "undefined") {
       if (pos === step) {
@@ -2632,7 +2632,7 @@ function inner_stringify(object2, prefix, generateArrayPrefix, commaRoundTrip, a
     }
     const encoded_key = allowDots && encodeDotInKeys ? key.replace(/\./g, "%2E") : key;
     const key_prefix = isArray(obj) ? typeof generateArrayPrefix === "function" ? generateArrayPrefix(adjusted_prefix, encoded_key) : adjusted_prefix : adjusted_prefix + (allowDots ? "." + encoded_key : "[" + encoded_key + "]");
-    sideChannel.set(object2, step);
+    sideChannel.set(object3, step);
     const valueSideChannel = /* @__PURE__ */ new WeakMap();
     valueSideChannel.set(sentinel, sideChannel);
     push_to_array(values, inner_stringify(
@@ -2721,8 +2721,8 @@ function normalize_stringify_options(opts = defaults) {
     strictNullHandling: typeof opts.strictNullHandling === "boolean" ? opts.strictNullHandling : defaults.strictNullHandling
   };
 }
-function stringify(object2, opts = {}) {
-  let obj = object2;
+function stringify(object3, opts = {}) {
+  let obj = object3;
   const options = normalize_stringify_options(opts);
   let obj_keys;
   let filter;
@@ -3890,17 +3890,17 @@ var init_headers = __esm({
 function encodeURIPath(str) {
   return str.replace(/[^A-Za-z0-9\-._~!$&'()*+,;=:@]+/g, encodeURIComponent);
 }
-var EMPTY, createPathTagFunction, path2;
+var EMPTY, createPathTagFunction, path;
 var init_path = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/internal/utils/path.mjs"() {
     init_error();
     EMPTY = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.create(null));
-    createPathTagFunction = (pathEncoder = encodeURIPath) => function path4(statics, ...params) {
+    createPathTagFunction = (pathEncoder = encodeURIPath) => function path3(statics, ...params) {
       if (statics.length === 1)
         return statics[0];
       let postPath = false;
       const invalidSegments = [];
-      const path5 = statics.reduce((previousValue, currentValue, index) => {
+      const path4 = statics.reduce((previousValue, currentValue, index) => {
         if (/[?#]/.test(currentValue)) {
           postPath = true;
         }
@@ -3917,7 +3917,7 @@ var init_path = __esm({
         }
         return previousValue + currentValue + (index === params.length ? "" : encoded);
       }, "");
-      const pathOnly = path5.split(/[?#]/, 1)[0];
+      const pathOnly = path4.split(/[?#]/, 1)[0];
       const invalidSegmentPattern = /(?<=^|\/)(?:\.|%2e){1,2}(?=\/|$)/gi;
       let match;
       while ((match = invalidSegmentPattern.exec(pathOnly)) !== null) {
@@ -3938,12 +3938,12 @@ var init_path = __esm({
         }, "");
         throw new LangsmithError(`Path parameters result in path with invalid segments:
 ${invalidSegments.map((e) => e.error).join("\n")}
-${path5}
+${path4}
 ${underline}`);
       }
-      return path5;
+      return path4;
     };
-    path2 = /* @__PURE__ */ createPathTagFunction(encodeURIPath);
+    path = /* @__PURE__ */ createPathTagFunction(encodeURIPath);
   }
 });
 
@@ -3976,7 +3976,7 @@ var init_agents = __esm({
        * environment's runtime bindings.
        */
       retrieve(agentID, query = {}, options) {
-        return this._client.get(path2`/api/v1/agents/${agentID}`, { query, ...options });
+        return this._client.get(path`/api/v1/agents/${agentID}`, { query, ...options });
       }
       /**
        * Updates an Agent's name, source_type, agent_type, or owner_id. Omitted fields
@@ -3989,7 +3989,7 @@ var init_agents = __esm({
        * when present. Requires update permission on every environment project.
        */
       update(agentID, body, options) {
-        return this._client.patch(path2`/api/v1/agents/${agentID}`, { body, ...options });
+        return this._client.patch(path`/api/v1/agents/${agentID}`, { body, ...options });
       }
       /**
        * Returns Agents visible to the caller. Each item is the same Agent shape as GET
@@ -4006,7 +4006,7 @@ var init_agents = __esm({
        * does not exist returns 204.
        */
       delete(agentID, options) {
-        return this._client.delete(path2`/api/v1/agents/${agentID}`, {
+        return this._client.delete(path`/api/v1/agents/${agentID}`, {
           ...options,
           headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
         });
@@ -4030,7 +4030,7 @@ var init_items = __esm({
        */
       create(queueID, params, options) {
         const { extend_trace_retention, ...body } = params;
-        return this._client.post(path2`/api/v1/platform/annotation-queues/${queueID}/items`, {
+        return this._client.post(path`/api/v1/platform/annotation-queues/${queueID}/items`, {
           query: { extend_trace_retention },
           body,
           ...options
@@ -4043,7 +4043,7 @@ var init_items = __esm({
        */
       update(itemID, params, options) {
         const { queue_id, ...body } = params;
-        return this._client.patch(path2`/api/v1/platform/annotation-queues/${queue_id}/items/${itemID}`, {
+        return this._client.patch(path`/api/v1/platform/annotation-queues/${queue_id}/items/${itemID}`, {
           body,
           ...options
         });
@@ -4059,14 +4059,14 @@ var init_items = __esm({
        * satisfied, not merely items the caller personally marked completed.
        */
       list(queueID, query, options) {
-        return this._client.getAPIList(path2`/api/v1/platform/annotation-queues/${queueID}/items`, ItemsCursorGetPagination, { query, ...options });
+        return this._client.getAPIList(path`/api/v1/platform/annotation-queues/${queueID}/items`, ItemsCursorGetPagination, { query, ...options });
       }
       /**
        * Log the caller's reviewer status for a RUN or THREAD annotation queue item. A
        * null status re-shows the item for this reviewer.
        */
       createStatus(queueItemID, body, options) {
-        return this._client.post(path2`/api/v1/platform/annotation-queues/items/${queueItemID}/status`, {
+        return this._client.post(path`/api/v1/platform/annotation-queues/items/${queueItemID}/status`, {
           body,
           ...options
         });
@@ -4076,7 +4076,7 @@ var init_items = __esm({
        * active and completed items can be removed.
        */
       deleteAll(queueID, body, options) {
-        return this._client.post(path2`/api/v1/platform/annotation-queues/${queueID}/items/delete`, {
+        return this._client.post(path`/api/v1/platform/annotation-queues/${queueID}/items/delete`, {
           body,
           ...options
         });
@@ -4088,7 +4088,7 @@ var init_items = __esm({
        * start time are excluded when either of the latter is set.
        */
       retrieveCount(queueID, query, options) {
-        return this._client.get(path2`/api/v1/platform/annotation-queues/${queueID}/items/count`, {
+        return this._client.get(path`/api/v1/platform/annotation-queues/${queueID}/items/count`, {
           query,
           ...options
         });
@@ -4101,7 +4101,7 @@ var init_items = __esm({
        */
       retrievePlacement(itemID, params, options) {
         const { queue_id } = params;
-        return this._client.get(path2`/api/v1/platform/annotation-queues/${queue_id}/items/${itemID}/placement`, options);
+        return this._client.get(path`/api/v1/platform/annotation-queues/${queue_id}/items/${itemID}/placement`, options);
       }
     };
   }
@@ -4121,7 +4121,7 @@ var init_runs = __esm({
        */
       create(queueID, params, options) {
         const { body, extend_trace_retention } = params;
-        return this._client.post(path2`/api/v1/annotation-queues/${queueID}/runs`, {
+        return this._client.post(path`/api/v1/annotation-queues/${queueID}/runs`, {
           query: { extend_trace_retention },
           body,
           ...options
@@ -4134,7 +4134,7 @@ var init_runs = __esm({
        */
       update(queueRunID, params, options) {
         const { queue_id, ...body } = params;
-        return this._client.patch(path2`/api/v1/annotation-queues/${queue_id}/runs/${queueRunID}`, {
+        return this._client.patch(path`/api/v1/annotation-queues/${queue_id}/runs/${queueRunID}`, {
           body,
           ...options
         });
@@ -4145,7 +4145,7 @@ var init_runs = __esm({
        * @deprecated Deprecated: use the annotation queue items list method (GET /api/v1/platform/annotation-queues/{queue_id}/items) instead. Will be removed after Jan 31, 2027.
        */
       list(queueID, query = {}, options) {
-        return this._client.get(path2`/api/v1/annotation-queues/${queueID}/runs`, { query, ...options });
+        return this._client.get(path`/api/v1/annotation-queues/${queueID}/runs`, { query, ...options });
       }
       /**
        * Self-hosted deployments require LangSmith `v0.16` or later.
@@ -4154,7 +4154,7 @@ var init_runs = __esm({
        */
       createByKey(queueID, params, options) {
         const { body, extend_trace_retention } = params;
-        return this._client.post(path2`/api/v1/annotation-queues/${queueID}/runs/by-key`, {
+        return this._client.post(path`/api/v1/annotation-queues/${queueID}/runs/by-key`, {
           query: { extend_trace_retention },
           body,
           ...options
@@ -4166,7 +4166,7 @@ var init_runs = __esm({
        * @deprecated Deprecated: use the annotation queue items delete_all method (POST /api/v1/platform/annotation-queues/{queue_id}/items/delete) instead. Will be removed after Jan 31, 2027.
        */
       deleteAll(queueID, body, options) {
-        return this._client.post(path2`/api/v1/annotation-queues/${queueID}/runs/delete`, { body, ...options });
+        return this._client.post(path`/api/v1/annotation-queues/${queueID}/runs/delete`, { body, ...options });
       }
       /**
        * Delete Run From Annotation Queue
@@ -4175,7 +4175,7 @@ var init_runs = __esm({
        */
       deleteQueue(queueRunID, params, options) {
         const { queue_id } = params;
-        return this._client.delete(path2`/api/v1/annotation-queues/${queue_id}/runs/${queueRunID}`, options);
+        return this._client.delete(path`/api/v1/annotation-queues/${queue_id}/runs/${queueRunID}`, options);
       }
     };
   }
@@ -4212,19 +4212,19 @@ var init_annotation_queues = __esm({
        * Get Annotation Queue
        */
       retrieve(queueID, options) {
-        return this._client.get(path2`/api/v1/annotation-queues/${queueID}`, options);
+        return this._client.get(path`/api/v1/annotation-queues/${queueID}`, options);
       }
       /**
        * Update Annotation Queue
        */
       update(queueID, body, options) {
-        return this._client.patch(path2`/api/v1/annotation-queues/${queueID}`, { body, ...options });
+        return this._client.patch(path`/api/v1/annotation-queues/${queueID}`, { body, ...options });
       }
       /**
        * Delete Annotation Queue
        */
       delete(queueID, options) {
-        return this._client.delete(path2`/api/v1/annotation-queues/${queueID}`, options);
+        return this._client.delete(path`/api/v1/annotation-queues/${queueID}`, options);
       }
       /**
        * Create Annotation Queue
@@ -4238,7 +4238,7 @@ var init_annotation_queues = __esm({
        * @deprecated Deprecated: use the annotation queue items create_status method (POST /api/v1/platform/annotation-queues/items/{queue_item_id}/status) instead. Will be removed after Jan 31, 2027.
        */
       createRunStatus(annotationQueueRunID, body, options) {
-        return this._client.post(path2`/api/v1/annotation-queues/status/${annotationQueueRunID}`, {
+        return this._client.post(path`/api/v1/annotation-queues/status/${annotationQueueRunID}`, {
           body,
           ...options
         });
@@ -4247,7 +4247,7 @@ var init_annotation_queues = __esm({
        * Export Annotation Queue Archived Runs
        */
       export(queueID, body, options) {
-        return this._client.post(path2`/api/v1/annotation-queues/${queueID}/export`, { body, ...options });
+        return this._client.post(path`/api/v1/annotation-queues/${queueID}/export`, { body, ...options });
       }
       /**
        * Populate annotation queue with runs from an experiment.
@@ -4265,7 +4265,7 @@ var init_annotation_queues = __esm({
        * Get Annotation Queues For Run
        */
       retrieveQueues(runID, options) {
-        return this._client.get(path2`/api/v1/annotation-queues/${runID}/queues`, options);
+        return this._client.get(path`/api/v1/annotation-queues/${runID}/queues`, options);
       }
       /**
        * Get a run from an annotation queue
@@ -4274,7 +4274,7 @@ var init_annotation_queues = __esm({
        */
       retrieveRun(index, params, options) {
         const { queue_id, ...query } = params;
-        return this._client.get(path2`/api/v1/annotation-queues/${queue_id}/run/${index}`, { query, ...options });
+        return this._client.get(path`/api/v1/annotation-queues/${queue_id}/run/${index}`, { query, ...options });
       }
       /**
        * Get Size From Annotation Queue
@@ -4282,7 +4282,7 @@ var init_annotation_queues = __esm({
        * @deprecated Deprecated: use the annotation queue items retrieve_count method (GET /api/v1/platform/annotation-queues/{queue_id}/items/count) with the desired status instead. Will be removed after Jan 31, 2027.
        */
       retrieveSize(queueID, query = {}, options) {
-        return this._client.get(path2`/api/v1/annotation-queues/${queueID}/size`, { query, ...options });
+        return this._client.get(path`/api/v1/annotation-queues/${queueID}/size`, { query, ...options });
       }
       /**
        * Get Total Archived From Annotation Queue
@@ -4290,7 +4290,7 @@ var init_annotation_queues = __esm({
        * @deprecated Deprecated: use the annotation queue items retrieve_count method (GET /api/v1/platform/annotation-queues/{queue_id}/items/count?status=archived) instead. Will be removed after Jan 31, 2027.
        */
       retrieveTotalArchived(queueID, query = {}, options) {
-        return this._client.get(path2`/api/v1/annotation-queues/${queueID}/total_archived`, { query, ...options });
+        return this._client.get(path`/api/v1/annotation-queues/${queueID}/total_archived`, { query, ...options });
       }
       /**
        * Get Total Size From Annotation Queue
@@ -4298,7 +4298,7 @@ var init_annotation_queues = __esm({
        * @deprecated Deprecated: use the annotation queue items retrieve_count method (GET /api/v1/platform/annotation-queues/{queue_id}/items/count?status=all) instead. Will be removed after Jan 31, 2027.
        */
       retrieveTotalSize(queueID, options) {
-        return this._client.get(path2`/api/v1/annotation-queues/${queueID}/total_size`, options);
+        return this._client.get(path`/api/v1/annotation-queues/${queueID}/total_size`, options);
       }
     };
     AnnotationQueues.Runs = Runs;
@@ -4324,7 +4324,7 @@ var init_examples = __esm({
        */
       delete(exampleID, params, options) {
         const { dataset_id } = params;
-        return this._client.delete(path2`/api/v1/platform/datasets/${dataset_id}/examples/${exampleID}`, {
+        return this._client.delete(path`/api/v1/platform/datasets/${dataset_id}/examples/${exampleID}`, {
           ...options,
           headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
         });
@@ -4348,7 +4348,7 @@ var init_experiment_runs = __esm({
        * Self-hosted deployments require LangSmith `v0.16` or later.
        */
       query(datasetID, body, options) {
-        return this._client.getAPIList(path2`/api/v2/datasets/${datasetID}/experiment-runs`, ItemsCursorPostPagination, { body, method: "post", ...options });
+        return this._client.getAPIList(path`/api/v2/datasets/${datasetID}/experiment-runs`, ItemsCursorPostPagination, { body, method: "post", ...options });
       }
     };
   }
@@ -4398,7 +4398,7 @@ var init_threads = __esm({
        * sandbox.sandbox_slug.
        */
       activateSandbox(threadID, options) {
-        return this._client.post(path2`/v1/fleet/threads/${threadID}/sandbox-activation`, options);
+        return this._client.post(path`/v1/fleet/threads/${threadID}/sandbox-activation`, options);
       }
     };
   }
@@ -4458,7 +4458,7 @@ var init_issues = __esm({
        * Returns one issue for the authenticated tenant.
        */
       retrieve(id, query = {}, options) {
-        return this._client.get(path2`/api/v1/platform/issues/${id}`, { query, ...options });
+        return this._client.get(path`/api/v1/platform/issues/${id}`, { query, ...options });
       }
       /**
        * **Beta:** This endpoint is in active development and may change without notice.
@@ -4495,14 +4495,14 @@ var init_online_evaluators = __esm({
        * Retrieve a single evaluator by its ID.
        */
       retrieve(evaluatorID, options) {
-        return this._client.get(path2`/api/v1/platform/evaluators/${evaluatorID}`, options);
+        return this._client.get(path`/api/v1/platform/evaluators/${evaluatorID}`, options);
       }
       /**
        * Update an existing evaluator's name, LLM configuration, or code configuration.
        * Returns 409 when a code evaluator build is ENQUEUED or BUILDING.
        */
       update(evaluatorID, body, options) {
-        return this._client.patch(path2`/api/v1/platform/evaluators/${evaluatorID}`, { body, ...options });
+        return this._client.patch(path`/api/v1/platform/evaluators/${evaluatorID}`, { body, ...options });
       }
       /**
        * List evaluators for the current workspace, with optional filtering by type,
@@ -4521,7 +4521,7 @@ var init_online_evaluators = __esm({
        */
       delete(evaluatorID, params = {}, options) {
         const { delete_run_rules } = params ?? {};
-        return this._client.delete(path2`/api/v1/platform/evaluators/${evaluatorID}`, {
+        return this._client.delete(path`/api/v1/platform/evaluators/${evaluatorID}`, {
           query: { delete_run_rules },
           ...options,
           headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
@@ -4579,7 +4579,7 @@ var init_product_feedback = __esm({
        * **Alpha:** This endpoint is in active development and may change without notice.
        */
       retrieve(id, options) {
-        return this._client.get(path2`/api/v1/platform/product-feedbacks/${id}`, options);
+        return this._client.get(path`/api/v1/platform/product-feedbacks/${id}`, options);
       }
     };
   }
@@ -4607,7 +4607,7 @@ var init_prompt_webhooks = __esm({
        * Get a specific prompt webhook.
        */
       retrieve(webhookID, options) {
-        return this._client.get(path2`/api/v1/prompt-webhooks/${webhookID}`, options);
+        return this._client.get(path`/api/v1/prompt-webhooks/${webhookID}`, options);
       }
       /**
        * Update a specific prompt webhook.
@@ -4616,7 +4616,7 @@ var init_prompt_webhooks = __esm({
        * replace the stored values.
        */
       update(webhookID, body, options) {
-        return this._client.patch(path2`/api/v1/prompt-webhooks/${webhookID}`, { body, ...options });
+        return this._client.patch(path`/api/v1/prompt-webhooks/${webhookID}`, { body, ...options });
       }
       /**
        * List all prompt webhooks for the current tenant.
@@ -4628,7 +4628,7 @@ var init_prompt_webhooks = __esm({
        * Delete a specific prompt webhook.
        */
       delete(webhookID, options) {
-        return this._client.delete(path2`/api/v1/prompt-webhooks/${webhookID}`, {
+        return this._client.delete(path`/api/v1/prompt-webhooks/${webhookID}`, {
           ...options,
           headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
         });
@@ -4676,7 +4676,7 @@ var init_runs2 = __esm({
        */
       retrieve(runID, params, options) {
         const { share_token, Accept, ...query } = params;
-        return this._client.get(path2`/api/v2/public/${share_token}/run/${runID}`, {
+        return this._client.get(path`/api/v2/public/${share_token}/run/${runID}`, {
           query,
           ...options,
           headers: buildHeaders([{ ...Accept != null ? { Accept } : void 0 }, options?.headers])
@@ -4697,7 +4697,7 @@ var init_runs2 = __esm({
        */
       query(shareToken, params, options) {
         const { Accept, ...body } = params;
-        return this._client.post(path2`/api/v2/public/${shareToken}/runs/query`, {
+        return this._client.post(path`/api/v2/public/${shareToken}/runs/query`, {
           body,
           ...options,
           headers: buildHeaders([{ ...Accept != null ? { Accept } : void 0 }, options?.headers])
@@ -4754,7 +4754,7 @@ var init_share = __esm({
        * ```
        */
       create(runID, body, options) {
-        return this._client.post(path2`/api/v2/runs/${runID}/share`, { body, ...options });
+        return this._client.post(path`/api/v2/runs/${runID}/share`, { body, ...options });
       }
       /**
        * Deletes the share token for the trace identified by trace_id and session_id.
@@ -4771,7 +4771,7 @@ var init_share = __esm({
        * ```
        */
       delete(traceID, body, options) {
-        return this._client.delete(path2`/api/v2/runs/${traceID}/share`, {
+        return this._client.delete(path`/api/v2/runs/${traceID}/share`, {
           body,
           ...options,
           headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
@@ -4951,7 +4951,7 @@ var init_runs3 = __esm({
        * ```
        */
       getURL(runID, query, options) {
-        return this._client.get(path2`/api/v2/runs/${runID}/url`, { query, ...options });
+        return this._client.get(path`/api/v2/runs/${runID}/url`, { query, ...options });
       }
       /**
        * Returns a paginated list of runs for the given projects within min/max
@@ -4997,7 +4997,7 @@ var init_runs3 = __esm({
        */
       retrieveV2(runID, params, options) {
         const { Accept, ...query } = params;
-        return this._client.get(path2`/api/v2/runs/${runID}`, {
+        return this._client.get(path`/api/v2/runs/${runID}`, {
           query,
           ...options,
           headers: buildHeaders([{ ...Accept != null ? { Accept } : void 0 }, options?.headers])
@@ -5031,7 +5031,7 @@ var init_boxes = __esm({
        * Retrieve a sandbox by name. Stale provisioning sandboxes are auto-failed.
        */
       retrieve(name, options) {
-        return this._client.get(path2`/api/v2/sandboxes/boxes/${name}`, options);
+        return this._client.get(path`/api/v2/sandboxes/boxes/${name}`, options);
       }
       /**
        * Update a sandbox's display name, retention, resources, tags, or proxy
@@ -5039,7 +5039,7 @@ var init_boxes = __esm({
        * sent to a sandbox that is not running is stored and applied when it next starts.
        */
       update(name, body, options) {
-        return this._client.patch(path2`/api/v2/sandboxes/boxes/${name}`, { body, ...options });
+        return this._client.patch(path`/api/v2/sandboxes/boxes/${name}`, { body, ...options });
       }
       /**
        * List sandboxes for the authenticated tenant, with optional filtering, sorting,
@@ -5056,7 +5056,7 @@ var init_boxes = __esm({
        * DB record.
        */
       delete(name, options) {
-        return this._client.delete(path2`/api/v2/sandboxes/boxes/${name}`, {
+        return this._client.delete(path`/api/v2/sandboxes/boxes/${name}`, {
           ...options,
           headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
         });
@@ -5066,7 +5066,7 @@ var init_boxes = __esm({
        * existing checkpoint.
        */
       createSnapshot(name, body, options) {
-        return this._client.post(path2`/api/v2/sandboxes/boxes/${name}/snapshot`, { body, ...options });
+        return this._client.post(path`/api/v2/sandboxes/boxes/${name}/snapshot`, { body, ...options });
       }
       /**
        * Removes the sharing grant for one port, or for every port when port is omitted.
@@ -5076,7 +5076,7 @@ var init_boxes = __esm({
        */
       deleteServiceURL(name, params = {}, options) {
         const { port } = params ?? {};
-        return this._client.delete(path2`/api/v2/sandboxes/boxes/${name}/service-urls`, {
+        return this._client.delete(path`/api/v2/sandboxes/boxes/${name}/service-urls`, {
           query: { port },
           ...options,
           headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
@@ -5105,7 +5105,7 @@ var init_boxes = __esm({
        * domain, not the API host.
        */
       generateDownloadURL(name, body, options) {
-        return this._client.post(path2`/api/v2/sandboxes/boxes/${name}/download-url`, { body, ...options });
+        return this._client.post(path`/api/v2/sandboxes/boxes/${name}/download-url`, { body, ...options });
       }
       /**
        * Create a short-lived JWT for accessing an HTTP service running on a specific
@@ -5122,13 +5122,13 @@ var init_boxes = __esm({
        * service URL.
        */
       generateServiceURL(name, body, options) {
-        return this._client.post(path2`/api/v2/sandboxes/boxes/${name}/service-url`, { body, ...options });
+        return this._client.post(path`/api/v2/sandboxes/boxes/${name}/service-url`, { body, ...options });
       }
       /**
        * Retrieve the lightweight status of a sandbox for polling.
        */
       getStatus(name, options) {
-        return this._client.get(path2`/api/v2/sandboxes/boxes/${name}/status`, options);
+        return this._client.get(path`/api/v2/sandboxes/boxes/${name}/status`, options);
       }
       /**
        * Returns one entry per port the sandbox is currently reachable on, so a caller
@@ -5137,20 +5137,20 @@ var init_boxes = __esm({
        * one.
        */
       listServiceURLs(name, query = {}, options) {
-        return this._client.getAPIList(path2`/api/v2/sandboxes/boxes/${name}/service-urls`, ItemsCursorGetPagination, { query, ...options });
+        return this._client.getAPIList(path`/api/v2/sandboxes/boxes/${name}/service-urls`, ItemsCursorGetPagination, { query, ...options });
       }
       /**
        * Start a stopped or failed sandbox. This endpoint is not idempotent.
        */
       start(name, options) {
-        return this._client.post(path2`/api/v2/sandboxes/boxes/${name}/start`, options);
+        return this._client.post(path`/api/v2/sandboxes/boxes/${name}/start`, options);
       }
       /**
        * Stop a ready sandbox. This endpoint is not idempotent; the filesystem is
        * preserved for later restart.
        */
       stop(name, options) {
-        return this._client.post(path2`/api/v2/sandboxes/boxes/${name}/stop`, {
+        return this._client.post(path`/api/v2/sandboxes/boxes/${name}/stop`, {
           ...options,
           headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
         });
@@ -5177,13 +5177,13 @@ var init_registries = __esm({
        * Get a sandbox registry by name.
        */
       retrieve(name, options) {
-        return this._client.get(path2`/api/v2/sandboxes/registries/${name}`, options);
+        return this._client.get(path`/api/v2/sandboxes/registries/${name}`, options);
       }
       /**
        * Update a sandbox registry's name and/or credentials.
        */
       update(name, body, options) {
-        return this._client.patch(path2`/api/v2/sandboxes/registries/${name}`, { body, ...options });
+        return this._client.patch(path`/api/v2/sandboxes/registries/${name}`, { body, ...options });
       }
       /**
        * List sandbox registries for pulling private images. Page with page_size and
@@ -5199,7 +5199,7 @@ var init_registries = __esm({
        * Delete a sandbox registry by name.
        */
       delete(name, options) {
-        return this._client.delete(path2`/api/v2/sandboxes/registries/${name}`, {
+        return this._client.delete(path`/api/v2/sandboxes/registries/${name}`, {
           ...options,
           headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
         });
@@ -5233,7 +5233,7 @@ var init_snapshots = __esm({
        * /api/v2/sandboxes/snapshots-by-name/{name}.
        */
       retrieve(snapshotID, options) {
-        return this._client.get(path2`/api/v2/sandboxes/snapshots/${snapshotID}`, options);
+        return this._client.get(path`/api/v2/sandboxes/snapshots/${snapshotID}`, options);
       }
       /**
        * List workspace and published system snapshots, with optional filtering, sorting,
@@ -5250,7 +5250,7 @@ var init_snapshots = __esm({
        * underlying storage is reclaimed asynchronously.
        */
       delete(snapshotID, options) {
-        return this._client.delete(path2`/api/v2/sandboxes/snapshots/${snapshotID}`, {
+        return this._client.delete(path`/api/v2/sandboxes/snapshots/${snapshotID}`, {
           ...options,
           headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
         });
@@ -5260,7 +5260,7 @@ var init_snapshots = __esm({
        * to. To fetch one snapshot, use /api/v2/sandboxes/snapshots/{snapshot_id}.
        */
       retrieveByName(name, options) {
-        return this._client.get(path2`/api/v2/sandboxes/snapshots-by-name/${name}`, options);
+        return this._client.get(path`/api/v2/sandboxes/snapshots-by-name/${name}`, options);
       }
     };
   }
@@ -5363,7 +5363,7 @@ var init_share2 = __esm({
        * ```
        */
       create(threadID, body, options) {
-        return this._client.post(path2`/api/v2/threads/${threadID}/share`, { body, ...options });
+        return this._client.post(path`/api/v2/threads/${threadID}/share`, { body, ...options });
       }
       /**
        * Returns the share token for a thread. The token is omitted when the thread is
@@ -5379,7 +5379,7 @@ var init_share2 = __esm({
        * ```
        */
       retrieve(threadID, query, options) {
-        return this._client.get(path2`/api/v2/threads/${threadID}/share`, { query, ...options });
+        return this._client.get(path`/api/v2/threads/${threadID}/share`, { query, ...options });
       }
       /**
        * Deletes the share token for a thread. Idempotent: returns 204 whether or not a
@@ -5394,7 +5394,7 @@ var init_share2 = __esm({
        */
       delete(threadID, params, options) {
         const { project_id } = params;
-        return this._client.delete(path2`/api/v2/threads/${threadID}/share`, {
+        return this._client.delete(path`/api/v2/threads/${threadID}/share`, {
           query: { project_id },
           ...options,
           headers: buildHeaders([{ Accept: "*/*" }, options?.headers])
@@ -5526,7 +5526,7 @@ var init_threads2 = __esm({
        * ```
        */
       listTraces(threadID, query, options) {
-        return this._client.getAPIList(path2`/api/v2/threads/${threadID}/traces`, ItemsCursorGetPagination, { query, ...options });
+        return this._client.getAPIList(path`/api/v2/threads/${threadID}/traces`, ItemsCursorGetPagination, { query, ...options });
       }
       /**
        * GET with body payload — no resources created. Returns the threads in a tracing
@@ -5574,7 +5574,7 @@ var init_threads2 = __esm({
        * ```
        */
       stats(threadID, query, options) {
-        return this._client.get(path2`/api/v2/threads/${threadID}/stats`, { query, ...options });
+        return this._client.get(path`/api/v2/threads/${threadID}/stats`, { query, ...options });
       }
     };
     Threads2.Streaming = Streaming2;
@@ -5679,7 +5679,7 @@ var init_traces = __esm({
        */
       listRuns(traceID, params, options) {
         const { Accept, ...query } = params;
-        return this._client.get(path2`/api/v2/traces/${traceID}/runs`, {
+        return this._client.get(path`/api/v2/traces/${traceID}/runs`, {
           query,
           ...options,
           headers: buildHeaders([{ ...Accept != null ? { Accept } : void 0 }, options?.headers])
@@ -6070,9 +6070,9 @@ var init_client = __esm({
       makeStatusError(status, error, message, headers) {
         return APIError.generate(status, error, message, headers);
       }
-      buildURL(path4, query, defaultBaseURL) {
+      buildURL(path3, query, defaultBaseURL) {
         const baseURL = !__classPrivateFieldGet(this, _Langsmith_instances, "m", _Langsmith_baseURLOverridden).call(this) && defaultBaseURL || this.baseURL;
-        const url = isAbsoluteURL(path4) ? new URL(path4) : new URL(baseURL + (baseURL.endsWith("/") && path4.startsWith("/") ? path4.slice(1) : path4));
+        const url = isAbsoluteURL(path3) ? new URL(path3) : new URL(baseURL + (baseURL.endsWith("/") && path3.startsWith("/") ? path3.slice(1) : path3));
         const defaultQuery = this.defaultQuery();
         const pathQuery = Object.fromEntries(url.searchParams);
         if (!isEmptyObj(defaultQuery) || !isEmptyObj(pathQuery)) {
@@ -6096,24 +6096,24 @@ var init_client = __esm({
        */
       async prepareRequest(request, { url, options }) {
       }
-      get(path4, opts) {
-        return this.methodRequest("get", path4, opts);
+      get(path3, opts) {
+        return this.methodRequest("get", path3, opts);
       }
-      post(path4, opts) {
-        return this.methodRequest("post", path4, opts);
+      post(path3, opts) {
+        return this.methodRequest("post", path3, opts);
       }
-      patch(path4, opts) {
-        return this.methodRequest("patch", path4, opts);
+      patch(path3, opts) {
+        return this.methodRequest("patch", path3, opts);
       }
-      put(path4, opts) {
-        return this.methodRequest("put", path4, opts);
+      put(path3, opts) {
+        return this.methodRequest("put", path3, opts);
       }
-      delete(path4, opts) {
-        return this.methodRequest("delete", path4, opts);
+      delete(path3, opts) {
+        return this.methodRequest("delete", path3, opts);
       }
-      methodRequest(method, path4, opts) {
+      methodRequest(method, path3, opts) {
         return this.request(Promise.resolve(opts).then((opts2) => {
-          return { method, path: path4, ...opts2 };
+          return { method, path: path3, ...opts2 };
         }));
       }
       request(options, remainingRetries = null) {
@@ -6216,8 +6216,8 @@ var init_client = __esm({
         }));
         return { response, options, controller, requestLogID, retryOfRequestLogID, startTime };
       }
-      getAPIList(path4, Page, opts) {
-        return this.requestAPIList(Page, opts && "then" in opts ? opts.then((opts2) => ({ method: "get", path: path4, ...opts2 })) : { method: "get", path: path4, ...opts });
+      getAPIList(path3, Page, opts) {
+        return this.requestAPIList(Page, opts && "then" in opts ? opts.then((opts2) => ({ method: "get", path: path3, ...opts2 })) : { method: "get", path: path3, ...opts });
       }
       requestAPIList(Page, options) {
         const request = this.makeRequest(options, null, void 0);
@@ -6296,8 +6296,8 @@ var init_client = __esm({
       }
       async buildRequest(inputOptions, { retryCount = 0 } = {}) {
         const options = { ...inputOptions };
-        const { method, path: path4, query, defaultBaseURL } = options;
-        const url = this.buildURL(path4, query, defaultBaseURL);
+        const { method, path: path3, query, defaultBaseURL } = options;
+        const url = this.buildURL(path3, query, defaultBaseURL);
         if ("timeout" in options)
           validatePositiveInteger("timeout", options.timeout);
         options.timeout = options.timeout ?? this.timeout;
@@ -6486,7 +6486,7 @@ var init_client = __esm({
 });
 
 // node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/warn.mjs
-function warnOnce(message, options) {
+function warnOnce2(message, options) {
   const key = options?.code ?? message;
   if (!warnedMessages[key]) {
     warnedMessages[key] = true;
@@ -6896,7 +6896,7 @@ function resolveFromEnv() {
   return address ? [void 0, address] : [project ?? "default", void 0];
 }
 function logUntraced(error) {
-  warnOnce(`LangSmith is not tracing this call: ${error.message}`);
+  warnOnce2(`LangSmith is not tracing this call: ${error.message}`);
 }
 function warnOnEnv() {
   if (!envNames().some((name) => getEnvironmentVariable(name))) {
@@ -6905,7 +6905,7 @@ function warnOnEnv() {
   try {
     resolveFromEnv();
   } catch (e) {
-    warnOnce(`${e.message} Runs that name no destination in code are not traced.`);
+    warnOnce2(`${e.message} Runs that name no destination in code are not traced.`);
   }
 }
 function applyToPayload(run, { update = false } = {}) {
@@ -7110,7 +7110,7 @@ async function stat2(filePath) {
 function existsSync2(p) {
   return nodeFs.existsSync(p);
 }
-function mkdirSync3(dir) {
+function mkdirSync4(dir) {
   nodeFs.mkdirSync(dir, { recursive: true });
 }
 function writeFileSync3(filePath, content) {
@@ -7122,7 +7122,7 @@ function renameSync4(oldPath, newPath) {
 function unlinkSync3(filePath) {
   nodeFs.unlinkSync(filePath);
 }
-function readFileSync3(filePath) {
+function readFileSync6(filePath) {
   return nodeFs.readFileSync(filePath, "utf-8");
 }
 async function mkdirExclusive(dir) {
@@ -7138,10 +7138,10 @@ function statMtimeMs(filePath) {
 async function rmRecursive(filePath) {
   await nodeFsPromises.rm(filePath, { recursive: true, force: true });
 }
-var path3;
+var path2;
 var init_fs = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/fs.mjs"() {
-    path3 = nodePath;
+    path2 = nodePath;
   }
 });
 
@@ -7312,9 +7312,9 @@ var init_prompt_cache = __esm({
         for (const [key, entry2] of this.cache.entries()) {
           entries[key] = entry2.value;
         }
-        const dir = path3.dirname(filePath);
+        const dir = path2.dirname(filePath);
         if (!existsSync2(dir)) {
-          mkdirSync3(dir);
+          mkdirSync4(dir);
         }
         const tempPath = `${filePath}.tmp`;
         try {
@@ -7340,7 +7340,7 @@ var init_prompt_cache = __esm({
         }
         let entries;
         try {
-          const content = readFileSync3(filePath);
+          const content = readFileSync6(filePath);
           const data = JSON.parse(content);
           entries = data.entries ?? null;
         } catch {
@@ -8863,10 +8863,10 @@ var init_client2 = __esm({
         this.cachedLSEnvVarsForMetadata = getLangSmithEnvVarsMetadata();
         warnOnEnv();
         if (config.cache !== void 0 && config.disablePromptCache) {
-          warnOnce("Both 'cache' and 'disablePromptCache' were provided. The 'cache' parameter is deprecated and will be removed in a future version. Using 'cache' parameter value.");
+          warnOnce2("Both 'cache' and 'disablePromptCache' were provided. The 'cache' parameter is deprecated and will be removed in a future version. Using 'cache' parameter value.");
         }
         if (config.cache !== void 0) {
-          warnOnce("The 'cache' parameter is deprecated and will be removed in a future version. Use 'configureGlobalPromptCache()' to configure the global cache, or 'disablePromptCache: true' to disable caching for this client.");
+          warnOnce2("The 'cache' parameter is deprecated and will be removed in a future version. Use 'configureGlobalPromptCache()' to configure the global cache, or 'disablePromptCache: true' to disable caching for this client.");
           if (config.cache === false) {
             this._promptCache = void 0;
           } else if (config.cache === true) {
@@ -9065,9 +9065,9 @@ var init_client2 = __esm({
           defaultHeaders: options.defaultHeaders
         });
       }
-      _getPlatformEndpointPath(path4) {
+      _getPlatformEndpointPath(path3) {
         const needsV1Prefix = this.apiUrl.slice(-3) !== "/v1" && this.apiUrl.slice(-4) !== "/v1/";
-        return needsV1Prefix ? `/v1/platform/${path4}` : `/platform/${path4}`;
+        return needsV1Prefix ? `/v1/platform/${path3}` : `/platform/${path3}`;
       }
       get evaluators() {
         this._checkStainlessVersion("0.16.0");
@@ -9213,9 +9213,9 @@ var init_client2 = __esm({
         }
         return runParams;
       }
-      async _getResponse(path4, queryParams) {
+      async _getResponse(path3, queryParams) {
         const paramsString = queryParams?.toString() ?? "";
-        const url = `${this.apiUrl}${path4}?${paramsString}`;
+        const url = `${this.apiUrl}${path3}?${paramsString}`;
         const response = await this.caller.call(async () => {
           const res = await this._fetch(url, {
             method: "GET",
@@ -9223,22 +9223,22 @@ var init_client2 = __esm({
             signal: AbortSignal.timeout(this.timeout_ms),
             ...this.fetchOptions
           });
-          await raiseForStatus(res, `fetch ${path4}`);
+          await raiseForStatus(res, `fetch ${path3}`);
           return res;
         });
         return response;
       }
-      async _get(path4, queryParams) {
-        const response = await this._getResponse(path4, queryParams);
+      async _get(path3, queryParams) {
+        const response = await this._getResponse(path3, queryParams);
         return response.json();
       }
-      async *_getPaginated(path4, queryParams = new URLSearchParams(), transform) {
+      async *_getPaginated(path3, queryParams = new URLSearchParams(), transform) {
         let offset = Number(queryParams.get("offset")) || 0;
         const limit2 = Number(queryParams.get("limit")) || 100;
         while (true) {
           queryParams.set("offset", String(offset));
           queryParams.set("limit", String(limit2));
-          const url = `${this.apiUrl}${path4}?${queryParams}`;
+          const url = `${this.apiUrl}${path3}?${queryParams}`;
           const response = await this.caller.call(async () => {
             const res = await this._fetch(url, {
               method: "GET",
@@ -9246,7 +9246,7 @@ var init_client2 = __esm({
               signal: AbortSignal.timeout(this.timeout_ms),
               ...this.fetchOptions
             });
-            await raiseForStatus(res, `fetch ${path4}`);
+            await raiseForStatus(res, `fetch ${path3}`);
             return res;
           });
           const items = transform ? transform(await response.json()) : await response.json();
@@ -9260,12 +9260,12 @@ var init_client2 = __esm({
           offset += items.length;
         }
       }
-      async *_getCursorPaginatedList(path4, body = null, requestMethod = "POST", dataKey = "runs") {
+      async *_getCursorPaginatedList(path3, body = null, requestMethod = "POST", dataKey = "runs") {
         const bodyParams = body ? { ...body } : {};
         while (true) {
           const body2 = JSON.stringify(bodyParams);
           const response = await this.caller.call(async () => {
-            const res = await this._fetch(`${this.apiUrl}${path4}`, {
+            const res = await this._fetch(`${this.apiUrl}${path3}`, {
               method: requestMethod,
               headers: {
                 ...this._mergedHeaders,
@@ -9275,7 +9275,7 @@ var init_client2 = __esm({
               ...this.fetchOptions,
               body: body2
             });
-            await raiseForStatus(res, `fetch ${path4}`);
+            await raiseForStatus(res, `fetch ${path3}`);
             return res;
           });
           const responseBody = await response.json();
@@ -9380,7 +9380,7 @@ var init_client2 = __esm({
             body_base64: bodyBuffer.toString("base64")
           });
           const filename = `trace_${Date.now()}_${v4_default().slice(0, 8)}.json`;
-          const filepath = path3.join(directory2, filename);
+          const filepath = path2.join(directory2, filename);
           if (!_Client._fallbackDirsCreated.has(directory2)) {
             await mkdir2(directory2);
             _Client._fallbackDirsCreated.add(directory2);
@@ -9391,7 +9391,7 @@ var init_client2 = __esm({
               const traceFiles = entries.filter((f2) => f2.startsWith("trace_") && f2.endsWith(".json"));
               let total = 0;
               for (const name of traceFiles) {
-                const { size } = await stat2(path3.join(directory2, name));
+                const { size } = await stat2(path2.join(directory2, name));
                 total += size;
               }
               if (total >= maxBytes) {
@@ -9595,7 +9595,7 @@ var init_client2 = __esm({
         if (getQueryBackend(serverInfo.instance_flags) === QueryBackend.SMITHDB_ONLY) {
           throw new Error(`sessionId must be provided when creating feedback for a run: this deployment cannot locate the run without it. See ${docs}`);
         }
-        warnOnce(`Creating feedback for a run without sessionId is deprecated and will stop working in a future release. See ${docs}`);
+        warnOnce2(`Creating feedback for a run without sessionId is deprecated and will stop working in a future release. See ${docs}`);
       }
       async _getSettings() {
         if (!this.settings) {
@@ -10083,7 +10083,7 @@ Context: ${context}`);
       }
       /** @deprecated Use `client.runs.retrieve()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-runs#runs-retrieve for the migration guide. Will be removed after Jan 31, 2027. */
       async readRun(runId, { loadChildRuns } = { loadChildRuns: false }) {
-        warnOnce("readRun() is deprecated and will be removed after Jan 31, 2027. Use client.runs.retrieve() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-runs#runs-retrieve for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_READ_RUN" });
+        warnOnce2("readRun() is deprecated and will be removed after Jan 31, 2027. Use client.runs.retrieve() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-runs#runs-retrieve for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_READ_RUN" });
         return this._readRun(runId, { loadChildRuns });
       }
       /**
@@ -10104,7 +10104,7 @@ Context: ${context}`);
       }
       /** @deprecated Use `client.runs.getURL()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-runs#runs-get-url for the migration guide. Will be removed after Jan 31, 2027. */
       async getRunUrl({ runId, run, projectOpts, address: rawAddress }) {
-        warnOnce("getRunUrl() is deprecated and will be removed after Jan 31, 2027. Use client.runs.getURL() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-runs#runs-get-url for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_GET_RUN_URL" });
+        warnOnce2("getRunUrl() is deprecated and will be removed after Jan 31, 2027. Use client.runs.getURL() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-runs#runs-get-url for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_GET_RUN_URL" });
         if (run !== void 0) {
           const argumentAddress = ensureAddress(rawAddress);
           rejectConflicting(projectOpts?.projectName ?? projectOpts?.projectId, argumentAddress);
@@ -10256,7 +10256,7 @@ Context: ${context}`);
        * });
        */
       async *listRuns(props) {
-        warnOnce("listRuns() is deprecated and will be removed after Jan 31, 2027. Use client.runs.query() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-query-runs#runs-query for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_LIST_RUNS" });
+        warnOnce2("listRuns() is deprecated and will be removed after Jan 31, 2027. Use client.runs.query() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-query-runs#runs-query for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_LIST_RUNS" });
         yield* this._listRuns(props);
       }
       /**
@@ -10327,7 +10327,7 @@ Context: ${context}`);
           order
         };
         if (body.select.includes("child_run_ids")) {
-          warnOnce("Deprecated: 'child_run_ids' in the listRuns select parameter is deprecated and will be removed in a future version.");
+          warnOnce2("Deprecated: 'child_run_ids' in the listRuns select parameter is deprecated and will be removed in a future version.");
         }
         let runsYielded = 0;
         for await (const runs of this._getCursorPaginatedList("/runs/query", body)) {
@@ -10360,8 +10360,8 @@ Context: ${context}`);
           limit: Number(limit2) || 100
         };
         let currentOffset = Number(offset) || 0;
-        const path4 = "/runs/group";
-        const url = `${this.apiUrl}${path4}`;
+        const path3 = "/runs/group";
+        const url = `${this.apiUrl}${path3}`;
         while (true) {
           const currentBody = {
             ...baseBody,
@@ -10380,7 +10380,7 @@ Context: ${context}`);
               ...this.fetchOptions,
               body
             });
-            await raiseForStatus(res, `Failed to fetch ${path4}`);
+            await raiseForStatus(res, `Failed to fetch ${path3}`);
             return res;
           });
           const items = await response.json();
@@ -10399,7 +10399,7 @@ Context: ${context}`);
       }
       /** @deprecated Use `client.threads.listTraces()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-threads#threads-list-traces for the migration guide. Will be removed after Jan 31, 2027. */
       async *readThread(props) {
-        warnOnce("readThread() is deprecated and will be removed after Jan 31, 2027. Use client.threads.listTraces() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-threads#threads-list-traces for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_READ_THREAD" });
+        warnOnce2("readThread() is deprecated and will be removed after Jan 31, 2027. Use client.threads.listTraces() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-threads#threads-list-traces for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_READ_THREAD" });
         const { threadId, projectId, projectName, isRoot = true, limit: limit2, filter: userFilter, order = "asc" } = props;
         if (!projectId && !projectName) {
           throw new Error("threadId requires projectId or projectName");
@@ -10417,7 +10417,7 @@ Context: ${context}`);
       }
       /** @deprecated Use `client.threads.query()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-threads#threads-query for the migration guide. Will be removed after Jan 31, 2027. */
       async listThreads(props) {
-        warnOnce("listThreads() is deprecated and will be removed after Jan 31, 2027. Use client.threads.query() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-threads#threads-query for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_LIST_THREADS" });
+        warnOnce2("listThreads() is deprecated and will be removed after Jan 31, 2027. Use client.threads.query() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-threads#threads-query for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_LIST_THREADS" });
         const { projectId, projectName, limit: limit2, offset = 0, filter, startTime, isRoot = true } = props;
         if (!projectId && !projectName) {
           throw new Error("Either projectId or projectName must be provided");
@@ -10564,7 +10564,7 @@ Context: ${context}`);
       }
       /** @deprecated Use `client.runs.share.create()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#share-and-read-public-runs for the migration guide. Will be removed after Jan 31, 2027. */
       async shareRun(runId, { shareId } = {}) {
-        warnOnce("shareRun() is deprecated and will be removed after Jan 31, 2027. Use client.runs.share.create() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#share-and-read-public-runs for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_SHARE_RUN" });
+        warnOnce2("shareRun() is deprecated and will be removed after Jan 31, 2027. Use client.runs.share.create() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#share-and-read-public-runs for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_SHARE_RUN" });
         const data = {
           run_id: runId,
           share_token: shareId || v4_default()
@@ -10590,7 +10590,7 @@ Context: ${context}`);
       }
       /** @deprecated Use `client.runs.share.delete()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#share-and-read-public-runs for the migration guide. Will be removed after Jan 31, 2027. */
       async unshareRun(runId) {
-        warnOnce("unshareRun() is deprecated and will be removed after Jan 31, 2027. Use client.runs.share.delete() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#share-and-read-public-runs for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_UNSHARE_RUN" });
+        warnOnce2("unshareRun() is deprecated and will be removed after Jan 31, 2027. Use client.runs.share.delete() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#share-and-read-public-runs for the migration guide.", { type: "DeprecationWarning", code: "LANGSMITH_DEPRECATED_UNSHARE_RUN" });
         assertUuid(runId);
         await this.caller.call(async () => {
           const res = await this._fetch(`${this.apiUrl}/runs/${runId}/share`, {
@@ -10605,7 +10605,7 @@ Context: ${context}`);
       }
       /** @deprecated Use `client.runs.retrieve({ selects: ["SHARE_URL"] })` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#share-and-read-public-runs for the migration guide. Will be removed after Jan 31, 2027. */
       async readRunSharedLink(runId) {
-        warnOnce('readRunSharedLink() is deprecated and will be removed after Jan 31, 2027. Use client.runs.retrieve({ selects: ["SHARE_URL"] }) instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#share-and-read-public-runs for the migration guide.', {
+        warnOnce2('readRunSharedLink() is deprecated and will be removed after Jan 31, 2027. Use client.runs.retrieve({ selects: ["SHARE_URL"] }) instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#share-and-read-public-runs for the migration guide.', {
           type: "DeprecationWarning",
           code: "LANGSMITH_DEPRECATED_READ_RUN_SHARED_LINK"
         });
@@ -10628,7 +10628,7 @@ Context: ${context}`);
       }
       /** @deprecated Use `client.public.runs.query()` instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#share-and-read-public-runs for the migration guide. Will be removed after Jan 31, 2027. */
       async listSharedRuns(shareToken, { runIds } = {}) {
-        warnOnce("listSharedRuns() is deprecated and will be removed after Jan 31, 2027. Use client.public.runs.query() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#share-and-read-public-runs for the migration guide.", {
+        warnOnce2("listSharedRuns() is deprecated and will be removed after Jan 31, 2027. Use client.public.runs.query() instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#share-and-read-public-runs for the migration guide.", {
           type: "DeprecationWarning",
           code: "LANGSMITH_DEPRECATED_LIST_SHARED_RUNS"
         });
@@ -10847,20 +10847,20 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         return result;
       }
       async hasProject({ projectId, projectName }) {
-        let path4 = "/sessions";
+        let path3 = "/sessions";
         const params = new URLSearchParams();
         if (projectId !== void 0 && projectName !== void 0) {
           throw new Error("Must provide either projectName or projectId, not both");
         } else if (projectId !== void 0) {
           assertUuid(projectId);
-          path4 += `/${projectId}`;
+          path3 += `/${projectId}`;
         } else if (projectName !== void 0) {
           params.append("name", projectName);
         } else {
           throw new Error("Must provide projectName or projectId");
         }
         const response = await this.caller.call(async () => {
-          const res = await this._fetch(`${this.apiUrl}${path4}?${params}`, {
+          const res = await this._fetch(`${this.apiUrl}${path3}?${params}`, {
             method: "GET",
             headers: this._mergedHeaders,
             signal: AbortSignal.timeout(this.timeout_ms),
@@ -10883,13 +10883,13 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         }
       }
       async readProject({ projectId, projectName, includeStats }) {
-        let path4 = "/sessions";
+        let path3 = "/sessions";
         const params = new URLSearchParams();
         if (projectId !== void 0 && projectName !== void 0) {
           throw new Error("Must provide either projectName or projectId, not both");
         } else if (projectId !== void 0) {
           assertUuid(projectId);
-          path4 += `/${projectId}`;
+          path3 += `/${projectId}`;
         } else if (projectName !== void 0) {
           params.append("name", projectName);
         } else {
@@ -10898,7 +10898,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         if (includeStats !== void 0) {
           params.append("include_stats", includeStats.toString());
         }
-        const response = await this._get(path4, params);
+        const response = await this._get(path3, params);
         let result;
         if (Array.isArray(response)) {
           if (response.length === 0) {
@@ -11065,19 +11065,19 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         return result;
       }
       async readDataset({ datasetId, datasetName }) {
-        let path4 = "/datasets";
+        let path3 = "/datasets";
         const params = new URLSearchParams({ limit: "1" });
         if (datasetId && datasetName) {
           throw new Error("Must provide either datasetName or datasetId, not both");
         } else if (datasetId) {
           assertUuid(datasetId);
-          path4 += `/${datasetId}`;
+          path3 += `/${datasetId}`;
         } else if (datasetName) {
           params.append("name", datasetName);
         } else {
           throw new Error("Must provide datasetName or datasetId");
         }
-        const response = await this._get(path4, params);
+        const response = await this._get(path3, params);
         let result;
         if (Array.isArray(response)) {
           if (response.length === 0) {
@@ -11118,20 +11118,20 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         return response;
       }
       async readDatasetOpenaiFinetuning({ datasetId, datasetName }) {
-        const path4 = "/datasets";
+        const path3 = "/datasets";
         if (datasetId !== void 0) {
         } else if (datasetName !== void 0) {
           datasetId = (await this.readDataset({ datasetName })).id;
         } else {
           throw new Error("Must provide either datasetName or datasetId");
         }
-        const response = await this._getResponse(`${path4}/${datasetId}/openai_ft`);
+        const response = await this._getResponse(`${path3}/${datasetId}/openai_ft`);
         const datasetText = await response.text();
         const dataset = datasetText.trim().split("\n").map((line) => JSON.parse(line));
         return dataset;
       }
       async *listDatasets({ limit: limit2 = 100, offset = 0, datasetIds, datasetName, datasetNameContains, metadata } = {}) {
-        const path4 = "/datasets";
+        const path3 = "/datasets";
         const params = new URLSearchParams({
           limit: limit2.toString(),
           offset: offset.toString()
@@ -11150,7 +11150,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         if (metadata !== void 0) {
           params.append("metadata", JSON.stringify(metadata));
         }
-        for await (const datasets of this._getPaginated(path4, params)) {
+        for await (const datasets of this._getPaginated(path3, params)) {
           yield* datasets;
         }
       }
@@ -11222,7 +11222,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         });
       }
       async deleteDataset({ datasetId, datasetName }) {
-        let path4 = "/datasets";
+        let path3 = "/datasets";
         let datasetId_ = datasetId;
         if (datasetId !== void 0 && datasetName !== void 0) {
           throw new Error("Must provide either datasetName or datasetId, not both");
@@ -11232,18 +11232,18 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
         }
         if (datasetId_ !== void 0) {
           assertUuid(datasetId_);
-          path4 += `/${datasetId_}`;
+          path3 += `/${datasetId_}`;
         } else {
           throw new Error("Must provide datasetName or datasetId");
         }
         await this.caller.call(async () => {
-          const res = await this._fetch(this.apiUrl + path4, {
+          const res = await this._fetch(this.apiUrl + path3, {
             method: "DELETE",
             headers: this._mergedHeaders,
             signal: AbortSignal.timeout(this.timeout_ms),
             ...this.fetchOptions
           });
-          await raiseForStatus(res, `delete ${path4}`, true);
+          await raiseForStatus(res, `delete ${path3}`, true);
           return res;
         });
       }
@@ -11355,8 +11355,8 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       }
       async readExample(exampleId) {
         assertUuid(exampleId);
-        const path4 = `/examples/${exampleId}`;
-        const rawExample = await this._get(path4);
+        const path3 = `/examples/${exampleId}`;
+        const rawExample = await this._get(path3);
         const { attachment_urls, ...rest } = rawExample;
         const example = rest;
         if (attachment_urls) {
@@ -11448,15 +11448,15 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       }
       async deleteExample(exampleId) {
         assertUuid(exampleId);
-        const path4 = `/examples/${exampleId}`;
+        const path3 = `/examples/${exampleId}`;
         await this.caller.call(async () => {
-          const res = await this._fetch(this.apiUrl + path4, {
+          const res = await this._fetch(this.apiUrl + path3, {
             method: "DELETE",
             headers: this._mergedHeaders,
             signal: AbortSignal.timeout(this.timeout_ms),
             ...this.fetchOptions
           });
-          await raiseForStatus(res, `delete ${path4}`, true);
+          await raiseForStatus(res, `delete ${path3}`, true);
           return res;
         });
       }
@@ -11469,9 +11469,9 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       async deleteExamples(exampleIds, options) {
         exampleIds.forEach((id) => assertUuid(id));
         if (options?.hardDelete) {
-          const path4 = this._getPlatformEndpointPath("datasets/examples/delete");
+          const path3 = this._getPlatformEndpointPath("datasets/examples/delete");
           await this.caller.call(async () => {
-            const res = await this._fetch(`${this.apiUrl}${path4}`, {
+            const res = await this._fetch(`${this.apiUrl}${path3}`, {
               method: "POST",
               headers: {
                 ...this._mergedHeaders,
@@ -11759,21 +11759,21 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       }
       async readFeedback(feedbackId) {
         assertUuid(feedbackId);
-        const path4 = `/feedback/${feedbackId}`;
-        const response = await this._get(path4);
+        const path3 = `/feedback/${feedbackId}`;
+        const response = await this._get(path3);
         return response;
       }
       async deleteFeedback(feedbackId) {
         assertUuid(feedbackId);
-        const path4 = `/feedback/${feedbackId}`;
+        const path3 = `/feedback/${feedbackId}`;
         await this.caller.call(async () => {
-          const res = await this._fetch(this.apiUrl + path4, {
+          const res = await this._fetch(this.apiUrl + path3, {
             method: "DELETE",
             headers: this._mergedHeaders,
             signal: AbortSignal.timeout(this.timeout_ms),
             ...this.fetchOptions
           });
-          await raiseForStatus(res, `delete ${path4}`, true);
+          await raiseForStatus(res, `delete ${path3}`, true);
           return res;
         });
       }
@@ -12232,7 +12232,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
             return serialized;
           }));
         } else {
-          warnOnce("Passing run IDs as strings to addRunsToAnnotationQueue() is deprecated and will be removed after Jan 31, 2027. Use RunKey[] instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#annotation-queues-add-runs for the migration guide.", {
+          warnOnce2("Passing run IDs as strings to addRunsToAnnotationQueue() is deprecated and will be removed after Jan 31, 2027. Use RunKey[] instead. See https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback#annotation-queues-add-runs for the migration guide.", {
             type: "DeprecationWarning",
             code: "LANGSMITH_DEPRECATED_ADD_RUNS_STRING_IDS"
           });
@@ -12293,8 +12293,8 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
           params.append("status", status);
         params.append("limit", limit2.toString());
         let count = 0;
-        const path4 = `/annotation-queues/${assertUuid(queueId, "queueId")}/runs`;
-        for await (const runs of this._getPaginated(path4, params)) {
+        const path3 = `/annotation-queues/${assertUuid(queueId, "queueId")}/runs`;
+        for await (const runs of this._getPaginated(path3, params)) {
           for (const run of runs) {
             yield _normalizeRunTimestamps(run);
             count++;
@@ -12670,14 +12670,14 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
        * });
        * ```
        */
-      async createCommit(promptIdentifier, object2, options) {
+      async createCommit(promptIdentifier, object3, options) {
         if (!await this.promptExists(promptIdentifier)) {
           throw new Error("Prompt does not exist, you must create it first.");
         }
         const [owner, promptName, _] = parseHubIdentifier(promptIdentifier);
         const resolvedParentCommitHash = options?.parentCommitHash === "latest" || !options?.parentCommitHash ? await this._getLatestCommitHash(`${owner}/${promptName}`) : options?.parentCommitHash;
         const payload = {
-          manifest: JSON.parse(JSON.stringify(object2)),
+          manifest: JSON.parse(JSON.stringify(object3)),
           parent_commit: resolvedParentCommitHash,
           ...options?.description !== void 0 && {
             description: options.description
@@ -14310,7 +14310,7 @@ var init_run_trees = __esm({
             await this.client.createRun(runCreate);
           }
           if (!excludeChildRuns) {
-            warnOnce("Posting with excludeChildRuns=false is deprecated and will be removed in a future version.");
+            warnOnce2("Posting with excludeChildRuns=false is deprecated and will be removed in a future version.");
             for (const childRun of this.child_runs) {
               await childRun.postRun(false);
             }
@@ -14805,7 +14805,7 @@ function isEEXIST(err) {
 }
 function lockMetadataLines(lockDir) {
   try {
-    return readFileSync3(path3.join(lockDir, LOCK_METADATA_FILE)).split("\n");
+    return readFileSync6(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
   } catch {
     return void 0;
   }
@@ -14837,7 +14837,7 @@ async function removeStaleLock(lockDir) {
 }
 async function acquireOAuthRefreshLock(configPath, deadline) {
   const lockDir = `${configPath}.oauth.lock.lock`;
-  const parent = path3.dirname(lockDir);
+  const parent = path2.dirname(lockDir);
   if (parent) {
     await mkdir2(parent);
   }
@@ -14858,7 +14858,7 @@ async function acquireOAuthRefreshLock(configPath, deadline) {
       continue;
     }
     try {
-      await writeFileAtomic(path3.join(lockDir, LOCK_METADATA_FILE), `${(/* @__PURE__ */ new Date()).toISOString()}
+      await writeFileAtomic(path2.join(lockDir, LOCK_METADATA_FILE), `${(/* @__PURE__ */ new Date()).toISOString()}
 ${owner}
 `);
     } catch (err) {
@@ -14907,7 +14907,7 @@ function getProfileConfigPath(selected) {
   if (!home) {
     return void 0;
   }
-  return path3.join(home, ".langsmith", "config.json");
+  return path2.join(home, ".langsmith", "config.json");
 }
 function resolveProfileName(config, selected) {
   const chosen = selected || getEnvironmentVariable("LANGSMITH_PROFILE");
@@ -14931,7 +14931,7 @@ function loadProfileState(selection = {}) {
     return void 0;
   }
   try {
-    const config = JSON.parse(readFileSync3(configPath));
+    const config = JSON.parse(readFileSync6(configPath));
     const profileName = resolveProfileName(config, selection.profile);
     const profile = profileName ? config.profiles?.[profileName] : void 0;
     if (!profileName || !profile) {
@@ -15194,7 +15194,7 @@ var init_profiles = __esm({
       }
       reloadProfile() {
         try {
-          const config = JSON.parse(readFileSync3(this.state.configPath));
+          const config = JSON.parse(readFileSync6(this.state.configPath));
           const profile = config.profiles?.[this.state.profileName];
           if (!profile) {
             return void 0;
@@ -15272,16 +15272,16 @@ import { userInfo } from "node:os";
 import { constants, closeSync, fstatSync, fsyncSync, lstatSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomBytes } from "node:crypto";
-function directory(path4, create = false, privateMode = false) {
+function directory(path3, create = false, privateMode = false) {
   if (create) {
     try {
-      mkdirSync(path4, { mode: 448 });
+      mkdirSync(path3, { mode: 448 });
     } catch (e) {
       if (e.code !== "EEXIST")
         throw e;
     }
   }
-  const s = lstatSync(path4);
+  const s = lstatSync(path3);
   if (!s.isDirectory() || s.uid !== process.getuid?.() || s.mode & (privateMode ? 63 : 18))
     throw new Error("Unsafe settings directory");
 }
@@ -15289,10 +15289,10 @@ function directories(home, create = false) {
   directory(home);
   directory(join(home, ".claude"), create);
 }
-function snapshot(path4, privateMode = false) {
+function snapshot(path3, privateMode = false) {
   let fd;
   try {
-    fd = openSync(path4, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    fd = openSync(path3, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch (e) {
     if (e.code === "ENOENT")
       return;
@@ -15313,12 +15313,12 @@ function snapshot(path4, privateMode = false) {
     closeSync(fd);
   }
 }
-function unchanged(path4, prior, privateMode = false) {
-  if (JSON.stringify(snapshot(path4, privateMode)) !== JSON.stringify(prior))
+function unchanged(path3, prior, privateMode = false) {
+  if (JSON.stringify(snapshot(path3, privateMode)) !== JSON.stringify(prior))
     throw new Error("Settings changed concurrently; retry");
 }
-function atomic(path4, text2, prior) {
-  const temp = join(dirname(path4), `.gateway-${randomBytes(16).toString("hex")}.tmp`);
+function atomic(path3, text2, prior) {
+  const temp = join(dirname(path3), `.gateway-${randomBytes(16).toString("hex")}.tmp`);
   const fd = openSync(temp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 384);
   try {
     try {
@@ -15327,13 +15327,13 @@ function atomic(path4, text2, prior) {
     } finally {
       closeSync(fd);
     }
-    unchanged(path4, prior);
+    unchanged(path3, prior);
     if (prior === void 0) {
-      linkSync(temp, path4);
+      linkSync(temp, path3);
       unlinkSync(temp);
     } else
-      renameSync(temp, path4);
-    const dir = openSync(dirname(path4), constants.O_RDONLY);
+      renameSync(temp, path3);
+    const dir = openSync(dirname(path3), constants.O_RDONLY);
     try {
       fsyncSync(dir);
     } finally {
@@ -15455,8 +15455,6 @@ var MAX_IDENTITY_TOKEN_COMMAND = 4096;
 var CREDENTIAL_TIMEOUT_MS = 1e4;
 var LOGIN_TOKEN_TTL_MS = 6e4;
 var LOGIN_CONFIG_PATH = [".langsmith", "config.json"];
-var GATEWAY_LOG_FILE = "gateway.log";
-var MAX_GATEWAY_LOG_BYTES = 1024 * 1024;
 var SIGN_IN_FAILED_LOG = "LangSmith sign-in failed: ";
 var GATEWAY_REFUSED_LOG = "The gateway refused the LangSmith token";
 var NO_LOGIN_REASON = "no saved LangSmith login was found, so run langsmith auth login";
@@ -15576,8 +15574,8 @@ function endpoints(c) {
     gatewayUrl: httpsOrigin(c.gatewayUrl === void 0 ? UPSTREAM : c.gatewayUrl)
   };
 }
-function privatePath(path4, directory2 = false) {
-  const s = lstatSync2(path4);
+function privatePath(path3, directory2 = false) {
+  const s = lstatSync2(path3);
   if (s.uid !== process.getuid?.() || (s.mode & 63) !== 0 || (directory2 ? !s.isDirectory() : !s.isFile()))
     throw new Error("Unsafe proxy configuration");
 }
@@ -15617,23 +15615,93 @@ function configStatus(home = userHome()) {
   };
 }
 
-// dist/src/proxy/log.js
-import { appendFileSync, renameSync as renameSync2, statSync } from "node:fs";
-import { join as join3 } from "node:path";
-var path;
-function startLog(directory2) {
-  path = join3(directory2, GATEWAY_LOG_FILE);
+// dist/src/logger.js
+import { appendFileSync, mkdirSync as mkdirSync2, statSync, renameSync as renameSync2 } from "node:fs";
+import { dirname as dirname3 } from "node:path";
+
+// node_modules/.pnpm/@langchain+plugins-base@0.5.1_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/constants.js
+import { constants as constants2 } from "node:fs";
+var COMMON_BOOLEAN_SETTINGS = {
+  enabled: { default: false, restrictive: false },
+  defaultMuted: { default: false, restrictive: true }
+};
+var COMMON_CONFIG_OPEN_FLAGS = constants2.O_RDONLY | (constants2.O_NONBLOCK ?? 0);
+var MANAGED_CONFIG_OPEN_FLAGS = COMMON_CONFIG_OPEN_FLAGS | (constants2.O_NOFOLLOW ?? 0);
+
+// node_modules/.pnpm/@langchain+plugins-base@0.5.1_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/managed-config.js
+import { closeSync as closeSync2, fstatSync as fstatSync2, lstatSync as lstatSync3, openSync as openSync2, readFileSync as readFileSync3 } from "node:fs";
+import { homedir } from "node:os";
+import { dirname as dirname2, join as join3 } from "node:path";
+
+// node_modules/.pnpm/@langchain+plugins-base@0.5.1_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/utils/account-home.js
+import { execFileSync } from "node:child_process";
+import { readFileSync as readFileSync2 } from "node:fs";
+import { userInfo as userInfo2 } from "node:os";
+import { isAbsolute as isAbsolute2 } from "node:path";
+
+// node_modules/.pnpm/@langchain+plugins-base@0.5.1_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/managed-lock.js
+import { isDeepStrictEqual } from "node:util";
+
+// node_modules/.pnpm/@langchain+plugins-base@0.5.1_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/config-files.js
+import { closeSync as closeSync3, fstatSync as fstatSync3, lstatSync as lstatSync4, openSync as openSync3, readFileSync as readFileSync4 } from "node:fs";
+import { join as join4 } from "node:path";
+
+// dist/src/constants.js
+var RUN_CONTEXT_FIELDS = [
+  "id",
+  "name",
+  "run_type",
+  "start_time",
+  "parent_run_id",
+  "trace_id",
+  "dotted_order"
+];
+var RUN_PATCH_FIELDS = ["outputs", "end_time", "error"];
+var RUN_SNAPSHOT_FIELDS = [...RUN_CONTEXT_FIELDS, "inputs", ...RUN_PATCH_FIELDS];
+var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
+var BOOLEAN_SETTINGS = {
+  enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
+  defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
+  strict_auth: { env: "CC_LANGSMITH_STRICT_AUTH", restrictive: false }
+};
+var MAX_LOG_BYTES = 5 * 1024 * 1024;
+var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
+var LEGACY_MAX_AGE_MS = 6 * 60 * 60 * 1e3;
+var LEGACY_EMPTY_FOLDER_IDLE_MS = 2 * 60 * 60 * 1e3;
+var LEGACY_UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+var LEGACY_QUEUE_ID = `\\d{16}-${LEGACY_UUID}`;
+var LEGACY_QUEUE_FILE = new RegExp(`^${LEGACY_QUEUE_ID}\\.queue\\.json$`);
+var LEGACY_QUEUE_TEMP_FILE = new RegExp(`^${LEGACY_QUEUE_ID}\\.queue\\.json\\.${LEGACY_UUID}\\.queue\\.tmp$`);
+var LEGACY_TURN_FILE = new RegExp(`^${LEGACY_UUID}\\.turn\\.jsonl$`);
+var LEGACY_FLUSH_LOCK_FILE = new RegExp(`^[\\w.-]+\\.flush\\.lock(\\.${LEGACY_UUID}\\.lock\\.staging)?$`);
+
+// dist/src/logger.js
+var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
+var debugEnabled = false;
+function initLogger(debug) {
+  debugEnabled = debug;
+  mkdirSync2(dirname3(LOG_FILE), { recursive: true });
 }
-function logFailure(message) {
-  if (path === void 0)
-    return;
+function rotateIfNeeded() {
   try {
-    if ((statSync(path, { throwIfNoEntry: false })?.size ?? 0) >= MAX_GATEWAY_LOG_BYTES)
-      renameSync2(path, `${path}.1`);
-    appendFileSync(path, `${(/* @__PURE__ */ new Date()).toISOString()} ${message}
-`, { mode: 384 });
+    if (statSync(LOG_FILE).size >= MAX_LOG_BYTES) {
+      renameSync2(LOG_FILE, `${LOG_FILE}.1`);
+    }
   } catch {
   }
+}
+function write(level, message) {
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").replace("Z", "");
+  const line = `${timestamp} [${level}] ${message}
+`;
+  try {
+    rotateIfNeeded();
+    appendFileSync(LOG_FILE, line);
+  } catch {
+  }
+}
+function warn(message) {
+  write("WARN", message);
 }
 
 // dist/src/proxy/server.js
@@ -15658,7 +15726,7 @@ function bearerCredential(value) {
 
 // dist/src/proxy/token.js
 import { spawn } from "node:child_process";
-import { join as join4 } from "node:path";
+import { join as join5 } from "node:path";
 function cliEnvironment() {
   return { HOME: userHome(), PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
 }
@@ -15667,7 +15735,7 @@ var SignInFailure = class extends Error {
 async function loginToken(config) {
   const { loadProfileClientConfig: loadProfileClientConfig2 } = await Promise.resolve().then(() => (init_profiles(), profiles_exports));
   const { profileAuth } = loadProfileClientConfig2({
-    configPath: join4(userHome(), ...LOGIN_CONFIG_PATH),
+    configPath: join5(userHome(), ...LOGIN_CONFIG_PATH),
     profile: config.profile
   });
   if (profileAuth === void 0)
@@ -15733,6 +15801,7 @@ var TokenCache = class {
   load;
   now;
   ttlMs;
+  log;
   cached;
   pending;
   retryAt = 0;
@@ -15740,10 +15809,11 @@ var TokenCache = class {
   failedAt;
   refusedAt;
   rejectedAt = 0;
-  constructor(load, now = Date.now, ttlMs = LOGIN_TOKEN_TTL_MS) {
+  constructor(load, now = Date.now, ttlMs = LOGIN_TOKEN_TTL_MS, log = () => void 0) {
     this.load = load;
     this.now = now;
     this.ttlMs = ttlMs;
+    this.log = log;
   }
   get loading() {
     return this.pending !== void 0;
@@ -15765,7 +15835,7 @@ var TokenCache = class {
       return;
     this.cached = void 0;
     this.rejectedAt = this.now();
-    logFailure(GATEWAY_REFUSED_LOG);
+    this.log(GATEWAY_REFUSED_LOG);
   }
   get() {
     if (this.cached && this.now() < this.cached.until)
@@ -15785,7 +15855,7 @@ var TokenCache = class {
       };
       return token;
     }).catch((error) => {
-      logFailure(SIGN_IN_FAILED_LOG + (error instanceof SignInFailure ? error.message : UNREADABLE_TOKEN_REASON));
+      this.log(SIGN_IN_FAILED_LOG + (error instanceof SignInFailure ? error.message : UNREADABLE_TOKEN_REASON));
       this.cached = void 0;
       this.failedAt = this.now();
       this.retryAt = this.now() + RETRY_AFTER_MS;
@@ -15856,8 +15926,8 @@ function cleanHeaders(headers, request = true) {
 function upstreamPath(method, raw) {
   if (raw.length > 4096 || /[\\#\x00-\x20\x7f]/.test(raw))
     return;
-  const [path4, query] = raw.split("?", 2);
-  if (!(method === "POST" && /^\/v1\/messages(?:\/count_tokens)?$/.test(path4) || method === "GET" && /^\/v1\/models(?:\/[a-zA-Z0-9_-]+)?$/.test(path4)))
+  const [path3, query] = raw.split("?", 2);
+  if (!(method === "POST" && /^\/v1\/messages(?:\/count_tokens)?$/.test(path3) || method === "GET" && /^\/v1\/models(?:\/[a-zA-Z0-9_-]+)?$/.test(path3)))
     return;
   if (query !== void 0) {
     if (raw.indexOf("?", raw.indexOf("?") + 1) !== -1)
@@ -15868,7 +15938,7 @@ function upstreamPath(method, raw) {
       if (!allowed.includes(key) || !/^[a-zA-Z0-9_.-]{1,256}$/.test(value))
         return;
   }
-  return method === "GET" && path4.startsWith("/v1/models/") ? "/anthropic" + raw : raw;
+  return method === "GET" && path3.startsWith("/v1/models/") ? "/anthropic" + raw : raw;
 }
 var RequestError = class extends Error {
   status;
@@ -15918,7 +15988,7 @@ function readBody(req) {
     req.on("aborted", failed);
   });
 }
-async function prepareBody(req, path4) {
+async function prepareBody(req, path3) {
   const encoding = req.headers["content-encoding"];
   if (encoding !== void 0 && encoding.toLowerCase() !== "identity")
     throw new RequestError(415, "Compressed request bodies are unsupported");
@@ -15944,16 +16014,16 @@ async function prepareBody(req, path4) {
     throw new RequestError(400, "model must be a bare ID or provider/model");
   const normalized = slash === -1 ? `anthropic/${model}` : model;
   body.model = normalized;
-  if (path4.split("?", 1)[0] === "/v1/messages/count_tokens") {
+  if (path3.split("?", 1)[0] === "/v1/messages/count_tokens") {
     if (!normalized.startsWith("anthropic/"))
       throw new RequestError(501, "count_tokens is supported only for Anthropic models");
-    path4 = "/anthropic" + path4;
+    path3 = "/anthropic" + path3;
     body.model = normalized.slice("anthropic/".length);
   }
   const rewritten = Buffer.from(JSON.stringify(body));
   if (rewritten.length > MAX_REQUEST_BYTES)
     throw new RequestError(413, "Request body exceeds 60 MiB");
-  return { body: rewritten, path: path4 };
+  return { body: rewritten, path: path3 };
 }
 var Sessions2 = class {
   now;
@@ -16024,7 +16094,7 @@ function createProxy(config, options = {}) {
   const command = config.identityTokenCommand;
   const fetchToken = command === void 0 ? options.token ?? (() => loginToken(config)) : () => commandToken(command, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal);
   const ttlMs = command === void 0 ? LOGIN_TOKEN_TTL_MS : config.identityTokenTtlMs ?? DEFAULT_IDENTITY_TOKEN_TTL_MS;
-  const tokens = new TokenCache(fetchToken, Date.now, ttlMs);
+  const tokens = new TokenCache(fetchToken, Date.now, ttlMs, options.log);
   const unavailable = () => command === void 0 ? loginGuidance(config) : commandGuidance(config);
   const sessions = options.sessions ?? new Sessions2();
   const transport = options.transport ?? https.request;
@@ -16065,8 +16135,8 @@ function createProxy(config, options = {}) {
       reply(res, 204, "");
       return;
     }
-    const path4 = upstreamPath(req.method ?? "", req.url ?? "");
-    if (!path4) {
+    const path3 = upstreamPath(req.method ?? "", req.url ?? "");
+    if (!path3) {
       reply(res, 404, "Unsupported proxy route");
       return;
     }
@@ -16108,7 +16178,7 @@ function createProxy(config, options = {}) {
     };
     void (async () => {
       const workspace = callerWorkspace(req) ?? config.workspaceId;
-      const prepared = req.method === "POST" ? await prepareBody(req, path4) : void 0;
+      const prepared = req.method === "POST" ? await prepareBody(req, path3) : void 0;
       if (ended || res.destroyed)
         return;
       if (prepared) {
@@ -16135,7 +16205,7 @@ function createProxy(config, options = {}) {
         protocol: "https:",
         hostname: upstreamOrigin.hostname,
         port: Number(upstreamOrigin.port || 443),
-        path: prepared?.path ?? path4,
+        path: prepared?.path ?? path3,
         method: req.method,
         headers,
         agent: false,
@@ -16335,12 +16405,12 @@ function parseGatewayCommand(prompt) {
 }
 
 // dist/src/proxy/settings.js
-import { mkdirSync as mkdirSync5, rmdirSync } from "node:fs";
-import { dirname as dirname3, join as join7 } from "node:path";
+import { mkdirSync as mkdirSync6, rmdirSync } from "node:fs";
+import { dirname as dirname5, join as join8 } from "node:path";
 
 // dist/src/proxy/setup.js
-import { mkdirSync as mkdirSync4 } from "node:fs";
-import { join as join5 } from "node:path";
+import { mkdirSync as mkdirSync5 } from "node:fs";
+import { join as join6 } from "node:path";
 import { randomBytes as randomBytes2 } from "node:crypto";
 function createConfig(profile, port, home = userHome(), urls = {}, useClaudeSubscription = false, credentials = {}) {
   const valid = typeof useClaudeSubscription === "boolean" && absent(profile, isProfile) && isPort(port) && absent(credentials.identityTokenCommand, isIdentityTokenCommand) && absent(credentials.identityTokenTtlMs, isIdentityTokenTtlMs) && absent(credentials.workspaceId, isWorkspaceId);
@@ -16350,7 +16420,7 @@ function createConfig(profile, port, home = userHome(), urls = {}, useClaudeSubs
   directories(home, true);
   const dir = configDir(home);
   try {
-    mkdirSync4(dir, { mode: 448 });
+    mkdirSync5(dir, { mode: 448 });
   } catch (e) {
     if (e.code !== "EEXIST")
       throw e;
@@ -16365,23 +16435,23 @@ function createConfig(profile, port, home = userHome(), urls = {}, useClaudeSubs
     port,
     secret: randomBytes2(32).toString("hex")
   };
-  const path4 = join5(dir, "config.json");
-  if (snapshot(path4, true))
+  const path3 = join6(dir, "config.json");
+  if (snapshot(path3, true))
     throw new Error("Proxy config already exists");
-  atomic(path4, jsonText(config), void 0);
+  atomic(path3, jsonText(config), void 0);
 }
 
 // dist/src/proxy/lifecycle.js
 import http2 from "node:http";
 import { connect } from "node:net";
 import { spawn as spawn2 } from "node:child_process";
-function control(config, method, path4, timeoutMs = 500) {
+function control(config, method, path3, timeoutMs = 500) {
   return new Promise((resolve2, reject) => {
     const req = http2.request({
       hostname: "127.0.0.1",
       port: config.port,
       method,
-      path: path4,
+      path: path3,
       agent: false,
       headers: { [KEY_HEADER]: config.secret, "content-length": "0" }
     }, (res) => {
@@ -16463,12 +16533,12 @@ async function waitForStopped(config, timeoutMs = 36e3) {
 
 // dist/src/proxy/scopes.js
 import { realpathSync } from "node:fs";
-import { dirname as dirname2, join as join6, resolve } from "node:path";
+import { dirname as dirname4, join as join7, resolve } from "node:path";
 function targetPaths(home, scope, cwd) {
   if (scope === "global")
     return {
-      settings: join6(home, ".claude/settings.json"),
-      config: join6(configDir(home), "config.json")
+      settings: join7(home, ".claude/settings.json"),
+      config: join7(configDir(home), "config.json")
     };
   if (!cwd || !cwd.startsWith("/"))
     throw new SetupError("Project scope requires an absolute hook cwd.");
@@ -16476,30 +16546,30 @@ function targetPaths(home, scope, cwd) {
   if (resolve(cwd) !== root)
     throw new SetupError("Project path must be canonical and not a symlink.");
   directory(root);
-  const settings2 = join6(root, ".claude/settings.local.json");
+  const settings2 = join7(root, ".claude/settings.local.json");
   return {
     settings: settings2,
-    config: join6(configDir(home), "config.json")
+    config: join7(configDir(home), "config.json")
   };
 }
 var BASE = "ANTHROPIC_BASE_URL";
 var HEADERS = "ANTHROPIC_CUSTOM_HEADERS";
 var proxyKeyLine = (config) => `X-LangSmith-Proxy-Key: ${config.secret}`;
-function routingSnapshot(path4) {
+function routingSnapshot(path3) {
   try {
-    const root = dirname2(dirname2(path4));
+    const root = dirname4(dirname4(path3));
     if (realpathSync(root) !== root)
       throw new Error("Noncanonical routing target");
     directory(root);
-    directory(dirname2(path4));
-    return snapshot(path4);
+    directory(dirname4(path3));
+    return snapshot(path3);
   } catch (error) {
     if (error.code !== "ENOENT")
       throw error;
   }
 }
-function unchangedRouting(path4, saved) {
-  if (JSON.stringify(routingSnapshot(path4)) !== JSON.stringify(saved))
+function unchangedRouting(path3, saved) {
+  if (JSON.stringify(routingSnapshot(path3)) !== JSON.stringify(saved))
     throw new Error("Settings changed concurrently; retry");
 }
 function routingEnv(saved) {
@@ -16522,14 +16592,14 @@ function routingTargets(home, cwd, config) {
   ]);
   if (cwd)
     paths.add(targetPaths(home, "project", cwd).settings);
-  return [...paths].map((path4) => ({ path: path4, saved: routingSnapshot(path4) }));
+  return [...paths].map((path3) => ({ path: path3, saved: routingSnapshot(path3) }));
 }
 
 // dist/src/proxy/settings.js
 var fail = (message) => {
   throw new SetupError(message);
 };
-function object(value) {
+function object2(value) {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return fail("Expected a JSON object; settings were not replaced.");
   return value;
@@ -16561,12 +16631,12 @@ function validateHeaders(value) {
       fail("Custom Host headers are unsupported by persistent setup. Remove the Host header explicitly so the client uses the loopback target; review headers privately.");
   }
 }
-function conflicting(guidance, path4, inEnvironment, inSettings) {
+function conflicting(guidance, path3, inEnvironment, inSettings) {
   const parts = [guidance];
   if (inEnvironment.length)
     parts.push(`Found in your environment: ${inEnvironment.join(", ")}.`, CONFLICT_ENVIRONMENT_GUIDANCE);
   if (inSettings.length)
-    parts.push(`Found in your settings file ${path4}: ${inSettings.join(", ")}.`, CONFLICT_SETTINGS_GUIDANCE);
+    parts.push(`Found in your settings file ${path3}: ${inSettings.join(", ")}.`, CONFLICT_SETTINGS_GUIDANCE);
   parts.push(CONFLICT_RETRY_GUIDANCE);
   return fail(parts.join(" "));
 }
@@ -16577,31 +16647,31 @@ function changedFields(config, next) {
   return keys.filter((key) => before[key] !== after[key]).map((key) => PINNED_FIELD_LABELS[key]);
 }
 function settings(s) {
-  const value = s ? object(JSON.parse(s.text)) : {};
-  const env = value.env === void 0 ? {} : object(value.env);
+  const value = s ? object2(JSON.parse(s.text)) : {};
+  const env = value.env === void 0 ? {} : object2(value.env);
   return { value, env };
 }
 function supportedHome(home, env) {
-  if (env.CLAUDE_CONFIG_DIR && env.CLAUDE_CONFIG_DIR !== join7(home, ".claude"))
+  if (env.CLAUDE_CONFIG_DIR && env.CLAUDE_CONFIG_DIR !== join8(home, ".claude"))
     fail("Custom CLAUDE_CONFIG_DIR is unsupported. Restart Claude Code with its default configuration directory, then use /langsmith-gateway:setup or /langsmith-gateway:disable.");
 }
 function lock(home) {
   directories(home, true);
   const dir = configDir(home);
   try {
-    mkdirSync5(dir, { mode: 448 });
+    mkdirSync6(dir, { mode: 448 });
   } catch (e) {
     if (e.code !== "EEXIST")
       throw e;
   }
   privatePath(dir, true);
-  const path4 = join7(dir, "settings.lock");
+  const path3 = join8(dir, "settings.lock");
   try {
-    mkdirSync5(path4, { mode: 448 });
+    mkdirSync6(path3, { mode: 448 });
   } catch {
     return fail("Another setup/disable is running or left settings.lock. Stop it before removing that lock directory and retrying.");
   }
-  return () => rmdirSync(path4);
+  return () => rmdirSync(path3);
 }
 async function enable(entry2, args, env = process.env, home = userHome(), cwd = process.cwd()) {
   const requested = parseSetupArgs(args);
@@ -16610,7 +16680,7 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
   const unlock = lock(home);
   try {
     const p = targetPaths(home, requested.scope, cwd);
-    directory(dirname3(p.settings), true);
+    directory(dirname5(p.settings), true);
     const beforeSettings = snapshot(p.settings);
     const { value, env: savedEnv } = settings(beforeSettings);
     if (value.disableAllHooks === true)
@@ -16705,7 +16775,7 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       unchanged(p.config, currentConfig, true);
       for (const item of targets)
         unchangedRouting(item.path, item.saved);
-      directory(dirname3(p.settings));
+      directory(dirname5(p.settings));
       const afterHeaders = keys.length ? headers : withProxyKey(headers, config);
       savedEnv[BASE] = target;
       savedEnv[HEADERS] = afterHeaders;
@@ -16821,7 +16891,7 @@ function routingStatus(paths, config) {
 }
 
 // dist/src/proxy/status.js
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 
 // dist/src/proxy/credential-report.js
 function signInSummary(config) {
@@ -16860,7 +16930,7 @@ var STATUS_ERROR = "Gateway status unavailable; review config, settings, permiss
 async function gatewayStatus(args, env, home, cwd) {
   const { scope } = parseStatusArgs(args);
   try {
-    if (env.CLAUDE_CONFIG_DIR && env.CLAUDE_CONFIG_DIR !== join8(home, ".claude"))
+    if (env.CLAUDE_CONFIG_DIR && env.CLAUDE_CONFIG_DIR !== join9(home, ".claude"))
       throw new Error("Unsupported configuration directory");
     const scopes = scope ? [scope] : ["global", "project"];
     const targets = scopes.map((selected) => ({
@@ -16955,8 +17025,8 @@ async function main() {
   if (!config)
     return;
   if (command === "daemon") {
-    startLog(configDir());
-    const { server, drain } = createProxy(config);
+    initLogger(false);
+    const { server, drain } = createProxy(config, { log: warn });
     const watch = setInterval(() => {
       try {
         const current = loadConfig();

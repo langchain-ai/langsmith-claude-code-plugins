@@ -285,6 +285,7 @@ export function createProxy(
   config: ProxyConfig,
   options: {
     token?: () => Promise<string>;
+    log?: (message: string) => void;
     transport?: typeof https.request;
     sessions?: Sessions;
   } = {},
@@ -300,7 +301,7 @@ export function createProxy(
     command === undefined
       ? LOGIN_TOKEN_TTL_MS
       : (config.identityTokenTtlMs ?? DEFAULT_IDENTITY_TOKEN_TTL_MS);
-  const tokens = new TokenCache(fetchToken, Date.now, ttlMs);
+  const tokens = new TokenCache(fetchToken, Date.now, ttlMs, options.log);
   const unavailable = () =>
     command === undefined ? loginGuidance(config) : commandGuidance(config);
   const sessions = options.sessions ?? new Sessions();

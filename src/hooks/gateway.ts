@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
-import { ConfigError, configDir, loadConfig } from "../proxy/config.js";
-import { startLog } from "../proxy/log.js";
+import { ConfigError, loadConfig } from "../proxy/config.js";
+import { initLogger, warn } from "../logger.js";
 import { createProxy, identity } from "../proxy/server.js";
 import { COMMAND_GUIDANCE } from "../proxy/proxy-constants.js";
 import { SetupError } from "../proxy/options.js";
@@ -23,8 +23,8 @@ async function main(): Promise<void> {
   if (command === "daemon") {
     // The same bundle runs in a separate background process so later model
     // requests and streams can be served after the short-lived hooks exit.
-    startLog(configDir());
-    const { server, drain } = createProxy(config);
+    initLogger(false);
+    const { server, drain } = createProxy(config, { log: warn });
     const watch = setInterval(() => {
       try {
         const current = loadConfig();
