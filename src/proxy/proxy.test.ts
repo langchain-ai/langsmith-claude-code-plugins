@@ -1386,8 +1386,8 @@ it("validates the private boolean and fingerprints the mode", () => {
   expect(identity({ ...base, useClaudeSubscription: false })).not.toBe(identity(base));
 });
 
-it("cancels an in-flight login refresh on daemon drain before releasing its port", async () => {
-  const server = await tokenServer(false);
+it("keeps its port on daemon drain until an in-flight login refresh finishes", async () => {
+  const server = await tokenServer(1500);
   saveLogin(home, {
     api_url: server.url,
     oauth: { access_token: jwt(1), refresh_token: "first", expires_at: "2020-01-01T00:00:00Z" },
@@ -1403,6 +1403,7 @@ it("cancels an in-flight login refresh on daemon drain before releasing its port
   }
   const closed = once(proxy.server, "close");
   proxy.drain();
-  expect((await response).status).toBe(503);
+  await response;
   await closed;
+  expect(server.answered).toHaveLength(1);
 });

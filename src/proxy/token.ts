@@ -31,14 +31,14 @@ export function cliEnvironment(): NodeJS.ProcessEnv {
 }
 export class SignInFailure extends Error {}
 
-export async function loginToken(config: ProxyConfig, signal?: AbortSignal): Promise<string> {
+export async function loginToken(config: ProxyConfig): Promise<string> {
   const { loadProfileClientConfig } = await import("langsmith/lib/utils/profiles");
   const { profileAuth } = loadProfileClientConfig({
     configPath: join(userHome(), ...LOGIN_CONFIG_PATH),
     profile: config.profile,
   });
   if (profileAuth === undefined) throw new SignInFailure(NO_LOGIN_REASON);
-  const token = bearerCredential((await profileAuth.getAuthHeader(fetch, signal))?.value);
+  const token = bearerCredential((await profileAuth.getAuthHeader(fetch))?.value);
   if (token === undefined || !BEARER_TOKEN.test(token))
     throw new SignInFailure(UNUSABLE_LOGIN_REASON);
   return token;

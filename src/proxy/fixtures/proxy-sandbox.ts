@@ -33,15 +33,17 @@ export function saveLogin(home: string, profile: Record<string, unknown>) {
     { mode: 0o600 },
   );
 }
-export async function tokenServer(respond = true) {
+export async function tokenServer(delayMs = 0) {
   const refreshes: string[] = [];
+  const answered: string[] = [];
   const server = http.createServer((req, res) => {
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
       if (req.method !== "POST") return void res.writeHead(404).end();
       refreshes.push(new URLSearchParams(body).get("refresh_token") ?? "");
-      if (respond)
+      setTimeout(() => {
+        answered.push(`rotated-${refreshes.length}`);
         res.end(
           JSON.stringify({
             access_token: jwt(Date.now() / 1000 + 3600),
@@ -49,9 +51,10 @@ export async function tokenServer(respond = true) {
             expires_in: 3600,
           }),
         );
+      }, delayMs);
     });
   });
-  return { url: `http://127.0.0.1:${await listen(server)}`, refreshes };
+  return { url: `http://127.0.0.1:${await listen(server)}`, refreshes, answered };
 }
 export async function fixture(
   handler: http.RequestListener = (_req, res) => res.end("ok"),

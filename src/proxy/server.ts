@@ -294,7 +294,7 @@ export function createProxy(
   const command = config.identityTokenCommand;
   const fetchToken =
     command === undefined
-      ? (options.token ?? (() => loginToken(config, credentialAbort.signal)))
+      ? (options.token ?? (() => loginToken(config)))
       : () => commandToken(command, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal);
   const ttlMs =
     command === undefined
@@ -473,7 +473,7 @@ export function createProxy(
     draining = true;
     credentialAbort.abort();
     // Retain the OS startup lock while draining: releasing the listening socket
-    // early could start a second daemon/CLI refresh while old requests still run.
+    // early could start a second daemon/login refresh while old requests still run.
     // New requests get 503; existing active requests have up to 30s to finish.
     server.closeIdleConnections();
     if (sessions.active === 0 && !tokens.loading) {

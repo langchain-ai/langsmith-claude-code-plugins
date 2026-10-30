@@ -15664,7 +15664,7 @@ function cliEnvironment() {
 }
 var SignInFailure = class extends Error {
 };
-async function loginToken(config, signal) {
+async function loginToken(config) {
   const { loadProfileClientConfig: loadProfileClientConfig2 } = await Promise.resolve().then(() => (init_profiles(), profiles_exports));
   const { profileAuth } = loadProfileClientConfig2({
     configPath: join4(userHome(), ...LOGIN_CONFIG_PATH),
@@ -15672,7 +15672,7 @@ async function loginToken(config, signal) {
   });
   if (profileAuth === void 0)
     throw new SignInFailure(NO_LOGIN_REASON);
-  const token = bearerCredential((await profileAuth.getAuthHeader(fetch, signal))?.value);
+  const token = bearerCredential((await profileAuth.getAuthHeader(fetch))?.value);
   if (token === void 0 || !BEARER_TOKEN.test(token))
     throw new SignInFailure(UNUSABLE_LOGIN_REASON);
   return token;
@@ -16022,7 +16022,7 @@ function createProxy(config, options = {}) {
   const upstreamOrigin = new URL(endpoints(config).gatewayUrl);
   const credentialAbort = new AbortController();
   const command = config.identityTokenCommand;
-  const fetchToken = command === void 0 ? options.token ?? (() => loginToken(config, credentialAbort.signal)) : () => commandToken(command, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal);
+  const fetchToken = command === void 0 ? options.token ?? (() => loginToken(config)) : () => commandToken(command, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal);
   const ttlMs = command === void 0 ? LOGIN_TOKEN_TTL_MS : config.identityTokenTtlMs ?? DEFAULT_IDENTITY_TOKEN_TTL_MS;
   const tokens = new TokenCache(fetchToken, Date.now, ttlMs);
   const unavailable = () => command === void 0 ? loginGuidance(config) : commandGuidance(config);
