@@ -23664,10 +23664,15 @@ var RUN_PATCH_FIELDS = ["outputs", "end_time", "error"];
 var RUN_SNAPSHOT_FIELDS = [...RUN_CONTEXT_FIELDS, "inputs", ...RUN_PATCH_FIELDS];
 var CURSOR_VERSION_FIELD = "cursor_version";
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
-var SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"]+)"|'([^']+)'|([^\s;&|()]+))`;
-var BASH_CD_STEP = new RegExp(String.raw`^\s*cd\s+${SHELL_FOLDER_ARGUMENT}\s*(&&|;|$)`);
-var BASH_GIT_DIRECTORY = new RegExp(String.raw`^\s*git\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
-var BASH_PLAIN_STEP = /^[^;&|()`$<>\n]*&&/;
+var SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"$\`\\]+)"|'([^']+)'|(~(?:\/[^\s;&|()$\`\\"'<>]*)?|[^\s;&|()$\`\\"'<>~-][^\s;&|()$\`\\"'<>]*))`;
+var BASH_CD_WORD = /^cd\b/;
+var BASH_CD_STEP = new RegExp(String.raw`^cd\s+${SHELL_FOLDER_ARGUMENT}\s*(?:&&|;|$)`);
+var BASH_LATER_CD = /\bcd\b/;
+var BASH_GIT_WORD = /^git(?=\s)/;
+var BASH_GIT_CONFIG_FLAG = /^\s+-c\s+(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
+var BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
+var BASH_SUBSHELL_STEP = /^\([^()`$]*\)\s*(?:&&|;|$)/;
+var BASH_PLAIN_STEP = /^[^;&|()`$<>\n]*(?:&&|;)/;
 var HOME_SHORTHAND = /^~(?=\/|$)/;
 var GLOB_TOOL_NAME = "Glob";
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
@@ -24536,29 +24541,47 @@ function folderArgument(match) {
   return match[1] ?? match[2] ?? match[3];
 }
 function pathFromBashCommand(command, sessionCwd) {
-  let current;
-  let rest = command;
-  for (; ; ) {
-    const from = current ?? sessionCwd;
-    const git = rest.match(BASH_GIT_DIRECTORY);
-    if (git)
-      return existingPath(folderArgument(git), from) ?? current;
-    const cd = rest.match(BASH_CD_STEP);
-    if (cd) {
-      const entered = existingPath(folderArgument(cd), from);
+  let folder;
+  let rest = command.trim();
+  while (rest) {
+    if (BASH_CD_WORD.test(rest)) {
+      const cd = rest.match(BASH_CD_STEP);
+      if (!cd)
+        return void 0;
+      const entered = existingPath(folderArgument(cd), folder ?? sessionCwd);
       if (!entered)
-        return current;
-      current = entered;
-      if (cd[4] !== "&&")
-        return current;
-      rest = rest.slice(cd[0].length);
+        return void 0;
+      folder = entered;
+      rest = rest.slice(cd[0].length).trimStart();
       continue;
     }
-    const plain = rest.match(BASH_PLAIN_STEP);
-    if (!plain)
-      return current;
-    rest = rest.slice(plain[0].length);
+    if (BASH_GIT_WORD.test(rest)) {
+      let options = rest.slice(3);
+      let gitFolder = folder ?? sessionCwd;
+      let named = false;
+      for (; ; ) {
+        const config = options.match(BASH_GIT_CONFIG_FLAG);
+        const directory = options.match(BASH_GIT_DIRECTORY_FLAG);
+        const flag = config ?? directory;
+        if (!flag)
+          break;
+        if (directory) {
+          gitFolder = existingPath(folderArgument(directory), gitFolder);
+          if (!gitFolder)
+            return void 0;
+          named = true;
+        }
+        options = options.slice(flag[0].length);
+      }
+      if (named)
+        return BASH_LATER_CD.test(options) ? void 0 : gitFolder;
+    }
+    const step = rest.match(BASH_SUBSHELL_STEP) ?? rest.match(BASH_PLAIN_STEP);
+    if (!step)
+      return BASH_LATER_CD.test(rest) ? void 0 : folder;
+    rest = rest.slice(step[0].length).trimStart();
   }
+  return folder;
 }
 function pathFromGlobPattern(pattern) {
   return isAbsolute5(pattern) && insideGitRepository(pattern) ? pattern : void 0;
@@ -24583,7 +24606,7 @@ function toolPathFromInput(toolInput, sessionCwd, toolName) {
       return { path: resolved, namedAPath };
   }
   const inferred = toolName === GLOB_TOOL_NAME && typeof input.pattern === "string" ? pathFromGlobPattern(input.pattern) : typeof input.command === "string" ? pathFromBashCommand(input.command, sessionCwd) : void 0;
-  return inferred ? { path: inferred, namedAPath: true } : { namedAPath };
+  return inferred ? { path: inferred, namedAPath } : { namedAPath };
 }
 
 // dist/src/repo-attribution.js

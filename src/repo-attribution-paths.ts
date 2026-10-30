@@ -3,9 +3,14 @@ import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import { rootFromGitMarker } from "@langchain/plugins-base/git";
 import {
-  BASH_GIT_DIRECTORY,
   BASH_CD_STEP,
+  BASH_CD_WORD,
+  BASH_GIT_CONFIG_FLAG,
+  BASH_GIT_DIRECTORY_FLAG,
+  BASH_GIT_WORD,
+  BASH_LATER_CD,
   BASH_PLAIN_STEP,
+  BASH_SUBSHELL_STEP,
   GLOB_TOOL_NAME,
   HOME_SHORTHAND,
   TOOL_PATH_INPUT_KEYS,
@@ -32,25 +37,41 @@ function folderArgument(match: RegExpMatchArray): string {
 }
 
 function pathFromBashCommand(command: string, sessionCwd?: string): string | undefined {
-  let current: string | undefined;
-  let rest = command;
-  for (;;) {
-    const from = current ?? sessionCwd;
-    const git = rest.match(BASH_GIT_DIRECTORY);
-    if (git) return existingPath(folderArgument(git), from) ?? current;
-    const cd = rest.match(BASH_CD_STEP);
-    if (cd) {
-      const entered = existingPath(folderArgument(cd), from);
-      if (!entered) return current;
-      current = entered;
-      if (cd[4] !== "&&") return current;
-      rest = rest.slice(cd[0].length);
+  let folder: string | undefined;
+  let rest = command.trim();
+  while (rest) {
+    if (BASH_CD_WORD.test(rest)) {
+      const cd = rest.match(BASH_CD_STEP);
+      if (!cd) return undefined;
+      const entered = existingPath(folderArgument(cd), folder ?? sessionCwd);
+      if (!entered) return undefined;
+      folder = entered;
+      rest = rest.slice(cd[0].length).trimStart();
       continue;
     }
-    const plain = rest.match(BASH_PLAIN_STEP);
-    if (!plain) return current;
-    rest = rest.slice(plain[0].length);
+    if (BASH_GIT_WORD.test(rest)) {
+      let options = rest.slice(3);
+      let gitFolder = folder ?? sessionCwd;
+      let named = false;
+      for (;;) {
+        const config = options.match(BASH_GIT_CONFIG_FLAG);
+        const directory = options.match(BASH_GIT_DIRECTORY_FLAG);
+        const flag = config ?? directory;
+        if (!flag) break;
+        if (directory) {
+          gitFolder = existingPath(folderArgument(directory), gitFolder);
+          if (!gitFolder) return undefined;
+          named = true;
+        }
+        options = options.slice(flag[0].length);
+      }
+      if (named) return BASH_LATER_CD.test(options) ? undefined : gitFolder;
+    }
+    const step = rest.match(BASH_SUBSHELL_STEP) ?? rest.match(BASH_PLAIN_STEP);
+    if (!step) return BASH_LATER_CD.test(rest) ? undefined : folder;
+    rest = rest.slice(step[0].length).trimStart();
   }
+  return folder;
 }
 
 function pathFromGlobPattern(pattern: string): string | undefined {
@@ -82,5 +103,5 @@ export function toolPathFromInput(
       : typeof input.command === "string"
         ? pathFromBashCommand(input.command, sessionCwd)
         : undefined;
-  return inferred ? { path: inferred, namedAPath: true } : { namedAPath };
+  return inferred ? { path: inferred, namedAPath } : { namedAPath };
 }
