@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { writeFileSync } from "node:fs";
+import { symlinkSync, writeFileSync } from "node:fs";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("node:child_process", { spy: true });
@@ -23,6 +23,7 @@ const beta = makeRepo("beta repo", "trunk-beta", "Beta Owner", "https://gitlab.c
 const plain = makeDir(root, "plain folder");
 makeRepo("~tilde-repo", "trunk-tilde", "Tilde Owner");
 makeDir(alpha, "-");
+makeDir(alpha, "$ROOT");
 const nested = join(makeDir(alpha, "sub dir"), "nested.txt");
 const betaNested = join(makeDir(beta, "sub dir"), "nested.txt");
 for (const path of [nested, betaNested]) writeFileSync(path, "nested\n");
@@ -126,36 +127,66 @@ describe("repoScopedMetadata", () => {
       ["a cd that may not run", `false && cd "${alpha}"; git status`],
       ["a cd behind a test", `[ -d "${alpha}" ] && cd "${alpha}"; git status`],
       ["a cd inside braces", `cd "${beta}" && { cd "${alpha}"; git status; }`],
-      ["a cd inside a subshell", `(cd "${alpha}" && ls)`],
-      ["a cd inside an if", `if true; then cd "${alpha}"; fi`],
-      ["a cd inside a loop", `for d in x; do cd "${alpha}"; done`],
-      ["a cd after time", `time cd "${alpha}"`],
-      ["a cd after builtin", `builtin cd "${alpha}"`],
-      ["a cd after command", `command cd "${alpha}"`],
-      ["pushd", `pushd "${alpha}"`],
       ["pushd after a cd", `cd "${beta}" && pushd "${alpha}"`],
+      ["popd after a cd", `cd "${beta}" && popd`],
       ["eval", `eval "cd ${alpha}"`],
-      ["a negated cd", `! cd "${alpha}"`],
-      ["a command before the cd", `echo hi; cd "${alpha}" && ls`],
-      ["a cd ended by a semicolon", `cd "${alpha}"; ls`],
-      ["a cd followed by an or", `cd "${alpha}" || ls`],
-      ["a cd with a redirect", `cd "${alpha}" 2>/dev/null && ls`],
-      ["a cd after another command", `git status && cd "${alpha}"`],
-      ["cd -", `cd "${alpha}" && cd -`],
-      ["a bare cd", `cd "${alpha}" && cd`],
-      ["a cd into a variable", `cd "${alpha}" && cd $HOME/x`],
-      ["a cd into a substitution", `cd "${alpha}" && cd "$(echo ${beta})"`],
-      ["a cd with --", `cd "${alpha}" && cd -- "${beta}"`],
-      ["a cd with an escaped space", `cd "${alpha}" && cd ${beta.replaceAll(" ", "\\ ")}`],
-      ["a cd into nothing", `cd "${alpha}" && cd "${missing}" && ls`],
-      ["a cd into a file", `cd "${alphaSeed}" && ls`],
-      ["a git -C into nothing", `cd "${alpha}" && git -C "${missing}" log`],
+      ["a cd ended by a semicolon", `cd "${beta}"; ls`],
+      ["a cd followed by an or", `cd "${beta}" || ls`],
+      ["a cd with a redirect", `cd "${beta}" 2>/dev/null && ls`],
+      ["a cd after another command", `git status && cd "${beta}"`],
+      ["cd -", `cd "${beta}" && cd -`],
+      ["a bare cd", `cd "${beta}" && cd`],
+      ["a cd into a variable", `cd "${beta}" && cd $HOME/x`],
+      ["a cd into a variable inside quotes", `cd "$ROOT" && ls`],
+      ["a cd into a substitution", `cd "${beta}" && cd "$(echo ${alpha})"`],
+      ["a cd with --", `cd "${beta}" && cd -- "${alpha}"`],
+      ["a cd with an escaped space", `cd "${beta}" && cd ${alpha.replaceAll(" ", "\\ ")}`],
+      ["a cd into nothing", `cd "${beta}" && cd "${missing}" && ls`],
+      ["a cd into a file", `cd "${betaSeed}" && ls`],
+      ["a git -C into nothing", `cd "${beta}" && git -C "${missing}" log`],
+      ["a git -C into a variable", `cd "${beta}" && git -C $REPO log`],
+      ["a git option before -C", `cd "${alpha}" && git --no-pager -C "${beta}" log`],
+      ["a GIT_DIR assignment", `cd "${beta}" && GIT_DIR=x git log`],
+      ["a later cd after git -C", `git -C "${beta}" log && cd "${alpha}"`],
+    ])("emits no repository when a command that leaves its folder has %s", (_name, command) => {
+      expect(repoScopedMetadata(inSession(), { command }, alpha)).toEqual(noRepoKeys);
+    });
+
+    it.each<[name: string, command: string]>([
+      ["a git -C into nothing", `git -C "${missing}" log`],
       ["a git -C into a file", `git -C "${alphaSeed}" log`],
-      ["a git -C into a variable", `cd "${alpha}" && git -C $REPO log`],
-      ["a later cd after git -C", `git -C "${alpha}" log && cd "${beta}"`],
-      ["a git first word with an option", `git --no-pager -C "${alpha}" log`],
-    ])("takes the call's own folder when a command has %s", (_name, command) => {
-      expect(repoScopedMetadata(inSession(), { command }, plain)).toEqual(noRepoKeys);
+      ["a git -C into a variable", "git -C $REPO log"],
+      ["a git option before -C", `git --no-pager -C "${beta}" log`],
+      ["a GIT_DIR assignment", `GIT_DIR=x git log`],
+      ["an env GIT_WORK_TREE assignment", `env GIT_WORK_TREE=x git log`],
+    ])("keeps the call's own folder when a command that stays in it has %s", (_name, command) => {
+      expect(repoScopedMetadata(inSession(), { command }, alpha)).toMatchObject(staysInAlpha);
+    });
+
+    it("reads leading whitespace before a cd", () => {
+      expect(
+        repoScopedMetadata(inSession(), { command: `  cd "${beta}" && ls` }, alpha),
+      ).toMatchObject(inBeta);
+    });
+
+    it("reads a relative session folder as unknown", () => {
+      vi.spyOn(process, "cwd").mockReturnValue(root);
+
+      expect(toolPathFromInput({ command: 'cd "beta repo" && ls' }, ".")).toEqual({
+        namedAPath: false,
+      });
+    });
+
+    it.skipIf(process.platform === "win32")("resolves git -C through a symlink as git does", () => {
+      const link = join(root, "link to sub");
+      symlinkSync(join(alpha, "sub dir"), link);
+
+      expect(
+        repoScopedMetadata(inSession(), { command: `git -C "${link}/.." log` }, plain),
+      ).toMatchObject(staysInAlpha);
+      expect(repoScopedMetadata(inSession(), { command: `cd "${link}/.." && ls` }, plain)).toEqual(
+        noRepoKeys,
+      );
     });
 
     it.skipIf(process.platform === "win32")("keeps a backslash inside quotes", () => {
@@ -199,14 +230,10 @@ describe("repoScopedMetadata", () => {
     it.each<[name: string, input: Record<string, string>, tool?: string]>([
       ["a commit message naming a path", { command: `git commit -m "see ${betaSeed}"` }],
       ["an echo naming a path", { command: `echo "${betaSeed}"` }],
-      ["a grep naming a path", { command: `grep -r foo "${beta}"` }],
-      ["a cat of a path", { command: `cat "${betaSeed}"` }],
       ["a curl body naming a path", { command: `curl -d "${betaSeed}" http://localhost:1` }],
       ["a docker volume that looks like a drive", { command: "docker run -v x:/data image" }],
       ["a variable that looks like a drive path", { command: "PATH=C:\\tools ls" }],
       ["a path in no repository", { command: `ls "${join(plain, "x.txt")}"` }],
-      ["a folder nothing sits at", { command: `cd "${missing}" && ls` }],
-      ["a git -C folder nothing sits at", { command: `git -C "${missing}" log` }],
       ["a Grep regex given as a path", { pattern: betaSeed }, "Grep"],
       ["a Glob pattern outside every repository", { pattern: `${plain}/*.txt` }, "Glob"],
       ["a relative Glob pattern", { pattern: "**/*.txt" }, "Glob"],

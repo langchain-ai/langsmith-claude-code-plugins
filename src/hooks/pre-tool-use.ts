@@ -45,10 +45,12 @@ export async function main(): Promise<void> {
           ...ss.tool_start_times,
           [input.tool_use_id]: startTime,
         },
-        tool_cwds: {
-          ...ss.tool_cwds,
-          [input.tool_use_id]: input.cwd,
-        },
+        tool_cwds: input.agent_id
+          ? ss.tool_cwds
+          : {
+              ...ss.tool_cwds,
+              [input.tool_use_id]: input.cwd,
+            },
       },
     };
   });

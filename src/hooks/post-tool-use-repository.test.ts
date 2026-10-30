@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGitSandbox } from "../fixtures/git-sandbox.js";
@@ -107,12 +107,36 @@ describe("PostToolUse", () => {
     expect(lastOrigin().path).toBe(beta);
   });
 
-  it("falls back to the folder the tool started in when a command's folder is unknown", async () => {
+  it("uses the folder the tool started in when a command that stays there has an unknown folder", async () => {
     writeState({ t1: beta });
-    payload.current = hookInput("Bash", { command: `cd "${plain}"; git status` }, "t1", plain);
+    payload.current = hookInput("Bash", { command: `git -C "${plain}/missing" log` }, "t1", plain);
     await main();
 
     expect(lastOrigin()).toMatchObject({ cwd: beta, namedAPath: false });
     expect(lastOrigin().path).toBeUndefined();
+  });
+
+  it("uses the hook's folder when no start folder was recorded", async () => {
+    payload.current = hookInput("Bash", { command: "ls" }, "t1", plain);
+    await main();
+
+    expect(lastOrigin().cwd).toBe(plain);
+  });
+
+  it("names no folder when a command with an unknown folder leaves it", async () => {
+    writeState({ t1: beta });
+    payload.current = hookInput("Bash", { command: `cd "${plain}"; git status` }, "t1", plain);
+    await main();
+
+    expect(lastOrigin().cwd).toBeUndefined();
+  });
+
+  it("forgets a tool's start folder once it has been used", async () => {
+    writeState({ t1: beta, t2: plain });
+    payload.current = hookInput("Bash", { command: "ls" }, "t1");
+    await main();
+
+    const state = JSON.parse(readFileSync(stateFilePath, "utf-8"));
+    expect(state["post-tool-repos"].tool_cwds).toEqual({ t2: plain });
   });
 });

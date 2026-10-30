@@ -552,6 +552,7 @@ export interface PreToolUseHookInput {
   hook_event_name: "PreToolUse";
   tool_use_id: string;
   tool_name: string;
+  agent_id?: string;
 }
 
 export interface PreCompactHookInput {

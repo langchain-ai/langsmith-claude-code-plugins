@@ -62,7 +62,6 @@ export function turnClosedReset(session: SessionState): Partial<SessionState> {
     current_notification_interrupted: undefined,
     traced_tool_use_ids: [],
     tool_start_times: {},
-    tool_cwds: {},
     turn_count: Math.max(session.turn_count, session.current_turn_number ?? 0),
   };
 }

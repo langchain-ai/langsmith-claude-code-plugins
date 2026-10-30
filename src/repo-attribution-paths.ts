@@ -1,13 +1,14 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, resolve, sep } from "node:path";
 import { rootFromGitMarker } from "@langchain/plugins-base/git";
 import {
   BASH_CD_STEP,
   BASH_FOLDER_CHANGE,
   BASH_GIT_CONFIG_FLAG,
   BASH_GIT_DIRECTORY_FLAG,
-  BASH_GIT_DIRECTORY_WORD,
+  BASH_GIT_ENVIRONMENT,
+  BASH_GIT_OPTION,
   BASH_GIT_WORD,
   GLOB_TOOL_NAME,
   HOME_SHORTHAND,
@@ -19,21 +20,19 @@ function insideGitRepository(path: string): boolean {
   return typeof rootFromGitMarker(path) === "string";
 }
 
-function directoryAt(path: string, from: string | undefined): string | undefined {
+function directoryAt(
+  path: string,
+  from: string | undefined,
+  physical: boolean,
+): string | undefined {
   const target = path.replace(HOME_SHORTHAND, homedir());
-  const resolved = isAbsolute(target)
-    ? target
-    : from && isAbsolute(from)
-      ? resolve(from, target)
-      : undefined;
-  return resolved !== undefined && isDirectory(resolved) ? resolved : undefined;
-}
-
-function isDirectory(path: string): boolean {
+  if (!isAbsolute(target) && from === undefined) return undefined;
+  const joined = isAbsolute(target) ? target : `${from}${sep}${target}`;
   try {
-    return statSync(path).isDirectory();
+    const folder = physical ? realpathSync.native(joined) : resolve(joined);
+    return statSync(folder).isDirectory() ? folder : undefined;
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -42,11 +41,12 @@ function folderArgument(match: RegExpMatchArray): string {
 }
 
 function pathFromBashCommand(command: string, callCwd?: string): string | undefined {
-  let folder = callCwd;
+  if (BASH_GIT_ENVIRONMENT.test(command)) return undefined;
+  let folder = callCwd !== undefined && isAbsolute(callCwd) ? callCwd : undefined;
   let named = false;
   let rest = command.trimStart();
   for (let cd = rest.match(BASH_CD_STEP); cd; cd = rest.match(BASH_CD_STEP)) {
-    folder = directoryAt(folderArgument(cd), folder);
+    folder = directoryAt(folderArgument(cd), folder, false);
     if (!folder) return undefined;
     named = true;
     rest = rest.slice(cd[0].length);
@@ -60,15 +60,20 @@ function pathFromBashCommand(command: string, callCwd?: string): string | undefi
       const flag = config ?? directory;
       if (!flag) break;
       if (directory) {
-        folder = directoryAt(folderArgument(directory), folder);
+        folder = directoryAt(folderArgument(directory), folder, true);
         if (!folder) return undefined;
         named = true;
       }
       rest = rest.slice(flag[0].length);
     }
-    if (BASH_GIT_DIRECTORY_WORD.test(rest)) return undefined;
+    if (BASH_GIT_OPTION.test(rest)) return undefined;
   }
   return named && !BASH_FOLDER_CHANGE.test(rest) ? folder : undefined;
+}
+
+export function commandLeavesItsFolder(toolInput: unknown): boolean {
+  const command = (toolInput as { command?: unknown } | null)?.command;
+  return typeof command === "string" && BASH_FOLDER_CHANGE.test(command);
 }
 
 function pathFromGlobPattern(pattern: string): string | undefined {

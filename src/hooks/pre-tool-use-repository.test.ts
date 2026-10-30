@@ -33,19 +33,23 @@ import { main } from "./pre-tool-use.js";
 
 afterAll(() => sandbox.remove());
 
-describe("PreToolUse", () => {
-  it("records the folder each tool starts in", async () => {
-    writeFileSync(stateFilePath, "{}");
-    payload.current = {
-      session_id: "pre-tool-cwd",
-      transcript_path: join(sandbox.root, "transcript.jsonl"),
-      cwd: sandbox.root,
-      hook_event_name: "PreToolUse",
-      tool_name: "Bash",
-      tool_input: { command: "ls" },
-      tool_use_id: "t1",
-    };
+const hookInput = (tool_use_id: string, extra: Record<string, unknown> = {}) => ({
+  session_id: "pre-tool-cwd",
+  transcript_path: join(sandbox.root, "transcript.jsonl"),
+  cwd: sandbox.root,
+  hook_event_name: "PreToolUse",
+  tool_name: "Bash",
+  tool_input: { command: "ls" },
+  tool_use_id,
+  ...extra,
+});
 
+describe("PreToolUse", () => {
+  it("records the folder each main-agent tool starts in and none for a subagent's", async () => {
+    writeFileSync(stateFilePath, "{}");
+    payload.current = hookInput("t1");
+    await main();
+    payload.current = hookInput("t2", { agent_id: "agent-1" });
     await main();
 
     const state = JSON.parse(readFileSync(stateFilePath, "utf-8"));

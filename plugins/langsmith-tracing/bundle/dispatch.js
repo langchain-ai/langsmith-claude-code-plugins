@@ -1113,9 +1113,9 @@ async function waitOutContention(attempt, error2) {
   let isContended = false;
   try {
     const gate = await lstat(gatePath);
-    const isDirectory2 = gate.isDirectory();
-    isContended = isDirectory2 || gate.isFile() && code === FILE_EXISTS_CODE;
-    if (isContended && await legacyGateIsAbandoned(gatePath, isDirectory2, gate.mtimeMs)) {
+    const isDirectory = gate.isDirectory();
+    isContended = isDirectory || gate.isFile() && code === FILE_EXISTS_CODE;
+    if (isContended && await legacyGateIsAbandoned(gatePath, isDirectory, gate.mtimeMs)) {
       if (!await reclaimLegacyGate(gatePath, filePath, tryAcquire))
         await waitForNextScan(deadline, gatePath);
       return;
@@ -1195,10 +1195,10 @@ async function recordLegacyGateOwner(gatePath) {
     throw new Error(FILE_LOCK_COMPATIBLE_OWNER_MESSAGE, { cause: error2 });
   }
 }
-async function legacyGateIsAbandoned(gatePath, isDirectory2, modifiedAtMs) {
+async function legacyGateIsAbandoned(gatePath, isDirectory, modifiedAtMs) {
   let contents;
   try {
-    contents = await readFile(isDirectory2 ? join(gatePath, FILE_LOCK_COMPATIBLE_OWNER_FILE) : gatePath, FILE_LOCK_ENCODING);
+    contents = await readFile(isDirectory ? join(gatePath, FILE_LOCK_COMPATIBLE_OWNER_FILE) : gatePath, FILE_LOCK_ENCODING);
   } catch (error2) {
     if (errorCode(error2) !== FILE_MISSING_CODE)
       return false;
@@ -1206,7 +1206,7 @@ async function legacyGateIsAbandoned(gatePath, isDirectory2, modifiedAtMs) {
   }
   const pid = FILE_LOCK_COMPATIBLE_OWNER_PID_PATTERN.test(contents.trim()) ? Number(contents.trim()) : void 0;
   if (pid !== void 0 && Number.isSafeInteger(pid) && pid > 0)
-    return processIsAlive(pid) === false || isDirectory2 && await ownerHeartbeatStopped(gatePath);
+    return processIsAlive(pid) === false || isDirectory && await ownerHeartbeatStopped(gatePath);
   return Date.now() - modifiedAtMs >= FILE_LOCK_COMPATIBLE_ABANDONED_GATE_MS;
 }
 async function ownerHeartbeatStopped(gatePath) {
@@ -1230,8 +1230,8 @@ async function reclaimLegacyGate(gatePath, filePath, tryAcquire) {
         return true;
       throw error2;
     }
-    const isDirectory2 = gate.isDirectory();
-    if (!await legacyGateIsAbandoned(gatePath, isDirectory2, gate.mtimeMs))
+    const isDirectory = gate.isDirectory();
+    if (!await legacyGateIsAbandoned(gatePath, isDirectory, gate.mtimeMs))
       return false;
     const stalePath = `${gatePath}.${randomUUID()}${FILE_LOCK_COMPATIBLE_STALE_SUFFIX}`;
     try {
@@ -1241,7 +1241,7 @@ async function reclaimLegacyGate(gatePath, filePath, tryAcquire) {
         return false;
       throw error2;
     }
-    if (!isDirectory2) {
+    if (!isDirectory) {
       await removeFile(stalePath);
       return true;
     }
@@ -23670,7 +23670,8 @@ var BASH_FOLDER_CHANGE = /\b(?:cd|pushd|popd)\b/;
 var BASH_GIT_WORD = /^git(?=\s)/;
 var BASH_GIT_CONFIG_FLAG = /^\s+-c\s+(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
 var BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
-var BASH_GIT_DIRECTORY_WORD = /^\s+-C(?=\s|$)/;
+var BASH_GIT_OPTION = /^\s+-/;
+var BASH_GIT_ENVIRONMENT = /\bGIT_(?:DIR|WORK_TREE)=/;
 var HOME_SHORTHAND = /^~(?=\/|$)/;
 var GLOB_TOOL_NAME = "Glob";
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
@@ -24522,33 +24523,35 @@ function loadConfig(options) {
 }
 
 // dist/src/repo-attribution-paths.js
-import { existsSync as existsSync3, statSync as statSync8 } from "node:fs";
+import { existsSync as existsSync3, realpathSync, statSync as statSync8 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
-import { isAbsolute as isAbsolute5, resolve as resolve14 } from "node:path";
+import { isAbsolute as isAbsolute5, resolve as resolve14, sep as sep3 } from "node:path";
 function insideGitRepository(path3) {
   return typeof rootFromGitMarker(path3) === "string";
 }
-function directoryAt(path3, from) {
+function directoryAt(path3, from, physical) {
   const target = path3.replace(HOME_SHORTHAND, homedir3());
-  const resolved = isAbsolute5(target) ? target : from && isAbsolute5(from) ? resolve14(from, target) : void 0;
-  return resolved !== void 0 && isDirectory(resolved) ? resolved : void 0;
-}
-function isDirectory(path3) {
+  if (!isAbsolute5(target) && from === void 0)
+    return void 0;
+  const joined = isAbsolute5(target) ? target : `${from}${sep3}${target}`;
   try {
-    return statSync8(path3).isDirectory();
+    const folder = physical ? realpathSync.native(joined) : resolve14(joined);
+    return statSync8(folder).isDirectory() ? folder : void 0;
   } catch {
-    return false;
+    return void 0;
   }
 }
 function folderArgument(match) {
   return match[1] ?? match[2] ?? match[3];
 }
 function pathFromBashCommand(command, callCwd) {
-  let folder = callCwd;
+  if (BASH_GIT_ENVIRONMENT.test(command))
+    return void 0;
+  let folder = callCwd !== void 0 && isAbsolute5(callCwd) ? callCwd : void 0;
   let named = false;
   let rest = command.trimStart();
   for (let cd = rest.match(BASH_CD_STEP); cd; cd = rest.match(BASH_CD_STEP)) {
-    folder = directoryAt(folderArgument(cd), folder);
+    folder = directoryAt(folderArgument(cd), folder, false);
     if (!folder)
       return void 0;
     named = true;
@@ -24564,17 +24567,21 @@ function pathFromBashCommand(command, callCwd) {
       if (!flag)
         break;
       if (directory) {
-        folder = directoryAt(folderArgument(directory), folder);
+        folder = directoryAt(folderArgument(directory), folder, true);
         if (!folder)
           return void 0;
         named = true;
       }
       rest = rest.slice(flag[0].length);
     }
-    if (BASH_GIT_DIRECTORY_WORD.test(rest))
+    if (BASH_GIT_OPTION.test(rest))
       return void 0;
   }
   return named && !BASH_FOLDER_CHANGE.test(rest) ? folder : void 0;
+}
+function commandLeavesItsFolder(toolInput) {
+  const command = toolInput?.command;
+  return typeof command === "string" && BASH_FOLDER_CHANGE.test(command);
 }
 function pathFromGlobPattern(pattern) {
   return isAbsolute5(pattern) && insideGitRepository(pattern) ? pattern : void 0;
@@ -24626,7 +24633,8 @@ function withPinsOf(base, scoped) {
   return scoped;
 }
 function toolOrigin(toolInput, sessionCwd, toolName) {
-  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd, toolName) };
+  const lookup = toolPathFromInput(toolInput, sessionCwd, toolName);
+  return { cwd: commandLeavesItsFolder(toolInput) ? void 0 : sessionCwd, ...lookup };
 }
 function sessionScopedMetadata(base, sessionCwd) {
   return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, []));
@@ -26233,7 +26241,6 @@ function turnClosedReset(session) {
     current_notification_interrupted: void 0,
     traced_tool_use_ids: [],
     tool_start_times: {},
-    tool_cwds: {},
     turn_count: Math.max(session.turn_count, session.current_turn_number ?? 0)
   };
 }
@@ -26735,7 +26742,6 @@ async function closeEndedSession(_id, closing, config) {
         task_run_map: {},
         traced_tool_use_ids: [],
         tool_start_times: {},
-        tool_cwds: {},
         tool_tracing_modes: {},
         tool_tracing_progress: {},
         pending_subagent_traces: [],
@@ -27015,7 +27021,6 @@ async function main4() {
         task_run_map: preservedTaskRunMap,
         traced_tool_use_ids: [],
         tool_start_times: {},
-        tool_cwds: {},
         pending_subagent_traces: [],
         open_turns: preservedOpenTurns,
         notification_done_agents: ss.notification_done_agents
@@ -27739,6 +27744,7 @@ async function main7() {
           }
         }, [input.tool_use_id], "post"),
         last_tool_end_time: toolEndTime,
+        tool_cwds: Object.fromEntries(Object.entries(freshSession.tool_cwds ?? {}).filter(([id]) => id !== input.tool_use_id)),
         ...backgroundUpdate,
         // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this
         // tool call from the transcript. A deferred Agent tool is skipped there
@@ -27800,7 +27806,7 @@ async function main9() {
           ...ss.tool_start_times,
           [input.tool_use_id]: startTime
         },
-        tool_cwds: {
+        tool_cwds: input.agent_id ? ss.tool_cwds : {
           ...ss.tool_cwds,
           [input.tool_use_id]: input.cwd
         }

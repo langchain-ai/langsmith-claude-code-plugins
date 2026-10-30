@@ -60,7 +60,9 @@ const BASH_GIT_CONFIG_FLAG = /^\s+-c\s+(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
 
 const BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
 
-const BASH_GIT_DIRECTORY_WORD = /^\s+-C(?=\s|$)/;
+const BASH_GIT_OPTION = /^\s+-/;
+
+const BASH_GIT_ENVIRONMENT = /\bGIT_(?:DIR|WORK_TREE)=/;
 
 const HOME_SHORTHAND = /^~(?=\/|$)/;
 
@@ -221,7 +223,8 @@ export {
   BASH_GIT_WORD,
   BASH_GIT_CONFIG_FLAG,
   BASH_GIT_DIRECTORY_FLAG,
-  BASH_GIT_DIRECTORY_WORD,
+  BASH_GIT_OPTION,
+  BASH_GIT_ENVIRONMENT,
   HOME_SHORTHAND,
   GLOB_TOOL_NAME,
   PINNED_REPOSITORY_KEYS,
