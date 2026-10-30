@@ -23671,20 +23671,20 @@ var BASH_CD_STEP = new RegExp(String.raw`^cd +${SHELL_FOLDER_ARGUMENT} *(?:&& *(
 var BASH_QUOTING_CHARS = /["'\\]/g;
 var BASH_GUARD_PATTERNS = [
   /(?:^|[^\w%/.-])(?:cd|pushd|popd)(?=$|[^\w-])/,
-  /\beval\b/,
-  /\benv\b/,
-  /\bsource\b/,
+  /(?:^|[^\w%/.-])eval(?=$|[^\w-])/,
+  /(?:^|[^\w%/.-])env(?=$|[^\w-])/,
+  /(?:^|[^\w%/.-])source(?=$|[^\w-])/,
   /(?:^|[;&|(){\n!]|\b(?:then|do|else|time|command|builtin))\s*\.\s/,
-  /\btmux\b/,
+  /(?:^|[^\w%/.-])tmux(?=$|[^\w-])/,
   /--dir\b/,
   /--directory\b/,
   /--cwd\b/,
   /--prefix\b/,
   /\$["']/,
   /\{[^{}]*,[^{}]*\}/,
-  /\bsh -c\b/,
-  /\bbash -c\b/,
-  /\bzsh -c\b/,
+  /(?:^|[^\w%/.-])sh -c(?=$|[^\w-])/,
+  /(?:^|[^\w%/.-])bash -c(?=$|[^\w-])/,
+  /(?:^|[^\w%/.-])zsh -c(?=$|[^\w-])/,
   /\$\(/,
   /`/,
   /GIT_DIR/,
@@ -23698,6 +23698,7 @@ var BASH_GUARD_PATTERNS = [
 var BASH_GIT_WORD = /^git(?= )/;
 var BASH_GIT_CONFIG_FLAG = new RegExp(String.raw`^ +-c +${SHELL_PLAIN_CHARS}+`);
 var BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^ +-C +${SHELL_FOLDER_ARGUMENT}`);
+var BASH_COMMAND_SEPARATOR = /[;&|]/;
 var BASH_GIT_OPTION = /^ +-/;
 var HOME_SHORTHAND = /^~(?=\/|$)/;
 var GLOB_TOOL_NAME = "Glob";
@@ -24573,6 +24574,7 @@ function folderArgument(match) {
 function pathFromBashCommand(command, callCwd) {
   let folder = callCwd !== void 0 && isAbsolute5(callCwd) ? callCwd : void 0;
   let named = false;
+  let gitMoved = false;
   let rest = command.replace(BASH_LEADING_SPACES, "");
   for (let cd = rest.match(BASH_CD_STEP); cd; cd = rest.match(BASH_CD_STEP)) {
     folder = directoryAt(folderArgument(cd), folder, false);
@@ -24595,10 +24597,13 @@ function pathFromBashCommand(command, callCwd) {
         if (!folder)
           return void 0;
         named = true;
+        gitMoved = true;
       }
       rest = rest.slice(flag[0].length);
     }
     if (BASH_GIT_OPTION.test(rest))
+      return void 0;
+    if (gitMoved && BASH_COMMAND_SEPARATOR.test(rest))
       return void 0;
   }
   return named && !mayPointElsewhere(rest) ? folder : void 0;

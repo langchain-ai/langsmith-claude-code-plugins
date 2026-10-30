@@ -4,6 +4,7 @@ import { isAbsolute, resolve, sep } from "node:path";
 import { rootFromGitMarker } from "@langchain/plugins-base/git";
 import {
   BASH_CD_STEP,
+  BASH_COMMAND_SEPARATOR,
   BASH_LEADING_SPACES,
   BASH_QUOTING_CHARS,
   BASH_GUARD_PATTERNS,
@@ -43,6 +44,7 @@ function folderArgument(match: RegExpMatchArray): string {
 function pathFromBashCommand(command: string, callCwd?: string): string | undefined {
   let folder = callCwd !== undefined && isAbsolute(callCwd) ? callCwd : undefined;
   let named = false;
+  let gitMoved = false;
   let rest = command.replace(BASH_LEADING_SPACES, "");
   for (let cd = rest.match(BASH_CD_STEP); cd; cd = rest.match(BASH_CD_STEP)) {
     folder = directoryAt(folderArgument(cd), folder, false);
@@ -62,10 +64,12 @@ function pathFromBashCommand(command: string, callCwd?: string): string | undefi
         folder = directoryAt(folderArgument(directory), folder, true);
         if (!folder) return undefined;
         named = true;
+        gitMoved = true;
       }
       rest = rest.slice(flag[0].length);
     }
     if (BASH_GIT_OPTION.test(rest)) return undefined;
+    if (gitMoved && BASH_COMMAND_SEPARATOR.test(rest)) return undefined;
   }
   return named && !mayPointElsewhere(rest) ? folder : undefined;
 }

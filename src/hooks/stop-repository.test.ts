@@ -17,13 +17,7 @@ vi.mock("../tracing-engine.js", () => ({
   settledFromTurn: async (base: unknown) => base,
 }));
 
-vi.mock("../logger.js", () => ({
-  log: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  initLogger: vi.fn(),
-}));
+vi.mock("../logger.js");
 
 import { closeStoppedTurn } from "./stop.js";
 
@@ -79,8 +73,6 @@ async function closingRunMetadata(
     session: {
       last_line: -1,
       turn_count: 0,
-      updated: "",
-      task_run_map: {},
       current_turn_run_id: "turn-1",
       current_trace_id: "turn-1",
       current_dotted_order: "20250101T000000000000Zturn-1",

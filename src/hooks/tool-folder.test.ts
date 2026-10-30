@@ -14,13 +14,7 @@ vi.mock("../tracing-engine.js", () => ({
 
 vi.mock("../utils/stdin.js", () => ({ readStdin: async () => payload.current }));
 
-vi.mock("../logger.js", () => ({
-  log: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  initLogger: vi.fn(),
-}));
+vi.mock("../logger.js");
 
 const sandbox = createGitSandbox("ls-post-tool-repos-");
 const beta = sandbox.makeRepo("beta-repo", "trunk-beta", "Beta", "git@github.com:acme/beta.git");

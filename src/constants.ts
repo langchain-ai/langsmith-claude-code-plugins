@@ -60,20 +60,20 @@ const BASH_QUOTING_CHARS = /["'\\]/g;
 
 const BASH_GUARD_PATTERNS = [
   /(?:^|[^\w%/.-])(?:cd|pushd|popd)(?=$|[^\w-])/,
-  /\beval\b/,
-  /\benv\b/,
-  /\bsource\b/,
+  /(?:^|[^\w%/.-])eval(?=$|[^\w-])/,
+  /(?:^|[^\w%/.-])env(?=$|[^\w-])/,
+  /(?:^|[^\w%/.-])source(?=$|[^\w-])/,
   /(?:^|[;&|(){\n!]|\b(?:then|do|else|time|command|builtin))\s*\.\s/,
-  /\btmux\b/,
+  /(?:^|[^\w%/.-])tmux(?=$|[^\w-])/,
   /--dir\b/,
   /--directory\b/,
   /--cwd\b/,
   /--prefix\b/,
   /\$["']/,
   /\{[^{}]*,[^{}]*\}/,
-  /\bsh -c\b/,
-  /\bbash -c\b/,
-  /\bzsh -c\b/,
+  /(?:^|[^\w%/.-])sh -c(?=$|[^\w-])/,
+  /(?:^|[^\w%/.-])bash -c(?=$|[^\w-])/,
+  /(?:^|[^\w%/.-])zsh -c(?=$|[^\w-])/,
   /\$\(/,
   /`/,
   /GIT_DIR/,
@@ -90,6 +90,8 @@ const BASH_GIT_WORD = /^git(?= )/;
 const BASH_GIT_CONFIG_FLAG = new RegExp(String.raw`^ +-c +${SHELL_PLAIN_CHARS}+`);
 
 const BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^ +-C +${SHELL_FOLDER_ARGUMENT}`);
+
+const BASH_COMMAND_SEPARATOR = /[;&|]/;
 
 const BASH_GIT_OPTION = /^ +-/;
 
@@ -254,6 +256,7 @@ export {
   BASH_GIT_WORD,
   BASH_GIT_CONFIG_FLAG,
   BASH_GIT_DIRECTORY_FLAG,
+  BASH_COMMAND_SEPARATOR,
   BASH_GIT_OPTION,
   HOME_SHORTHAND,
   GLOB_TOOL_NAME,

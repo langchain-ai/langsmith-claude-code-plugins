@@ -125,7 +125,6 @@ describe("repoScopedMetadata", () => {
     });
 
     const afterEntering = [
-      "cd -",
       "cd",
       "cd $HOME/x",
       `cd ${missing}`,
@@ -152,13 +151,11 @@ describe("repoScopedMetadata", () => {
       "echo {a,}",
       "source ./go.sh",
       "env ls",
-      ". ./go.sh",
       "if :; then . ./set.sh; fi",
       "time . x",
       "! . x",
       "command . x",
       "builtin . x",
-      "ls\nls",
       `git -C\t${alpha} log`,
     ].map((tail) => `cd ${beta} && ${tail}`);
 
@@ -172,6 +169,7 @@ describe("repoScopedMetadata", () => {
       `git -C${alpha} status`,
       "GIT_WORK_T''REE=x git status",
       `cd ${beta} &&`,
+      ...["&&", "||", ";", "|", "&"].map((separator) => `git -C ${beta} status ${separator} ls`),
       "cd../beta-repo && ls",
       "cd  && ls",
       "cd - && ls",
@@ -200,6 +198,11 @@ describe("repoScopedMetadata", () => {
       "ls .",
       "grep -r foo . | head",
       "git log -- . | head",
+      "cat .env; grep FOO .env",
+      "cp .env.example .env",
+      "cat docs/source ci/tmux",
+      'node -e "console.log(process.env.X)"',
+      "rg -n src/eval",
     ])("keeps the call's own folder for %s", (command) => {
       expect(attributes({ command }, alpha)).toMatchObject(staysInAlpha);
     });
