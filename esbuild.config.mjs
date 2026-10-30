@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { chmodSync, readFileSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 
 // Read the plugin version at BUILD TIME and inject it as a global constant.
 // The plugin's package.json carries no version, so we cannot read it at runtime and
@@ -55,3 +55,10 @@ await build({
 });
 chmodSync("plugins/langsmith-gateway/bundle/gateway.js", 0o755);
 console.log("Bundled experimental gateway into plugins/langsmith-gateway/bundle/");
+
+// The launcher downloads the build released at this version, so stamp it like the bundle.
+const gatewayLauncher = "plugins/langsmith-gateway/hooks/langsmith-gateway";
+writeFileSync(
+  gatewayLauncher,
+  readFileSync(gatewayLauncher, "utf-8").replace(/^VERSION=".*"$/m, `VERSION="${pkg.version}"`),
+);

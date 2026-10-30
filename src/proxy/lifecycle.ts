@@ -6,6 +6,7 @@ import { HEALTH_PATH, KEY_HEADER } from "./proxy-constants.js";
 import type { ProxyConfig } from "./proxy-models.js";
 import { identity } from "./server.js";
 import { cliEnvironment } from "./token.js";
+import { builtAsBinary } from "../utils/binary-runtime.js";
 
 export function control(
   config: ProxyConfig,
@@ -57,7 +58,8 @@ export async function ensure(config: ProxyConfig, entry: string): Promise<void> 
   // The exclusive loopback listen is the startup lock. Unlike PID/filesystem locks,
   // the OS atomically arbitrates it and releases it even after SIGKILL. Concurrent
   // candidates losing EADDRINUSE exit without reading tokens or touching sessions.
-  const child = spawn(process.execPath, [entry, "daemon"], {
+  const daemon = builtAsBinary() ? ["daemon"] : [entry, "daemon"];
+  const child = spawn(process.execPath, daemon, {
     detached: true,
     stdio: "ignore",
     cwd: userHome(),

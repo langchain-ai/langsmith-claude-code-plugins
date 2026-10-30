@@ -44,7 +44,7 @@ function hookBundles(pluginRoot: string): string[] {
         const entry = match![1] ?? match![2];
         // The dispatcher runs whichever event it is given, so a mislabelled
         // argument would quietly run the wrong hook.
-        if (entry !== "bundle/gateway.js") expect(match![3], hook.command).toBe(` ${event}`);
+        if (entry !== "hooks/langsmith-gateway") expect(match![3], hook.command).toBe(` ${event}`);
         const path = resolve(pluginRoot, entry);
         expect(path.startsWith(resolve(pluginRoot) + sep)).toBe(true);
         expect(existsSync(path), path).toBe(true);
@@ -130,7 +130,10 @@ describe("separate marketplace packages", () => {
         expect(Object.keys(json(join(pluginRoot, "hooks/hooks.json")).hooks).sort()).toEqual(
           [...events].sort(),
         );
-        expect(hookBundles(pluginRoot)).toEqual(events.map(() => "bundle/gateway.js"));
+        expect(hookBundles(pluginRoot)).toEqual(events.map(() => "hooks/langsmith-gateway"));
+        expect(readFileSync(join(pluginRoot, "hooks/langsmith-gateway"), "utf8")).toContain(
+          `VERSION="${json(join(root, "package.json")).version}"`,
+        );
       }
     }
   });

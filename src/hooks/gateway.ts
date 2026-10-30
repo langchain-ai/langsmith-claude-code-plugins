@@ -6,10 +6,15 @@ import { COMMAND_GUIDANCE } from "../proxy/proxy-constants.js";
 import { SetupError } from "../proxy/options.js";
 import { handleGatewayInput } from "../proxy/commands.js";
 import { readStdin } from "../utils/stdin.js";
+import { LS_INTEGRATION_VERSION } from "../integration-version.js";
 
 const entry = fileURLToPath(import.meta.url);
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
+  if (command === "--version" && args.length === 0) {
+    process.stdout.write(`${LS_INTEGRATION_VERSION ?? "development"}\n`);
+    return;
+  }
   if (command !== undefined && (command !== "daemon" || args.length !== 0))
     throw new SetupError(COMMAND_GUIDANCE);
   if (command === undefined) {

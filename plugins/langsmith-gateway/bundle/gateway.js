@@ -1108,6 +1108,13 @@ function createConfig(cli, profile, port, home = userHome(), urls = {}, useClaud
 import http2 from "node:http";
 import { connect } from "node:net";
 import { spawn as spawn2 } from "node:child_process";
+
+// dist/src/utils/binary-runtime.js
+function builtAsBinary() {
+  return typeof LS_COMPILED_BINARY !== "undefined";
+}
+
+// dist/src/proxy/lifecycle.js
 function control(config, method, path, timeoutMs = 500) {
   return new Promise((resolve2, reject) => {
     const req = http2.request({
@@ -1144,7 +1151,8 @@ async function healthy(config) {
 async function ensure(config, entry2) {
   if (await healthy(config))
     return;
-  const child = spawn2(process.execPath, [entry2, "daemon"], {
+  const daemon = builtAsBinary() ? ["daemon"] : [entry2, "daemon"];
+  const child = spawn2(process.execPath, daemon, {
     detached: true,
     stdio: "ignore",
     cwd: userHome(),
@@ -1690,10 +1698,18 @@ function readStdin() {
   });
 }
 
+// dist/src/integration-version.js
+var LS_INTEGRATION_VERSION = typeof __LS_INTEGRATION_VERSION__ !== "undefined" ? __LS_INTEGRATION_VERSION__ : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+
 // dist/src/hooks/gateway.js
 var entry = fileURLToPath(import.meta.url);
 async function main() {
   const [command, ...args] = process.argv.slice(2);
+  if (command === "--version" && args.length === 0) {
+    process.stdout.write(`${LS_INTEGRATION_VERSION ?? "development"}
+`);
+    return;
+  }
   if (command !== void 0 && (command !== "daemon" || args.length !== 0))
     throw new SetupError(COMMAND_GUIDANCE);
   if (command === void 0) {
