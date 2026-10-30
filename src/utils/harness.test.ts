@@ -3,9 +3,11 @@ import { describe, it, expect } from "vitest";
 import {
   isCursorPayload,
   isPayloadForHook,
+  slashSkillOf,
   stripContentMarkup,
   stripHarnessMarkup,
 } from "./harness.js";
+import type { Turn } from "../types.js";
 import cursorHooks from "../fixtures/cursor-hooks.json" with { type: "json" };
 
 const CLAUDE_PAYLOAD = {
@@ -94,5 +96,57 @@ describe("stripContentMarkup", () => {
     ];
     expect(stripContentMarkup(content)).toEqual([{ type: "text", text: "what does this do" }]);
     expect(stripContentMarkup("<system-reminder>x</system-reminder>")).toBeUndefined();
+  });
+});
+
+describe("slashSkillOf", () => {
+  const SKILL_BODY =
+    "Base directory for this skill: /home/me/.claude/skills/plain-terms\n\n## The rule";
+  const turnOf = (userContent: Turn["userContent"], before: Turn["userContent"][] = []): Turn => ({
+    userContent,
+    userTimestamp: "2025-01-01T00:00:00Z",
+    llmCalls: [
+      {
+        content: [],
+        model: "claude-sonnet-4-5",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        startTime: "2025-01-01T00:00:01Z",
+        endTime: "2025-01-01T00:00:02Z",
+        toolCalls: [],
+        userMessagesBefore: before,
+      },
+    ],
+    isComplete: true,
+  });
+
+  it("names a skill typed as a slash command once its body reached the model", () => {
+    const turn = turnOf(
+      "<command-name>/plain-terms</command-name>\n<command-args>shorten this</command-args>",
+      [[{ type: "text", text: SKILL_BODY }]],
+    );
+    expect(slashSkillOf(turn)).toEqual({ name: "plain-terms", args: "shorten this" });
+  });
+
+  it("reads a command sent as content blocks and keeps a plugin namespace", () => {
+    const turn = turnOf(
+      [{ type: "text", text: "<command-name>/myplugin:deploy</command-name>" }],
+      [SKILL_BODY],
+    );
+    expect(slashSkillOf(turn)).toEqual({ name: "myplugin:deploy" });
+  });
+
+  it("ignores a built-in command that loads no skill body", () => {
+    expect(slashSkillOf(turnOf("<command-name>/plugin</command-name>"))).toBeUndefined();
+    expect(
+      slashSkillOf(
+        turnOf("<command-name>/model</command-name>", [
+          [{ type: "text", text: "Set model to opus" }],
+        ]),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("ignores a skill body that no slash command started", () => {
+    expect(slashSkillOf(turnOf("review this", [SKILL_BODY]))).toBeUndefined();
   });
 });

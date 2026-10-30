@@ -417,7 +417,9 @@ function mergeAdjacentTextBlocks(blocks: ContentBlock[]): ContentBlock[] {
 function findToolResult(
   toolUseId: string,
   toolResults: ToolResultMessage[],
-): { content: ToolResultContent; timestamp: string; agentId?: string } | undefined {
+):
+  | { content: ToolResultContent; timestamp: string; isError?: boolean; agentId?: string }
+  | undefined {
   for (const msg of toolResults) {
     for (const block of msg.message.content) {
       if (block.type === "tool_result" && block.tool_use_id === toolUseId) {
@@ -429,6 +431,7 @@ function findToolResult(
         return {
           content,
           timestamp: msg.timestamp,
+          isError: block.is_error === true ? true : undefined,
           agentId: msg.toolUseResult?.agentId,
         };
       }
@@ -492,7 +495,9 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         const result = findToolResult(tu.id, toolResults);
         return {
           tool_use: tu,
-          result: result ? { content: result.content, timestamp: result.timestamp } : undefined,
+          result: result
+            ? { content: result.content, timestamp: result.timestamp, isError: result.isError }
+            : undefined,
           agentId: result?.agentId,
         };
       });

@@ -501,6 +501,78 @@ describe("traceTurn", () => {
     ]);
   });
 
+  const skillRuns = () =>
+    mockCreateRun.mock.calls.map(([run]) => run).filter((run) => run.name === "Skill");
+  const skillTurn = (userContent: string, before: Turn["userContent"][], toolCalls = []): Turn => ({
+    userContent,
+    userTimestamp: "2025-01-01T00:00:00Z",
+    llmCalls: [call([{ type: "text", text: "ok" }], { userMessagesBefore: before, toolCalls })],
+    isComplete: true,
+  });
+
+  it("records a skill typed as a slash command as a Skill run like the tool's", async () => {
+    await traceTurn({
+      turn: skillTurn(
+        "<command-name>/plain-terms</command-name>\n<command-args>shorten</command-args>",
+        [[{ type: "text", text: "Base directory for this skill: /s/plain-terms\n\nBe plain." }]],
+      ),
+      sessionId: "session-123",
+      turnNum: 1,
+    });
+
+    const [skill] = skillRuns();
+    expect(skillRuns()).toHaveLength(1);
+    expect(skill.run_type).toBe("tool");
+    expect(skill.parent_run_id).toBe(created(USER_PROMPT_TURN_NAME).id);
+    expect(skill.inputs).toEqual({ input: { skill: "plain-terms", args: "shorten" } });
+    expect(skill.outputs).toEqual({ output: "Launching skill: plain-terms" });
+    expect(skill.extra.metadata.ls_skill_name).toBe("plain-terms");
+  });
+
+  it("records no Skill run for a built-in slash command", async () => {
+    await traceTurn({
+      turn: skillTurn("<command-name>/plugin</command-name>", []),
+      sessionId: "session-123",
+      turnNum: 1,
+    });
+
+    expect(skillRuns()).toHaveLength(0);
+  });
+
+  const skillToolCall = (id: string, skill: string, result: object) => ({
+    tool_use: { type: "tool_use" as const, id, name: "Skill", input: { skill } },
+    result: { timestamp: "2025-01-01T00:00:03Z", ...result },
+  });
+
+  it("tags a Skill tool call with its normalized name", async () => {
+    await traceTurn({
+      turn: skillTurn("go", [], [
+        skillToolCall("t1", " /review-pr ", { content: "Launching skill: review-pr" }),
+      ] as never),
+      sessionId: "session-123",
+      turnNum: 1,
+    });
+
+    expect(skillRuns()).toHaveLength(1);
+    expect(skillRuns()[0].extra.metadata.ls_skill_name).toBe("review-pr");
+  });
+
+  it("does not tag a Skill tool call that failed to load the skill", async () => {
+    await traceTurn({
+      turn: skillTurn("go", [], [
+        skillToolCall("t1", "nonexistent-skill", {
+          content: "Unknown skill: nonexistent-skill",
+          isError: true,
+        }),
+      ] as never),
+      sessionId: "session-123",
+      turnNum: 1,
+    });
+
+    expect(skillRuns()).toHaveLength(1);
+    expect(skillRuns()[0].extra.metadata.ls_skill_name).toBeUndefined();
+  });
+
   it("shows server tool results and non-text tool results as tool messages", async () => {
     const image = {
       type: "image",

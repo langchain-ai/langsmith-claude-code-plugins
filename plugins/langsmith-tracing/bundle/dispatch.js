@@ -23701,6 +23701,9 @@ var HARNESS_TASK_NOTIFICATION = /^(?:\s*<task-notification>\s*<task-id>(?:(?!<\/
 var HARNESS_TASK_NOTIFICATION_KEPT = /<(summary|result)>([\s\S]*?)<\/\1>/g;
 var HARNESS_UNWRAPPED_TAG = /<\/?(bash-input|bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|<\/?pasted_content(\s[^>]*)?>/g;
 var SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
+var SKILL_TOOL_NAME = "Skill";
+var SKILL_BODY_OPENING = "Base directory for this skill";
+var SKILL_LAUNCH_OUTPUT_PREFIX = "Launching skill: ";
 var WORKFLOW_TOOL_NAME = "Workflow";
 var WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
 var KILLED_NOTIFICATION_STATUS = "killed";
@@ -25117,6 +25120,7 @@ function findToolResult(toolUseId, toolResults) {
         return {
           content,
           timestamp: msg.timestamp,
+          isError: block.is_error === true ? true : void 0,
           agentId: msg.toolUseResult?.agentId
         };
       }
@@ -25153,7 +25157,7 @@ function groupIntoTurns(messages) {
         const result = findToolResult(tu.id, toolResults);
         return {
           tool_use: tu,
-          result: result ? { content: result.content, timestamp: result.timestamp } : void 0,
+          result: result ? { content: result.content, timestamp: result.timestamp, isError: result.isError } : void 0,
           agentId: result?.agentId
         };
       });
@@ -25251,6 +25255,23 @@ function stripContentMarkup(content) {
   });
   return blocks.length > 0 ? blocks : void 0;
 }
+function normalizeSkillName(name) {
+  return name.trim().replace(/^\//, "").trim() || void 0;
+}
+function contentText(content) {
+  if (typeof content === "string")
+    return content;
+  return content.map((block) => typeof block.text === "string" ? block.text : "").join("\n");
+}
+function slashSkillOf(turn) {
+  const command = [...contentText(turn.userContent).matchAll(HARNESS_COMMAND)][0];
+  const name = command && normalizeSkillName(command[1]);
+  const loadedBody = turn.llmCalls[0]?.userMessagesBefore?.some((content) => contentText(content).trimStart().startsWith(SKILL_BODY_OPENING));
+  if (!name || !loadedBody)
+    return void 0;
+  const args = command[2]?.trim();
+  return args ? { name, args } : { name };
+}
 
 // dist/src/metadata.js
 function runTypeOf(options) {
@@ -25271,10 +25292,10 @@ function codingAgentMetadata(options) {
   };
 }
 function skillNameFromTool(toolName, toolInput) {
-  if (toolName !== "Skill")
+  if (toolName !== SKILL_TOOL_NAME)
     return void 0;
   const skill = toolInput?.skill;
-  return typeof skill === "string" ? skill : void 0;
+  return typeof skill === "string" ? normalizeSkillName(skill) : void 0;
 }
 
 // dist/src/engine-session.js
@@ -25519,6 +25540,37 @@ async function traceTurn(options) {
     ...existingTaskRunMap
   };
   let lastEndTime = turn.userTimestamp;
+  const slashSkill = slashSkillOf(turn);
+  if (slashSkill) {
+    const skillRunId = stableRunId(turn.userTimestamp, sessionId, turnId, "slash-skill");
+    const skillInput = {
+      skill: slashSkill.name,
+      ...slashSkill.args && { args: slashSkill.args }
+    };
+    await captureRun({
+      id: skillRunId,
+      name: SKILL_TOOL_NAME,
+      run_type: "tool",
+      inputs: { input: skillInput },
+      outputs: { output: `${SKILL_LAUNCH_OUTPUT_PREFIX}${slashSkill.name}` },
+      start_time: turn.userTimestamp,
+      end_time: turn.userTimestamp,
+      parent_run_id: turnRunId,
+      trace_id: traceId,
+      dotted_order: `${parentDottedOrder}.${generateDottedOrderSegment(turn.userTimestamp, skillRunId)}`,
+      metadata: codingAgentMetadata({
+        sessionId,
+        base: repoScopedMetadata(turnMetadataBase, skillInput, sessionCwd),
+        turnId,
+        turnNumber: turnNum,
+        runtimeVersion,
+        agentType,
+        toolName: SKILL_TOOL_NAME,
+        runName: SKILL_TOOL_NAME,
+        skillName: slashSkill.name
+      })
+    }, tracing);
+  }
   for (const [llmIndex, llmCall] of turn.llmCalls.entries()) {
     for (const content of llmCall.userMessagesBefore ?? []) {
       const shown = stripContentMarkup(content);
@@ -25566,7 +25618,7 @@ async function traceTurn(options) {
           agentType,
           toolName: toolCall.tool_use.name,
           runName: toolCall.tool_use.name,
-          skillName: skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input)
+          skillName: toolCall.result?.isError ? void 0 : skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input)
         })
       }, toolMode);
       if (toolCall.agentId) {

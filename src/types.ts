@@ -84,6 +84,7 @@ export interface ToolResultBlock {
   type: "tool_result";
   tool_use_id: string;
   content: ToolResultContent;
+  is_error?: boolean;
 }
 
 /** Text, or blocks such as images and documents a tool returned. */
@@ -183,6 +184,7 @@ export interface ToolCall {
   result?: {
     content: ToolResultContent;
     timestamp: string;
+    isError?: boolean;
   };
   /** If this was a Task tool, the agent ID for subagent tracing. */
   agentId?: string;

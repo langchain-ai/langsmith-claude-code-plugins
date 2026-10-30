@@ -2,9 +2,10 @@ import type {
   CodingAgentMetadataOptions,
   CodingAgentRunType,
 } from "@langchain/plugins-base/metadata";
-import { LS_INTEGRATION } from "./constants.js";
+import { LS_INTEGRATION, SKILL_TOOL_NAME } from "./constants.js";
 import { LS_INTEGRATION_VERSION } from "./integration-version.js";
 import type { ClaudeMetadataOptions } from "./types.js";
+import { normalizeSkillName } from "./utils/harness.js";
 
 function runTypeOf(options: ClaudeMetadataOptions): CodingAgentRunType {
   if (options.toolName) return "tool";
@@ -33,7 +34,7 @@ export function skillNameFromTool(
   toolName: string | undefined,
   toolInput: unknown,
 ): string | undefined {
-  if (toolName !== "Skill") return undefined;
+  if (toolName !== SKILL_TOOL_NAME) return undefined;
   const skill = (toolInput as { skill?: unknown } | null | undefined)?.skill;
-  return typeof skill === "string" ? skill : undefined;
+  return typeof skill === "string" ? normalizeSkillName(skill) : undefined;
 }

@@ -30,4 +30,20 @@ describe("skillNameFromTool", () => {
     expect(skillNameFromTool("Skill", undefined)).toBeUndefined();
     expect(skillNameFromTool("Skill", { skill: 42 })).toBeUndefined();
   });
+
+  it.each([
+    ["review-pr", "review-pr"],
+    ["/review-pr", "review-pr"],
+    ["  review-pr ", "review-pr"],
+    [" /review-pr\n", "review-pr"],
+    ["Review-PR", "Review-PR"],
+    ["myplugin:deploy", "myplugin:deploy"],
+    ["/myplugin:deploy", "myplugin:deploy"],
+  ])("names %j as %j", (written, expected) => {
+    expect(skillNameFromTool("Skill", { skill: written })).toBe(expected);
+  });
+
+  it.each(["", "  ", "/", " / "])("drops the blank name %j", (written) => {
+    expect(skillNameFromTool("Skill", { skill: written })).toBeUndefined();
+  });
 });

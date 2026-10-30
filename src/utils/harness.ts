@@ -5,6 +5,7 @@ import {
   HARNESS_TASK_NOTIFICATION,
   HARNESS_TASK_NOTIFICATION_KEPT,
   HARNESS_UNWRAPPED_TAG,
+  SKILL_BODY_OPENING,
 } from "../constants.js";
 import type { HookEventName, HookEventPayload, Turn } from "../types.js";
 
@@ -40,4 +41,24 @@ export function stripContentMarkup(content: Turn["userContent"]): Turn["userCont
     return text ? [{ ...block, text }] : [];
   });
   return blocks.length > 0 ? blocks : undefined;
+}
+
+export function normalizeSkillName(name: string): string | undefined {
+  return name.trim().replace(/^\//, "").trim() || undefined;
+}
+
+function contentText(content: Turn["userContent"]): string {
+  if (typeof content === "string") return content;
+  return content.map((block) => (typeof block.text === "string" ? block.text : "")).join("\n");
+}
+
+export function slashSkillOf(turn: Turn): { name: string; args?: string } | undefined {
+  const command = [...contentText(turn.userContent).matchAll(HARNESS_COMMAND)][0];
+  const name = command && normalizeSkillName(command[1]);
+  const loadedBody = turn.llmCalls[0]?.userMessagesBefore?.some((content) =>
+    contentText(content).trimStart().startsWith(SKILL_BODY_OPENING),
+  );
+  if (!name || !loadedBody) return undefined;
+  const args = command[2]?.trim();
+  return args ? { name, args } : { name };
 }

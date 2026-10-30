@@ -471,6 +471,25 @@ describe("resolveProvider", () => {
 // ─── groupIntoTurns ─────────────────────────────────────────────────────────
 
 describe("groupIntoTurns", () => {
+  it("marks a tool result Claude Code flagged as an error", () => {
+    const failed = makeToolResult("t1", "Unknown skill: nope");
+    failed.message.content[0].is_error = true;
+    const turns = groupIntoTurns([
+      makeUser("Hello"),
+      makeAssistant("msg_1", "Trying", {
+        toolUses: [
+          { id: "t1", name: "Skill", input: { skill: "nope" } },
+          { id: "t2", name: "Skill", input: { skill: "ok" } },
+        ],
+      }),
+      failed,
+      makeToolResult("t2", "Launching skill: ok"),
+    ]);
+    const [bad, good] = turns[0].llmCalls[0].toolCalls;
+    expect(bad.result?.isError).toBe(true);
+    expect(good.result?.isError).toBeUndefined();
+  });
+
   it("groups a simple user/assistant exchange into one turn", () => {
     const messages: TranscriptMessage[] = [makeUser("Hello"), makeAssistant("msg_1", "Hi there!")];
     const turns = groupIntoTurns(messages);

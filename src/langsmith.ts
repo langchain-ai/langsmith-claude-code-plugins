@@ -30,8 +30,14 @@ import {
 } from "./transcript.js";
 import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
-import { ASSISTANT_RUN_NAME, SERVER_TOOL_RESULT_TYPE, USER_PROMPT_TURN_NAME } from "./constants.js";
-import { stripContentMarkup } from "./utils/harness.js";
+import {
+  ASSISTANT_RUN_NAME,
+  SERVER_TOOL_RESULT_TYPE,
+  SKILL_LAUNCH_OUTPUT_PREFIX,
+  SKILL_TOOL_NAME,
+  USER_PROMPT_TURN_NAME,
+} from "./constants.js";
+import { slashSkillOf, stripContentMarkup } from "./utils/harness.js";
 import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import {
   repoScopedMetadata,
@@ -235,6 +241,41 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
 
   let lastEndTime = turn.userTimestamp;
 
+  const slashSkill = slashSkillOf(turn);
+  if (slashSkill) {
+    const skillRunId = stableRunId(turn.userTimestamp, sessionId, turnId, "slash-skill");
+    const skillInput = {
+      skill: slashSkill.name,
+      ...(slashSkill.args && { args: slashSkill.args }),
+    };
+    await captureRun(
+      {
+        id: skillRunId,
+        name: SKILL_TOOL_NAME,
+        run_type: "tool",
+        inputs: { input: skillInput },
+        outputs: { output: `${SKILL_LAUNCH_OUTPUT_PREFIX}${slashSkill.name}` },
+        start_time: turn.userTimestamp,
+        end_time: turn.userTimestamp,
+        parent_run_id: turnRunId,
+        trace_id: traceId!,
+        dotted_order: `${parentDottedOrder}.${generateDottedOrderSegment(turn.userTimestamp, skillRunId)}`,
+        metadata: codingAgentMetadata({
+          sessionId,
+          base: repoScopedMetadata(turnMetadataBase, skillInput, sessionCwd),
+          turnId,
+          turnNumber: turnNum,
+          runtimeVersion,
+          agentType,
+          toolName: SKILL_TOOL_NAME,
+          runName: SKILL_TOOL_NAME,
+          skillName: slashSkill.name,
+        }),
+      },
+      tracing,
+    );
+  }
+
   // 2. Process each LLM call - create as children of the turn run
   for (const [llmIndex, llmCall] of turn.llmCalls.entries()) {
     for (const content of llmCall.userMessagesBefore ?? []) {
@@ -303,7 +344,9 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
             agentType,
             toolName: toolCall.tool_use.name,
             runName: toolCall.tool_use.name,
-            skillName: skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input),
+            skillName: toolCall.result?.isError
+              ? undefined
+              : skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input),
           }),
         },
         toolMode,

@@ -105,6 +105,10 @@ const HARNESS_UNWRAPPED_TAG =
   /<\/?(bash-input|bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|<\/?pasted_content(\s[^>]*)?>/g;
 const SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
 
+const SKILL_TOOL_NAME = "Skill";
+const SKILL_BODY_OPENING = "Base directory for this skill";
+const SKILL_LAUNCH_OUTPUT_PREFIX = "Launching skill: ";
+
 const WORKFLOW_TOOL_NAME = "Workflow";
 
 const WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
@@ -172,6 +176,9 @@ export {
   HARNESS_TASK_NOTIFICATION_KEPT,
   HARNESS_UNWRAPPED_TAG,
   SERVER_TOOL_RESULT_TYPE,
+  SKILL_TOOL_NAME,
+  SKILL_BODY_OPENING,
+  SKILL_LAUNCH_OUTPUT_PREFIX,
   WORKFLOW_TOOL_NAME,
   WORKFLOW_SUBAGENT_TYPE,
   KILLED_NOTIFICATION_STATUS,
