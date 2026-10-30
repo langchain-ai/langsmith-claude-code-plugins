@@ -12,6 +12,7 @@ import {
 import * as fsPromises from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { COMMAND_REPLY_MARKER } from "@langchain/plugins-base/plugin";
 import {
   getThreadTracingMode,
   parseTracingCommand,
@@ -26,9 +27,14 @@ const mocks = vi.hoisted(() => ({
   tracing: vi.fn(),
   state: vi.fn(),
   links: vi.fn(),
+  loginNotice: vi.fn(),
 }));
 vi.mock("node:fs/promises", async (importOriginal) => ({
   ...(await importOriginal<typeof import("node:fs/promises")>()),
+}));
+vi.mock("@langchain/plugins-base/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@langchain/plugins-base/auth")>()),
+  readLoginNotice: mocks.loginNotice,
 }));
 vi.mock("./thread-link.js", () => ({ describeThreadLinks: mocks.links }));
 vi.mock("./config.js", () => ({ loadConfig: mocks.config }));
@@ -229,9 +235,15 @@ describe("exact command parser", () => {
   it.each(["mute", "unmute", "trace"] as const)("recognizes %s", (cmd) => {
     expect(parseTracingCommand(`/langsmith-tracing:${cmd}`)).toBe(cmd);
   });
+  it.each(["/langsmith-tracing:setup", "/langsmith-tracing:setup my project https://x.test"])(
+    "recognizes setup in %j",
+    (prompt) => expect(parseTracingCommand(prompt)).toBe("setup"),
+  );
   it.each([
     "",
     "/mute",
+    "/langsmith-tracing:setupx",
+    "please /langsmith-tracing:setup",
     "/langsmith-tracing:mute now",
     "/langsmith-tracing:unmute now",
     " /langsmith-tracing:mute",
@@ -245,7 +257,7 @@ describe("exact command parser", () => {
 });
 
 describe("actual UserPromptSubmit command prefix", () => {
-  async function submit(prompt: string, enabled = "false") {
+  async function run(prompt: string, enabled = "false") {
     vi.resetModules();
     vi.stubEnv("TRACE_TO_LANGSMITH", enabled);
     mocks.stdin.mockResolvedValue({
@@ -255,40 +267,44 @@ describe("actual UserPromptSubmit command prefix", () => {
       transcript_path: "unused",
       hook_event_name: "UserPromptSubmit",
     });
-    mocks.init.mockReturnValue(null);
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    output.mockClear();
     const { HOOK_HANDLERS } = await import("./hooks/registry.js");
     await HOOK_HANDLERS.UserPromptSubmit();
-    expect(output).toHaveBeenCalled();
-    expect(mocks.init).not.toHaveBeenCalled();
-    expect(mocks.tracing).not.toHaveBeenCalled();
-    expect(mocks.state).not.toHaveBeenCalled();
-    const response = JSON.parse(output.mock.calls[0][0]);
-    expect(response.decision).toBe("block");
-    return response.reason as string;
+    expect(output).toHaveBeenCalledTimes(1);
+    expect(mocks.init).toHaveBeenCalledWith(dir);
+    response = JSON.parse(output.mock.calls[0][0]);
+    return response;
   }
+  async function submit(prompt: string, enabled = "false") {
+    await run(prompt, enabled);
+    expect(response.decision).toBeUndefined();
+    expect(response.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
+    const [instruction, reply] = response.hookSpecificOutput.additionalContext.split("\n\n");
+    expect(instruction.startsWith(COMMAND_REPLY_MARKER)).toBe(true);
+    return reply as string;
+  }
+  let response: Record<string, any>;
 
   beforeEach(() => {
+    mocks.init.mockReturnValue(null);
     mocks.config
       .mockReset()
       .mockReturnValue({ stateFilePath: state, apiKey: "test", enabled: false });
     mocks.links.mockReset().mockResolvedValue("project: https://smith.langchain.com/example");
   });
 
-  it.each(["mute", "unmute"] as const)(
-    "blocks and persists %s with master disabled",
-    async (command) => {
-      writeFileSync(state, "existing turn");
-      const reason = await submit(`/langsmith-tracing:${command}`);
-      expect(reason).toContain(
-        command === "mute" ? "muted (metadata-only)" : "unmuted (full content)",
-      );
-      expect(reason).toContain("Master tracing is disabled");
-      expect(reason).toContain("for the next turn; the current turn is unchanged");
-      expect(getThreadTracingMode(state, "session")).toBe(command === "mute" ? "metadata" : "full");
-      expect(readFileSync(state, "utf8")).toBe("existing turn");
-    },
-  );
+  it.each(["mute", "unmute"] as const)("persists %s with master disabled", async (command) => {
+    writeFileSync(state, "existing turn");
+    const reason = await submit(`/langsmith-tracing:${command}`);
+    expect(reason).toContain(
+      command === "mute" ? "muted (metadata-only)" : "unmuted (full content)",
+    );
+    expect(reason).toContain("Master tracing is disabled");
+    expect(reason).toContain("for the next turn; the current turn is unchanged");
+    expect(getThreadTracingMode(state, "session")).toBe(command === "mute" ? "metadata" : "full");
+    expect(readFileSync(state, "utf8")).toBe("existing turn");
+  });
 
   it("names the managed config problem instead of the master switch", async () => {
     mocks.config.mockReturnValue({
@@ -303,7 +319,7 @@ describe("actual UserPromptSubmit command prefix", () => {
   });
 
   it.each(["mute", "unmute", "trace"] as const)(
-    "handles the actual %s command definition body without a model turn",
+    "handles the actual %s command definition body",
     async (command) => {
       const definition = readFileSync(
         new URL(`../plugins/langsmith-tracing/commands/${command}.md`, import.meta.url),
@@ -328,7 +344,7 @@ describe("actual UserPromptSubmit command prefix", () => {
     expect(existsSync(policy)).toBe(false);
   });
 
-  it("blocks a failed trace command without exposing error details or changing preferences", async () => {
+  it("reports a failed trace command without exposing error details or changing preferences", async () => {
     mocks.links.mockRejectedValue(new Error("PRIVATE_REQUEST_DETAILS"));
     const reason = await submit("/langsmith-tracing:trace");
     expect(reason).toContain("Session ID: session");
@@ -373,7 +389,7 @@ describe("actual UserPromptSubmit command prefix", () => {
     expect(getThreadTracingMode(state, "session")).toBe("full");
   });
 
-  it("blocks commands with master enabled but credentials missing", async () => {
+  it("warns commands with master enabled but credentials missing", async () => {
     mocks.config.mockReturnValue({
       stateFilePath: state,
       apiKey: "",
@@ -381,6 +397,7 @@ describe("actual UserPromptSubmit command prefix", () => {
       credentialProblem: "No credential",
     });
     expect(await submit("/langsmith-tracing:mute", "true")).toContain("credentials");
+    expect(response.systemMessage).toBe("No credential");
     expect(getThreadTracingMode(state, "session")).toBe("metadata");
   });
 
@@ -436,7 +453,7 @@ describe("actual UserPromptSubmit command prefix", () => {
     }
   });
 
-  it("blocks configuration failures rather than falling through", async () => {
+  it("reports configuration failures rather than falling through", async () => {
     mocks.config.mockImplementation(() => {
       throw new Error("config unavailable");
     });
@@ -444,16 +461,333 @@ describe("actual UserPromptSubmit command prefix", () => {
     expect(existsSync(policy)).toBe(false);
   });
 
-  it("blocks parent/write failures", async () => {
+  it("reports parent/write failures", async () => {
     writeFileSync(join(dir, "not-directory"), "file");
     mocks.config.mockReturnValue({ stateFilePath: join(dir, "not-directory", "state.json") });
     expect(await submit("/langsmith-tracing:mute")).toContain("Could not mute");
   });
 
-  it("blocks lock timeouts without stealing the lock", async () => {
+  it("reports lock timeouts without stealing the lock", async () => {
     mkdirSync(`${policy}.lock`);
     expect(await submit("/langsmith-tracing:mute")).toContain("Timed out");
     expect(readdirSync(`${policy}.lock`)).toEqual([]);
+  });
+
+  it("runs a command but still refuses the prompt under strict auth", async () => {
+    mocks.config.mockReturnValue({
+      stateFilePath: state,
+      apiKey: "",
+      enabled: true,
+      strictAuth: true,
+      credentialProblem: "LangSmith isn't signed in.",
+    });
+    expect(await run("/langsmith-tracing:mute", "true")).toEqual({
+      decision: "block",
+      reason:
+        "Thread tracing muted (metadata-only). Preference saved for the next turn; the current turn is unchanged. Tracing remains inactive until credentials are configured.\n\nLangSmith isn't signed in.",
+    });
+    expect(getThreadTracingMode(state, "session")).toBe("metadata");
+  });
+
+  describe("setup", () => {
+    const projectDestination =
+      'Traces go to the "claude-code" project at "https://api.smith.langchain.com".';
+    const oneReplicaDestination =
+      "Traces go to the replica destination in your settings, which replaces the usual project and URL.";
+    const twoReplicaDestinations =
+      "Traces go to the 2 replica destinations in your settings, which replace the usual project and URL.";
+    let settings: string;
+    beforeEach(() => {
+      mocks.loginNotice.mockReset();
+      vi.stubEnv("HOME", dir);
+      settings = join(dir, ".claude", "langsmith.json");
+    });
+
+    it("keeps other settings and replies with the values in effect after reloading", async () => {
+      mkdirSync(join(dir, ".claude"));
+      writeFileSync(settings, JSON.stringify({ api_key: "kept", notice_cooldown: 30 }));
+      mocks.config.mockReturnValue({
+        stateFilePath: state,
+        apiKey: "kept",
+        enabled: false,
+        project: "from-env",
+        apiBaseUrl: "https://env.example.test",
+        managedConfigProblem: "Your admin's managed settings file is broken.",
+      });
+      const reply = await submit("/langsmith-tracing:setup my project https://eu.example.test");
+      expect(JSON.parse(readFileSync(settings, "utf8"))).toEqual({
+        api_key: "kept",
+        notice_cooldown: 30,
+        enabled: true,
+        project: "my project",
+        api_url: "https://eu.example.test",
+      });
+      expect(reply).toBe(
+        `Turned LangSmith tracing on in ${settings}. Traces go to the "from-env" project at "https://env.example.test". Tracing is still off because an environment variable, a project's langsmith.json or langsmith-plugins.json, or your admin's managed settings turn it off. Another setting overrides part of this (an agent_id, an environment variable, a project's langsmith.json or langsmith-plugins.json, or your admin's managed settings), so the values above are what's in effect. Your admin's managed settings file is broken.`,
+      );
+      expect(response.systemMessage).toBeUndefined();
+    });
+
+    it("names a broken managed file instead of asking for a login when there is no key", async () => {
+      mocks.config.mockReturnValue({
+        stateFilePath: state,
+        apiKey: "",
+        enabled: false,
+        project: "claude-code",
+        apiBaseUrl: "https://api.smith.langchain.com",
+        credentialProblem: "LangSmith isn't signed in.",
+        managedConfigProblem: "Your admin's managed settings file is broken.",
+      });
+      expect(await submit("/langsmith-tracing:setup")).toBe(
+        `Turned LangSmith tracing on in ${settings}. Traces go to the "claude-code" project at "https://api.smith.langchain.com". Tracing is still off because an environment variable, a project's langsmith.json or langsmith-plugins.json, or your admin's managed settings turn it off. Your admin's managed settings file is broken.`,
+      );
+    });
+
+    it.each([
+      { muting: "no mute", defaultMuted: false, threadMode: undefined, muted: false },
+      { muting: "a default mute", defaultMuted: true, threadMode: undefined, muted: true },
+      { muting: "a thread mute", defaultMuted: false, threadMode: "metadata", muted: true },
+    ] as const)("says whether the thread is muted under $muting", async (example) => {
+      if (example.threadMode) await setThreadTracingMode(state, "session", example.threadMode);
+      mocks.config.mockReturnValue({
+        stateFilePath: state,
+        apiKey: "test",
+        enabled: true,
+        defaultMuted: example.defaultMuted,
+        project: "claude-code",
+        apiBaseUrl: "https://api.smith.langchain.com",
+      });
+      expect((await submit("/langsmith-tracing:setup")).includes("This thread is muted")).toBe(
+        example.muted,
+      );
+    });
+
+    it("passes a non-breaking space and a line break after the command through to setup", async () => {
+      await submit("/langsmith-tracing:setup\u00a0spaced-project");
+      expect(JSON.parse(readFileSync(settings, "utf8")).project).toBe("spaced-project");
+      expect(await submit("/langsmith-tracing:setup\nsecond")).toBe(
+        "Setup takes its project and URL on one line, so nothing was changed. Send anything else as its own message.",
+      );
+    });
+
+    it.each([
+      {
+        signIn: { login: { configPath: "/login/config.json" } },
+        ending: "Signed in with the LangSmith CLI.",
+      },
+      { signIn: { credentialProblem: "Key rejected." }, ending: "Key rejected." },
+    ])("ends the reply with $ending", async ({ signIn, ending }) => {
+      mocks.config.mockReturnValue({
+        stateFilePath: state,
+        apiKey: "",
+        enabled: true,
+        project: "claude-code",
+        apiBaseUrl: "https://api.smith.langchain.com",
+        ...signIn,
+      });
+      const reply = await submit("/langsmith-tracing:setup");
+      expect(reply).toBe(
+        `Turned LangSmith tracing on in ${settings}. Traces go to the "claude-code" project at "https://api.smith.langchain.com". ${ending}`,
+      );
+      expect(response.systemMessage).toBeUndefined();
+    });
+
+    it.each([
+      {
+        defect: "a rejected key is reported as working",
+        config: { apiKey: "test-key" },
+        loginNotice: "LangSmith API key was rejected.",
+        destination: projectDestination,
+        ending: "LangSmith API key was rejected.",
+      },
+      {
+        defect: "a login whose replica can't upload is reported as signed in",
+        config: {
+          apiKey: "",
+          login: { configPath: "/login/config.json" },
+          credentialProblem: "Replicas on https://other.example need their own API key.",
+          replicas: [{ projectName: "other", apiUrl: "https://other.example" }],
+        },
+        destination: projectDestination,
+        ending: "Replicas on https://other.example need their own API key.",
+      },
+      {
+        defect: "a login's skipped keyless replica goes unmentioned",
+        config: {
+          apiKey: "",
+          login: { configPath: "/login/config.json" },
+          credentialProblem: "Replicas on https://other.example need their own API key.",
+          replicas: [
+            { projectName: "other", apiUrl: "https://other.example" },
+            { projectName: "same-server", apiUrl: "https://api.smith.langchain.com" },
+            { projectName: "keyed", apiKey: "replica-key" },
+          ],
+        },
+        destination: twoReplicaDestinations,
+        ending:
+          "LangSmith replicas on https://other.example need their own API key, so they're skipped.",
+      },
+      {
+        defect: "a replica's own key is reported as missing",
+        config: {
+          apiKey: "",
+          credentialProblem: "LangSmith isn't signed in.",
+          replicas: [
+            { projectName: "keyed", apiKey: "replica-key" },
+            { projectName: "keyless", apiUrl: "https://api.smith.langchain.com" },
+          ],
+        },
+        destination: oneReplicaDestination,
+        ending: "Using your LangSmith API key.",
+      },
+    ])("asks what the next turn will upload with, so not $defect", async (example) => {
+      mocks.loginNotice.mockReturnValue(example.loginNotice);
+      mocks.config.mockReturnValue({
+        stateFilePath: state,
+        enabled: true,
+        project: "claude-code",
+        apiBaseUrl: "https://api.smith.langchain.com",
+        ...example.config,
+      });
+      expect(await submit("/langsmith-tracing:setup")).toBe(
+        `Turned LangSmith tracing on in ${settings}. ${example.destination} ${example.ending}`,
+      );
+    });
+
+    it("names the replicas instead of a project that receives nothing", async () => {
+      mocks.config.mockReturnValue({
+        stateFilePath: state,
+        apiKey: "test",
+        enabled: true,
+        project: "typed-project",
+        apiBaseUrl: "https://api.smith.langchain.com",
+        replicas: [{ projectName: "first", apiKey: "first-key" }, { projectName: "second" }],
+      });
+      expect(await submit("/langsmith-tracing:setup typed-project")).toBe(
+        `Turned LangSmith tracing on in ${settings}. ${twoReplicaDestinations} Another setting overrides part of this (an agent_id, an environment variable, a project's langsmith.json or langsmith-plugins.json, or your admin's managed settings), so the values above are what's in effect. Using your LangSmith API key.`,
+      );
+    });
+
+    it("counts replicas set in the environment the way uploads do", async () => {
+      vi.stubEnv(
+        "LANGSMITH_RUNS_ENDPOINTS",
+        JSON.stringify([
+          { api_url: "https://api.smith.langchain.com", api_key: "env-key", project_name: "env" },
+        ]),
+      );
+      mocks.config.mockReturnValue({
+        stateFilePath: state,
+        apiKey: "test",
+        enabled: true,
+        project: "claude-code",
+        apiBaseUrl: "https://api.smith.langchain.com",
+      });
+      expect(await submit("/langsmith-tracing:setup")).toBe(
+        `Turned LangSmith tracing on in ${settings}. ${oneReplicaDestination} Using your LangSmith API key.`,
+      );
+    });
+
+    it("keeps the setup reply when the environment's replicas can't be read", async () => {
+      vi.stubEnv("LANGSMITH_RUNS_ENDPOINTS", JSON.stringify({ "https://a.example": "env-key" }));
+      vi.stubEnv("LANGSMITH_ENDPOINT", "https://b.example");
+      mocks.config.mockReturnValue({
+        stateFilePath: state,
+        apiKey: "test",
+        enabled: true,
+        project: "claude-code",
+        apiBaseUrl: "https://api.smith.langchain.com",
+      });
+      expect(await submit("/langsmith-tracing:setup")).toBe(
+        `Turned LangSmith tracing on in ${settings}. ${projectDestination} You cannot provide both LANGSMITH_ENDPOINT / LANGCHAIN_ENDPOINT and LANGSMITH_RUNS_ENDPOINTS.`,
+      );
+    });
+
+    it("names the project when the environment's keyed replicas can't run because nothing can upload", async () => {
+      vi.stubEnv(
+        "LANGSMITH_RUNS_ENDPOINTS",
+        JSON.stringify([
+          { api_url: "https://api.smith.langchain.com", api_key: "env-key", project_name: "env" },
+        ]),
+      );
+      mocks.config.mockReturnValue({
+        stateFilePath: state,
+        apiKey: "",
+        enabled: true,
+        project: "claude-code",
+        apiBaseUrl: "https://api.smith.langchain.com",
+        credentialProblem: "LangSmith isn't signed in.",
+      });
+      expect(await submit("/langsmith-tracing:setup")).toBe(
+        `Turned LangSmith tracing on in ${settings}. ${projectDestination} LangSmith isn't signed in.`,
+      );
+    });
+
+    it("doesn't let a blank API key cover keyless replicas", async () => {
+      mocks.config.mockReturnValue({
+        stateFilePath: state,
+        apiKey: "  ",
+        enabled: true,
+        project: "claude-code",
+        apiBaseUrl: "https://api.smith.langchain.com",
+        credentialProblem: "LangSmith isn't signed in.",
+        replicas: [
+          { projectName: "keyed", apiKey: "replica-key" },
+          { projectName: "keyless", apiUrl: "https://api.smith.langchain.com" },
+        ],
+      });
+      expect(await submit("/langsmith-tracing:setup")).toBe(
+        `Turned LangSmith tracing on in ${settings}. ${oneReplicaDestination} Using your LangSmith API key.`,
+      );
+    });
+
+    it("names the agent when traces go to one", async () => {
+      mocks.config.mockReturnValue({
+        stateFilePath: state,
+        apiKey: "test",
+        enabled: true,
+        project: "claude-code",
+        agentId: "shared-claude",
+        apiBaseUrl: "https://api.smith.langchain.com",
+      });
+      expect(await submit("/langsmith-tracing:setup")).toContain(
+        'Traces go to the "shared-claude" agent at "https://api.smith.langchain.com".',
+      );
+    });
+
+    it("reloads the settings after writing them", async () => {
+      mocks.config.mockImplementation(() => ({
+        stateFilePath: state,
+        apiKey: "test",
+        enabled: true,
+        project: existsSync(settings)
+          ? JSON.parse(readFileSync(settings, "utf8")).project
+          : "claude-code",
+        apiBaseUrl: "https://api.smith.langchain.com",
+      }));
+      expect(await submit("/langsmith-tracing:setup fresh-project")).toContain(
+        'Traces go to the "fresh-project" project',
+      );
+    });
+
+    it("writes the settings before the turn starts so the setup turn is traced", async () => {
+      let writtenBeforeTurn = false;
+      mocks.init.mockImplementation(() => {
+        writtenBeforeTurn = existsSync(settings);
+        return null;
+      });
+      await submit("/langsmith-tracing:setup");
+      expect(writtenBeforeTurn).toBe(true);
+    });
+
+    it("replies with the error and leaves an unreadable settings file alone", async () => {
+      mkdirSync(join(dir, ".claude"));
+      writeFileSync(settings, "{not json");
+      const reply = await submit("/langsmith-tracing:setup my-project");
+      expect(reply).toBe(
+        `Couldn't read ${settings} as a JSON object, so nothing was changed. Fix or remove that file and run setup again.`,
+      );
+      expect(readFileSync(settings, "utf8")).toBe("{not json");
+    });
   });
 
   it("leaves normal prompts on the existing initHook path", async () => {

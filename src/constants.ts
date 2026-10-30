@@ -68,6 +68,12 @@ const NOTICE_KINDS = {
 } as const;
 const NOTICE_COOLDOWN_OFF = "off";
 const MUTE_LOCKED_REPLY = "An admin locked muting on, so this conversation stays muted.";
+const SETUP_COMMAND = "/langsmith-tracing:setup";
+const SETUP_COMMAND_PATTERN = /^\/langsmith-tracing:setup(?:\s|$)/;
+const HARNESS_DIRECTORY = ".claude";
+const USER_PROMPT_SUBMIT_EVENT = "UserPromptSubmit";
+const COMMAND_TURN_FAILED = "Could not start the turn after the {command} command: {error}";
+const RESPONSE_WRITE_FAILED = "Could not write the UserPromptSubmit response: {error}";
 
 const BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
@@ -159,6 +165,12 @@ export {
   NOTICE_KINDS,
   NOTICE_COOLDOWN_OFF,
   MUTE_LOCKED_REPLY,
+  SETUP_COMMAND,
+  SETUP_COMMAND_PATTERN,
+  HARNESS_DIRECTORY,
+  USER_PROMPT_SUBMIT_EVENT,
+  COMMAND_TURN_FAILED,
+  RESPONSE_WRITE_FAILED,
   MAX_LOG_BYTES,
   LOOKUP_TIMEOUT_MS,
   AGENT_ADDRESS_KIND,

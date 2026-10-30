@@ -188,9 +188,10 @@ describe("separate marketplace packages", () => {
         expect(expanded).toBe(`/langsmith-gateway:${name} ${args.join(" ")}`);
         expect(parseGatewayCommand(expanded)).toEqual({ command: name, args });
       }
-      expect(existsSync(join(root, "plugins/langsmith-tracing/commands", `${name}.md`))).toBe(
-        false,
-      );
+      const tracingCommand = join(root, "plugins/langsmith-tracing/commands", `${name}.md`);
+      if (existsSync(tracingCommand)) {
+        expect(readFileSync(tracingCommand, "utf8")).not.toContain("/langsmith-gateway:");
+      }
     }
   });
 

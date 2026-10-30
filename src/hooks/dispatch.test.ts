@@ -158,8 +158,8 @@ describe("bundle/dispatch.js", () => {
     const result = dispatch([event], "/langsmith-tracing:trace");
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
-    const decision = result.stdout === "" ? undefined : JSON.parse(result.stdout).decision;
-    expect(decision).toBe(event === "UserPromptSubmit" ? "block" : undefined);
+    const reply = result.stdout === "" ? undefined : JSON.parse(result.stdout).hookSpecificOutput;
+    expect(reply?.hookEventName).toBe(event === "UserPromptSubmit" ? event : undefined);
   });
 
   it("logs and still exits 0 when a handler cannot read its input", () => {

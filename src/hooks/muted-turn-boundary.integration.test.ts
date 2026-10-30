@@ -90,6 +90,11 @@ async function hook(name: keyof typeof HOOKS, payload: Record<string, unknown>):
   return main();
 }
 
+async function chooseMode(mode: "metadata" | "full"): Promise<void> {
+  const { setThreadTracingMode } = await import("../tracing-policy.js");
+  await setThreadTracingMode(process.env.STATE_FILE!, SESSION, mode);
+}
+
 function line(entry: Record<string, unknown>): void {
   const timestamp = new Date().toISOString();
   const uuid = randomUUID();
@@ -149,7 +154,7 @@ async function sentRuns(): Promise<Array<Record<string, any>>> {
 async function openNotificationThenMute(): Promise<void> {
   await prompt(NOTIFICATION);
   assistant([{ type: "text", text: "PUBLIC_REPLY" }], "end_turn");
-  await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+  await chooseMode("metadata");
 }
 
 it("keeps an unmuted turn whole when a task notification lands mid-turn", async () => {
@@ -228,7 +233,9 @@ it("saves a blocking Stop hook's retried reply for a turn still waiting on a bac
   const { atomicUpdateState, loadState } = await import("../state.js");
   const stateFile = process.env.STATE_FILE!;
   const { parseDottedOrder } = await import("../langsmith.js");
-  const { runId: turnRunId } = parseDottedOrder(loadState(stateFile)[SESSION]!.current_dotted_order!);
+  const { runId: turnRunId } = parseDottedOrder(
+    loadState(stateFile)[SESSION]!.current_dotted_order!,
+  );
   await atomicUpdateState(stateFile, (state) => {
     const waiting = {
       run_id: turnRunId,
@@ -284,10 +291,10 @@ it("nests a compaction between turns under the turn before it", async () => {
 });
 
 it("keeps a compaction nested under a muted turn muted after an unmute", async () => {
-  await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+  await chooseMode("metadata");
   await prompt("SECRET_PROMPT", "A");
   await finishMutedTurn();
-  await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:unmute" });
+  await chooseMode("full");
   await hook("PreCompact", { trigger: "manual", custom_instructions: "" });
   await hook("PostCompact", { trigger: "manual", compact_summary: "SECRET_SUMMARY" });
 
@@ -328,7 +335,7 @@ it("keeps a full turn's own content when the user mutes partway through it", asy
   const tool = { tool_name: "Bash", tool_input: { command: "ls" }, tool_use_id: "toolu_bash" };
   assistant([{ type: "tool_use", id: "toolu_bash", name: "Bash", input: {} }], "tool_use", "A");
   await hook("PreToolUse", tool);
-  await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+  await chooseMode("metadata");
   user([{ type: "tool_result", tool_use_id: "toolu_bash", content: "PUBLIC_BASH" }], "A");
   await hook("PostToolUse", { ...tool, tool_response: { stdout: "PUBLIC_BASH" } });
   assistant([{ type: "text", text: "PUBLIC_ANSWER" }], "end_turn", "A");
@@ -396,7 +403,7 @@ describe("a muted turn after an open full turn", () => {
     await prompt("SECRET_PROMPT", "A");
     bashLines();
     await bashHooks();
-    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:unmute" });
+    await chooseMode("full");
     await finishMutedTurn();
 
     const sent = await uploaded();
@@ -413,7 +420,7 @@ describe("a muted turn after an open full turn", () => {
     await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_REPLY" });
     await hook("UserPromptSubmit", { prompt: "SECRET_PROMPT" });
     await bashHooks();
-    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:unmute" });
+    await chooseMode("full");
     await finishMutedTurn();
 
     const sent = await uploaded();
@@ -434,7 +441,7 @@ describe("a muted turn after an open full turn", () => {
     });
     await Promise.all([opened, stopped]);
     await bashHooks();
-    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:unmute" });
+    await chooseMode("full");
     await finishMutedTurn();
 
     const sent = await uploaded();
@@ -448,7 +455,7 @@ describe("a muted turn after an open full turn", () => {
     await prompt(NOTIFICATION.replace("bgtask1", "bgtask2"));
     assistant([{ type: "text", text: "PUBLIC_REPLY" }], "end_turn");
     await drain();
-    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+    await chooseMode("metadata");
     await prompt("SECRET_PROMPT", "A");
     bashLines();
     await bashHooks();
@@ -462,7 +469,7 @@ describe("a muted turn after an open full turn", () => {
     assistant([{ type: "text", text: "PUBLIC_REPLY" }], "end_turn", "P");
     user(NOTIFICATION);
     await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_REPLY" });
-    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+    await chooseMode("metadata");
     await hook("UserPromptSubmit", { prompt: NOTIFICATION });
     assistant([{ type: "text", text: "SECRET_ANSWER" }], "end_turn");
     await drain();
@@ -481,7 +488,7 @@ describe("a muted turn after an open full turn", () => {
     await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_REPLY" });
     await drain();
     await hook("UserPromptSubmit", { prompt: NOTIFICATION });
-    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+    await chooseMode("metadata");
     await prompt("SECRET_PROMPT", "A");
     bashLines();
     await bashHooks();
@@ -494,7 +501,7 @@ describe("a muted turn after an open full turn", () => {
     await prompt(`PUBLIC_PROMPT ${"x".repeat(4096)}`, "P");
     assistant([{ type: "text", text: "PUBLIC_REPLY" }], "end_turn", "P");
     writeFileSync(transcript, readFileSync(transcript, "utf-8").replace("x".repeat(4096), "x"));
-    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+    await chooseMode("metadata");
     user("SECRET_PROMPT", "A");
     bashLines();
     await bashHooks();
@@ -522,12 +529,12 @@ describe("a muted turn after an open full turn", () => {
   it("keeps a muted prompt with no prompt id out of an open turn with none either, even after unmuting", async () => {
     await prompt("PUBLIC_PROMPT");
     assistant([{ type: "text", text: "PUBLIC_REPLY" }], "end_turn");
-    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+    await chooseMode("metadata");
     user("SECRET_PROMPT");
     assistant([{ type: "tool_use", id: "toolu_bash", name: "Bash", input: BASH }], "tool_use");
     user([{ type: "tool_result", tool_use_id: "toolu_bash", content: "SECRET_BASH_OUTPUT" }]);
     await bashHooks();
-    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:unmute" });
+    await chooseMode("full");
     assistant([{ type: "text", text: "SECRET_ANSWER" }], "end_turn");
     await hook("Stop", { stop_hook_active: false, last_assistant_message: "SECRET_ANSWER" });
 
@@ -538,9 +545,9 @@ describe("a muted turn after an open full turn", () => {
   });
 
   it("keeps the reply a blocking Stop hook asks for muted after an unmute typed mid-turn", async () => {
-    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+    await chooseMode("metadata");
     await prompt("SECRET_PROMPT", "A");
-    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:unmute" });
+    await chooseMode("full");
     await finishMutedTurn();
     line({
       type: "user",
@@ -565,7 +572,7 @@ describe("a muted turn after an open full turn", () => {
     async (_, open) => {
       await open();
       assistant([{ type: "text", text: "PUBLIC_REPLY" }], "end_turn", "P");
-      await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+      await chooseMode("metadata");
       user("SECRET_PROMPT");
       assistant([{ type: "tool_use", id: "toolu_bash", name: "Bash", input: BASH }], "tool_use");
       user([{ type: "tool_result", tool_use_id: "toolu_bash", content: "SECRET_BASH_OUTPUT" }]);
@@ -579,4 +586,33 @@ describe("a muted turn after an open full turn", () => {
       expect(sent).not.toContain("SECRET");
     },
   );
+});
+
+it("traces a mute command's own turn in full and mutes the turn after it", async () => {
+  const output = vi.spyOn(console, "log").mockImplementation(() => {});
+  await prompt("/langsmith-tracing:mute");
+  expect(output.mock.calls.map(([text]) => JSON.parse(text))).toEqual([
+    {
+      hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit",
+        additionalContext: expect.stringContaining("Thread tracing muted"),
+      },
+    },
+  ]);
+  output.mockRestore();
+  assistant([{ type: "text", text: "PUBLIC_COMMAND_REPLY" }], "end_turn");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_COMMAND_REPLY" });
+  await prompt("SECRET_PROMPT");
+  assistant([{ type: "text", text: "SECRET_ANSWER" }], "end_turn");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "SECRET_ANSWER" });
+  const runs = await sentRuns();
+  const commandTurn = runs.find(
+    (run) => run.inputs?.messages?.[0]?.content === "/langsmith-tracing:mute",
+  );
+  expect(commandTurn?.name).toBe("Claude Code Turn");
+  const commandReply = runs.find(
+    (run) => run.name === "Claude" && JSON.stringify(run.outputs).includes("PUBLIC_COMMAND_REPLY"),
+  );
+  expect(commandReply?.parent_run_id).toBe(commandTurn?.id);
+  expect(JSON.stringify(runs)).not.toContain("SECRET_ANSWER");
 });

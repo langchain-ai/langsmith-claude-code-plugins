@@ -20,6 +20,7 @@ import {
 } from "@langchain/plugins-base/metadata";
 import {
   BOOLEAN_SETTINGS,
+  HARNESS_DIRECTORY,
   NO_PINNED_KEYS,
   NOTICE_COOLDOWN_OFF,
   PINNED_REPOSITORY_KEYS,
@@ -176,7 +177,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
     }
   }
 
-  const files = readCommonConfigFiles({ cwd, home: homeDir, harnessDirectory: ".claude" });
+  const files = readCommonConfigFiles({ cwd, home: homeDir, harnessDirectory: HARNESS_DIRECTORY });
   const common = mergeCommonConfig(
     {
       harness: files.harness.common,
