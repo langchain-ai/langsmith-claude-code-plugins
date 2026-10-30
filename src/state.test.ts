@@ -506,7 +506,7 @@ describe("pruneOldSessions", () => {
     saveHeldRun(held, statePath, "s", "old");
     saveHeldRun(held, statePath, "s", "new");
     const folder = join(tmpDir, ENGINE_STORAGE_DIR_NAME);
-    writeFileSync(join(folder, "engine-owned.json"), "{}");
+    writeFileSync(join(folder, "engine-owned.json"), "{}", { flag: "wx", mode: 0o600 });
     for (const name of [`${HELD_TOOL_RUN_PREFIX}s-old.json`, "engine-owned.json"])
       utimesSync(join(folder, name), new Date(twoDaysAgo), new Date(twoDaysAgo));
     pruneHeldRuns(statePath, now);
