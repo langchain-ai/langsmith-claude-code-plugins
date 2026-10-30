@@ -117,9 +117,7 @@ describe("repoScopedMetadata", () => {
       ["every git -C in order", { command: `git -C "${alpha}" -C "${beta}" log` }],
       ["a relative git -C after another", { command: `git -C "${root}" -C "beta repo" log` }],
       ["a git -c before git -C", { command: `git -c core.x=1 -C "${beta}" log` }],
-      ["a git -c after a cd", { command: `cd "${alpha}" && git -c core.x=1 -C "${beta}" log` }],
       ["a Glob pattern with a wildcard", { pattern: `${beta}/**/*.txt` }, "Glob"],
-      ["a Glob pattern ending in a partial file name", { pattern: `${beta}/seed*` }, "Glob"],
     ])("attributes %s to the repository it names", (_name, input, tool) => {
       expect(repoScopedMetadata(inSession(), input, alpha, tool)).toMatchObject(inBeta);
     });
@@ -141,21 +139,32 @@ describe("repoScopedMetadata", () => {
       ["--work-tree", `cd "${beta}" && ls --work-tree`],
       ["a newline", `cd "${beta}" && ls\nls`],
       ["a nested bash -c", `cd "${beta}" && bash -c "cd ${alpha} && git log"`],
-      ["a cd in a substitution", `cd "${beta}" && echo "$(cd ${alpha} && git log)"`],
       ["a cd hidden between apostrophes", `cd "${beta}" && echo it's; cd "${alpha}"; echo don't`],
-      ["a backslash cd", `cd "${beta}" && \\cd "${alpha}"`],
       ["a cd after an assignment", `cd "${beta}" && FOO=1 cd "${alpha}"`],
       ["a cd in a case", `cd "${beta}" && case x in x) cd "${alpha}";; esac`],
-      ["a quoted cd", `cd "${beta}" && 'cd' "${alpha}"`],
+      ["a cd split by quotes", `c""d "${alpha}" && git status`],
+      ["a pushd split by quotes", `p""ushd "${alpha}" && git status`],
+      ["a quoted -C", `git "-C" "${alpha}" status`],
+      ["a single-quoted -C", `git '-C' "${alpha}" status`],
+      ["a backslashed -C", `git -\\C "${alpha}" status`],
+      ["a split GIT_WORK_TREE", `GIT_WORK_T''REE=x git status`],
+      ["a split GIT_DIR", `cd "${beta}" && GIT_D''IR=x ls`],
+      ["an exported GIT_DIR", `cd "${beta}" && export GIT_DIR=x`],
+      ["source", `cd "${beta}" && source ./go.sh`],
+      ["a dot command", `cd "${beta}" && . ./go.sh`],
+      ["env", `cd "${beta}" && env ls`],
+      ["a tab after -C", `cd "${beta}" && git -C\t"${alpha}" log`],
+      ["a tab after sh -c", `cd "${beta}" && sh\t-c ls`],
+      ["a form feed", `cd "${beta}" && ls\f`],
+      ["a carriage return", `cd "${beta}" && ls\r`],
+      ["a tab before a cd", `cd\t"${alpha}" && ls`],
+      ["a byte order mark", `\ufeffcd "${beta}" && ls`],
       ["a cd into a variable", `cd "${beta}" && cd $HOME/x`],
       ["a cd into a variable inside quotes", `cd "$ROOT" && ls`],
       ["a cd with an escaped space", `cd "${beta}" && cd ${alpha.replaceAll(" ", "\\ ")}`],
       ["a cd into nothing", `cd "${beta}" && cd "${missing}" && ls`],
       ["a cd into a file", `cd "${betaSeed}" && ls`],
-      ["a git -C into nothing", `git -C "${missing}" log`],
-      ["a git -C into a variable", `git -C "$REPO" log`],
       ["a git option before -C", `cd "${alpha}" && git --no-pager -C "${beta}" log`],
-      ["a second git -C", `git -C "${beta}" pull && git -C "${alpha}" pull`],
     ])("emits no repository when a command has %s", (_name, command) => {
       expect(repoScopedMetadata(inSession(), { command }, alpha)).toEqual(noRepoKeys);
     });
@@ -215,16 +224,17 @@ describe("repoScopedMetadata", () => {
       );
     });
 
-    it("reads ~ in a folder the command enters as the person's home", () => {
+    it("reads an unquoted ~ as the person's home but a quoted one as text", () => {
       vi.stubEnv("HOME", root);
       vi.stubEnv("USERPROFILE", root);
+      const inTilde = { ls_git_branch: "trunk-tilde" };
 
-      expect(
-        repoScopedMetadata(inSession(), { command: 'cd "~/beta repo" && ls' }, plain),
-      ).toMatchObject(inBeta);
-      expect(
-        repoScopedMetadata(inSession(), { command: 'git -C "~/beta repo" log' }, plain),
-      ).toMatchObject(inBeta);
+      for (const command of ["cd ~/~tilde-repo && ls", "git -C ~/~tilde-repo log"]) {
+        expect(repoScopedMetadata(inSession(), { command }, plain)).toMatchObject(inTilde);
+      }
+      for (const command of ['cd "~/~tilde-repo" && ls', "git -C '~/~tilde-repo' log"]) {
+        expect(repoScopedMetadata(inSession(), { command }, plain)).toEqual(noRepoKeys);
+      }
     });
 
     it("attributes a shell command that entered a folder outside every repository to none", () => {

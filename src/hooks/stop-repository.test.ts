@@ -57,14 +57,6 @@ function transcriptWith(call: Record<string, unknown>, cwd?: string): string {
           usage: { input_tokens: 1, output_tokens: 1 },
         },
       },
-      {
-        type: "user",
-        timestamp: "2025-01-01T00:00:02Z",
-        message: {
-          role: "user",
-          content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }],
-        },
-      },
     ]
       .map((line) => JSON.stringify(line))
       .join("\n"),

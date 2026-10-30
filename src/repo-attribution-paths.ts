@@ -4,6 +4,7 @@ import { isAbsolute, resolve, sep } from "node:path";
 import { rootFromGitMarker } from "@langchain/plugins-base/git";
 import {
   BASH_CD_STEP,
+  BASH_QUOTING_CHARS,
   BASH_GUARD_PATTERNS,
   BASH_GIT_CONFIG_FLAG,
   BASH_GIT_DIRECTORY_FLAG,
@@ -24,9 +25,8 @@ function directoryAt(
   from: string | undefined,
   physical: boolean,
 ): string | undefined {
-  const target = path.replace(HOME_SHORTHAND, homedir());
-  if (!isAbsolute(target) && from === undefined) return undefined;
-  const joined = isAbsolute(target) ? target : `${from}${sep}${target}`;
+  if (!isAbsolute(path) && from === undefined) return undefined;
+  const joined = isAbsolute(path) ? path : `${from}${sep}${path}`;
   try {
     const folder = physical ? realpathSync.native(joined) : resolve(joined);
     return statSync(folder).isDirectory() ? folder : undefined;
@@ -36,13 +36,15 @@ function directoryAt(
 }
 
 function folderArgument(match: RegExpMatchArray): string {
-  return match[1] ?? match[2] ?? match[3];
+  return match[3] === undefined
+    ? (match[1] ?? match[2])
+    : match[3].replace(HOME_SHORTHAND, homedir());
 }
 
 function pathFromBashCommand(command: string, callCwd?: string): string | undefined {
   let folder = callCwd !== undefined && isAbsolute(callCwd) ? callCwd : undefined;
   let named = false;
-  let rest = command.trimStart();
+  let rest = command.replace(/^ +/, "");
   for (let cd = rest.match(BASH_CD_STEP); cd; cd = rest.match(BASH_CD_STEP)) {
     folder = directoryAt(folderArgument(cd), folder, false);
     if (!folder) return undefined;
@@ -70,7 +72,8 @@ function pathFromBashCommand(command: string, callCwd?: string): string | undefi
 }
 
 function mayPointElsewhere(command: string): boolean {
-  return BASH_GUARD_PATTERNS.some((pattern) => pattern.test(command));
+  const text = command.replace(BASH_QUOTING_CHARS, "");
+  return BASH_GUARD_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 export function commandMayPointElsewhere(toolInput: unknown): boolean {

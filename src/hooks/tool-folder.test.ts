@@ -134,46 +134,32 @@ describe("PostToolUse", () => {
 });
 
 const preHookInput = (tool_use_id: string, extra: Record<string, unknown> = {}) => ({
-  session_id: "pre-tool-repos",
-  transcript_path: join(sandbox.root, "transcript.jsonl"),
-  cwd: sandbox.root,
+  ...hookInput("Bash", { command: "ls" }, tool_use_id),
   hook_event_name: "PreToolUse",
-  tool_name: "Bash",
-  tool_input: { command: "ls" },
-  tool_use_id,
   ...extra,
 });
 
+const savedToolCwds = () =>
+  JSON.parse(readFileSync(stateFilePath, "utf-8"))["post-tool-repos"].tool_cwds;
+
 describe("PreToolUse", () => {
   it("records the folder each main-agent tool starts in and none for a subagent's", async () => {
-    writeFileSync(stateFilePath, "{}");
     payload.current = preHookInput("t1");
     await preToolUse();
     payload.current = preHookInput("t2", { agent_id: "agent-1" });
     await preToolUse();
 
-    const state = JSON.parse(readFileSync(stateFilePath, "utf-8"));
-    expect(state["pre-tool-repos"].tool_cwds).toEqual({ t1: sandbox.root });
+    expect(savedToolCwds()).toEqual({ t1: sandbox.root });
   });
 
   it("forgets folders of tools from before the last reset of the start times", async () => {
-    writeFileSync(
-      stateFilePath,
-      JSON.stringify({
-        "pre-tool-repos": {
-          last_line: -1,
-          turn_count: 0,
-          updated: "",
-          task_run_map: {},
-          tool_start_times: { kept: 1 },
-          tool_cwds: { kept: "/a", stale: "/b" },
-        },
-      }),
-    );
+    writeState({ kept: "/a", stale: "/b" });
+    const state = JSON.parse(readFileSync(stateFilePath, "utf-8"));
+    state["post-tool-repos"].tool_start_times = { kept: 1 };
+    writeFileSync(stateFilePath, JSON.stringify(state));
     payload.current = preHookInput("t3");
     await preToolUse();
 
-    const state = JSON.parse(readFileSync(stateFilePath, "utf-8"));
-    expect(state["pre-tool-repos"].tool_cwds).toEqual({ kept: "/a", t3: sandbox.root });
+    expect(savedToolCwds()).toEqual({ kept: "/a", t3: sandbox.root });
   });
 });

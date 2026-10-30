@@ -50,31 +50,36 @@ const TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"] as co
 
 const SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"$\`]+)"|'([^']+)'|(~(?:\/[^\s;&|()$\`\\"'<>]*)?|[^\s;&|()$\`\\"'<>~-][^\s;&|()$\`\\"'<>]*))`;
 
-const BASH_CD_STEP = new RegExp(String.raw`^cd\s+${SHELL_FOLDER_ARGUMENT}\s*(?:&&\s*|$)`);
+const BASH_CD_STEP = new RegExp(String.raw`^cd +${SHELL_FOLDER_ARGUMENT} *(?:&& *|$)`);
+
+const BASH_QUOTING_CHARS = /["'\\]/g;
 
 const BASH_GUARD_PATTERNS = [
   /(?:^|[^\w%/.-])(?:cd|pushd|popd)(?=$|[^\w-])/,
   /\beval\b/,
-  /\bsh\s+-c\b/,
-  /\bbash\s+-c\b/,
-  /\bzsh\s+-c\b/,
+  /\benv\b/,
+  /\bsource\b/,
+  /(?:^|[;&|({])\s*\.\s/,
+  /\bsh -c\b/,
+  /\bbash -c\b/,
+  /\bzsh -c\b/,
   /\$\(/,
   /`/,
   /GIT_DIR/,
   /GIT_WORK_TREE/,
-  /-C\s/,
+  /-C /,
   /--git-dir/,
   /--work-tree/,
-  /\n/,
+  /[\p{Cc}\ufeff]/u,
 ];
 
-const BASH_GIT_WORD = /^git(?=\s)/;
+const BASH_GIT_WORD = /^git(?= )/;
 
-const BASH_GIT_CONFIG_FLAG = /^\s+-c\s+(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
+const BASH_GIT_CONFIG_FLAG = /^ +-c +(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
 
-const BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
+const BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^ +-C +${SHELL_FOLDER_ARGUMENT}`);
 
-const BASH_GIT_OPTION = /^\s+-/;
+const BASH_GIT_OPTION = /^ +-/;
 
 const HOME_SHORTHAND = /^~(?=\/|$)/;
 
@@ -231,6 +236,7 @@ export {
   CURSOR_VERSION_FIELD,
   TOOL_PATH_INPUT_KEYS,
   BASH_CD_STEP,
+  BASH_QUOTING_CHARS,
   BASH_GUARD_PATTERNS,
   BASH_GIT_WORD,
   BASH_GIT_CONFIG_FLAG,

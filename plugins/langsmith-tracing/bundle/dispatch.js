@@ -23665,26 +23665,30 @@ var RUN_SNAPSHOT_FIELDS = [...RUN_CONTEXT_FIELDS, "inputs", ...RUN_PATCH_FIELDS]
 var CURSOR_VERSION_FIELD = "cursor_version";
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
 var SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"$\`]+)"|'([^']+)'|(~(?:\/[^\s;&|()$\`\\"'<>]*)?|[^\s;&|()$\`\\"'<>~-][^\s;&|()$\`\\"'<>]*))`;
-var BASH_CD_STEP = new RegExp(String.raw`^cd\s+${SHELL_FOLDER_ARGUMENT}\s*(?:&&\s*|$)`);
+var BASH_CD_STEP = new RegExp(String.raw`^cd +${SHELL_FOLDER_ARGUMENT} *(?:&& *|$)`);
+var BASH_QUOTING_CHARS = /["'\\]/g;
 var BASH_GUARD_PATTERNS = [
   /(?:^|[^\w%/.-])(?:cd|pushd|popd)(?=$|[^\w-])/,
   /\beval\b/,
-  /\bsh\s+-c\b/,
-  /\bbash\s+-c\b/,
-  /\bzsh\s+-c\b/,
+  /\benv\b/,
+  /\bsource\b/,
+  /(?:^|[;&|({])\s*\.\s/,
+  /\bsh -c\b/,
+  /\bbash -c\b/,
+  /\bzsh -c\b/,
   /\$\(/,
   /`/,
   /GIT_DIR/,
   /GIT_WORK_TREE/,
-  /-C\s/,
+  /-C /,
   /--git-dir/,
   /--work-tree/,
-  /\n/
+  /[\p{Cc}\ufeff]/u
 ];
-var BASH_GIT_WORD = /^git(?=\s)/;
-var BASH_GIT_CONFIG_FLAG = /^\s+-c\s+(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
-var BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
-var BASH_GIT_OPTION = /^\s+-/;
+var BASH_GIT_WORD = /^git(?= )/;
+var BASH_GIT_CONFIG_FLAG = /^ +-c +(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
+var BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^ +-C +${SHELL_FOLDER_ARGUMENT}`);
+var BASH_GIT_OPTION = /^ +-/;
 var HOME_SHORTHAND = /^~(?=\/|$)/;
 var GLOB_TOOL_NAME = "Glob";
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
@@ -24543,10 +24547,9 @@ function insideGitRepository(path3) {
   return typeof rootFromGitMarker(path3) === "string";
 }
 function directoryAt(path3, from, physical) {
-  const target = path3.replace(HOME_SHORTHAND, homedir3());
-  if (!isAbsolute5(target) && from === void 0)
+  if (!isAbsolute5(path3) && from === void 0)
     return void 0;
-  const joined = isAbsolute5(target) ? target : `${from}${sep3}${target}`;
+  const joined = isAbsolute5(path3) ? path3 : `${from}${sep3}${path3}`;
   try {
     const folder = physical ? realpathSync.native(joined) : resolve14(joined);
     return statSync8(folder).isDirectory() ? folder : void 0;
@@ -24555,12 +24558,12 @@ function directoryAt(path3, from, physical) {
   }
 }
 function folderArgument(match) {
-  return match[1] ?? match[2] ?? match[3];
+  return match[3] === void 0 ? match[1] ?? match[2] : match[3].replace(HOME_SHORTHAND, homedir3());
 }
 function pathFromBashCommand(command, callCwd) {
   let folder = callCwd !== void 0 && isAbsolute5(callCwd) ? callCwd : void 0;
   let named = false;
-  let rest = command.trimStart();
+  let rest = command.replace(/^ +/, "");
   for (let cd = rest.match(BASH_CD_STEP); cd; cd = rest.match(BASH_CD_STEP)) {
     folder = directoryAt(folderArgument(cd), folder, false);
     if (!folder)
@@ -24591,7 +24594,8 @@ function pathFromBashCommand(command, callCwd) {
   return named && !mayPointElsewhere(rest) ? folder : void 0;
 }
 function mayPointElsewhere(command) {
-  return BASH_GUARD_PATTERNS.some((pattern) => pattern.test(command));
+  const text = command.replace(BASH_QUOTING_CHARS, "");
+  return BASH_GUARD_PATTERNS.some((pattern) => pattern.test(text));
 }
 function commandMayPointElsewhere(toolInput) {
   const command = toolInput?.command;
