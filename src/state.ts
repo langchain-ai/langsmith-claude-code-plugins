@@ -7,9 +7,15 @@ import { dirname, join } from "node:path";
 import { createStateStore, pruneStateEntries } from "@langchain/plugins-base/storage";
 import { HELD_TOOL_RUNS_DIR, SESSION_MAX_AGE_MS, UNSAFE_FILE_NAME_CHARS } from "./constants.js";
 import { warn } from "./logger.js";
-import { atomic, directory } from "./proxy/files.js";
-import { entryInfo, listDirectory, readJson, readText, removeFile } from "./utils/files.js";
-import type { TracingState, SessionState, ReadPosition, HeldToolRun } from "./types.js";
+import {
+  entryInfo,
+  listDirectory,
+  publishFile,
+  readJson,
+  readText,
+  removeFile,
+} from "./utils/files.js";
+import type { TracingState, SessionState, ReadPosition, HeldToolRun, HeldRunKey } from "./types.js";
 
 type SessionStore = ReturnType<typeof createStateStore<SessionState>>;
 
@@ -137,30 +143,18 @@ export function updateSessionState(
 
 const heldRunsFolder = (stateFilePath: string) => join(dirname(stateFilePath), HELD_TOOL_RUNS_DIR);
 
-const heldRunPath = (stateFilePath: string, sessionId: string, toolUseId: string) =>
+const heldRunPath = (...[stateFilePath, sessionId, toolUseId]: HeldRunKey) =>
   join(
     heldRunsFolder(stateFilePath),
     `${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`,
   );
 
-export function saveHeldRun(
-  stateFilePath: string,
-  sessionId: string,
-  toolUseId: string,
-  held: HeldToolRun,
-): void {
-  directory(heldRunsFolder(stateFilePath), true, true);
-  atomic(heldRunPath(stateFilePath, sessionId, toolUseId), JSON.stringify(held), undefined);
-}
+export const saveHeldRun = (held: HeldToolRun, ...key: HeldRunKey) =>
+  publishFile(heldRunPath(...key), JSON.stringify(held));
 
-export function takeHeldRun(
-  stateFilePath: string,
-  sessionId: string,
-  toolUseId: string,
-): HeldToolRun | undefined {
-  const path = heldRunPath(stateFilePath, sessionId, toolUseId);
-  const held = readJson(readText(path)) as HeldToolRun | undefined;
-  removeFile(path);
+export function takeHeldRun(...key: HeldRunKey): HeldToolRun | undefined {
+  const held = readJson(readText(heldRunPath(...key))) as HeldToolRun | undefined;
+  removeFile(heldRunPath(...key));
   return held;
 }
 
@@ -172,11 +166,7 @@ export function pruneHeldRuns(stateFilePath: string, now: number = Date.now()): 
   }
 }
 
-export function dropHeldRuns(
-  stateFilePath: string,
-  sessionId: string,
-  session: SessionState,
-): Pick<SessionState, "held_tool_runs"> {
+export function dropHeld(stateFilePath: string, sessionId: string, session: SessionState) {
   for (const id of Object.keys(session.held_tool_runs ?? {}))
     takeHeldRun(stateFilePath, sessionId, id);
   return { held_tool_runs: undefined };

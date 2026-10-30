@@ -9,7 +9,8 @@ import { hookOutputs, type HookOutput } from "@langchain/plugins-base/tracing";
 import { resolveTurnTracingMode } from "./tracing-mode.js";
 import type {
   ClaudeRun,
-  HookPlacement,
+  HeldRunSettings,
+  HookDirection,
   TranscriptMessage,
   Turn,
   TranscriptRead,
@@ -56,17 +57,13 @@ import { stableRunId } from "./utils/ids/run-id.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-export function hooksFiring(
-  hooks: HookOutput[] | undefined,
-  direction: HookPlacement["direction"],
-): HookOutput[] {
-  return (hooks ?? []).filter((hook) => hookPlacement(hook.name).direction === direction);
-}
+export const hooksFiring = (hooks: HookOutput[] | undefined, direction: HookDirection) =>
+  (hooks ?? []).filter((hook) => hookPlacement(hook.name).direction === direction);
 
 export function withHooks<T extends object>(
   content: T,
   hooks: HookOutput[] | undefined,
-  direction: HookPlacement["direction"],
+  direction: HookDirection,
 ): T {
   return { ...content, ...hookOutputs(hooksFiring(hooks, direction)) };
 }
@@ -557,11 +554,10 @@ export function withTaskRunHooks(
 }
 
 export async function flushHeldToolRuns(
-  stateFilePath: string,
+  { stateFilePath, captureHookOutputs }: HeldRunSettings,
   sessionId: string,
   turnRunId: string | undefined,
   messages: TranscriptMessage[],
-  captureHookOutputs?: boolean,
 ): Promise<void> {
   const refs = Object.entries(
     getSessionState(loadState(stateFilePath), sessionId).held_tool_runs ?? {},
@@ -786,13 +782,7 @@ export async function closeInterruptedTurn(options: {
     }
   }
 
-  await flushHeldToolRuns(
-    stateFilePath,
-    sessionId,
-    sessionState.current_turn_run_id,
-    read.messages,
-    options.captureHookOutputs,
-  );
+  await flushHeldToolRuns(options, sessionId, sessionState.current_turn_run_id, read.messages);
 
   // Close the parent turn run with the error message.
   await closeTurnRun(

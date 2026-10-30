@@ -481,21 +481,24 @@ export interface OpenTurn {
   hooks?: HookOutput[];
 }
 
+export type HeldRunKey = readonly [stateFilePath: string, sessionId: string, toolUseId: string];
+
 export interface HeldToolRun {
   run: ClaudeRun;
   tracing: TracingMode;
   origin: ToolOrigin;
 }
 
+export type HeldRunSettings = Pick<Config, "stateFilePath" | "captureHookOutputs">;
+
 export interface PostedRunPayload {
   privacyMode: TracingMode;
   run: { inputs?: Record<string, unknown> };
 }
 
-export interface HookPlacement {
-  direction: "input" | "output";
-  scope: "tool" | "turn";
-}
+export type HookPlacement = { direction: "input" | "output"; scope: "tool" | "turn" };
+
+export type HookDirection = HookPlacement["direction"];
 
 export interface TracingState {
   [sessionId: string]: SessionState;

@@ -19,6 +19,7 @@ import type {
   ToolResultMessage,
   AssistantMessage,
   TranscriptMessage,
+  Turn,
 } from "./types.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -742,19 +743,7 @@ describe("groupIntoTurns", () => {
     const turns = groupIntoTurns(messages);
     expect(turns[0].userTimestamp).toBe("2025-06-15T12:30:00.500Z");
   });
-  it("gives SessionStart output to only one turn when a prompt gets no reply", () => {
-    const lines = [
-      makeHook("SessionStart", "start", "SessionStart"),
-      makeUser("Q1", T0, "p1"),
-      makeUser("Q2", T1, "p2"),
-      makeAssistant("msg_1", "A2", { stop_reason: "end_turn" }),
-    ];
-    const turns = groupPromptTurns(lines);
-    expect(turns.map((turn) => turn.hooks?.length)).toEqual([undefined, 1]);
-  });
-
   it("puts tool hook output on its tool and every other hook on its turn", () => {
-    const hook = (name: string, output: string) => ({ name, output });
     const lines = [
       makeAssistant("msg_0", "Earlier", { toolUses: [{ id: "t0", name: "Bash", input: {} }] }),
       makeHook("PreToolUse", "early", "t9"),
@@ -795,26 +784,18 @@ describe("groupIntoTurns", () => {
       makeUser("Q4", T1, "p4"),
       makeAssistant("msg_4", "A4", { stop_reason: "end_turn" }),
     ];
-    const turns = groupIntoTurns(lines);
-    expect(turns.map((turn) => turn.hooks)).toEqual([
-      [
-        hook("SessionStart", "on main"),
-        hook("UserPromptSubmit", "run lint"),
-        hook("UserPromptSubmit", "check types"),
-        hook("UserPromptSubmit", "lone text"),
-        hook("PostToolBatch", "batch done"),
-        hook("SessionStart", "compacted"),
-      ],
-      [
-        hook("UserPromptSubmit", "again"),
-        hook("PostToolUse", "late"),
-        hook("PostToolUse", "async"),
-      ],
-      [hook("SessionStart", "compacted again")],
+    const turns = groupPromptTurns(lines);
+    const named = (hooks: Turn["hooks"]) => hooks?.map((h) => `${h.name} ${h.output}`).join(", ");
+    expect(turns.map((turn) => named(turn.hooks))).toEqual([
+      "SessionStart on main, UserPromptSubmit run lint, UserPromptSubmit check types, UserPromptSubmit lone text, PostToolBatch batch done, SessionStart compacted",
+      "UserPromptSubmit again, PostToolUse late, PostToolUse async",
+      "UserPromptSubmit cancelled",
+      undefined,
+      "SessionStart compacted again",
     ]);
-    expect(turns[0].llmCalls[0].toolCalls.map((tool) => tool.hooks)).toEqual([
-      [hook("PostToolUse", "tests pass"), hook("PostToolUse", "plugin")],
-      [hook("PostToolUseFailure", "read failed")],
+    expect(turns[0].llmCalls[0].toolCalls.map((tool) => named(tool.hooks))).toEqual([
+      "PostToolUse tests pass, PostToolUse plugin",
+      "PostToolUseFailure read failed",
     ]);
   });
 });

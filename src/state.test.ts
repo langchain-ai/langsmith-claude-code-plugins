@@ -503,11 +503,10 @@ describe("pruneOldSessions", () => {
   it("removes held tool runs older than the session age limit", () => {
     const statePath = join(tmpDir, "state.json");
     const held = { run: { id: "r" }, tracing: "full", origin: "main" } as unknown as HeldToolRun;
-    saveHeldRun(statePath, "s", "old", held);
-    saveHeldRun(statePath, "s", "new", held);
+    saveHeldRun(held, statePath, "s", "old");
+    saveHeldRun(held, statePath, "s", "new");
     const folder = join(tmpDir, HELD_TOOL_RUNS_DIR);
-    const twoDays = (now - 2 * 24 * 60 * 60 * 1000) / 1000;
-    utimesSync(join(folder, "s-old.json"), twoDays, twoDays);
+    utimesSync(join(folder, "s-old.json"), new Date(twoDaysAgo), new Date(twoDaysAgo));
     pruneHeldRuns(statePath, now);
     expect(readdirSync(folder)).toEqual(["s-new.json"]);
   });

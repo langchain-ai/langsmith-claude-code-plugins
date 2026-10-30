@@ -63,11 +63,10 @@ export async function closeFailedTurn(
       )
     : { messages: [] };
   await flushHeldToolRuns(
-    config.stateFilePath,
+    config,
     input.session_id,
     sessionState.current_turn_run_id,
     read.messages,
-    config.captureHookOutputs,
   );
 
   try {

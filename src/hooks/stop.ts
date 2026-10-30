@@ -243,11 +243,11 @@ export async function closeStoppedTurn(
     }
   }
 
-  const found = config.captureHookOutputs
+  const own = config.captureHookOutputs
     ? turnHooks(sessionState, { messages, promptId })
     : undefined;
   const earlier = continuedRunId ? (live.closed_turn_hooks ?? []) : [];
-  const hooks = earlier.length > 0 ? [...earlier, ...(found ?? [])] : found;
+  const hooks = earlier.length > 0 ? [...earlier, ...(own ?? [])] : own;
 
   // Re-read state so we pick up PostToolUse writes that may have landed after the Stop hook.
   const freshState = loadState(config.stateFilePath);
@@ -424,13 +424,7 @@ export async function closeStoppedTurn(
     return pruneOldSessions(updatedState);
   });
 
-  await flushHeldToolRuns(
-    config.stateFilePath,
-    input.session_id,
-    currentRunId,
-    messages,
-    config.captureHookOutputs,
-  );
+  await flushHeldToolRuns(config, input.session_id, currentRunId, messages);
   if (config.captureHookOutputs) pruneHeldRuns(config.stateFilePath);
 
   // Complete the Turn run created by UserPromptSubmit (unless deferred above).

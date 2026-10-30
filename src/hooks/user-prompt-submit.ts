@@ -77,10 +77,8 @@ function readStartBeforeOwnPrompt(filePath: string, promptText: string): number 
   const replied = messages.map((m) => m.type === "assistant").lastIndexOf(true);
   const content = (prompt?.message.content ?? "") as Turn["userContent"];
   const text = typeof content === "string" ? content : content.map((b) => b.text ?? "").join("");
-  const own =
-    prompt !== undefined &&
-    text === promptText &&
-    Date.now() - Date.parse(prompt.timestamp) <= OWN_PROMPT_LINE_MAX_AGE_MS;
+  const age = Date.now() - Date.parse(prompt?.timestamp ?? "");
+  const own = text === promptText && age <= OWN_PROMPT_LINE_MAX_AGE_MS;
   return lastLine - (own ? messages.length - 1 - replied : 0);
 }
 

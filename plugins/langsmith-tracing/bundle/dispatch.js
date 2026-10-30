@@ -737,8 +737,8 @@ async function removeDirectoryBestEffort(path3, warning) {
       console.warn(warning, describe(error2));
   }
 }
-async function removeEmptyAncestors(directory2, root) {
-  for (let current = directory2; current !== root && current !== dirname(current); ) {
+async function removeEmptyAncestors(directory, root) {
+  for (let current = directory; current !== root && current !== dirname(current); ) {
     try {
       await rmdir(current);
     } catch (error2) {
@@ -1672,11 +1672,11 @@ async function replacePolicyFile(path3, policy, warnings) {
 }
 async function syncPolicyDirectory(path3, warnings) {
   await bestEffort(warnings, async () => {
-    const directory2 = await open(dirname4(path3), POLICY_DIRECTORY_OPEN_FLAG);
+    const directory = await open(dirname4(path3), POLICY_DIRECTORY_OPEN_FLAG);
     try {
-      await directory2.sync();
+      await directory.sync();
     } finally {
-      await bestEffort(warnings, () => directory2.close(), POLICY_DIRECTORY_CLOSE_WARNING);
+      await bestEffort(warnings, () => directory.close(), POLICY_DIRECTORY_CLOSE_WARNING);
     }
   }, POLICY_DURABILITY_WARNING);
 }
@@ -1829,9 +1829,9 @@ function applyPatches(state, patches) {
   return result;
 }
 var pendingDirectory = (stateFilePath) => `${stateFilePath}${PENDING_STATE_DIR_SUFFIX}`;
-function names(directory2) {
+function names(directory) {
   try {
-    return readdirSync(directory2);
+    return readdirSync(directory);
   } catch {
     return [];
   }
@@ -1839,13 +1839,13 @@ function names(directory2) {
 function writePending(stateFilePath, patch) {
   if (patch.length === 0)
     return;
-  const directory2 = pendingDirectory(stateFilePath);
+  const directory = pendingDirectory(stateFilePath);
   const time = String(Date.now()).padStart(PENDING_STATE_TIME_WIDTH, "0");
   const order = String(sequence++).padStart(PENDING_STATE_SEQUENCE_WIDTH, "0");
-  const file = join3(directory2, `${time}-${order}-${process.pid}${PENDING_STATE_FILE_SUFFIX}`);
+  const file = join3(directory, `${time}-${order}-${process.pid}${PENDING_STATE_FILE_SUFFIX}`);
   for (let attempt = 1; ; attempt++) {
     try {
-      mkdirSync(directory2, { recursive: true, mode: STATE_PRIVATE_DIR_MODE });
+      mkdirSync(directory, { recursive: true, mode: STATE_PRIVATE_DIR_MODE });
       publishByRename(file, JSON.stringify(patch), PENDING_STATE_TEMP_SUFFIX, STATE_PRIVATE_FILE_MODE);
       return;
     } catch (error2) {
@@ -1855,11 +1855,11 @@ function writePending(stateFilePath, patch) {
   }
 }
 function readPending(stateFilePath) {
-  const directory2 = pendingDirectory(stateFilePath);
+  const directory = pendingDirectory(stateFilePath);
   const files = [];
   const patches = [];
-  for (const name of names(directory2).filter((n2) => n2.endsWith(PENDING_STATE_FILE_SUFFIX)).toSorted()) {
-    const file = join3(directory2, name);
+  for (const name of names(directory).filter((n2) => n2.endsWith(PENDING_STATE_FILE_SUFFIX)).toSorted()) {
+    const file = join3(directory, name);
     files.push(file);
     try {
       patches.push(JSON.parse(readFileSync2(file, "utf-8")));
@@ -1870,23 +1870,23 @@ function readPending(stateFilePath) {
   return { files, patches };
 }
 function hasRecentPending(stateFilePath) {
-  const directory2 = pendingDirectory(stateFilePath);
-  return names(directory2).some((name) => {
+  const directory = pendingDirectory(stateFilePath);
+  return names(directory).some((name) => {
     try {
-      return name.endsWith(PENDING_STATE_FILE_SUFFIX) && Date.now() - statSync(join3(directory2, name)).mtimeMs < STATE_LOCK_BUSY_MEMORY_MS;
+      return name.endsWith(PENDING_STATE_FILE_SUFFIX) && Date.now() - statSync(join3(directory, name)).mtimeMs < STATE_LOCK_BUSY_MEMORY_MS;
     } catch {
       return false;
     }
   });
 }
 function removePending(stateFilePath, files) {
-  const directory2 = pendingDirectory(stateFilePath);
+  const directory = pendingDirectory(stateFilePath);
   for (const file of files)
     rmSync(file, { force: true });
-  for (const name of names(directory2)) {
+  for (const name of names(directory)) {
     if (name.endsWith(PENDING_STATE_FILE_SUFFIX))
       continue;
-    const file = join3(directory2, name);
+    const file = join3(directory, name);
     try {
       if (Date.now() - statSync(file).mtimeMs > PENDING_STATE_ABANDONED_MS)
         rmSync(file, { force: true });
@@ -1894,10 +1894,10 @@ function removePending(stateFilePath, files) {
       continue;
     }
   }
-  if (names(directory2).length > 0)
+  if (names(directory).length > 0)
     return;
   try {
-    rmdirSync(directory2);
+    rmdirSync(directory);
   } catch {
     return;
   }
@@ -2037,10 +2037,10 @@ function captureRoot(storage) {
   return typeof storage === "string" ? resolve3(storage) : storage.root;
 }
 function captureDirectory(storage) {
-  const directory2 = typeof storage === "string" ? CAPTURE_TURNS_DIRECTORY : storage.directory;
-  if (directory2 !== CAPTURE_TURNS_DIRECTORY && directory2 !== CAPTURE_JOBS_DIRECTORY)
+  const directory = typeof storage === "string" ? CAPTURE_TURNS_DIRECTORY : storage.directory;
+  if (directory !== CAPTURE_TURNS_DIRECTORY && directory !== CAPTURE_JOBS_DIRECTORY)
     throw new TypeError(CAPTURE_STORAGE_DIRECTORY_MESSAGE);
-  return directory2;
+  return directory;
 }
 function sessionSegments(sessionHash) {
   return [CAPTURE_SESSIONS_DIRECTORY, sessionHash];
@@ -2112,8 +2112,8 @@ async function createPrivateDirectory(root, segments) {
   return current;
 }
 async function publishExclusive(path3, contents, beforeCommit) {
-  const directory2 = dirname6(path3);
-  const stagingPath = join5(directory2, `.${randomUUID5()}.tmp`);
+  const directory = dirname6(path3);
+  const stagingPath = join5(directory, `.${randomUUID5()}.tmp`);
   const handle = await open2(stagingPath, "wx", CAPTURE_FILE_MODE);
   try {
     await handle.writeFile(contents, "utf8");
@@ -2125,7 +2125,7 @@ async function publishExclusive(path3, contents, beforeCommit) {
   try {
     beforeCommit?.();
     await link2(stagingPath, path3);
-    await syncDirectory(directory2);
+    await syncDirectory(directory);
     return true;
   } catch (error2) {
     if (errorCode(error2) === FILE_EXISTS_CODE)
@@ -2145,8 +2145,8 @@ async function replacePrivateFile(root, path3, contents, beforeCommit) {
   if (!original.isFile() || original.isSymbolicLink() || !hasPrivateFileMode(original.mode)) {
     throw new Error("Capture record must be a private regular file");
   }
-  const directory2 = dirname6(path3);
-  const stagingPath = join5(directory2, `.${randomUUID5()}.tmp`);
+  const directory = dirname6(path3);
+  const stagingPath = join5(directory, `.${randomUUID5()}.tmp`);
   let handle;
   let stagingCreated = false;
   let operationFailed = false;
@@ -2165,7 +2165,7 @@ async function replacePrivateFile(root, path3, contents, beforeCommit) {
     }
     await beforeCommit?.();
     await rename4(stagingPath, path3);
-    await syncDirectory(directory2);
+    await syncDirectory(directory);
   } catch (error2) {
     operationFailed = true;
     operationError = error2;
@@ -2231,10 +2231,10 @@ async function hasRealParentDirectories(root, path3) {
     current = join5(current, segment);
     directories.push(current);
   }
-  for (const directory2 of directories) {
+  for (const directory of directories) {
     let info;
     try {
-      info = await lstat3(directory2);
+      info = await lstat3(directory);
     } catch (error2) {
       if (errorCode(error2) === FILE_MISSING_CODE)
         return false;
@@ -2259,9 +2259,9 @@ async function syncDirectory(path3) {
 // node_modules/.pnpm/@langchain+plugins-base@htt_afc8bad01ebcf25b4c6a457d1a3b59fa/node_modules/@langchain/plugins-base/dist/utils/files/private-directory.js
 import { lstat as lstat4, readdir as readdir2 } from "node:fs/promises";
 import { isAbsolute as isAbsolute2, join as join6, relative as relative2, resolve as resolve4, sep as sep2 } from "node:path";
-async function listPrivateDirectory(root, directory2) {
+async function listPrivateDirectory(root, directory) {
   const storageRoot = resolve4(root);
-  const target = resolve4(directory2);
+  const target = resolve4(directory);
   const relativePath = relative2(storageRoot, target);
   if (relativePath === ".." || relativePath.startsWith(`..${sep2}`) || isAbsolute2(relativePath)) {
     throw new Error("Private directory is outside storage root");
@@ -2426,8 +2426,8 @@ async function readMarkerOutcome(root, scope, destination) {
 }
 async function readDroppedRunIds(root, scope) {
   const runIds = /* @__PURE__ */ new Set();
-  const directory2 = join7(captureRoot(root), ...eventSegments(root, scope));
-  for (const path3 of await markersIn(root, directory2)) {
+  const directory = join7(captureRoot(root), ...eventSegments(root, scope));
+  for (const path3 of await markersIn(root, directory)) {
     const marker = await readMarker(root, path3);
     for (const { runId, outcomes } of Object.values(marker?.entries ?? {})) {
       if (Object.values(outcomes).every(({ outcome }) => outcome === "dropped"))
@@ -2441,8 +2441,8 @@ async function forgetTurnMarkers(root, scope) {
   for (const path3 of paths)
     await removeFileIfPresent(path3);
 }
-async function markersIn(root, directory2) {
-  return (await listPrivateDirectory(captureRoot(root), directory2) ?? []).filter((entry) => entry.isFile() && CAPTURE_MARKER_FILE.test(entry.name)).map((entry) => join7(directory2, entry.name));
+async function markersIn(root, directory) {
+  return (await listPrivateDirectory(captureRoot(root), directory) ?? []).filter((entry) => entry.isFile() && CAPTURE_MARKER_FILE.test(entry.name)).map((entry) => join7(directory, entry.name));
 }
 async function removeStaleMarkers(root, integration, modifiedBeforeMs) {
   const sessions = sessionsDirectory(root, integration);
@@ -2452,16 +2452,16 @@ async function removeStaleMarkers(root, integration, modifiedBeforeMs) {
       continue;
     const turns = turnsDirectory(root, integration, session.name);
     const directories = captureDirectory(root) === CAPTURE_JOBS_DIRECTORY ? [turns] : (await listPrivateDirectory(captureRoot(root), turns) ?? []).filter((turn) => turn.isDirectory() && CAPTURE_HASH.test(turn.name)).map((turn) => eventsDirectory(turns, turn.name));
-    for (const directory2 of directories) {
-      removed += await removeOldMarkers(root, directory2, modifiedBeforeMs);
-      await removeEmptyAncestors(directory2, captureRoot(root));
+    for (const directory of directories) {
+      removed += await removeOldMarkers(root, directory, modifiedBeforeMs);
+      await removeEmptyAncestors(directory, captureRoot(root));
     }
   }
   return removed;
 }
-async function removeOldMarkers(root, directory2, modifiedBeforeMs) {
+async function removeOldMarkers(root, directory, modifiedBeforeMs) {
   let removed = 0;
-  for (const path3 of await markersIn(root, directory2)) {
+  for (const path3 of await markersIn(root, directory)) {
     const info = await lstat5(path3).catch((error2) => {
       if (errorCode(error2) === FILE_MISSING_CODE)
         return void 0;
@@ -2476,8 +2476,8 @@ async function removeOldMarkers(root, directory2, modifiedBeforeMs) {
 }
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_afc8bad01ebcf25b4c6a457d1a3b59fa/node_modules/@langchain/plugins-base/dist/storage/capture/capture-store.js
-function createCaptureStore(root, directory2 = CAPTURE_TURNS_DIRECTORY) {
-  const storageRoot = { root: resolve5(root), directory: directory2 };
+function createCaptureStore(root, directory = CAPTURE_TURNS_DIRECTORY) {
+  const storageRoot = { root: resolve5(root), directory };
   captureDirectory(storageRoot);
   return {
     capture: (input) => captureEvent(storageRoot, input),
@@ -2579,10 +2579,10 @@ async function readCapture(root, scope) {
 async function enumerateIntegrationSessions(root, integration) {
   validateIntegration(integration);
   const sessions = [];
-  for (const directory2 of await listPrivateDirectory(captureRoot(root), sessionsDirectory(root, integration)) ?? []) {
-    if (!directory2.isDirectory() || !CAPTURE_HASH.test(directory2.name))
+  for (const directory of await listPrivateDirectory(captureRoot(root), sessionsDirectory(root, integration)) ?? []) {
+    if (!directory.isDirectory() || !CAPTURE_HASH.test(directory.name))
       continue;
-    const captures = await enumerateTurns(root, integration, directory2.name, () => true);
+    const captures = await enumerateTurns(root, integration, directory.name, () => true);
     if (captures.length > 0)
       sessions.push({ sessionId: captures[0].record.sessionId, captures });
   }
@@ -2699,12 +2699,12 @@ async function enumerateTurns(root, integration, sessionHash, wanted) {
   }
   return captures.toSorted(compareCaptures);
 }
-async function enumerateEvents(root, directory2, integration, sessionHash, wanted) {
+async function enumerateEvents(root, directory, integration, sessionHash, wanted) {
   const captures = [];
-  for (const event of await listPrivateDirectory(captureRoot(root), directory2) ?? []) {
+  for (const event of await listPrivateDirectory(captureRoot(root), directory) ?? []) {
     if (!event.isFile() || !CAPTURE_EVENT_FILE.test(event.name))
       continue;
-    const path3 = join8(directory2, event.name);
+    const path3 = join8(directory, event.name);
     const record = await readEvent(root, path3);
     if (record === void 0 || identifierHash(record.sessionId) !== sessionHash || eventPath(root, record) !== path3) {
       if (record !== void 0)
@@ -3070,29 +3070,29 @@ function assertPlainFile(entry, message) {
   if (!entry.isFile() || entry.isSymbolicLink())
     throw new Error(message);
 }
-async function readActiveMarker(storageRoot, directory2, entry, markerId, scan) {
+async function readActiveMarker(storageRoot, directory, entry, markerId, scan) {
   assertPlainFile(entry, BACKGROUND_WORKER_UNSAFE_ACTIVE_MARKER_MESSAGE);
   if (markerId === void 0 || !BACKGROUND_WORKER_MARKER_ID_PATTERN.test(markerId))
     throw new Error(BACKGROUND_WORKER_INVALID_ACTIVE_PATH_MESSAGE);
   if (scan.active)
     throw new Error(BACKGROUND_WORKER_MULTIPLE_ACTIVE_MARKERS_MESSAGE);
-  scan.active = parseMarker2(await readRequired(storageRoot, join10(directory2, entry.name)));
+  scan.active = parseMarker2(await readRequired(storageRoot, join10(directory, entry.name)));
   if (scan.active.id !== markerId)
     throw new Error(BACKGROUND_WORKER_ACTIVE_MARKER_PATH_MISMATCH_MESSAGE);
 }
-async function readAttemptFile(storageRoot, directory2, entry, match, scan) {
+async function readAttemptFile(storageRoot, directory, entry, match, scan) {
   assertPlainFile(entry, BACKGROUND_WORKER_UNSAFE_RETRY_ATTEMPT_MESSAGE);
   const markerId = match[1];
   const attemptNumber = Number(match[2]);
   if (markerId === void 0 || !BACKGROUND_WORKER_MARKER_ID_PATTERN.test(markerId) || !Number.isSafeInteger(attemptNumber)) {
     throw new Error(BACKGROUND_WORKER_INVALID_ATTEMPT_PATH_MESSAGE);
   }
-  const attempt = parseAttempt(await readRequired(storageRoot, join10(directory2, entry.name)), markerId, attemptNumber);
+  const attempt = parseAttempt(await readRequired(storageRoot, join10(directory, entry.name)), markerId, attemptNumber);
   const markerAttempts = scan.attemptsByMarker.get(markerId) ?? [];
   markerAttempts.push(attempt);
   scan.attemptsByMarker.set(markerId, markerAttempts);
 }
-async function scanStateEntry(storageRoot, directory2, entry, scan, scope) {
+async function scanStateEntry(storageRoot, directory, entry, scan, scope) {
   if (BACKGROUND_WORKER_SHARED_DIRECTORY.test(entry.name)) {
     if (!entry.isDirectory() || entry.isSymbolicLink())
       throw new Error(BACKGROUND_WORKER_UNSAFE_LOCK_DIRECTORY_MESSAGE);
@@ -3105,15 +3105,15 @@ async function scanStateEntry(storageRoot, directory2, entry, scan, scope) {
   }
   if (name === BACKGROUND_WORKER_PENDING_FILE) {
     assertPlainFile(entry, BACKGROUND_WORKER_UNSAFE_PENDING_MARKER_MESSAGE);
-    scan.pending = parseMarker2(await readRequired(storageRoot, join10(directory2, entry.name)));
+    scan.pending = parseMarker2(await readRequired(storageRoot, join10(directory, entry.name)));
     return;
   }
   const activeMatch = BACKGROUND_WORKER_ACTIVE_MARKER_NAME.exec(name ?? "");
   if (activeMatch)
-    return readActiveMarker(storageRoot, directory2, entry, activeMatch[1], scan);
+    return readActiveMarker(storageRoot, directory, entry, activeMatch[1], scan);
   const attemptMatch = BACKGROUND_WORKER_ATTEMPT_NAME.exec(name ?? "");
   if (attemptMatch)
-    return readAttemptFile(storageRoot, directory2, entry, attemptMatch, scan);
+    return readAttemptFile(storageRoot, directory, entry, attemptMatch, scan);
   if (BACKGROUND_WORKER_STAGING_FILE.test(entry.name)) {
     assertPlainFile(entry, BACKGROUND_WORKER_UNSAFE_STAGING_FILE_MESSAGE);
     return;
@@ -3139,13 +3139,13 @@ function stateFromScan({ pending, active: active2, attemptsByMarker }) {
     orphanedAttempts
   };
 }
-async function readWorkerState(storageRoot, directory2, scope) {
-  const entries = await listPrivateDirectory(storageRoot, directory2);
+async function readWorkerState(storageRoot, directory, scope) {
+  const entries = await listPrivateDirectory(storageRoot, directory);
   if (!entries)
     return { attempts: [], orphanedAttempts: [] };
   const scan = { attemptsByMarker: /* @__PURE__ */ new Map() };
   for (const entry of entries)
-    await scanStateEntry(storageRoot, directory2, entry, scan, scope);
+    await scanStateEntry(storageRoot, directory, entry, scan, scope);
   return stateFromScan(scan);
 }
 async function readRequired(storageRoot, path3) {
@@ -3239,7 +3239,7 @@ async function launchWorker(context) {
   return "launched";
 }
 async function runPasses(context) {
-  const { storageRoot, directory: directory2, lockPath, retryPolicy, scope } = context;
+  const { storageRoot, directory, lockPath, retryPolicy, scope } = context;
   await ensurePrivateDirectory(storageRoot, context.directorySegments);
   const totals = {
     processed: false,
@@ -3254,7 +3254,7 @@ async function runPasses(context) {
       return result;
     if (totals.failures >= retryPolicy.maxAttempts)
       return "retry-exhausted";
-    if (!await hasPendingWork(storageRoot, directory2, scope))
+    if (!await hasPendingWork(storageRoot, directory, scope))
       return result;
   }
 }
@@ -3266,7 +3266,7 @@ async function passInScope(context) {
   return processLocked(storageRoot, context.directory, scope, config, context.retryPolicy);
 }
 async function runOwnedPasses(context, totals) {
-  const { config, storageRoot, scope, directory: directory2, retryPolicy } = context;
+  const { config, storageRoot, scope, directory, retryPolicy } = context;
   for (; ; ) {
     if (!await matchesScope(config.resolveScope, scope))
       return "scope-mismatch";
@@ -3283,7 +3283,7 @@ async function runOwnedPasses(context, totals) {
       return "retry-exhausted";
     if (pass.retryPending && retryPolicy.retryDelayMs > 0)
       await delay2(retryPolicy.retryDelayMs);
-    if (!await hasPendingWork(storageRoot, directory2, scope))
+    if (!await hasPendingWork(storageRoot, directory, scope))
       return totals.retryExhausted ? "retry-exhausted" : totals.processed ? "completed" : "idle";
   }
 }
@@ -3345,8 +3345,8 @@ async function recordAttempt(storageRoot, scope, marker, attemptNumber) {
   }
   return attempt;
 }
-async function processLocked(storageRoot, directory2, scope, options, retryPolicy) {
-  const state = await readWorkerState(storageRoot, directory2, scope);
+async function processLocked(storageRoot, directory, scope, options, retryPolicy) {
+  const state = await readWorkerState(storageRoot, directory, scope);
   for (const attempt of state.orphanedAttempts) {
     await removeFileIfPresent(workerAttemptPath(storageRoot, scope, attempt.markerId, attempt.attempt));
   }
@@ -3408,8 +3408,8 @@ async function runTasks(options, scope) {
   deferred ||= result === "deferred";
   return deferred ? "deferred" : progressed ? "progressed" : "idle";
 }
-async function hasPendingWork(storageRoot, directory2, scope) {
-  const entries = await listPrivateDirectory(storageRoot, directory2);
+async function hasPendingWork(storageRoot, directory, scope) {
+  const entries = await listPrivateDirectory(storageRoot, directory);
   return entries?.some((entry) => {
     const name = scopedWorkerFileName(scope, entry.name);
     return name === BACKGROUND_WORKER_PENDING_FILE || BACKGROUND_WORKER_ACTIVE_MARKER_NAME.test(name ?? "");
@@ -3459,10 +3459,10 @@ async function removeStaleStorageFiles(root, folders, modifiedBeforeMs) {
     removed += await removeStaleChildren(join11(root, folder), modifiedBeforeMs);
   return removed;
 }
-async function removeStaleChildren(directory2, modifiedBeforeMs) {
+async function removeStaleChildren(directory, modifiedBeforeMs) {
   let removed = 0;
-  for (const name of await readdir3(directory2).catch(ifMissing([]))) {
-    const path3 = join11(directory2, name);
+  for (const name of await readdir3(directory).catch(ifMissing([]))) {
+    const path3 = join11(directory, name);
     const info = await lstat7(path3).catch(ifMissing(void 0));
     if (info === void 0)
       continue;
@@ -13541,7 +13541,7 @@ var Client = class _Client {
    *   [Content-Encoding: <value from saved headers>]
    *   <decoded body>
    */
-  static async _writeTraceToFallbackDir(directory2, body, replayHeaders, endpoint, maxBytes) {
+  static async _writeTraceToFallbackDir(directory, body, replayHeaders, endpoint, maxBytes) {
     try {
       const bodyBuffer = typeof body === "string" ? Buffer.from(body, "utf8") : Buffer.from(body);
       const envelope = JSON.stringify({
@@ -13551,22 +13551,22 @@ var Client = class _Client {
         body_base64: bodyBuffer.toString("base64")
       });
       const filename = `trace_${Date.now()}_${v4_default().slice(0, 8)}.json`;
-      const filepath = path2.join(directory2, filename);
-      if (!_Client._fallbackDirsCreated.has(directory2)) {
-        await mkdir5(directory2);
-        _Client._fallbackDirsCreated.add(directory2);
+      const filepath = path2.join(directory, filename);
+      if (!_Client._fallbackDirsCreated.has(directory)) {
+        await mkdir5(directory);
+        _Client._fallbackDirsCreated.add(directory);
       }
       if (maxBytes !== void 0 && maxBytes > 0) {
         try {
-          const entries = await readdir5(directory2);
+          const entries = await readdir5(directory);
           const traceFiles = entries.filter((f2) => f2.startsWith("trace_") && f2.endsWith(".json"));
           let total = 0;
           for (const name of traceFiles) {
-            const { size } = await stat2(path2.join(directory2, name));
+            const { size } = await stat2(path2.join(directory, name));
             total += size;
           }
           if (total >= maxBytes) {
-            console.warn(`Could not write trace to fallback dir ${directory2} as it's already over size limit (${total} bytes >= ${maxBytes} bytes). Increase LANGSMITH_FAILED_TRACES_MAX_MB if possible.`);
+            console.warn(`Could not write trace to fallback dir ${directory} as it's already over size limit (${total} bytes >= ${maxBytes} bytes). Increase LANGSMITH_FAILED_TRACES_MAX_MB if possible.`);
             return;
           }
         } catch {
@@ -13575,7 +13575,7 @@ var Client = class _Client {
       await writeFileAtomic(filepath, envelope);
       console.warn(`LangSmith trace upload failed; data saved to ${filepath} for later replay.`);
     } catch (writeErr) {
-      console.error(`LangSmith tracing error: could not write trace to fallback dir ${directory2}:`, writeErr);
+      console.error(`LangSmith tracing error: could not write trace to fallback dir ${directory}:`, writeErr);
     }
   }
   async _processBatch(batch, options) {
@@ -19144,16 +19144,16 @@ function snapshotReplicaUpdates(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError("Replica updates must be an object");
   }
-  let snapshot2;
+  let snapshot;
   try {
-    snapshot2 = JSON.parse(JSON.stringify(value));
+    snapshot = JSON.parse(JSON.stringify(value));
   } catch {
     throw new TypeError("Replica updates must be JSON serializable");
   }
-  if (snapshot2 === null || typeof snapshot2 !== "object" || Array.isArray(snapshot2)) {
+  if (snapshot === null || typeof snapshot !== "object" || Array.isArray(snapshot)) {
     throw new TypeError("Replica updates must be an object");
   }
-  const updates = snapshot2;
+  const updates = snapshot;
   for (const field4 of Object.keys(updates)) {
     if (UPLOAD_REPLICA_IDENTITY_UPDATE_FIELDS.has(field4)) {
       throw new TypeError("Replica updates cannot override run identity");
@@ -19856,16 +19856,16 @@ function preparePatchRunPayload(submission, destination) {
   if (submission.patch.fields.includes("events")) {
     run.events = submission.patch.values.events;
   }
-  const snapshot2 = JSON.parse(JSON.stringify(run.toJSON()));
+  const snapshot = JSON.parse(JSON.stringify(run.toJSON()));
   const update = {
-    extra: snapshot2["extra"],
+    extra: snapshot["extra"],
     session_name: destination.projectName,
-    trace_id: snapshot2["trace_id"],
-    dotted_order: snapshot2["dotted_order"],
-    ...snapshot2["parent_run_id"] === void 0 ? {} : { parent_run_id: snapshot2["parent_run_id"] }
+    trace_id: snapshot["trace_id"],
+    dotted_order: snapshot["dotted_order"],
+    ...snapshot["parent_run_id"] === void 0 ? {} : { parent_run_id: snapshot["parent_run_id"] }
   };
   for (const field4 of submission.patch.fields) {
-    const value = snapshot2[field4];
+    const value = snapshot[field4];
     if (value === void 0)
       continue;
     if (field4 === "inputs")
@@ -21122,11 +21122,11 @@ async function refreshSettlementProgress(work, destinations, readOutcome) {
       continue;
     }
     const readiness = await captureReadiness(patches.map(({ scope }) => scope), destinations, readOutcome);
-    const { reason: previousReason, destinations: previousDestinations, ...unchanged2 } = entry;
+    const { reason: previousReason, destinations: previousDestinations, ...unchanged } = entry;
     const reason = readiness.status === "delivered" ? previousReason === "settlement-pending" ? void 0 : previousReason : readiness.status === "dropped" ? "settlement-dropped" : "settlement-pending";
     const reportDestinations = readiness.destinations.length > 0 ? readiness.destinations : previousReason === "settlement-pending" ? void 0 : previousDestinations;
     turns.push({
-      ...unchanged2,
+      ...unchanged,
       status: readiness.status === "pending" ? "pending" : "settled",
       ...reason === void 0 ? {} : { reason },
       ...reportDestinations === void 0 ? {} : { destinations: reportDestinations }
@@ -21374,8 +21374,8 @@ function busyDrainResult() {
   return { status: "busy", settlement: { captured: 0, turns: [] } };
 }
 async function acquireSettlementLock(context) {
-  const directory2 = await ensurePrivateDirectory(context.storageRoot, sessionSegments(identifierHash(context.sessionId)));
-  const path3 = join15(directory2, `${LIFECYCLE_SETTLEMENT_LOCK_PREFIX}${identifierHash(context.writer.accountFingerprint)}`);
+  const directory = await ensurePrivateDirectory(context.storageRoot, sessionSegments(identifierHash(context.sessionId)));
+  const path3 = join15(directory, `${LIFECYCLE_SETTLEMENT_LOCK_PREFIX}${identifierHash(context.writer.accountFingerprint)}`);
   return { path: path3, lock: await tryAcquireFileLock(path3) };
 }
 async function sweepWithWarning(fallback, sweep) {
@@ -21792,10 +21792,10 @@ function sourceAgeFor(job, sourceRef, jobCapturedAtMs) {
   if (job.sourceSnapshots !== void 0) {
     if (sourceRef === void 0)
       throw new TypeError(RECONSTRUCTION_SNAPSHOT_OUTPUTS_REQUIRE_SOURCE_REF_MESSAGE);
-    const snapshot2 = job.sourceSnapshots.find((candidate) => candidate.sourceRef === sourceRef);
-    if (snapshot2 === void 0)
+    const snapshot = job.sourceSnapshots.find((candidate) => candidate.sourceRef === sourceRef);
+    if (snapshot === void 0)
       throw new TypeError(RECONSTRUCTION_OUTPUT_SOURCE_REF_HAS_NO_SNAPSHOT_MESSAGE);
-    return snapshot2.sourceAgeStartedAtMs;
+    return snapshot.sourceAgeStartedAtMs;
   }
   if (sourceRef !== void 0 && !job.sourceRefs.includes(sourceRef))
     throw new TypeError(RECONSTRUCTION_OUTPUT_REF_UNKNOWN_MESSAGE);
@@ -22008,15 +22008,15 @@ function snapshotJob(job) {
     ...job,
     sourceRefs: Object.freeze([...job.sourceRefs]),
     ...job.sourceSnapshots === void 0 ? {} : {
-      sourceSnapshots: Object.freeze(job.sourceSnapshots.map((snapshot2) => Object.freeze({
-        ...snapshot2,
-        submission: snapshotData(snapshot2.submission),
-        ...snapshot2.attributionContext === void 0 ? {} : {
+      sourceSnapshots: Object.freeze(job.sourceSnapshots.map((snapshot) => Object.freeze({
+        ...snapshot,
+        submission: snapshotData(snapshot.submission),
+        ...snapshot.attributionContext === void 0 ? {} : {
           attributionContext: Object.freeze({
-            toolOrigin: Object.freeze({ ...snapshot2.attributionContext.toolOrigin }),
-            ...snapshot2.attributionContext.pinnedRepositoryKeys === void 0 ? {} : {
+            toolOrigin: Object.freeze({ ...snapshot.attributionContext.toolOrigin }),
+            ...snapshot.attributionContext.pinnedRepositoryKeys === void 0 ? {} : {
               pinnedRepositoryKeys: Object.freeze([
-                ...snapshot2.attributionContext.pinnedRepositoryKeys
+                ...snapshot.attributionContext.pinnedRepositoryKeys
               ])
             }
           })
@@ -22051,11 +22051,11 @@ function jobRecord(job) {
       sourceRefs: [...job.sourceRefs],
       ...job.sourceAgeStartedAtMs === void 0 ? {} : { sourceAgeStartedAtMs: job.sourceAgeStartedAtMs },
       ...job.sourceSnapshots === void 0 ? {} : {
-        sourceSnapshots: job.sourceSnapshots.map((snapshot2) => ({
-          sourceRef: snapshot2.sourceRef,
-          submission: snapshot2.submission,
-          sourceAgeStartedAtMs: snapshot2.sourceAgeStartedAtMs,
-          ...snapshot2.attributionContext === void 0 ? {} : { attributionContext: snapshot2.attributionContext }
+        sourceSnapshots: job.sourceSnapshots.map((snapshot) => ({
+          sourceRef: snapshot.sourceRef,
+          submission: snapshot.submission,
+          sourceAgeStartedAtMs: snapshot.sourceAgeStartedAtMs,
+          ...snapshot.attributionContext === void 0 ? {} : { attributionContext: snapshot.attributionContext }
         }))
       }
     }, /* @__PURE__ */ new Set()),
@@ -23663,6 +23663,9 @@ var ASYNC_HOOK_ATTACHMENT = "async_hook_response";
 var PLUGIN_CONTEXT_SUFFIX = /-context$/;
 var HELD_TOOL_RUNS_DIR = "langsmith_held_tool_runs";
 var UNSAFE_FILE_NAME_CHARS = /[^A-Za-z0-9_-]/g;
+var PRIVATE_FILE_MODE = 384;
+var PRIVATE_FOLDER_MODE = 448;
+var TEMP_FILE_SUFFIX = ".tmp";
 var SESSION_START_HOOK = "SessionStart";
 var RUN_CONTEXT_FIELDS = [
   "id",
@@ -24224,26 +24227,26 @@ function createGitHubLoginFallback(options) {
 // node_modules/.pnpm/@langchain+plugins-base@htt_afc8bad01ebcf25b4c6a457d1a3b59fa/node_modules/@langchain/plugins-base/dist/git/paths.js
 import { readFileSync as readFileSync12, statSync as statSync7 } from "node:fs";
 import { dirname as dirname15, join as join22, resolve as resolve13 } from "node:path";
-function gitMarkerAt(directory2) {
-  const marker = join22(directory2, GIT_DIRECTORY_NAME);
+function gitMarkerAt(directory) {
+  const marker = join22(directory, GIT_DIRECTORY_NAME);
   try {
     if (statSync7(marker).isDirectory())
       return GIT_MARKERS.REPOSITORY_ROOT;
   } catch {
     return GIT_MARKERS.NOTHING_HERE;
   }
-  return pointsAtGitDirectory(directory2, marker) ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
+  return pointsAtGitDirectory(directory, marker) ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
 }
-function pointsAtGitDirectory(directory2, marker) {
+function pointsAtGitDirectory(directory, marker) {
   try {
     const pointer = readFileSync12(marker, "utf-8").match(GIT_FILE_POINTER)?.[1];
-    return pointer !== void 0 && statSync7(resolve13(directory2, pointer)).isDirectory();
+    return pointer !== void 0 && statSync7(resolve13(directory, pointer)).isDirectory();
   } catch {
     return false;
   }
 }
-function rootFromGitMarker(directory2) {
-  let current = resolve13(directory2);
+function rootFromGitMarker(directory) {
+  let current = resolve13(directory);
   for (; ; ) {
     const marker = gitMarkerAt(current);
     if (marker === GIT_MARKERS.REPOSITORY_ROOT)
@@ -24265,15 +24268,15 @@ function createRepositoryAttributor(options) {
   const identifierByRoot = /* @__PURE__ */ new Map();
   const githubLogin = createGitHubLoginFallback({ markerPath: options.githubLoginMarkerPath });
   function rootForPath(path3) {
-    const directory2 = nearestExistingDirectory(path3);
-    if (!directory2)
+    const directory = nearestExistingDirectory(path3);
+    if (!directory)
       return void 0;
-    if (rootByDirectory.has(directory2))
-      return rootByDirectory.get(directory2);
-    const walked = rootFromGitMarker(directory2);
+    if (rootByDirectory.has(directory))
+      return rootByDirectory.get(directory);
+    const walked = rootFromGitMarker(directory);
     const onlyGitCanSay = walked === void 0;
-    const root = onlyGitCanSay ? getRepoRoot(directory2) : walked;
-    rootByDirectory.set(directory2, root);
+    const root = onlyGitCanSay ? getRepoRoot(directory) : walked;
+    rootByDirectory.set(directory, root);
     return root;
   }
   function isSessionsOwnRepository(sessionCwd, root) {
@@ -24687,85 +24690,12 @@ async function settleToolRuns(job) {
 }
 
 // dist/src/state.js
-import { dirname as dirname19, join as join27 } from "node:path";
-
-// dist/src/proxy/files.js
-import { constants as constants3, closeSync as closeSync5, fstatSync as fstatSync3, fsyncSync, lstatSync as lstatSync4, linkSync, mkdirSync as mkdirSync8, openSync as openSync5, readFileSync as readFileSync14, renameSync as renameSync7, unlinkSync as unlinkSync3, writeFileSync as writeFileSync5 } from "node:fs";
-import { dirname as dirname18, join as join26 } from "node:path";
-import { randomBytes } from "node:crypto";
-function directory(path3, create = false, privateMode = false) {
-  if (create) {
-    try {
-      mkdirSync8(path3, { mode: 448 });
-    } catch (e) {
-      if (e.code !== "EEXIST")
-        throw e;
-    }
-  }
-  const s = lstatSync4(path3);
-  if (!s.isDirectory() || s.uid !== process.getuid?.() || s.mode & (privateMode ? 63 : 18))
-    throw new Error("Unsafe settings directory");
-}
-function snapshot(path3, privateMode = false) {
-  let fd;
-  try {
-    fd = openSync5(path3, constants3.O_RDONLY | constants3.O_NOFOLLOW | constants3.O_NONBLOCK);
-  } catch (e) {
-    if (e.code === "ENOENT")
-      return;
-    throw e;
-  }
-  try {
-    const s = fstatSync3(fd);
-    if (!s.isFile() || s.nlink !== 1 || s.uid !== process.getuid?.() || s.mode & (privateMode ? 63 : 18) || s.size > 1024 * 1024)
-      throw new Error("Unsafe settings file");
-    return {
-      text: readFileSync14(fd, "utf8"),
-      ino: s.ino,
-      dev: s.dev,
-      mtime: s.mtimeMs,
-      mode: s.mode
-    };
-  } finally {
-    closeSync5(fd);
-  }
-}
-function unchanged(path3, prior, privateMode = false) {
-  if (JSON.stringify(snapshot(path3, privateMode)) !== JSON.stringify(prior))
-    throw new Error("Settings changed concurrently; retry");
-}
-function atomic(path3, text, prior) {
-  const temp = join26(dirname18(path3), `.gateway-${randomBytes(16).toString("hex")}.tmp`);
-  const fd = openSync5(temp, constants3.O_WRONLY | constants3.O_CREAT | constants3.O_EXCL | constants3.O_NOFOLLOW, 384);
-  try {
-    try {
-      writeFileSync5(fd, text);
-      fsyncSync(fd);
-    } finally {
-      closeSync5(fd);
-    }
-    unchanged(path3, prior);
-    if (prior === void 0) {
-      linkSync(temp, path3);
-      unlinkSync3(temp);
-    } else
-      renameSync7(temp, path3);
-    const dir = openSync5(dirname18(path3), constants3.O_RDONLY);
-    try {
-      fsyncSync(dir);
-    } finally {
-      closeSync5(dir);
-    }
-  } finally {
-    try {
-      unlinkSync3(temp);
-    } catch {
-    }
-  }
-}
+import { dirname as dirname19, join as join26 } from "node:path";
 
 // dist/src/utils/files.js
-import { lstatSync as lstatSync5, readdirSync as readdirSync2, readFileSync as readFileSync15, rmdirSync as rmdirSync2, unlinkSync as unlinkSync4 } from "node:fs";
+import { lstatSync as lstatSync4, mkdirSync as mkdirSync8, readdirSync as readdirSync2, readFileSync as readFileSync14, renameSync as renameSync7, rmdirSync as rmdirSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync5 } from "node:fs";
+import { randomUUID as randomUUID7 } from "node:crypto";
+import { dirname as dirname18 } from "node:path";
 function listDirectory(path3) {
   try {
     return readdirSync2(path3).sort();
@@ -24775,7 +24705,7 @@ function listDirectory(path3) {
 }
 function entryInfo(path3) {
   try {
-    return lstatSync5(path3);
+    return lstatSync4(path3);
   } catch {
     return void 0;
   }
@@ -24784,7 +24714,7 @@ function removeFile2(path3) {
   if (!entryInfo(path3)?.isFile())
     return false;
   try {
-    unlinkSync4(path3);
+    unlinkSync3(path3);
     return true;
   } catch {
     return false;
@@ -24799,7 +24729,7 @@ function removeEmptyFolder(path3) {
 }
 function readText(path3) {
   try {
-    return readFileSync15(path3, "utf-8");
+    return readFileSync14(path3, "utf-8");
   } catch {
     return "";
   }
@@ -24810,6 +24740,12 @@ function readJson(text) {
   } catch {
     return void 0;
   }
+}
+function publishFile(path3, text) {
+  mkdirSync8(dirname18(path3), { recursive: true, mode: PRIVATE_FOLDER_MODE });
+  const temp = `${path3}.${randomUUID7()}${TEMP_FILE_SUFFIX}`;
+  writeFileSync5(temp, text, { flag: "wx", mode: PRIVATE_FILE_MODE });
+  renameSync7(temp, path3);
 }
 
 // dist/src/state.js
@@ -24885,34 +24821,30 @@ function updateSessionState(state, sessionId, position, turnCount, taskRunMap, c
     }
   };
 }
-var heldRunsFolder = (stateFilePath) => join27(dirname19(stateFilePath), HELD_TOOL_RUNS_DIR);
-var heldRunPath = (stateFilePath, sessionId, toolUseId) => join27(heldRunsFolder(stateFilePath), `${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`);
-function saveHeldRun(stateFilePath, sessionId, toolUseId, held) {
-  directory(heldRunsFolder(stateFilePath), true, true);
-  atomic(heldRunPath(stateFilePath, sessionId, toolUseId), JSON.stringify(held), void 0);
-}
-function takeHeldRun(stateFilePath, sessionId, toolUseId) {
-  const path3 = heldRunPath(stateFilePath, sessionId, toolUseId);
-  const held = readJson(readText(path3));
-  removeFile2(path3);
+var heldRunsFolder = (stateFilePath) => join26(dirname19(stateFilePath), HELD_TOOL_RUNS_DIR);
+var heldRunPath = (...[stateFilePath, sessionId, toolUseId]) => join26(heldRunsFolder(stateFilePath), `${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`);
+var saveHeldRun = (held, ...key) => publishFile(heldRunPath(...key), JSON.stringify(held));
+function takeHeldRun(...key) {
+  const held = readJson(readText(heldRunPath(...key)));
+  removeFile2(heldRunPath(...key));
   return held;
 }
 function pruneHeldRuns(stateFilePath, now = Date.now()) {
   const folder = heldRunsFolder(stateFilePath);
   for (const name of listDirectory(folder)) {
-    const modified = entryInfo(join27(folder, name))?.mtimeMs ?? now;
+    const modified = entryInfo(join26(folder, name))?.mtimeMs ?? now;
     if (now - modified > SESSION_MAX_AGE_MS)
-      removeFile2(join27(folder, name));
+      removeFile2(join26(folder, name));
   }
 }
-function dropHeldRuns(stateFilePath, sessionId, session) {
+function dropHeld(stateFilePath, sessionId, session) {
   for (const id of Object.keys(session.held_tool_runs ?? {}))
     takeHeldRun(stateFilePath, sessionId, id);
   return { held_tool_runs: void 0 };
 }
 
 // dist/src/hooks/stop.js
-import { randomUUID as randomUUID8 } from "node:crypto";
+import { randomUUID as randomUUID9 } from "node:crypto";
 
 // dist/src/tracing-policy.js
 import { mkdir as mkdir6 } from "node:fs/promises";
@@ -24971,7 +24903,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync16, statSync as statSync8, fstatSync as fstatSync4, openSync as openSync6, readSync, closeSync as closeSync6 } from "node:fs";
+import { readFileSync as readFileSync15, statSync as statSync8, fstatSync as fstatSync3, openSync as openSync5, readSync, closeSync as closeSync5 } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
 // dist/src/utils/ids/prompt-hash.js
@@ -25059,7 +24991,7 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
     return { messages: [], lastLine: afterLine, laterPrompt, anchor };
   }
   if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync16(filePath, "utf-8");
+    const raw = readFileSync15(filePath, "utf-8");
     const messages = [];
     let lastLine = afterLine;
     let i = -1;
@@ -25078,7 +25010,7 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
     }
     return finish({ messages, lastLine, laterPrompt });
   }
-  const fd = openSync6(filePath, "r");
+  const fd = openSync5(filePath, "r");
   try {
     const chunkSize = 2 * 1024 * 1024;
     const buf = Buffer.alloc(chunkSize);
@@ -25122,7 +25054,7 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
     }
     return finish({ messages, lastLine, laterPrompt });
   } finally {
-    closeSync6(fd);
+    closeSync5(fd);
   }
 }
 function getTranscriptEndLine(filePath) {
@@ -25131,11 +25063,11 @@ function getTranscriptEndLine(filePath) {
     if (size === 0)
       return -1;
     if (size <= MAX_FULL_READ_BYTES) {
-      const raw = readFileSync16(filePath, "utf-8");
+      const raw = readFileSync15(filePath, "utf-8");
       const lines = raw.split("\n").filter((l) => l.trim() !== "");
       return lines.length > 0 ? lines.length - 1 : -1;
     }
-    const fd = openSync6(filePath, "r");
+    const fd = openSync5(filePath, "r");
     try {
       const chunkSize = 1024 * 1024;
       const buf = Buffer.alloc(chunkSize);
@@ -25158,7 +25090,7 @@ function getTranscriptEndLine(filePath) {
         lineCount++;
       return lineCount > 0 ? lineCount - 1 : -1;
     } finally {
-      closeSync6(fd);
+      closeSync5(fd);
     }
   } catch {
     return -1;
@@ -25167,8 +25099,8 @@ function getTranscriptEndLine(filePath) {
 function readRuntimeVersion(filePath) {
   let fd;
   try {
-    fd = openSync6(filePath, "r");
-    const size = fstatSync4(fd).size;
+    fd = openSync5(filePath, "r");
+    const size = fstatSync3(fd).size;
     if (size === 0)
       return void 0;
     const window2 = 64 * 1024;
@@ -25190,7 +25122,7 @@ function readRuntimeVersion(filePath) {
   } catch {
   } finally {
     if (fd !== void 0)
-      closeSync6(fd);
+      closeSync5(fd);
   }
   return void 0;
 }
@@ -25378,16 +25310,11 @@ function groupTurns(messages, keepUnanswered) {
     if (isHumanMessage(msg)) {
       const isNewTurn = currentUser === null || (msg.promptId === void 0 || msg.promptId !== currentPromptId) && !(isInsertedMessage(msg) && !hasStopReasonEndTurn);
       if (isNewTurn) {
-        const carried = currentUser && assistantChunks.size === 0 ? turnHooks2.filter((hook) => hook.name === SESSION_START_HOOK) : [];
+        const unanswered = currentUser && assistantChunks.size === 0;
+        const carried = turnHooks2.filter((hook) => unanswered && hook.name === SESSION_START_HOOK);
         turnHooks2 = turnHooks2.filter((hook) => !carried.includes(hook));
         finalizeTurn();
-        if (currentUser)
-          turnHooks2 = carried;
-        else
-          turnHooks2 = turnHooks2.filter((hook) => {
-            const { direction, scope } = hookPlacement(hook.name);
-            return direction === "input" && scope === "turn";
-          });
+        turnHooks2 = currentUser ? carried : turnHooks2.filter((hook) => hookPlacement(hook.name) === TURN_INPUT_HOOK);
         currentPromptId = msg.promptId;
         currentUser = msg;
         assistantChunks = /* @__PURE__ */ new Map();
@@ -25631,9 +25558,7 @@ function stableRunId(time, ...identity) {
 }
 
 // dist/src/langsmith.js
-function hooksFiring(hooks, direction) {
-  return (hooks ?? []).filter((hook) => hookPlacement(hook.name).direction === direction);
-}
+var hooksFiring = (hooks, direction) => (hooks ?? []).filter((hook) => hookPlacement(hook.name).direction === direction);
 function withHooks(content, hooks, direction) {
   return { ...content, ...hookOutputs(hooksFiring(hooks, direction)) };
 }
@@ -25945,7 +25870,7 @@ function withTaskRunHooks(taskRunMap, turns) {
     return [id, hooks && entry.tracing === "full" ? { ...entry, hooks } : entry];
   }));
 }
-async function flushHeldToolRuns(stateFilePath, sessionId, turnRunId, messages, captureHookOutputs) {
+async function flushHeldToolRuns({ stateFilePath, captureHookOutputs }, sessionId, turnRunId, messages) {
   const refs = Object.entries(getSessionState(loadState(stateFilePath), sessionId).held_tool_runs ?? {}).filter(([, turn]) => turn === turnRunId);
   if (refs.length === 0)
     return;
@@ -26055,7 +25980,7 @@ async function closeInterruptedTurn(options) {
       error(`Failed to trace pending subagents on interrupt: ${err}`);
     }
   }
-  await flushHeldToolRuns(stateFilePath, sessionId, sessionState.current_turn_run_id, read.messages, options.captureHookOutputs);
+  await flushHeldToolRuns(options, sessionId, sessionState.current_turn_run_id, read.messages);
   await closeTurnRun({
     sessionId,
     customMetadata,
@@ -26404,9 +26329,9 @@ async function finalizeNotificationChain(opts) {
 }
 
 // dist/src/closing-queue.js
-import { randomUUID as randomUUID7 } from "node:crypto";
+import { randomUUID as randomUUID8 } from "node:crypto";
 async function queueClosing(config, kind, input, options = {}) {
-  const id = randomUUID7();
+  const id = randomUUID8();
   const at = Date.now();
   let queued = false;
   await atomicUpdateState(config.stateFilePath, (state) => {
@@ -26414,13 +26339,13 @@ async function queueClosing(config, kind, input, options = {}) {
     if (options.skip?.(session))
       return state;
     queued = true;
-    const { queued_closings: earlier, ...snapshot2 } = session;
+    const { queued_closings: earlier, ...snapshot } = session;
     const closing = {
       kind,
       at,
       ...options.transcriptCut ? { cut_at: new Date(at).toISOString() } : {},
       input,
-      session: snapshot2
+      session: snapshot
     };
     return {
       ...state,
@@ -26571,9 +26496,9 @@ async function closeStoppedTurn(_id, closing, config) {
       error(`Failed to trace turn ${turnNum}: ${err}`);
     }
   }
-  const found = config.captureHookOutputs ? turnHooks(sessionState, { messages, promptId }) : void 0;
+  const own = config.captureHookOutputs ? turnHooks(sessionState, { messages, promptId }) : void 0;
   const earlier = continuedRunId ? live.closed_turn_hooks ?? [] : [];
-  const hooks = earlier.length > 0 ? [...earlier, ...found ?? []] : found;
+  const hooks = earlier.length > 0 ? [...earlier, ...own ?? []] : own;
   const freshState = loadState(config.stateFilePath);
   const freshSession = getSessionState(freshState, input.session_id);
   const mergedTaskRunMap = withTaskRunHooks({ ...freshSession.task_run_map, ...allTaskRunMaps }, turns);
@@ -26678,7 +26603,7 @@ async function closeStoppedTurn(_id, closing, config) {
     s.open_turns = openTurns;
     return pruneOldSessions(updatedState);
   });
-  await flushHeldToolRuns(config.stateFilePath, input.session_id, currentRunId, messages, config.captureHookOutputs);
+  await flushHeldToolRuns(config, input.session_id, currentRunId, messages);
   if (config.captureHookOutputs)
     pruneHeldRuns(config.stateFilePath);
   const turnRunId = completeNow ? currentRunId : continuedDeferred ? void 0 : continuedRunId;
@@ -26689,7 +26614,7 @@ async function closeStoppedTurn(_id, closing, config) {
         tracing: currentTracing,
         sessionId: input.session_id,
         runId: turnRunId,
-        eventKey: completeNow ? turnRunId : `${turnRunId}:${randomUUID8()}`,
+        eventKey: completeNow ? turnRunId : `${turnRunId}:${randomUUID9()}`,
         traceId: currentTraceId,
         dottedOrder: currentDottedOrder,
         parentRunId: currentParentRunId,
@@ -26791,7 +26716,7 @@ async function closeFailedTurn(_id, closing, config) {
   initTracing(config, input.cwd, input.session_id);
   const errorMessage = input.error_details ? `${input.error}: ${input.error_details}` : input.error;
   const read = config.captureHookOutputs ? readTranscript(expandHome(input.transcript_path), sessionState.last_line, void 0, turnPrompt(sessionState), sessionState) : { messages: [] };
-  await flushHeldToolRuns(config.stateFilePath, input.session_id, sessionState.current_turn_run_id, read.messages, config.captureHookOutputs);
+  await flushHeldToolRuns(config, input.session_id, sessionState.current_turn_run_id, read.messages);
   try {
     await captureRun(await withTurnHooks(turnHooks(sessionState, read), {
       name: USER_PROMPT_TURN_NAME,
@@ -26846,7 +26771,7 @@ async function main3() {
       ...s,
       [input.session_id]: {
         ...ss,
-        ...dropHeldRuns(config.stateFilePath, input.session_id, ss),
+        ...dropHeld(config.stateFilePath, input.session_id, ss),
         tool_tracing_modes: {},
         tool_tracing_progress: {}
       }
@@ -26970,7 +26895,7 @@ async function closeEndedSession(_id, closing, config) {
       [input.session_id]: {
         ...ss,
         ...counted,
-        ...dropHeldRuns(config.stateFilePath, input.session_id, ss),
+        ...dropHeld(config.stateFilePath, input.session_id, ss),
         current_turn_tracing: void 0,
         current_turn_run_id: void 0,
         current_trace_id: void 0,
@@ -27085,7 +27010,8 @@ function readStartBeforeOwnPrompt(filePath, promptText) {
   const replied = messages.map((m) => m.type === "assistant").lastIndexOf(true);
   const content = prompt?.message.content ?? "";
   const text = typeof content === "string" ? content : content.map((b) => b.text ?? "").join("");
-  const own = prompt !== void 0 && text === promptText && Date.now() - Date.parse(prompt.timestamp) <= OWN_PROMPT_LINE_MAX_AGE_MS;
+  const age = Date.now() - Date.parse(prompt?.timestamp ?? "");
+  const own = text === promptText && age <= OWN_PROMPT_LINE_MAX_AGE_MS;
   return lastLine - (own ? messages.length - 1 - replied : 0);
 }
 async function main4() {
@@ -27639,13 +27565,13 @@ async function runQueuedClosings(workerConfig, sessionId) {
 
 // dist/src/legacy-import.js
 import { createHmac } from "node:crypto";
-import { basename as basename4, dirname as dirname21, join as join28 } from "node:path";
+import { basename as basename4, dirname as dirname21, join as join27 } from "node:path";
 function legacyRuns(config) {
   const origin = legacyOrigin(config);
   const root = dirname21(config.stateFilePath);
   const scan = { runs: [], settled: [], unreadable: [] };
   const { runs } = scan;
-  for (const [sessionId, file] of legacyFiles(join28(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
+  for (const [sessionId, file] of legacyFiles(join27(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
     const entry = readJson(readText(file));
     if (!entry?.run)
       scan.unreadable.push(file);
@@ -27662,7 +27588,7 @@ function legacyRuns(config) {
       run: { ...run, metadata: legacyOptions(base ?? {}, sessionId, "tool") }
     });
   }
-  for (const [sessionId, file] of legacyFiles(join28(root, TURN_RECORD_DIR_NAME), LEGACY_TURN_FILE)) {
+  for (const [sessionId, file] of legacyFiles(join27(root, TURN_RECORD_DIR_NAME), LEGACY_TURN_FILE)) {
     const record = readTurnRecord(file);
     if (!record.root || !record.closed || record.origin !== origin)
       continue;
@@ -27726,7 +27652,7 @@ function legacyOptions(metadata, sessionId, runType) {
 function legacyFiles(root, pattern) {
   if (!entryInfo(root)?.isDirectory())
     return [];
-  return listDirectory(root).filter((sessionId) => entryInfo(join28(root, sessionId))?.isDirectory()).flatMap((sessionId) => listDirectory(join28(root, sessionId)).map((name) => [sessionId, join28(root, sessionId, name)]).filter(([, file]) => pattern.test(basename4(file)) && entryInfo(file)?.isFile()));
+  return listDirectory(root).filter((sessionId) => entryInfo(join27(root, sessionId))?.isDirectory()).flatMap((sessionId) => listDirectory(join27(root, sessionId)).map((name) => [sessionId, join27(root, sessionId, name)]).filter(([, file]) => pattern.test(basename4(file)) && entryInfo(file)?.isFile()));
 }
 function readTurnRecord(path3) {
   const record = {
@@ -27760,7 +27686,7 @@ function readTurnRecord(path3) {
 }
 
 // dist/src/legacy-sweep.js
-import { join as join29, dirname as dirname22 } from "node:path";
+import { join as join28, dirname as dirname22 } from "node:path";
 function idleMs(info, now) {
   return info ? now - info.mtimeMs : 0;
 }
@@ -27775,7 +27701,7 @@ function mayAgeOut(name, path3, removable) {
 }
 function sweepSession(path3, removable, now) {
   const aged = listDirectory(path3).filter((name) => {
-    const entry = join29(path3, name);
+    const entry = join28(path3, name);
     return mayAgeOut(name, entry, removable) && removeIfOld(entry, now);
   }).length;
   if (aged > 0 || idleMs(entryInfo(path3), now) >= LEGACY_EMPTY_FOLDER_IDLE_MS) {
@@ -27788,7 +27714,7 @@ function sweepFolder(path3, removable, now) {
     return 0;
   let aged = 0;
   for (const name of listDirectory(path3)) {
-    const entry = join29(path3, name);
+    const entry = join28(path3, name);
     if (entryInfo(entry)?.isDirectory())
       aged += sweepSession(entry, removable, now);
     else if (LEGACY_FLUSH_LOCK_FILE.test(name))
@@ -27799,7 +27725,7 @@ function sweepFolder(path3, removable, now) {
 }
 function sweepLegacyLeftovers(stateFilePath, removable, now = Date.now()) {
   const root = dirname22(stateFilePath);
-  return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join29(root, folder), removable, now), 0);
+  return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join28(root, folder), removable, now), 0);
 }
 
 // dist/src/engine-legacy.js
@@ -27903,7 +27829,13 @@ async function main7() {
   const agentId = input.tool_response.agentId;
   const workflow = !agentId ? detectWorkflowLaunch(input.tool_name, input.tool_response) : void 0;
   const origin = toolOrigin(input.tool_input, input.cwd);
-  let held;
+  let held = false;
+  const heldKey = [config.stateFilePath, input.session_id, input.tool_use_id];
+  const hold = async (run, mode, _parent, from) => {
+    const content = mode === "full" ? run : { ...run, inputs: {}, outputs: {} };
+    saveHeldRun({ run: content, tracing: mode, origin: from }, ...heldKey);
+    held = true;
+  };
   if (agentId) {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
   } else if (workflow) {
@@ -27931,7 +27863,7 @@ async function main7() {
     }, tracing, parentRunId, origin);
   } else {
     initTracing(config, input.cwd, input.session_id);
-    const run = {
+    await (config.captureHookOutputs ? hold : captureToolRun2)({
       id: toolRunId,
       name: input.tool_name,
       run_type: "tool",
@@ -27952,29 +27884,13 @@ async function main7() {
         runName: input.tool_name,
         skillName: skillNameFromTool(input.tool_name, input.tool_input)
       })
-    };
-    if (!config.captureHookOutputs)
-      await captureToolRun2(run, tracing, parentRunId, origin);
-    else
-      held = {
-        run: tracing === "full" ? run : { ...run, inputs: {}, outputs: {} },
-        tracing,
-        origin
-      };
-  }
-  try {
-    if (held)
-      saveHeldRun(config.stateFilePath, input.session_id, input.tool_use_id, held);
-  } catch (err) {
-    error(`Failed to hold tool run ${toolRunId}, uploading it without hooks: ${err}`);
-    await captureToolRun2(held.run, held.tracing, parentRunId, held.origin);
-    held = void 0;
+    }, tracing, parentRunId, origin);
   }
   let kept = false;
   await atomicUpdateState(config.stateFilePath, (freshState) => {
     const freshSession = getSessionState(freshState, input.session_id);
     const closings = Object.values(freshSession.queued_closings ?? {}).map((c) => c.session);
-    kept = !!held && [freshSession, ...closings].some((s) => s.current_turn_run_id === parentRunId);
+    kept = held && [freshSession, ...closings].some((s) => s.current_turn_run_id === parentRunId);
     let backgroundUpdate;
     if (agentId || workflow) {
       const deferred = {
@@ -28032,7 +27948,7 @@ async function main7() {
     };
   });
   if (held && !kept)
-    takeHeldRun(config.stateFilePath, input.session_id, input.tool_use_id);
+    takeHeldRun(...heldKey);
 }
 
 // dist/src/hooks/pre-compact.js

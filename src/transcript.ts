@@ -584,18 +584,13 @@ function groupTurns(messages: TranscriptMessage[], keepUnanswered: boolean): Tur
 
       if (isNewTurn) {
         // Finalize previous turn and start a new one
-        const carried =
-          currentUser && assistantChunks.size === 0
-            ? turnHooks.filter((hook) => hook.name === SESSION_START_HOOK)
-            : [];
+        const unanswered = currentUser && assistantChunks.size === 0;
+        const carried = turnHooks.filter((hook) => unanswered && hook.name === SESSION_START_HOOK);
         turnHooks = turnHooks.filter((hook) => !carried.includes(hook));
         finalizeTurn();
-        if (currentUser) turnHooks = carried;
-        else
-          turnHooks = turnHooks.filter((hook) => {
-            const { direction, scope } = hookPlacement(hook.name);
-            return direction === "input" && scope === "turn";
-          });
+        turnHooks = currentUser
+          ? carried
+          : turnHooks.filter((hook) => hookPlacement(hook.name) === TURN_INPUT_HOOK);
         currentPromptId = msg.promptId;
         currentUser = msg;
         assistantChunks = new Map();

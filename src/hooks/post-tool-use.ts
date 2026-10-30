@@ -26,7 +26,7 @@ import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
 import { captureToolRun, initTracing } from "../tracing-engine.js";
 import { stableRunId } from "../utils/ids/run-id.js";
-import type { ClaudeRun, HeldToolRun, PostToolUseHookInput } from "../types.js";
+import type { ClaudeRun, PostToolUseHookInput, ToolOrigin, TracingMode } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: PostToolUseHookInput = await readStdin();
@@ -94,7 +94,13 @@ export async function main(): Promise<void> {
     : undefined;
 
   const origin = toolOrigin(input.tool_input, input.cwd);
-  let held: HeldToolRun | undefined;
+  let held = false;
+  const heldKey = [config.stateFilePath, input.session_id, input.tool_use_id] as const;
+  const hold = async (run: ClaudeRun, mode: TracingMode, _parent: string, from: ToolOrigin) => {
+    const content = mode === "full" ? run : { ...run, inputs: {}, outputs: {} };
+    saveHeldRun({ run: content, tracing: mode, origin: from }, ...heldKey);
+    held = true;
+  };
 
   if (agentId) {
     // Agent tool: defer LangSmith run creation to the Stop hook, which will
@@ -135,42 +141,33 @@ export async function main(): Promise<void> {
     );
   } else {
     initTracing(config, input.cwd, input.session_id);
-    const run: ClaudeRun = {
-      id: toolRunId,
-      name: input.tool_name,
-      run_type: "tool",
-      inputs: { input: input.tool_input },
-      outputs: { output: input.tool_response },
-      start_time: startTimeIso,
-      end_time: toolEndTimeIso,
-      parent_run_id: parentRunId,
-      trace_id: traceId,
-      dotted_order: toolDottedOrder,
-      metadata: codingAgentMetadata({
-        sessionId: input.session_id,
-        base: config.customMetadata,
-        turnNumber: sessionState.current_turn_number,
-        runtimeVersion: sessionState.runtime_version,
-        agentType: "root",
-        toolName: input.tool_name,
-        runName: input.tool_name,
-        skillName: skillNameFromTool(input.tool_name, input.tool_input),
-      }),
-    };
-    if (!config.captureHookOutputs) await captureToolRun(run, tracing, parentRunId, origin);
-    else
-      held = {
-        run: tracing === "full" ? run : { ...run, inputs: {}, outputs: {} },
-        tracing,
-        origin,
-      };
-  }
-  try {
-    if (held) saveHeldRun(config.stateFilePath, input.session_id, input.tool_use_id, held);
-  } catch (err) {
-    error(`Failed to hold tool run ${toolRunId}, uploading it without hooks: ${err}`);
-    await captureToolRun(held!.run, held!.tracing, parentRunId, held!.origin);
-    held = undefined;
+    await (config.captureHookOutputs ? hold : captureToolRun)(
+      {
+        id: toolRunId,
+        name: input.tool_name,
+        run_type: "tool",
+        inputs: { input: input.tool_input },
+        outputs: { output: input.tool_response },
+        start_time: startTimeIso,
+        end_time: toolEndTimeIso,
+        parent_run_id: parentRunId,
+        trace_id: traceId,
+        dotted_order: toolDottedOrder,
+        metadata: codingAgentMetadata({
+          sessionId: input.session_id,
+          base: config.customMetadata,
+          turnNumber: sessionState.current_turn_number,
+          runtimeVersion: sessionState.runtime_version,
+          agentType: "root",
+          toolName: input.tool_name,
+          runName: input.tool_name,
+          skillName: skillNameFromTool(input.tool_name, input.tool_input),
+        }),
+      },
+      tracing,
+      parentRunId,
+      origin,
+    );
   }
   let kept = false;
 
@@ -178,7 +175,7 @@ export async function main(): Promise<void> {
   await atomicUpdateState(config.stateFilePath, (freshState) => {
     const freshSession = getSessionState(freshState, input.session_id);
     const closings = Object.values(freshSession.queued_closings ?? {}).map((c) => c.session);
-    kept = !!held && [freshSession, ...closings].some((s) => s.current_turn_run_id === parentRunId);
+    kept = held && [freshSession, ...closings].some((s) => s.current_turn_run_id === parentRunId);
 
     // Both the Agent and Workflow tools launch work that outlives this turn's
     // Stop. Register either the same way — under its launching turn in open_turns
@@ -268,5 +265,5 @@ export async function main(): Promise<void> {
       },
     };
   });
-  if (held && !kept) takeHeldRun(config.stateFilePath, input.session_id, input.tool_use_id);
+  if (held && !kept) takeHeldRun(...heldKey);
 }

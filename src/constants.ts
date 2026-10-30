@@ -25,6 +25,9 @@ const ASYNC_HOOK_ATTACHMENT = "async_hook_response";
 const PLUGIN_CONTEXT_SUFFIX = /-context$/;
 const HELD_TOOL_RUNS_DIR = "langsmith_held_tool_runs";
 const UNSAFE_FILE_NAME_CHARS = /[^A-Za-z0-9_-]/g;
+const PRIVATE_FILE_MODE = 0o600;
+const PRIVATE_FOLDER_MODE = 0o700;
+const TEMP_FILE_SUFFIX = ".tmp";
 const SESSION_START_HOOK = "SessionStart";
 const RUN_CONTEXT_FIELDS = [
   "id",
@@ -249,6 +252,9 @@ export {
   PLUGIN_CONTEXT_SUFFIX,
   HELD_TOOL_RUNS_DIR,
   UNSAFE_FILE_NAME_CHARS,
+  PRIVATE_FILE_MODE,
+  PRIVATE_FOLDER_MODE,
+  TEMP_FILE_SUFFIX,
   SESSION_START_HOOK,
   RUN_CONTEXT_FIELDS,
   RUN_PATCH_FIELDS,
