@@ -5,6 +5,7 @@ RAN_CODES="0"
 VERSION="0.6.1"
 REPOSITORY="langchain-ai/langsmith-claude-code-plugins"
 STALE_DOWNLOAD_MINUTES="10"
+UNUSED_BUILD_DAYS="7"
 
 root="${CLAUDE_PLUGIN_ROOT:-}"
 if [ -z "$root" ]; then
@@ -35,6 +36,7 @@ claim_download() {
 download() {
   lock="$build.lock"
   claim_download || return 0
+  find "$data/bin" -type f -name "$executable-darwin-*.partial.*" -mmin +"$STALE_DOWNLOAD_MINUTES" -exec rm -f {} + 2>/dev/null || :
   partial="$build.partial.$$"
   release="https://github.com/$REPOSITORY/releases/download/$VERSION"
   if curl -fsSL --proto '=https' --max-time 300 -o "$partial" "$release/$asset" &&
@@ -43,15 +45,10 @@ download() {
     [ "$(shasum -a 256 "$partial" | cut -d' ' -f1)" = "$expected" ] &&
     chmod +x "$partial" &&
     mv -f "$partial" "$build"; then
-    for old in "$data/bin/$executable"-darwin-*; do
-      case "$old" in
-        "$build" | *.lock | *.partial.*) ;;
-        *) rm -f "$old" ;;
-      esac
-    done
+    find "$data/bin" -type f -name "$executable-darwin-*" ! -name "$asset*" -mtime +"$UNUSED_BUILD_DAYS" -exec rm -f {} + 2>/dev/null || :
+    rmdir "$lock" || :
   fi
   rm -f "$partial" || :
-  rmdir "$lock" || :
 }
 
 if [ -n "$build" ] && [ ! -x "$build" ] && mkdir -p "$data/bin" 2>/dev/null; then

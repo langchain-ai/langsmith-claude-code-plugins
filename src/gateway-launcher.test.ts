@@ -72,9 +72,12 @@ function sandbox({ release = builds.works, checksum = undefined as string | unde
   return dir;
 }
 
-function machine(dir: string, system: string) {
+function machine(dir: string, system: string, hardware = "arm64") {
   const path = join(dir, "machine/uname");
-  writeFileSync(path, `#!/bin/sh\nif [ "$1" = "-m" ]; then echo arm64; else echo ${system}; fi\n`);
+  writeFileSync(
+    path,
+    `#!/bin/sh\nif [ "$1" = "-m" ]; then echo ${hardware}; else echo ${system}; fi\n`,
+  );
   chmodSync(path, 0o755);
 }
 
@@ -104,10 +107,19 @@ const requested = (dir: string) =>
     ? readFileSync(join(dir, "curl.log"), "utf8").trim().split("\n")
     : [];
 
-async function downloadFinished(dir: string) {
+async function eventually(holds: () => boolean) {
   const deadline = Date.now() + DOWNLOAD_WAIT_MS;
-  while (existsSync(`${installed(dir)}.lock`) && Date.now() < deadline) await after(50);
-  expect(existsSync(`${installed(dir)}.lock`)).toBe(false);
+  while (!holds() && Date.now() < deadline) await after(50);
+  expect(holds()).toBe(true);
+}
+
+const downloadFinished = (dir: string) => eventually(() => !existsSync(`${installed(dir)}.lock`));
+const partials = (dir: string) =>
+  readdirSync(join(dir, "data/bin")).filter((name) => name.includes(".partial."));
+
+function age(path: string, minutes: number) {
+  const then = new Date(Date.now() - minutes * 60 * 1000);
+  utimesSync(path, then, then);
 }
 
 function place(dir: string, name: string, body: string) {
@@ -144,11 +156,30 @@ describe("the gateway launcher", () => {
     expect(run(dir).stdout.trim()).toBe(`build ${EVENT.length} bytes`);
   });
 
-  it("refuses a download whose checksum does not match and leaves nothing behind", async () => {
+  it("refuses a download whose checksum does not match and waits before trying again", async () => {
     const dir = sandbox({ checksum: "0".repeat(64) });
     expect(run(dir).stdout.trim()).toBe(`node ${EVENT.length} bytes`);
-    await downloadFinished(dir);
-    expect(readdirSync(join(dir, "data/bin"))).toEqual([]);
+    await eventually(() => requested(dir).length === 2 && partials(dir).length === 0);
+    expect(existsSync(installed(dir))).toBe(false);
+    run(dir);
+    await after(500);
+    expect(requested(dir)).toHaveLength(2);
+  });
+
+  it("answers the hook without waiting for the download", () => {
+    const dir = sandbox();
+    const started = Date.now();
+    const result = run(dir, { CURL_DELAY: "3" });
+    expect(result.stdout.trim()).toBe(`node ${EVENT.length} bytes`);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it("asks for the Intel build on an Intel Mac", async () => {
+    const dir = sandbox();
+    machine(dir, "Darwin", "x86_64");
+    run(dir);
+    await eventually(() => requested(dir).length > 0);
+    expect(requested(dir)[0]).toBe(`${RELEASE_URL}/${executableName}-darwin-x64-${version}`);
   });
 
   it("hands Node the whole event when the downloaded build cannot run it", () => {
@@ -191,19 +222,25 @@ describe("the gateway launcher", () => {
     await after(500);
     expect(requested(dir)).toEqual([]);
 
-    const longAgo = new Date(Date.now() - 60 * 60 * 1000);
-    utimesSync(`${installed(dir)}.lock`, longAgo, longAgo);
+    const killed = `${installed(dir)}.partial.1`;
+    writeFileSync(killed, "half a build");
+    age(killed, 60);
+    age(`${installed(dir)}.lock`, 60);
     run(dir);
     await downloadFinished(dir);
     expect(existsSync(installed(dir))).toBe(true);
+    expect(partials(dir)).toEqual([]);
   });
 
-  it("deletes the previous version's build once this one is in", async () => {
+  it("deletes an older version's build only once nothing has fetched it for a week", async () => {
     const dir = sandbox();
-    const previous = `${executableName}-darwin-arm64-0.0.1`;
-    place(dir, previous, builds.works);
+    const unused = `${executableName}-darwin-arm64-0.0.1`;
+    const inUse = `${executableName}-darwin-arm64-0.0.2`;
+    place(dir, unused, builds.works);
+    place(dir, inUse, builds.works);
+    age(join(dir, "data/bin", unused), 8 * 24 * 60);
     run(dir);
     await downloadFinished(dir);
-    expect(readdirSync(join(dir, "data/bin"))).toEqual([asset]);
+    expect(readdirSync(join(dir, "data/bin")).sort()).toEqual([asset, inUse].sort());
   });
 });
