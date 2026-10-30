@@ -35,10 +35,11 @@ export async function loginToken(
   config: ProxyConfig,
   log: (message: string) => void = () => undefined,
 ): Promise<string> {
-  const { loadProfileClientConfig } = await import("langsmith/lib/utils/profiles");
-  const { profileAuth } = loadProfileClientConfig({
-    configPath: join(userHome(), ...LOGIN_CONFIG_PATH),
+  const { Client } = await import("langsmith");
+  const { profileAuth } = Client.getDefaultClientConfig({
     profile: config.profile,
+    profileConfigPath: join(userHome(), ...LOGIN_CONFIG_PATH),
+    preferProfileAuth: true,
   });
   if (profileAuth === undefined) throw new SignInFailure(NO_LOGIN_REASON);
   const loggingFetch: typeof fetch = async (input, init) => {
