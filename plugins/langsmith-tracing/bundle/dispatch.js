@@ -23666,14 +23666,25 @@ var CURSOR_VERSION_FIELD = "cursor_version";
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
 var SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"$\`]+)"|'([^']+)'|(~(?:\/[^\s;&|()$\`\\"'<>]*)?|[^\s;&|()$\`\\"'<>~-][^\s;&|()$\`\\"'<>]*))`;
 var BASH_CD_STEP = new RegExp(String.raw`^cd\s+${SHELL_FOLDER_ARGUMENT}\s*(?:&&\s*|$)`);
-var BASH_QUOTED = /"[^"]*"|'[^']*'/g;
-var BASH_FOLDER_CHANGE = /(?:^|[;&|({\n])\s*(?:(?:then|do|else|time|builtin|command|!)\s+)*(?:cd|pushd|popd|eval)(?=\s|;|&|\||\)|$)/;
-var BASH_GIT_REDIRECT = /\bgit\b[^;&|\n]*\s(?:-C|--git-dir|--work-tree)(?=[\s=]|$)/;
+var BASH_GUARD_PATTERNS = [
+  /(?:^|[^\w%/.-])(?:cd|pushd|popd)(?=$|[^\w-])/,
+  /\beval\b/,
+  /\bsh\s+-c\b/,
+  /\bbash\s+-c\b/,
+  /\bzsh\s+-c\b/,
+  /\$\(/,
+  /`/,
+  /GIT_DIR/,
+  /GIT_WORK_TREE/,
+  /-C\s/,
+  /--git-dir/,
+  /--work-tree/,
+  /\n/
+];
 var BASH_GIT_WORD = /^git(?=\s)/;
 var BASH_GIT_CONFIG_FLAG = /^\s+-c\s+(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
 var BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
 var BASH_GIT_OPTION = /^\s+-/;
-var BASH_GIT_ENVIRONMENT = /\bGIT_(?:DIR|WORK_TREE)=/;
 var HOME_SHORTHAND = /^~(?=\/|$)/;
 var GLOB_TOOL_NAME = "Glob";
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
@@ -24580,8 +24591,7 @@ function pathFromBashCommand(command, callCwd) {
   return named && !mayPointElsewhere(rest) ? folder : void 0;
 }
 function mayPointElsewhere(command) {
-  const unquoted = command.replace(BASH_QUOTED, '""');
-  return [BASH_FOLDER_CHANGE, BASH_GIT_REDIRECT, BASH_GIT_ENVIRONMENT].some((pattern) => pattern.test(unquoted));
+  return BASH_GUARD_PATTERNS.some((pattern) => pattern.test(command));
 }
 function commandMayPointElsewhere(toolInput) {
   const command = toolInput?.command;

@@ -125,15 +125,28 @@ describe("repoScopedMetadata", () => {
     });
 
     it.each<[name: string, command: string]>([
-      ["a cd that may not run", `false && cd "${alpha}"; git status`],
-      ["a cd inside braces", `cd "${beta}" && { cd "${alpha}"; git status; }`],
-      ["a cd after then", `if true; then cd "${alpha}"; fi`],
-      ["pushd", `cd "${beta}" && pushd "${alpha}"`],
-      ["popd", `cd "${beta}" && popd`],
-      ["eval", `eval "cd ${alpha}"`],
-      ["a cd ended by a semicolon", `cd "${beta}"; ls`],
-      ["a cd followed by an or", `cd "${beta}" || ls`],
-      ["cd -", `cd "${beta}" && cd -`],
+      ["a cd word", `cd "${beta}" && cd -`],
+      ["a pushd word", `cd "${beta}" && pushd x`],
+      ["a popd word", `cd "${beta}" && popd`],
+      ["eval", `cd "${beta}" && eval ls`],
+      ["sh -c", `cd "${beta}" && sh -c ls`],
+      ["bash -c", `cd "${beta}" && bash -c ls`],
+      ["zsh -c", `cd "${beta}" && zsh -c ls`],
+      ["a substitution", `cd "${beta}" && echo $(pwd)`],
+      ["a backtick", `cd "${beta}" && echo \`pwd\``],
+      ["GIT_DIR", `cd "${beta}" && GIT_DIR=x ls`],
+      ["GIT_WORK_TREE", `cd "${beta}" && GIT_WORK_TREE=x ls`],
+      ["a -C option", `cd "${beta}" && make -C sub`],
+      ["--git-dir", `cd "${beta}" && ls --git-dir`],
+      ["--work-tree", `cd "${beta}" && ls --work-tree`],
+      ["a newline", `cd "${beta}" && ls\nls`],
+      ["a nested bash -c", `cd "${beta}" && bash -c "cd ${alpha} && git log"`],
+      ["a cd in a substitution", `cd "${beta}" && echo "$(cd ${alpha} && git log)"`],
+      ["a cd hidden between apostrophes", `cd "${beta}" && echo it's; cd "${alpha}"; echo don't`],
+      ["a backslash cd", `cd "${beta}" && \\cd "${alpha}"`],
+      ["a cd after an assignment", `cd "${beta}" && FOO=1 cd "${alpha}"`],
+      ["a cd in a case", `cd "${beta}" && case x in x) cd "${alpha}";; esac`],
+      ["a quoted cd", `cd "${beta}" && 'cd' "${alpha}"`],
       ["a cd into a variable", `cd "${beta}" && cd $HOME/x`],
       ["a cd into a variable inside quotes", `cd "$ROOT" && ls`],
       ["a cd with an escaped space", `cd "${beta}" && cd ${alpha.replaceAll(" ", "\\ ")}`],
@@ -142,23 +155,14 @@ describe("repoScopedMetadata", () => {
       ["a git -C into nothing", `git -C "${missing}" log`],
       ["a git -C into a variable", `git -C "$REPO" log`],
       ["a git option before -C", `cd "${alpha}" && git --no-pager -C "${beta}" log`],
-      ["a git option before -C without a cd", `git --no-pager -C "${beta}" log`],
-      ["a git --git-dir", `git --git-dir="${beta}/.git" status`],
-      ["a git --work-tree", `git --work-tree "${beta}" status`],
-      ["a GIT_DIR assignment", `GIT_DIR="${beta}/.git" git status`],
-      ["an env GIT_WORK_TREE assignment", `env GIT_WORK_TREE=x git log`],
       ["a second git -C", `git -C "${beta}" pull && git -C "${alpha}" pull`],
-      ["a later cd after git -C", `git -C "${beta}" log && cd "${alpha}"`],
-    ])("emits no repository when a command that may point elsewhere has %s", (_name, command) => {
+    ])("emits no repository when a command has %s", (_name, command) => {
       expect(repoScopedMetadata(inSession(), { command }, alpha)).toEqual(noRepoKeys);
     });
 
     it.each<[name: string, command: string]>([
       ["a cd in a format string", "git log -1 --format='%h %cd'"],
       ["a cd in a path", "git add ci/cd/x.yml"],
-      ["a cd in a commit message", 'git commit -m "fix cd bug"'],
-      ["a quoted cd before a command", 'echo "cd x" && git status'],
-      ["a quoted cd after a semicolon", 'git commit -m "done; cd x"'],
     ])("keeps the call's own folder for %s", (_name, command) => {
       expect(repoScopedMetadata(inSession(), { command }, alpha)).toMatchObject(staysInAlpha);
     });

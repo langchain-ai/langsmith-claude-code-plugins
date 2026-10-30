@@ -52,12 +52,21 @@ const SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"$\`]+)"|'([^']+)'|(~(?:\/[^\s;&
 
 const BASH_CD_STEP = new RegExp(String.raw`^cd\s+${SHELL_FOLDER_ARGUMENT}\s*(?:&&\s*|$)`);
 
-const BASH_QUOTED = /"[^"]*"|'[^']*'/g;
-
-const BASH_FOLDER_CHANGE =
-  /(?:^|[;&|({\n])\s*(?:(?:then|do|else|time|builtin|command|!)\s+)*(?:cd|pushd|popd|eval)(?=\s|;|&|\||\)|$)/;
-
-const BASH_GIT_REDIRECT = /\bgit\b[^;&|\n]*\s(?:-C|--git-dir|--work-tree)(?=[\s=]|$)/;
+const BASH_GUARD_PATTERNS = [
+  /(?:^|[^\w%/.-])(?:cd|pushd|popd)(?=$|[^\w-])/,
+  /\beval\b/,
+  /\bsh\s+-c\b/,
+  /\bbash\s+-c\b/,
+  /\bzsh\s+-c\b/,
+  /\$\(/,
+  /`/,
+  /GIT_DIR/,
+  /GIT_WORK_TREE/,
+  /-C\s/,
+  /--git-dir/,
+  /--work-tree/,
+  /\n/,
+];
 
 const BASH_GIT_WORD = /^git(?=\s)/;
 
@@ -66,8 +75,6 @@ const BASH_GIT_CONFIG_FLAG = /^\s+-c\s+(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
 const BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
 
 const BASH_GIT_OPTION = /^\s+-/;
-
-const BASH_GIT_ENVIRONMENT = /\bGIT_(?:DIR|WORK_TREE)=/;
 
 const HOME_SHORTHAND = /^~(?=\/|$)/;
 
@@ -224,14 +231,11 @@ export {
   CURSOR_VERSION_FIELD,
   TOOL_PATH_INPUT_KEYS,
   BASH_CD_STEP,
-  BASH_QUOTED,
-  BASH_FOLDER_CHANGE,
-  BASH_GIT_REDIRECT,
+  BASH_GUARD_PATTERNS,
   BASH_GIT_WORD,
   BASH_GIT_CONFIG_FLAG,
   BASH_GIT_DIRECTORY_FLAG,
   BASH_GIT_OPTION,
-  BASH_GIT_ENVIRONMENT,
   HOME_SHORTHAND,
   GLOB_TOOL_NAME,
   PINNED_REPOSITORY_KEYS,

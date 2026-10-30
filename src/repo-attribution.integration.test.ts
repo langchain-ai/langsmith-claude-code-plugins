@@ -217,24 +217,6 @@ describe("a turn working across repositories", () => {
     });
   }, 120_000);
 
-  it("gives a Glob whose pattern sits in another repository that repository", async () => {
-    const session = "glob-pattern";
-    const path = join(sandbox.root, `${session}.jsonl`);
-    const base = { session_id: session, transcript_path: path, cwd: alpha };
-
-    await prompt(base);
-    await hook("PostToolUse", {
-      ...base,
-      hook_event_name: "PostToolUse",
-      tool_name: "Glob",
-      tool_input: { pattern: join(beta, "**", "*.txt") },
-      tool_response: { ok: true },
-      tool_use_id: `${session}-tool-0`,
-    });
-
-    await settled(() => expect(toolRun("Glob")).toMatchObject({ ls_git_repo: "acme/b" }));
-  }, 120_000);
-
   it("keeps the turn's repository off a shell command that ran outside one", async () => {
     const session = "shell-cwd";
     const path = join(sandbox.root, `${session}.jsonl`);

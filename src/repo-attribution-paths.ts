@@ -4,12 +4,9 @@ import { isAbsolute, resolve, sep } from "node:path";
 import { rootFromGitMarker } from "@langchain/plugins-base/git";
 import {
   BASH_CD_STEP,
-  BASH_FOLDER_CHANGE,
-  BASH_GIT_REDIRECT,
-  BASH_QUOTED,
+  BASH_GUARD_PATTERNS,
   BASH_GIT_CONFIG_FLAG,
   BASH_GIT_DIRECTORY_FLAG,
-  BASH_GIT_ENVIRONMENT,
   BASH_GIT_OPTION,
   BASH_GIT_WORD,
   GLOB_TOOL_NAME,
@@ -73,10 +70,7 @@ function pathFromBashCommand(command: string, callCwd?: string): string | undefi
 }
 
 function mayPointElsewhere(command: string): boolean {
-  const unquoted = command.replace(BASH_QUOTED, '""');
-  return [BASH_FOLDER_CHANGE, BASH_GIT_REDIRECT, BASH_GIT_ENVIRONMENT].some((pattern) =>
-    pattern.test(unquoted),
-  );
+  return BASH_GUARD_PATTERNS.some((pattern) => pattern.test(command));
 }
 
 export function commandMayPointElsewhere(toolInput: unknown): boolean {
