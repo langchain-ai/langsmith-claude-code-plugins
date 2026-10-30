@@ -48,7 +48,9 @@ const CURSOR_VERSION_FIELD = "cursor_version";
 
 const TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"] as const;
 
-const SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"$\`\\]+)"|'([^']+)'|(~(?:\/[^\s;&|()$\`\\"'<>]*)?|[^\s;&|()$\`\\"'<>~-][^\s;&|()$\`\\"'<>]*))`;
+const SHELL_UNREADABLE_CHARS = process.platform === "win32" ? "$`" : "$`\\\\";
+
+const SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"${SHELL_UNREADABLE_CHARS}]+)"|'([^']+)'|(~(?:\/[^\s;&|()${SHELL_UNREADABLE_CHARS}"'<>]*)?|[^\s;&|()${SHELL_UNREADABLE_CHARS}"'<>~-][^\s;&|()${SHELL_UNREADABLE_CHARS}"'<>]*))`;
 
 const BASH_CD_WORD = /^cd\b/;
 
