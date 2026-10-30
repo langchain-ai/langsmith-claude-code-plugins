@@ -1,4 +1,5 @@
 plugins/langsmith-tracing/bundle/** linguist-generated=true
+plugins/langsmith-gateway/bundle/** linguist-generated=true
 pnpm-lock.yaml linguist-generated=true
 plugins/langsmith-tracing/binary/langsmith-claude-code-tracing-* binary linguist-generated=true
 plugins/langsmith-tracing/hooks/langsmith-tracing text eol=lf
