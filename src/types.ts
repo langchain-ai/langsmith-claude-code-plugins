@@ -12,7 +12,12 @@ import type { UploadLogin } from "@langchain/plugins-base/auth";
 import type { PluginSession } from "@langchain/plugins-base/plugin";
 import type { LifecycleCaptureInput } from "@langchain/plugins-base/tracing/lifecycle";
 import type { RecordedRun, TurnRecord } from "@langchain/plugins-base/tracing/settlement";
-import type { BOOLEAN_SETTINGS, HOOK_EVENT_NAMES, PINNED_REPOSITORY_KEYS } from "./constants.js";
+import type {
+  BOOLEAN_SETTINGS,
+  HOOK_EVENT_NAMES,
+  PINNED_REPOSITORY_KEYS,
+  USER_PROMPT_SUBMIT_EVENT,
+} from "./constants.js";
 
 export type TracingMode = "full" | "metadata";
 
@@ -612,6 +617,28 @@ export interface UserPromptSubmitHookInput {
   prompt: string;
   agent_id?: string;
   agent_type?: string;
+}
+
+export type TracingCommand = "mute" | "unmute" | "trace" | "setup";
+
+export interface CommandOutcome {
+  reply: string;
+  currentTurnMode?: TracingMode;
+}
+
+export interface UploadNotices {
+  loginNotice?: string;
+  credentialNotice?: string;
+}
+
+export interface UserPromptSubmitOutput {
+  decision?: "block";
+  reason?: string;
+  systemMessage?: string;
+  hookSpecificOutput?: {
+    hookEventName: typeof USER_PROMPT_SUBMIT_EVENT;
+    additionalContext: string;
+  };
 }
 
 export interface Config {

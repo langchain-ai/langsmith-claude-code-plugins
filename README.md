@@ -66,13 +66,13 @@ When your sign-in expires or your key is rejected the plugin stops uploading but
 
 ### Strict auth
 
-Strict auth refuses every prompt until your sign-in or key works again, even if no credentials were ever set. Turn it on by setting `strict_auth` to `true`. It's off by default and has no effect while tracing is off.
+Strict auth refuses every prompt until your sign-in or key works again, even if no credentials were ever set. A plugin command still runs then, but its prompt shows as blocked. Turn it on by setting `strict_auth` to `true`. It's off by default and has no effect while tracing is off.
 
 > **Strict auth also blocks `claude -p`.** Leave it off in CI unless a failed sign-in should fail the job.
 
 ## Turn on tracing
 
-Tracing is off until you switch it on in `~/.claude/langsmith.json`, unless your admin already turned it on with a [managed file](#lock-settings-with-a-managed-file). Send traces to an agent with `agent_id`:
+Tracing is off until you switch it on in `~/.claude/langsmith.json`, unless your admin already turned it on with a [managed file](#lock-settings-with-a-managed-file). Run `/langsmith-tracing:setup [project] [https://url]` inside Claude Code to switch it on and optionally pick the project and LangSmith URL, which never touches your API key. The URL needs `http://` or `https://`, since a bare hostname becomes part of the project name. Send traces to an agent with `agent_id`:
 
 ```json
 { "enabled": true, "agent_id": "shared-claude" }
@@ -105,7 +105,7 @@ To keep one conversation's content out of LangSmith run these inside Claude Code
 /langsmith-tracing:unmute
 ```
 
-The confirmation appears as a prompt blocked by a hook. That's how Claude Code shows a plugin's reply, so nothing went wrong and the command never reaches the model.
+Claude replies with the plugin's confirmation, and that turn is traced like any other.
 
 A muted conversation keeps its structure in LangSmith but leaves out what was said. Muting starts from your next turn so wait for the confirmation before you send anything sensitive. It only changes what reaches LangSmith and doesn't delete earlier uploads.
 

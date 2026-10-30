@@ -12,7 +12,7 @@ export async function handleGatewayInput(
   home = userHome(),
   output = (value: unknown) => process.stdout.write(JSON.stringify(value) + "\n"),
 ): Promise<void> {
-  // Same supported UserPromptSubmit decision:block protocol as tracing mute/unmute.
+  // Uses the supported UserPromptSubmit decision:block protocol.
   // Parse and consume even errors BEFORE config/disabled checks; no model/tool turn.
   if (
     input.hook_event_name === "UserPromptSubmit" &&

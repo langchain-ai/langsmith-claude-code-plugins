@@ -27,7 +27,7 @@
     "langsmith": "^0.11.4"
   },
   "devDependencies": {
-    "@langchain/plugins-base": "0.5.1",
+    "@langchain/plugins-base": "github:langchain-ai/langsmith-plugin-binary#8addc9098bcb84a4189c70cada22843e4ce7c014",
     "@types/node": "^26.6.5",
     "esbuild": "^0.28.1",
     "oxfmt": "^0.72.0",

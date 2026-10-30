@@ -12,16 +12,6 @@ import {
   WORKSPACE_ID_VARIABLE,
 } from "./constants.js";
 
-/**
- * OSC 8 hyperlink keeping a wrapped URL clickable. The URL is its own label, so
- * terminals without OSC 8 ignore the escape and still show the full link.
- */
-function terminalLink(url: string): string {
-  const OSC8 = "\u001b]8;;";
-  const BEL = "\u0007";
-  return `${OSC8}${url}${BEL}${url}${OSC8}${BEL}`;
-}
-
 function lookupOptions(apiUrl: string) {
   return {
     apiUrl,
@@ -102,7 +92,7 @@ export async function describeThreadLinks(config: Config, sessionId: string): Pr
         const url = new URL(client.getHostUrl());
         const path = ["o", project.tenant_id, "projects", "p", project.id, "t", sessionId];
         url.pathname = `${url.pathname.replace(/\/$/, "")}/${path.map(encodeURIComponent).join("/")}`;
-        return { resolved: true, line: `${projectName}: ${terminalLink(url.href)}` };
+        return { resolved: true, line: `${projectName}: ${url.href}` };
       } catch {
         // Drop the error: SDK messages can carry request details the user should not see.
         return {

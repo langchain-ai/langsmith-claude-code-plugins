@@ -2,7 +2,8 @@ import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { readPolicyFile, updatePolicyFile } from "@langchain/plugins-base/plugin";
 import type { PolicyFileOptions } from "@langchain/plugins-base/plugin";
-import type { TracingMode, TracingPolicy } from "./types.js";
+import { SETUP_COMMAND_PATTERN } from "./constants.js";
+import type { TracingCommand, TracingMode, TracingPolicy } from "./types.js";
 import { isRecord } from "./utils/records.js";
 
 function isMode(value: unknown): value is TracingMode {
@@ -44,11 +45,12 @@ export function getThreadTracingMode(
   }
 }
 
-/** Exact, argument-free commands only; ordinary prompts are never interpreted. */
-export function parseTracingCommand(prompt: string): "mute" | "unmute" | "trace" | undefined {
+/** Exact commands only, and only setup takes arguments; ordinary prompts are never interpreted. */
+export function parseTracingCommand(prompt: string): TracingCommand | undefined {
   if (prompt === "/langsmith-tracing:mute") return "mute";
   if (prompt === "/langsmith-tracing:unmute") return "unmute";
   if (prompt === "/langsmith-tracing:trace") return "trace";
+  if (SETUP_COMMAND_PATTERN.test(prompt)) return "setup";
   return undefined;
 }
 
