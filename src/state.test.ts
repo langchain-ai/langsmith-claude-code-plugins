@@ -25,7 +25,7 @@ import {
   saveHeldRun,
   pruneHeldRuns,
 } from "./state.js";
-import { HELD_TOOL_RUNS_DIR } from "./constants.js";
+import { ENGINE_STORAGE_DIR_NAME, HELD_TOOL_RUN_PREFIX } from "./constants.js";
 import type { HeldToolRun } from "./types.js";
 import type { TracingState } from "./types.js";
 
@@ -505,10 +505,15 @@ describe("pruneOldSessions", () => {
     const held = { run: { id: "r" }, tracing: "full", origin: "main" } as unknown as HeldToolRun;
     saveHeldRun(held, statePath, "s", "old");
     saveHeldRun(held, statePath, "s", "new");
-    const folder = join(tmpDir, HELD_TOOL_RUNS_DIR);
-    utimesSync(join(folder, "s-old.json"), new Date(twoDaysAgo), new Date(twoDaysAgo));
+    const folder = join(tmpDir, ENGINE_STORAGE_DIR_NAME);
+    writeFileSync(join(folder, "engine-owned.json"), "{}");
+    for (const name of [`${HELD_TOOL_RUN_PREFIX}s-old.json`, "engine-owned.json"])
+      utimesSync(join(folder, name), new Date(twoDaysAgo), new Date(twoDaysAgo));
     pruneHeldRuns(statePath, now);
-    expect(readdirSync(folder)).toEqual(["s-new.json"]);
+    expect(readdirSync(folder).sort()).toEqual([
+      "engine-owned.json",
+      `${HELD_TOOL_RUN_PREFIX}s-new.json`,
+    ]);
   });
 });
 

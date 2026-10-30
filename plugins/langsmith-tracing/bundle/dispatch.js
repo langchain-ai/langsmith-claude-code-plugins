@@ -23661,7 +23661,7 @@ var HOOK_ENTRY_TYPE = "attachment";
 var HOOK_CONTEXT_ATTACHMENT = "hook_additional_context";
 var ASYNC_HOOK_ATTACHMENT = "async_hook_response";
 var PLUGIN_CONTEXT_SUFFIX = /-context$/;
-var HELD_TOOL_RUNS_DIR = "langsmith_held_tool_runs";
+var HELD_TOOL_RUN_PREFIX = "held-tool-run-";
 var UNSAFE_FILE_NAME_CHARS = /[^A-Za-z0-9_-]/g;
 var PRIVATE_FILE_MODE = 384;
 var PRIVATE_FOLDER_MODE = 448;
@@ -24821,8 +24821,8 @@ function updateSessionState(state, sessionId, position, turnCount, taskRunMap, c
     }
   };
 }
-var heldRunsFolder = (stateFilePath) => join26(dirname19(stateFilePath), HELD_TOOL_RUNS_DIR);
-var heldRunPath = (...[stateFilePath, sessionId, toolUseId]) => join26(heldRunsFolder(stateFilePath), `${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`);
+var heldRunsFolder = (stateFilePath) => join26(dirname19(stateFilePath), ENGINE_STORAGE_DIR_NAME);
+var heldRunPath = (...[stateFilePath, sessionId, toolUseId]) => join26(heldRunsFolder(stateFilePath), `${HELD_TOOL_RUN_PREFIX}${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`);
 var saveHeldRun = (held, ...key) => publishFile(heldRunPath(...key), JSON.stringify(held));
 function takeHeldRun(...key) {
   const held = readJson(readText(heldRunPath(...key)));
@@ -24831,7 +24831,7 @@ function takeHeldRun(...key) {
 }
 function pruneHeldRuns(stateFilePath, now = Date.now()) {
   const folder = heldRunsFolder(stateFilePath);
-  for (const name of listDirectory(folder)) {
+  for (const name of listDirectory(folder).filter((n2) => n2.startsWith(HELD_TOOL_RUN_PREFIX))) {
     const modified = entryInfo(join26(folder, name))?.mtimeMs ?? now;
     if (now - modified > SESSION_MAX_AGE_MS)
       removeFile2(join26(folder, name));

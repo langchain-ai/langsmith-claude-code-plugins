@@ -15,7 +15,7 @@ import type {
   TranscriptMessage,
 } from "../types.js";
 import { tracingPolicyPath } from "../tracing-policy.js";
-import { HELD_TOOL_RUNS_DIR, STOP_FLUSH_WAIT_MS } from "../constants.js";
+import { ENGINE_STORAGE_DIR_NAME, HELD_TOOL_RUN_PREFIX, STOP_FLUSH_WAIT_MS } from "../constants.js";
 
 // Exercise the real hooks, grouping, run builders, background registration and
 // finalization. Only I/O/SDK transport is replaced; privacy projection is real.
@@ -224,8 +224,11 @@ vi.mock("../transcript.js", async (original) => ({
 }));
 
 h.stateFilePath = join(mkdtempSync(join(tmpdir(), "held-runs-")), "state.json");
-const heldDir = join(h.stateFilePath, "..", HELD_TOOL_RUNS_DIR);
-const heldFiles = () => readdirSync(heldDir).map((n) => readFileSync(join(heldDir, n), "utf8"));
+const heldDir = join(h.stateFilePath, "..", ENGINE_STORAGE_DIR_NAME);
+const heldFiles = () =>
+  readdirSync(heldDir)
+    .filter((n) => n.startsWith(HELD_TOOL_RUN_PREFIX))
+    .map((n) => readFileSync(join(heldDir, n), "utf8"));
 afterAll(() => rmSync(join(h.stateFilePath, ".."), { recursive: true, force: true }));
 const now = "2026-07-01T00:00:00.000Z";
 const earlier = "2026-06-30T23:59:59.000Z";

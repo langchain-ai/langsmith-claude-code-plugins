@@ -23,7 +23,7 @@ const HOOK_ENTRY_TYPE = "attachment";
 const HOOK_CONTEXT_ATTACHMENT = "hook_additional_context";
 const ASYNC_HOOK_ATTACHMENT = "async_hook_response";
 const PLUGIN_CONTEXT_SUFFIX = /-context$/;
-const HELD_TOOL_RUNS_DIR = "langsmith_held_tool_runs";
+const HELD_TOOL_RUN_PREFIX = "held-tool-run-";
 const UNSAFE_FILE_NAME_CHARS = /[^A-Za-z0-9_-]/g;
 const PRIVATE_FILE_MODE = 0o600;
 const PRIVATE_FOLDER_MODE = 0o700;
@@ -250,7 +250,7 @@ export {
   HOOK_CONTEXT_ATTACHMENT,
   ASYNC_HOOK_ATTACHMENT,
   PLUGIN_CONTEXT_SUFFIX,
-  HELD_TOOL_RUNS_DIR,
+  HELD_TOOL_RUN_PREFIX,
   UNSAFE_FILE_NAME_CHARS,
   PRIVATE_FILE_MODE,
   PRIVATE_FOLDER_MODE,
