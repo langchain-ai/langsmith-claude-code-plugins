@@ -23662,6 +23662,7 @@ var HOOK_CONTEXT_ATTACHMENT = "hook_additional_context";
 var ASYNC_HOOK_ATTACHMENT = "async_hook_response";
 var PLUGIN_CONTEXT_SUFFIX = /-context$/;
 var HELD_TOOL_RUN_PREFIX = "held-tool-run-";
+var HELD_TOOL_RUN_MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 var UNSAFE_FILE_NAME_CHARS = /[^A-Za-z0-9_-]/g;
 var PRIVATE_FILE_MODE = 384;
 var PRIVATE_FOLDER_MODE = 448;
@@ -24832,7 +24833,7 @@ function pruneHeldRuns(stateFilePath, now = Date.now()) {
   const folder = engineStorageRoot(stateFilePath);
   for (const name of listDirectory(folder).filter((n2) => n2.startsWith(HELD_TOOL_RUN_PREFIX))) {
     const modified = entryInfo(join26(folder, name))?.mtimeMs ?? now;
-    if (now - modified > SESSION_MAX_AGE_MS)
+    if (now - modified > HELD_TOOL_RUN_MAX_AGE_MS)
       removeFile2(join26(folder, name));
   }
 }

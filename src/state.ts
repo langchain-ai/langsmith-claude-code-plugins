@@ -5,7 +5,12 @@
 
 import { join } from "node:path";
 import { createStateStore, pruneStateEntries } from "@langchain/plugins-base/storage";
-import { HELD_TOOL_RUN_PREFIX, SESSION_MAX_AGE_MS, UNSAFE_FILE_NAME_CHARS } from "./constants.js";
+import {
+  HELD_TOOL_RUN_MAX_AGE_MS,
+  HELD_TOOL_RUN_PREFIX,
+  SESSION_MAX_AGE_MS,
+  UNSAFE_FILE_NAME_CHARS,
+} from "./constants.js";
 import { engineStorageRoot } from "./engine-writer.js";
 import { warn } from "./logger.js";
 import {
@@ -161,7 +166,7 @@ export function pruneHeldRuns(stateFilePath: string, now: number = Date.now()): 
   const folder = engineStorageRoot(stateFilePath);
   for (const name of listDirectory(folder).filter((n) => n.startsWith(HELD_TOOL_RUN_PREFIX))) {
     const modified = entryInfo(join(folder, name))?.mtimeMs ?? now;
-    if (now - modified > SESSION_MAX_AGE_MS) removeFile(join(folder, name));
+    if (now - modified > HELD_TOOL_RUN_MAX_AGE_MS) removeFile(join(folder, name));
   }
 }
 

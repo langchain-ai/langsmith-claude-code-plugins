@@ -500,20 +500,16 @@ describe("pruneOldSessions", () => {
     expect(result).toHaveProperty("active");
   });
 
-  it("removes held tool runs older than the session age limit", () => {
+  it("removes held tool runs older than six hours", () => {
     const statePath = join(tmpDir, "state.json");
     const held = { run: { id: "r" }, tracing: "full", origin: "main" } as unknown as HeldToolRun;
-    saveHeldRun(held, statePath, "s", "old");
-    saveHeldRun(held, statePath, "s", "new");
+    saveHeldRun(held, statePath, "s", "t");
     const folder = join(tmpDir, ENGINE_STORAGE_DIR_NAME);
-    writeFileSync(join(folder, "engine-owned.json"), "{}", { flag: "wx", mode: 0o600 });
-    for (const name of [`${HELD_TOOL_RUN_PREFIX}s-old.json`, "engine-owned.json"])
-      utimesSync(join(folder, name), new Date(twoDaysAgo), new Date(twoDaysAgo));
-    pruneHeldRuns(statePath, now);
-    expect(readdirSync(folder).sort()).toEqual([
-      "engine-owned.json",
-      `${HELD_TOOL_RUN_PREFIX}s-new.json`,
-    ]);
+    writeFileSync(join(folder, "other.json"), "{}", { flag: "wx", mode: 0o600 });
+    pruneHeldRuns(statePath, Date.now() + 5 * 60 * 60 * 1000);
+    expect(readdirSync(folder).sort()).toEqual([`${HELD_TOOL_RUN_PREFIX}s-t.json`, "other.json"]);
+    pruneHeldRuns(statePath, Date.now() + 7 * 60 * 60 * 1000);
+    expect(readdirSync(folder)).toEqual(["other.json"]);
   });
 });
 

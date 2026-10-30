@@ -231,10 +231,7 @@ const now = "2026-07-01T00:00:00.000Z";
 const earlier = "2026-06-30T23:59:59.000Z";
 const later = "2026-07-01T00:00:01.000Z";
 const privateText = "PRIVATE_MARKER";
-const imagePrompt = {
-  role: "user",
-  content: [{ type: "image" }, { type: "text", text: privateText }],
-};
+const pasted = { role: "user", content: [{ type: "image" }, { type: "text", text: privateText }] };
 const hookEntry = (hookEvent: string, toolUseID: string) => {
   const attachment = { type: "hook_additional_context", content: [`${hookEvent}-hook`] };
   return { type: "attachment", attachment: { ...attachment, hookEvent, toolUseID } } as HookEntry;
@@ -1030,7 +1027,7 @@ describe("tool privacy snapshot reclamation", () => {
     [[hookEntry("SessionStart", "SessionStart"), hookEntry("Setup", "Setup")], -1, false],
     [transcript(), 1, false],
     [
-      [hookEntry("SessionStart", "SessionStart"), { ...transcript()[0], message: imagePrompt }],
+      [hookEntry("SessionStart", "SessionStart"), { ...transcript()[0], message: pasted }],
       -1,
       false,
     ],
