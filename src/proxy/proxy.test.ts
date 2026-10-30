@@ -19,6 +19,7 @@ import {
 import { endpoints, configDir, loadConfig } from "./config.js";
 import {
   API_URL,
+  AUTH_UNAVAILABLE_LOG,
   CREDENTIAL_SLOT_GUIDANCE,
   EXPIRED_TOKEN_REASON,
   GATEWAY_REFUSED_LOG,
@@ -839,7 +840,7 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     if (profile !== undefined) saveLogin(home, profile);
     await expect(loginToken(base)).rejects.toThrow(reason);
   });
-  it("logs a failed sign-in when a request reaches the gateway", async () => {
+  it("logs every sign-in 503, including ones from a remembered failure", async () => {
     const log = vi.fn();
     const config = { ...base, useClaudeSubscription: false };
     const token = async () => {
@@ -847,9 +848,15 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     };
     const proxy = createProxy(config, { token, log });
     config.port = await listen(proxy.server);
-    const response = await request(config, undefined, { headers: { authorization: undefined } });
-    expect(response.status).toBe(503);
-    expect(log).toHaveBeenCalledWith(SIGN_IN_FAILED_LOG + NO_LOGIN_REASON);
+    for (const _attempt of [1, 2]) {
+      const response = await request(config, undefined, { headers: { authorization: undefined } });
+      expect(response.status).toBe(503);
+    }
+    expect(log.mock.calls).toEqual([
+      [SIGN_IN_FAILED_LOG + NO_LOGIN_REASON],
+      [AUTH_UNAVAILABLE_LOG],
+      [AUTH_UNAVAILABLE_LOG],
+    ]);
   });
   it("logs why sign-in failed and when the gateway refused a token, never the token", async () => {
     const log = vi.fn();

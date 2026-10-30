@@ -15457,6 +15457,7 @@ var LOGIN_TOKEN_TTL_MS = 6e4;
 var LOGIN_CONFIG_PATH = [".langsmith", "config.json"];
 var SIGN_IN_FAILED_LOG = "LangSmith sign-in failed: ";
 var GATEWAY_REFUSED_LOG = "The gateway refused the LangSmith token";
+var AUTH_UNAVAILABLE_LOG = "Returned 503 to Claude Code because no LangSmith token was available";
 var NO_LOGIN_REASON = "no saved LangSmith login was found, so run langsmith auth login";
 var UNUSABLE_LOGIN_REASON = "the saved login has no usable access token";
 var EXPIRED_TOKEN_REASON = "the token is expired, so a refresh failed or was refused";
@@ -16190,6 +16191,7 @@ function createProxy(config, options = {}) {
       if (draining)
         throw new RequestError(503, "Local proxy draining");
       const token = await tokens.get().catch(() => {
+        options.log?.(AUTH_UNAVAILABLE_LOG);
         throw new RequestError(503, unavailable());
       });
       if (ended || res.destroyed)

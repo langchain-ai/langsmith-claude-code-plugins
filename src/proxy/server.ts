@@ -8,6 +8,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { endpoints } from "./config.js";
 import {
   API_KEY_SLOT,
+  AUTH_UNAVAILABLE_LOG,
   BEARER_SLOT,
   CREDENTIAL_PREFIX,
   CREDENTIAL_SLOT_GUIDANCE,
@@ -397,6 +398,7 @@ export function createProxy(
       }
       if (draining) throw new RequestError(503, "Local proxy draining");
       const token = await tokens.get().catch(() => {
+        options.log?.(AUTH_UNAVAILABLE_LOG);
         throw new RequestError(503, unavailable());
       });
       if (ended || res.destroyed) return;
