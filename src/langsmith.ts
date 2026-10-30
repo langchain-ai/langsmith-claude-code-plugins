@@ -37,7 +37,7 @@ import {
   SKILL_TOOL_NAME,
   USER_PROMPT_TURN_NAME,
 } from "./constants.js";
-import { skillKey, slashSkillOf, stripContentMarkup } from "./utils/harness.js";
+import { isSameSkill, slashSkillOf, stripContentMarkup } from "./utils/harness.js";
 import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import {
   repoScopedMetadata,
@@ -242,13 +242,13 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
   let lastEndTime = turn.userTimestamp;
 
   const slashSkill = slashSkillOf(turn);
-  const loadedSkillKeys = turn.llmCalls.flatMap((llmCall) =>
+  const loadedSkills = turn.llmCalls.flatMap((llmCall) =>
     llmCall.toolCalls.flatMap(({ tool_use, result }) => {
       const name = result?.isError ? undefined : skillNameFromTool(tool_use.name, tool_use.input);
-      return name ? [skillKey(name)] : [];
+      return name ? [name] : [];
     }),
   );
-  if (slashSkill && !loadedSkillKeys.includes(skillKey(slashSkill.name))) {
+  if (slashSkill && !loadedSkills.some((name) => isSameSkill(name, slashSkill.name))) {
     const skillRunId = stableRunId(turn.userTimestamp, sessionId, turnId, "slash-skill");
     const skillInput = {
       skill: slashSkill.name,

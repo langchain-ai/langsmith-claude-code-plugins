@@ -23703,6 +23703,8 @@ var HARNESS_UNWRAPPED_TAG = /<\/?(bash-input|bash-stdout|bash-stderr|local-comma
 var SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
 var SKILL_TOOL_NAME = "Skill";
 var SKILL_COMMAND_OPENING = "<command-message>";
+var SKILL_NAMESPACE_SEPARATOR = ":";
+var SLASH_COMMAND = new RegExp(HARNESS_COMMAND.source);
 var SKILL_LAUNCH_OUTPUT_PREFIX = "Launching skill: ";
 var WORKFLOW_TOOL_NAME = "Workflow";
 var WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
@@ -25276,17 +25278,21 @@ function slashSkillOf(turn) {
   if (!text.startsWith(SKILL_COMMAND_OPENING) || !turn.llmCalls[0]?.instructionsBefore) {
     return void 0;
   }
-  for (const [, rawName, rawArgs] of text.matchAll(HARNESS_COMMAND)) {
-    const name = normalizeSkillName(rawName);
-    const args = rawArgs?.trim();
-    if (!name)
-      return void 0;
-    return args ? { name, args } : { name };
-  }
-  return void 0;
+  const [, rawName = "", rawArgs] = SLASH_COMMAND.exec(text) ?? [];
+  const name = normalizeSkillName(rawName);
+  const args = rawArgs?.trim();
+  if (!name)
+    return void 0;
+  return args ? { name, args } : { name };
 }
-function skillKey(name) {
-  return name.toLowerCase().split(":").at(-1) ?? name;
+function isSameSkill(first, second) {
+  const [a, b] = [first, second].map((name) => name.toLowerCase());
+  const bareA = a.split(SKILL_NAMESPACE_SEPARATOR).at(-1);
+  const bareB = b.split(SKILL_NAMESPACE_SEPARATOR).at(-1);
+  if (!bareA || !bareB)
+    return false;
+  const bothNamespaced = bareA !== a && bareB !== b;
+  return bothNamespaced ? a === b : bareA === bareB;
 }
 
 // dist/src/metadata.js
@@ -25557,11 +25563,11 @@ async function traceTurn(options) {
   };
   let lastEndTime = turn.userTimestamp;
   const slashSkill = slashSkillOf(turn);
-  const loadedSkillKeys = turn.llmCalls.flatMap((llmCall) => llmCall.toolCalls.flatMap(({ tool_use, result }) => {
+  const loadedSkills = turn.llmCalls.flatMap((llmCall) => llmCall.toolCalls.flatMap(({ tool_use, result }) => {
     const name = result?.isError ? void 0 : skillNameFromTool(tool_use.name, tool_use.input);
-    return name ? [skillKey(name)] : [];
+    return name ? [name] : [];
   }));
-  if (slashSkill && !loadedSkillKeys.includes(skillKey(slashSkill.name))) {
+  if (slashSkill && !loadedSkills.some((name) => isSameSkill(name, slashSkill.name))) {
     const skillRunId = stableRunId(turn.userTimestamp, sessionId, turnId, "slash-skill");
     const skillInput = {
       skill: slashSkill.name,

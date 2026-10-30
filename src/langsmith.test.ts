@@ -589,6 +589,59 @@ describe("traceTurn", () => {
     expect(skillRuns()).toHaveLength(1);
   });
 
+  it.each([
+    ["/a:review", "b:review"],
+    ["/a:b:review", "c:review"],
+    ["/a:", "b:"],
+  ])("records typed %s and a Skill call for %s as two runs", async (typed, called) => {
+    await traceTurn({
+      turn: skillTurn(
+        `<command-message>${typed.slice(1)}</command-message>\n<command-name>${typed}</command-name>`,
+        true,
+        [skillToolCall("t1", called, { content: `Launching skill: ${called}` })] as never,
+      ),
+      sessionId: "session-123",
+      turnNum: 1,
+    });
+
+    expect(skillRuns()).toHaveLength(2);
+  });
+
+  it("records a typed skill once when it is not the first skill Claude called", async () => {
+    await traceTurn({
+      turn: skillTurn(
+        "<command-message>review-pr</command-message>\n<command-name>/review-pr</command-name>",
+        true,
+        [
+          skillToolCall("t1", "plain-terms", { content: "Launching skill: plain-terms" }),
+          skillToolCall("t2", "review-pr", { content: "Launching skill: review-pr" }),
+        ] as never,
+      ),
+      sessionId: "session-123",
+      turnNum: 1,
+    });
+
+    expect(skillRuns().map((run) => run.extra.metadata.ls_skill_name)).toEqual([
+      "plain-terms",
+      "review-pr",
+    ]);
+  });
+
+  it("records a typed skill once when Claude called it in a later model call", async () => {
+    const turn = skillTurn(
+      "<command-message>review-pr</command-message>\n<command-name>/review-pr</command-name>",
+      true,
+    );
+    turn.llmCalls.push(
+      call([{ type: "text", text: "again" }], {
+        toolCalls: [skillToolCall("t2", "review-pr", { content: "Launching skill: review-pr" })],
+      }),
+    );
+    await traceTurn({ turn, sessionId: "session-123", turnNum: 1 });
+
+    expect(skillRuns()).toHaveLength(1);
+  });
+
   it("still tags a typed skill when Claude's call for the same skill failed", async () => {
     await traceTurn({
       turn: skillTurn(

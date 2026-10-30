@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   isCursorPayload,
   isPayloadForHook,
-  skillKey,
+  isSameSkill,
   slashSkillOf,
   stripContentMarkup,
   stripHarnessMarkup,
@@ -175,6 +175,18 @@ describe("slashSkillOf", () => {
     expect(slashSkillOf(turn)).toEqual({ name: "plain-terms" });
   });
 
+  it("trims the arguments", () => {
+    const turn = turnOf(
+      "<command-message>plain-terms</command-message>\n<command-name>/plain-terms</command-name>\n<command-args>  shorten  </command-args>",
+      true,
+    );
+    expect(slashSkillOf(turn)).toEqual({ name: "plain-terms", args: "shorten" });
+  });
+
+  it("ignores skill-style markup that names no command", () => {
+    expect(slashSkillOf(turnOf("<command-message>x</command-message>", true))).toBeUndefined();
+  });
+
   it("ignores a command named only by a slash", () => {
     const turn = turnOf("<command-message>x</command-message><command-name>/</command-name>", true);
     expect(slashSkillOf(turn)).toBeUndefined();
@@ -185,12 +197,19 @@ describe("slashSkillOf", () => {
   });
 });
 
-describe("skillKey", () => {
+describe("isSameSkill", () => {
   it.each([
-    ["Foo", "foo"],
-    ["plug:foo", "foo"],
-    ["foo", "foo"],
-  ])("keys %j as %j", (name, key) => {
-    expect(skillKey(name)).toBe(key);
+    ["foo", "foo", true],
+    ["Foo", "foo", true],
+    ["plug:foo", "foo", true],
+    ["foo", "plug:foo", true],
+    ["a:review", "a:review", true],
+    ["a:review", "b:review", false],
+    ["a:b:review", "c:review", false],
+    ["a:", "b:", false],
+    ["a:", "a:", false],
+    ["", "", false],
+  ])("compares %j with %j as %s", (first, second, same) => {
+    expect(isSameSkill(first, second)).toBe(same);
   });
 });

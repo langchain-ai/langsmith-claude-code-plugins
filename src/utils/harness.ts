@@ -6,6 +6,8 @@ import {
   HARNESS_TASK_NOTIFICATION_KEPT,
   HARNESS_UNWRAPPED_TAG,
   SKILL_COMMAND_OPENING,
+  SKILL_NAMESPACE_SEPARATOR,
+  SLASH_COMMAND,
 } from "../constants.js";
 import type { HookEventName, HookEventPayload, SlashSkill, Turn } from "../types.js";
 
@@ -57,15 +59,18 @@ export function slashSkillOf(turn: Turn): SlashSkill | undefined {
   if (!text.startsWith(SKILL_COMMAND_OPENING) || !turn.llmCalls[0]?.instructionsBefore) {
     return undefined;
   }
-  for (const [, rawName, rawArgs] of text.matchAll(HARNESS_COMMAND)) {
-    const name = normalizeSkillName(rawName);
-    const args = rawArgs?.trim();
-    if (!name) return undefined;
-    return args ? { name, args } : { name };
-  }
-  return undefined;
+  const [, rawName = "", rawArgs] = SLASH_COMMAND.exec(text) ?? [];
+  const name = normalizeSkillName(rawName);
+  const args = rawArgs?.trim();
+  if (!name) return undefined;
+  return args ? { name, args } : { name };
 }
 
-export function skillKey(name: string): string {
-  return name.toLowerCase().split(":").at(-1) ?? name;
+export function isSameSkill(first: string, second: string): boolean {
+  const [a, b] = [first, second].map((name) => name.toLowerCase());
+  const bareA = a.split(SKILL_NAMESPACE_SEPARATOR).at(-1);
+  const bareB = b.split(SKILL_NAMESPACE_SEPARATOR).at(-1);
+  if (!bareA || !bareB) return false;
+  const bothNamespaced = bareA !== a && bareB !== b;
+  return bothNamespaced ? a === b : bareA === bareB;
 }
