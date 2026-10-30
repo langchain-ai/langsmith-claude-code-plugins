@@ -26604,8 +26604,7 @@ async function closeStoppedTurn(_id, closing, config) {
     return pruneOldSessions(updatedState);
   });
   await flushHeldToolRuns(config, input.session_id, currentRunId, messages);
-  if (config.captureHookOutputs)
-    pruneHeldRuns(config.stateFilePath);
+  pruneHeldRuns(config.stateFilePath);
   const turnRunId = completeNow ? currentRunId : continuedDeferred ? void 0 : continuedRunId;
   if (turnRunId) {
     debug(`Completing Turn run ${turnRunId}`);

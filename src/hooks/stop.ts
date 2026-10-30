@@ -425,7 +425,7 @@ export async function closeStoppedTurn(
   });
 
   await flushHeldToolRuns(config, input.session_id, currentRunId, messages);
-  if (config.captureHookOutputs) pruneHeldRuns(config.stateFilePath);
+  pruneHeldRuns(config.stateFilePath);
 
   // Complete the Turn run created by UserPromptSubmit (unless deferred above).
   const turnRunId = completeNow ? currentRunId : continuedDeferred ? undefined : continuedRunId;
