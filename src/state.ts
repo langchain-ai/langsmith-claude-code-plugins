@@ -3,10 +3,13 @@
  * transcript so the Stop hook only processes new messages.
  */
 
+import { dirname, join } from "node:path";
 import { createStateStore, pruneStateEntries } from "@langchain/plugins-base/storage";
-import { SESSION_MAX_AGE_MS } from "./constants.js";
+import { HELD_TOOL_RUNS_DIR, SESSION_MAX_AGE_MS, UNSAFE_FILE_NAME_CHARS } from "./constants.js";
 import { warn } from "./logger.js";
-import type { TracingState, SessionState, ReadPosition } from "./types.js";
+import { atomic, directory } from "./proxy/files.js";
+import { entryInfo, listDirectory, readJson, readText, removeFile } from "./utils/files.js";
+import type { TracingState, SessionState, ReadPosition, HeldToolRun } from "./types.js";
 
 type SessionStore = ReturnType<typeof createStateStore<SessionState>>;
 
@@ -130,4 +133,51 @@ export function updateSessionState(
         currentTurnRunId !== undefined ? currentTurnRunId : existingSession.current_turn_run_id,
     },
   };
+}
+
+const heldRunsFolder = (stateFilePath: string) => join(dirname(stateFilePath), HELD_TOOL_RUNS_DIR);
+
+const heldRunPath = (stateFilePath: string, sessionId: string, toolUseId: string) =>
+  join(
+    heldRunsFolder(stateFilePath),
+    `${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`,
+  );
+
+export function saveHeldRun(
+  stateFilePath: string,
+  sessionId: string,
+  toolUseId: string,
+  held: HeldToolRun,
+): void {
+  directory(heldRunsFolder(stateFilePath), true, true);
+  atomic(heldRunPath(stateFilePath, sessionId, toolUseId), JSON.stringify(held), undefined);
+}
+
+export function takeHeldRun(
+  stateFilePath: string,
+  sessionId: string,
+  toolUseId: string,
+): HeldToolRun | undefined {
+  const path = heldRunPath(stateFilePath, sessionId, toolUseId);
+  const held = readJson(readText(path)) as HeldToolRun | undefined;
+  removeFile(path);
+  return held;
+}
+
+export function pruneHeldRuns(stateFilePath: string, now: number = Date.now()): void {
+  const folder = heldRunsFolder(stateFilePath);
+  for (const name of listDirectory(folder)) {
+    const modified = entryInfo(join(folder, name))?.mtimeMs ?? now;
+    if (now - modified > SESSION_MAX_AGE_MS) removeFile(join(folder, name));
+  }
+}
+
+export function dropHeldRuns(
+  stateFilePath: string,
+  sessionId: string,
+  session: SessionState,
+): Pick<SessionState, "held_tool_runs"> {
+  for (const id of Object.keys(session.held_tool_runs ?? {}))
+    takeHeldRun(stateFilePath, sessionId, id);
+  return { held_tool_runs: undefined };
 }

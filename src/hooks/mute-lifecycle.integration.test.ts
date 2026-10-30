@@ -1,18 +1,20 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UploadLogin } from "@langchain/plugins-base/auth";
 import type {
   Config,
+  HeldToolRun,
   HookEventName,
+  SessionState,
   TracingMode,
   TracingState,
   TranscriptMessage,
 } from "../types.js";
 import { tracingPolicyPath } from "../tracing-policy.js";
-import { STOP_FLUSH_WAIT_MS } from "../constants.js";
+import { HELD_TOOL_RUNS_DIR, STOP_FLUSH_WAIT_MS } from "../constants.js";
 
 // Exercise the real hooks, grouping, run builders, background registration and
 // finalization. Only I/O/SDK transport is replaced; privacy projection is real.
@@ -33,6 +35,7 @@ const h = vi.hoisted(() => ({
   readAt: 0,
   endLine: -1,
   readPromptId: undefined as string | undefined,
+  stateFilePath: "",
   captureHooks: false,
   managedProblem: undefined as string | undefined,
   login: undefined as UploadLogin | undefined,
@@ -199,6 +202,12 @@ vi.mock("../state.js", async (original) => {
       // Match persistence: no symbols/functions or shared references survive.
       h.state = JSON.parse(JSON.stringify(update(structuredClone(h.state))));
     },
+    saveHeldRun: (_: string, ...rest: [string, string, HeldToolRun]) =>
+      state.saveHeldRun(h.stateFilePath, ...rest),
+    takeHeldRun: (_: string, ...rest: [string, string]) =>
+      state.takeHeldRun(h.stateFilePath, ...rest),
+    dropHeldRuns: (_: string, ...rest: [string, SessionState]) =>
+      state.dropHeldRuns(h.stateFilePath, ...rest),
   };
 });
 vi.mock("../transcript.js", async (original) => ({
@@ -213,6 +222,11 @@ vi.mock("../transcript.js", async (original) => ({
   readRuntimeVersion: () => "test-runtime",
 }));
 
+h.stateFilePath = join(mkdtempSync(join(tmpdir(), "held-runs-")), "state.json");
+const heldDir = join(h.stateFilePath, "..", HELD_TOOL_RUNS_DIR);
+const heldFiles = () =>
+  readdirSync(heldDir).map((name) => readFileSync(join(heldDir, name), "utf8"));
+afterAll(() => rmSync(join(h.stateFilePath, ".."), { recursive: true, force: true }));
 const now = "2026-07-01T00:00:00.000Z";
 const earlier = "2026-06-30T23:59:59.000Z";
 const later = "2026-07-01T00:00:01.000Z";
@@ -1100,14 +1114,17 @@ describe("tool privacy snapshot reclamation", () => {
       await hook("pre");
       vi.setSystemTime(Date.parse(now) + 1000);
       await hook("post", { tool_response: { stdout: "TOOL_OUTPUT" } });
-      if (capture) expect(JSON.stringify(h.state).includes("TOOL_OUTPUT")).toBe(mode === "full");
+      const onDisk = [JSON.stringify(h.state), heldFiles().join()].map((t) =>
+        t.includes("TOOL_OUTPUT"),
+      );
+      if (capture) expect(onDisk).toEqual([false, mode === "full"]);
       vi.setSystemTime(Date.parse(now) + 2000);
       await hook("stop");
       return h.operations.filter((op) => op.config.name === "Bash").map((op) => op.config);
     };
     const [live] = await bash(false);
     const [held] = await bash(true);
-    expect(h.state.session.held_tool_runs).toEqual({});
+    expect([h.state.session.held_tool_runs, heldFiles()]).toEqual([{}, []]);
     const hooks = mode === "full" ? { hooks: [toolHook] } : {};
     expect(held).toEqual({ ...live, outputs: { ...live.outputs, ...hooks } });
   });
@@ -1224,6 +1241,17 @@ describe("tool privacy snapshot reclamation", () => {
     h.readAt = 0;
     await hook("failure", { error: "rate_limit" });
     expect(h.readAt).toBe(0);
+  });
+
+  it("removes a session's leftover held tools at SessionEnd", async () => {
+    reset("full", true);
+    h.messages = [...transcript({ id: "tool", name: "Bash" }), hookEntry("PostToolUse", "tool")];
+    await hook("prompt");
+    await hook("post");
+    h.state.session.held_tool_runs = { tool: "a turn that already closed" };
+    await hook("stop");
+    await hook("end");
+    expect([h.state.session.held_tool_runs, heldFiles()]).toEqual([undefined, []]);
   });
 
   it("leaves the turn's inputs alone when its saved post is missing", async () => {

@@ -26,6 +26,7 @@ import {
   furtherRead,
   pruneOldSessions,
   advanceToolTracingProgress,
+  pruneHeldRuns,
 } from "../state.js";
 import {
   traceTurn,
@@ -430,6 +431,7 @@ export async function closeStoppedTurn(
     messages,
     config.captureHookOutputs,
   );
+  if (config.captureHookOutputs) pruneHeldRuns(config.stateFilePath);
 
   // Complete the Turn run created by UserPromptSubmit (unless deferred above).
   const turnRunId = completeNow ? currentRunId : continuedDeferred ? undefined : continuedRunId;

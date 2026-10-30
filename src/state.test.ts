@@ -22,7 +22,11 @@ import {
   pruneOldSessions,
   advanceToolTracingProgress,
   furtherRead,
+  saveHeldRun,
+  pruneHeldRuns,
 } from "./state.js";
+import { HELD_TOOL_RUNS_DIR } from "./constants.js";
+import type { HeldToolRun } from "./types.js";
 import type { TracingState } from "./types.js";
 
 const warn = vi.hoisted(() => vi.fn());
@@ -494,6 +498,18 @@ describe("pruneOldSessions", () => {
     };
     const result = pruneOldSessions(state, now);
     expect(result).toHaveProperty("active");
+  });
+
+  it("removes held tool runs older than the session age limit", () => {
+    const statePath = join(tmpDir, "state.json");
+    const held = { run: { id: "r" }, tracing: "full", origin: "main" } as unknown as HeldToolRun;
+    saveHeldRun(statePath, "s", "old", held);
+    saveHeldRun(statePath, "s", "new", held);
+    const folder = join(tmpDir, HELD_TOOL_RUNS_DIR);
+    const twoDays = (now - 2 * 24 * 60 * 60 * 1000) / 1000;
+    utimesSync(join(folder, "s-old.json"), twoDays, twoDays);
+    pruneHeldRuns(statePath, now);
+    expect(readdirSync(folder)).toEqual(["s-new.json"]);
   });
 });
 

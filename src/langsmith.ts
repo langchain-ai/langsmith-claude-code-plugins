@@ -36,7 +36,7 @@ import {
   hookPlacement,
   windowHooks,
 } from "./transcript.js";
-import { loadState, getSessionState, atomicUpdateState } from "./state.js";
+import { loadState, getSessionState, atomicUpdateState, takeHeldRun } from "./state.js";
 import * as logger from "./logger.js";
 import {
   ASSISTANT_RUN_NAME,
@@ -563,22 +563,25 @@ export async function flushHeldToolRuns(
   messages: TranscriptMessage[],
   captureHookOutputs?: boolean,
 ): Promise<void> {
-  const held = Object.entries(
+  const refs = Object.entries(
     getSessionState(loadState(stateFilePath), sessionId).held_tool_runs ?? {},
-  ).filter(([, { run }]) => run.parent_run_id === turnRunId);
-  if (held.length === 0) return;
-  for (const [id, { run, tracing, origin }] of held) {
+  ).filter(([, turn]) => turn === turnRunId);
+  if (refs.length === 0) return;
+  for (const [id] of refs) {
+    const held = takeHeldRun(stateFilePath, sessionId, id);
+    if (!held) continue;
     const hooks = captureHookOutputs ? windowHooks(messages, id) : [];
-    const inputs = withHooks(run.inputs ?? {}, hooks, "input");
-    const outputs = withHooks(run.outputs ?? {}, hooks, "output");
-    await captureToolRun({ ...run, inputs, outputs }, tracing, run.parent_run_id!, origin).catch(
-      (err) => logger.error(`Failed to trace held tool ${id}: ${err}`),
+    const inputs = withHooks(held.run.inputs ?? {}, hooks, "input");
+    const outputs = withHooks(held.run.outputs ?? {}, hooks, "output");
+    const run = { ...held.run, inputs, outputs };
+    await captureToolRun(run, held.tracing, run.parent_run_id!, held.origin).catch((err) =>
+      logger.error(`Failed to trace held tool ${id}: ${err}`),
     );
   }
   await atomicUpdateState(stateFilePath, (state) => {
     const session = getSessionState(state, sessionId);
     const runs = { ...session.held_tool_runs };
-    for (const [id] of held) delete runs[id];
+    for (const [id] of refs) delete runs[id];
     return { ...state, [sessionId]: { ...session, held_tool_runs: runs } };
   });
 }

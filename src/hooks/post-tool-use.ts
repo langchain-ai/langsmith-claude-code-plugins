@@ -14,6 +14,8 @@ import {
   atomicUpdateState,
   getSessionState,
   advanceToolTracingProgress,
+  saveHeldRun,
+  takeHeldRun,
 } from "../state.js";
 import { expandHome, initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
@@ -163,14 +165,20 @@ export async function main(): Promise<void> {
         origin,
       };
   }
+  try {
+    if (held) saveHeldRun(config.stateFilePath, input.session_id, input.tool_use_id, held);
+  } catch (err) {
+    error(`Failed to hold tool run ${toolRunId}, uploading it without hooks: ${err}`);
+    await captureToolRun(held!.run, held!.tracing, parentRunId, held!.origin);
+    held = undefined;
+  }
+  let kept = false;
 
   // Save state atomically so concurrent PostToolUse hooks don't clobber each other.
   await atomicUpdateState(config.stateFilePath, (freshState) => {
     const freshSession = getSessionState(freshState, input.session_id);
     const closings = Object.values(freshSession.queued_closings ?? {}).map((c) => c.session);
-    const willClose = [freshSession, ...closings].some(
-      (s) => s.current_turn_run_id === parentRunId,
-    );
+    kept = !!held && [freshSession, ...closings].some((s) => s.current_turn_run_id === parentRunId);
 
     // Both the Agent and Workflow tools launch work that outlives this turn's
     // Stop. Register either the same way — under its launching turn in open_turns
@@ -243,8 +251,8 @@ export async function main(): Promise<void> {
               "post",
             )),
         last_tool_end_time: toolEndTime,
-        ...(held && willClose
-          ? { held_tool_runs: { ...freshSession.held_tool_runs, [input.tool_use_id]: held } }
+        ...(kept
+          ? { held_tool_runs: { ...freshSession.held_tool_runs, [input.tool_use_id]: parentRunId } }
           : {}),
         ...backgroundUpdate,
         // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this
@@ -260,4 +268,5 @@ export async function main(): Promise<void> {
       },
     };
   });
+  if (held && !kept) takeHeldRun(config.stateFilePath, input.session_id, input.tool_use_id);
 }

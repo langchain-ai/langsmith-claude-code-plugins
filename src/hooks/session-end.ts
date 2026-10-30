@@ -17,7 +17,13 @@ import {
   completeTurnRun,
   turnIdentityFromOpenTurn,
 } from "../langsmith.js";
-import { loadState, atomicUpdateState, getSessionState, furtherRead } from "../state.js";
+import {
+  loadState,
+  atomicUpdateState,
+  getSessionState,
+  furtherRead,
+  dropHeldRuns,
+} from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { initTracing } from "../tracing-engine.js";
 import { queueClosing } from "../closing-queue.js";
@@ -57,7 +63,12 @@ export async function main(): Promise<void> {
     if (!ss) return s;
     return {
       ...s,
-      [input.session_id]: { ...ss, tool_tracing_modes: {}, tool_tracing_progress: {} },
+      [input.session_id]: {
+        ...ss,
+        ...dropHeldRuns(config.stateFilePath, input.session_id, ss),
+        tool_tracing_modes: {},
+        tool_tracing_progress: {},
+      },
     };
   });
 }
@@ -222,6 +233,7 @@ export async function closeEndedSession(
       [input.session_id]: {
         ...ss,
         ...counted,
+        ...dropHeldRuns(config.stateFilePath, input.session_id, ss),
         current_turn_tracing: undefined,
         current_turn_run_id: undefined,
         current_trace_id: undefined,

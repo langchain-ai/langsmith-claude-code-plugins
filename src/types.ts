@@ -314,7 +314,7 @@ export interface SessionState {
   /** The last Stop-closed turn's mode, for a reply a blocking Stop hook adds to that turn. */
   closed_turn_tracing?: TracingMode;
   closed_turn_hooks?: HookOutput[];
-  held_tool_runs?: Record<string, HeldToolRun>;
+  held_tool_runs?: Record<string, string>;
   /** Captured by PreCompact for async PostCompact (manual preference or auto turn mode). */
   compaction_tracing?: TracingMode;
   last_line: number;
