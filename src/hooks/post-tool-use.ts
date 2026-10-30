@@ -91,7 +91,7 @@ export async function main(): Promise<void> {
     ? detectWorkflowLaunch(input.tool_name, input.tool_response)
     : undefined;
 
-  const origin = toolOrigin(input.tool_input, input.cwd);
+  const origin = toolOrigin(input.tool_input, input.cwd, input.tool_name);
 
   if (agentId) {
     // Agent tool: defer LangSmith run creation to the Stop hook, which will

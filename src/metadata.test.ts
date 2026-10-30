@@ -30,4 +30,14 @@ describe("skillNameFromTool", () => {
     expect(skillNameFromTool("Skill", undefined)).toBeUndefined();
     expect(skillNameFromTool("Skill", { skill: 42 })).toBeUndefined();
   });
+
+  it("files a slash or padded spelling under the bare name", () => {
+    expect(skillNameFromTool("Skill", { skill: "/review-pr" })).toBe("review-pr");
+    expect(skillNameFromTool("Skill", { skill: " review-pr " })).toBe("review-pr");
+  });
+
+  it("drops the name when the call failed", () => {
+    expect(skillNameFromTool("Skill", { skill: "nope" }, true)).toBeUndefined();
+    expect(skillNameFromTool("Skill", { skill: "ok" }, false)).toBe("ok");
+  });
 });

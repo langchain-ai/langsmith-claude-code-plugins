@@ -5,6 +5,9 @@ import {
   HARNESS_TASK_NOTIFICATION,
   HARNESS_TASK_NOTIFICATION_KEPT,
   HARNESS_UNWRAPPED_TAG,
+  NON_SKILL_PROMPT_COMMAND,
+  SKILL_COMMAND_OPENING,
+  SKILL_NAME_LEADING_SLASH,
 } from "../constants.js";
 import type { HookEventName, HookEventPayload, Turn } from "../types.js";
 
@@ -30,6 +33,14 @@ export function stripHarnessMarkup(text: string): string {
     )
     .replace(HARNESS_UNWRAPPED_TAG, "")
     .trim();
+}
+
+export function typedSkillName(content: Turn["userContent"]): string | undefined {
+  if (typeof content !== "string" || !content.startsWith(SKILL_COMMAND_OPENING)) return undefined;
+  const name = [...content.matchAll(HARNESS_COMMAND)][0]?.[1];
+  return name && !NON_SKILL_PROMPT_COMMAND.test(name.trim().replace(SKILL_NAME_LEADING_SLASH, ""))
+    ? name
+    : undefined;
 }
 
 export function stripContentMarkup(content: Turn["userContent"]): Turn["userContent"] | undefined {
