@@ -82,8 +82,6 @@ export function parseSetupArgs(rest: string[]): SetupOptions {
   const scope = flags.get("--scope");
   if (scope !== "global" && scope !== "project") throw new SetupError(usage);
   const result: SetupOptions = { scope, useClaudeSubscription };
-  result.cli = flags.get("--cli");
-  if (result.cli !== undefined && !result.cli.startsWith("/")) throw new SetupError(usage);
   if (flags.has("--port")) {
     const port = flags.get("--port")!;
     if (!/^[0-9]{4,5}$/.test(port) || Number(port) < 1024 || Number(port) > 65535)

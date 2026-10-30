@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import http from "node:http";
 import type https from "node:https";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createProxy } from "../server.js";
@@ -16,7 +16,6 @@ export const jwt = (exp = Date.now() / 1000 + 300) =>
 export const base: ProxyConfig = {
   enabled: true,
   useClaudeSubscription: true,
-  cli: "/unused/langsmith",
   profile: "test",
   port: 19991,
   secret: "a".repeat(64),
@@ -25,6 +24,34 @@ export function temporary() {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "ls-proxy-test-")));
   cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
+}
+export function saveLogin(home: string, profile: Record<string, unknown>) {
+  mkdirSync(join(home, ".langsmith"), { mode: 0o700 });
+  writeFileSync(
+    join(home, ".langsmith", "config.json"),
+    JSON.stringify({ profiles: { [base.profile!]: profile } }),
+    { mode: 0o600 },
+  );
+}
+export async function tokenServer(respond = true) {
+  const refreshes: string[] = [];
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      if (req.method !== "POST") return void res.writeHead(404).end();
+      refreshes.push(new URLSearchParams(body).get("refresh_token") ?? "");
+      if (respond)
+        res.end(
+          JSON.stringify({
+            access_token: jwt(Date.now() / 1000 + 3600),
+            refresh_token: `rotated-${refreshes.length}`,
+            expires_in: 3600,
+          }),
+        );
+    });
+  });
+  return { url: `http://127.0.0.1:${await listen(server)}`, refreshes };
 }
 export async function fixture(
   handler: http.RequestListener = (_req, res) => res.end("ok"),

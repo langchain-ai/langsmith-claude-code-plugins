@@ -161,7 +161,7 @@ describe("separate marketplace packages", () => {
           ? "description: Show read-only gateway routing and shared proxy status"
           : `description: ${name === "setup" ? "Enable" : "Disable"} gateway settings deterministically for an explicit scope`,
         name === "setup"
-          ? `argument-hint: "--scope global|project [--use-claude-subscription] [--profile name] [--api-url HTTPS_ORIGIN --gateway-url HTTPS_ORIGIN] [--cli /absolute/path --port 52507] [--workspace-id UUID --identity-token-ttl 300 --identity-token-command cmd args (last)]"`
+          ? `argument-hint: "--scope global|project [--use-claude-subscription] [--profile name] [--api-url HTTPS_ORIGIN --gateway-url HTTPS_ORIGIN] [--port 52507] [--workspace-id UUID --identity-token-ttl 300 --identity-token-command cmd args (last)]"`
           : name === "status"
             ? `argument-hint: "[--scope global|project]"`
             : `argument-hint: "--scope global|project"`,
@@ -179,8 +179,6 @@ describe("separate marketplace packages", () => {
             "https://api.preview.test/",
             "--gateway-url",
             "https://gateway.preview.test:8443/",
-            "--cli",
-            "/absolute/path/to/langsmith",
             "--port",
             "52508",
           );
@@ -214,7 +212,6 @@ describe("separate marketplace packages", () => {
                   useClaudeSubscription: false,
                   apiUrl: "https://api.preview.test",
                   gatewayUrl: "https://gateway.preview.test",
-                  cli: process.execPath,
                   profile: "private-profile",
                   port: 52507,
                   secret: "b".repeat(64),
@@ -348,7 +345,6 @@ require("node:module").syncBuiltinESMExports();
     const config: ProxyConfig = {
       enabled: true,
       useClaudeSubscription: false,
-      cli: process.execPath,
       profile: "fake",
       port: 0,
       secret: "b".repeat(64),
@@ -510,7 +506,6 @@ require("node:module").syncBuiltinESMExports();
       const retained = {
         enabled: false,
         useClaudeSubscription: false,
-        cli: process.execPath,
         profile: "fake",
         port: 52507,
         secret: "b".repeat(64),

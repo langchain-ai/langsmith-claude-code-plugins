@@ -24,7 +24,6 @@ it.each(["apiUrl", "gatewayUrl", "useClaudeSubscription", "disabled", "invalid"]
     const config: ProxyConfig = {
       enabled: true,
       useClaudeSubscription: true,
-      cli: "/fake/cli",
       profile: "preview",
       port: 52507,
       secret: "a".repeat(64),

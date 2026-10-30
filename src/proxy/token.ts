@@ -1,16 +1,27 @@
 import { spawn } from "node:child_process";
+import { join } from "node:path";
 import { endpoints, userHome } from "./config.js";
+import { bearerCredential } from "./header-slots.js";
+import { logFailure } from "./log.js";
 import {
   BEARER_TOKEN,
-  CLI_TOKEN_TTL_MS,
   CREDENTIAL_TIMEOUT_MS,
   DEFAULT_IDENTITY_TOKEN_TTL_MS,
+  EXPIRED_TOKEN_REASON,
   EXPIRY_MARGIN_MS,
   EXPIRY_SKEW_MS,
+  GATEWAY_REFUSED_LOG,
+  LOGIN_CONFIG_PATH,
+  LOGIN_TOKEN_TTL_MS,
   MAX_TOKEN_BYTES,
+  NO_LOGIN_REASON,
   REJECTION_RECHECK_MS,
   RETRY_AFTER_MS,
   SHELL,
+  SIGN_IN_FAILED_LOG,
+  TOKEN_COMMAND_REASON,
+  UNREADABLE_TOKEN_REASON,
+  UNUSABLE_LOGIN_REASON,
 } from "./proxy-constants.js";
 import type { CredentialState, ProxyConfig } from "./proxy-models.js";
 
@@ -18,24 +29,19 @@ import type { CredentialState, ProxyConfig } from "./proxy-models.js";
 export function cliEnvironment(): NodeJS.ProcessEnv {
   return { HOME: userHome(), PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
 }
-export function cliToken(
-  config: ProxyConfig,
-  timeoutMs = CREDENTIAL_TIMEOUT_MS,
-  signal?: AbortSignal,
-): Promise<string> {
-  return spawnToken(
-    config.cli!,
-    [
-      ...(config.profile === undefined ? [] : ["--profile", config.profile]),
-      "--api-url",
-      endpoints(config).apiUrl,
-      "--format=pretty",
-      "auth",
-      "token",
-    ],
-    timeoutMs,
-    signal,
-  );
+export class SignInFailure extends Error {}
+
+export async function loginToken(config: ProxyConfig, signal?: AbortSignal): Promise<string> {
+  const { loadProfileClientConfig } = await import("langsmith/lib/utils/profiles");
+  const { profileAuth } = loadProfileClientConfig({
+    configPath: join(userHome(), ...LOGIN_CONFIG_PATH),
+    profile: config.profile,
+  });
+  if (profileAuth === undefined) throw new SignInFailure(NO_LOGIN_REASON);
+  const token = bearerCredential((await profileAuth.getAuthHeader(fetch, signal))?.value);
+  if (token === undefined || !BEARER_TOKEN.test(token))
+    throw new SignInFailure(UNUSABLE_LOGIN_REASON);
+  return token;
 }
 
 export function commandToken(
@@ -72,7 +78,7 @@ function spawnToken(
       signal?.removeEventListener("abort", cancel);
       output = "";
       if (token) resolve(token);
-      else reject(new Error("LangSmith token unavailable"));
+      else reject(new SignInFailure(TOKEN_COMMAND_REASON));
     };
     // Wait for child close after cancellation before releasing the drain lock.
     const cancel = () => {
@@ -110,7 +116,7 @@ export class TokenCache {
   constructor(
     private readonly load: () => Promise<string>,
     private readonly now = Date.now,
-    private readonly ttlMs = CLI_TOKEN_TTL_MS,
+    private readonly ttlMs = LOGIN_TOKEN_TTL_MS,
   ) {}
   get loading(): boolean {
     return this.pending !== undefined;
@@ -130,6 +136,7 @@ export class TokenCache {
     if (this.now() < this.rejectedAt + REJECTION_RECHECK_MS) return;
     this.cached = undefined;
     this.rejectedAt = this.now();
+    logFailure(GATEWAY_REFUSED_LOG);
   }
   get(): Promise<string> {
     if (this.cached && this.now() < this.cached.until) return Promise.resolve(this.cached.token);
@@ -143,7 +150,7 @@ export class TokenCache {
           !Number.isFinite(exp) ||
           exp * 1000 < this.now() + EXPIRY_SKEW_MS
         )
-          throw new Error("Expired token");
+          throw new SignInFailure(EXPIRED_TOKEN_REASON);
         this.succeededAt = this.now();
         this.cached = {
           token,
@@ -151,7 +158,11 @@ export class TokenCache {
         };
         return token;
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        logFailure(
+          SIGN_IN_FAILED_LOG +
+            (error instanceof SignInFailure ? error.message : UNREADABLE_TOKEN_REASON),
+        );
         this.cached = undefined;
         this.failedAt = this.now();
         this.retryAt = this.now() + RETRY_AFTER_MS;
@@ -170,5 +181,5 @@ export function commandGuidance(config: ProxyConfig): string {
 }
 
 export function loginGuidance(config: ProxyConfig): string {
-  return `LangSmith authentication unavailable. Stop gateway sessions and other CLI writers, then log in in a separate terminal using your pinned CLI executable with: ${config.profile === undefined ? "" : `--profile ${config.profile} `}--api-url ${endpoints(config).apiUrl} auth login. Use a profile matching the selected API (optionally pin it with --profile): --api-url does not change an existing saved OAuth issuer. Review that issuer privately before login/refresh. Then retry the request; token lookup failures are cached for two seconds. Failed requests are not replayed automatically. Hooks never open a browser.\n`;
+  return `LangSmith authentication unavailable. Stop gateway sessions and other CLI writers, then log in in a separate terminal using the LangSmith CLI with: ${config.profile === undefined ? "" : `--profile ${config.profile} `}--api-url ${endpoints(config).apiUrl} auth login. Use a profile matching the selected API (optionally pin it with --profile): --api-url does not change an existing saved OAuth issuer. Review that issuer privately before login/refresh. Then retry the request; token lookup failures are cached for two seconds. Failed requests are not replayed automatically. Hooks never open a browser.\n`;
 }

@@ -9,7 +9,6 @@ import { endpoints } from "./config.js";
 import {
   API_KEY_SLOT,
   BEARER_SLOT,
-  CLI_TOKEN_TTL_MS,
   CREDENTIAL_PREFIX,
   CREDENTIAL_SLOT_GUIDANCE,
   CREDENTIAL_STATE_PATH,
@@ -17,6 +16,7 @@ import {
   DEFAULT_IDENTITY_TOKEN_TTL_MS,
   HEALTH_PATH,
   KEY_HEADER,
+  LOGIN_TOKEN_TTL_MS,
   MAX_REQUEST_BYTES,
   PASSTHROUGH_HEADER,
   PROTOCOL_VERSION,
@@ -29,7 +29,7 @@ import {
 import { isWorkspaceId } from "./config-validation.js";
 import { bearerCredential, slotPresent, slotValue } from "./header-slots.js";
 import type { ProxyConfig } from "./proxy-models.js";
-import { TokenCache, cliToken, commandToken, commandGuidance, loginGuidance } from "./token.js";
+import { TokenCache, commandToken, commandGuidance, loginGuidance, loginToken } from "./token.js";
 
 // Bump the protocol identity when forwarding or validation changes so an older
 // daemon cannot silently retain the previous contract. Conflicts fail closed.
@@ -39,7 +39,6 @@ export const identity = (c: ProxyConfig) =>
       JSON.stringify([
         PROTOCOL_VERSION,
         c.useClaudeSubscription,
-        c.cli,
         c.profile,
         c.port,
         c.secret,
@@ -295,11 +294,11 @@ export function createProxy(
   const command = config.identityTokenCommand;
   const fetchToken =
     command === undefined
-      ? (options.token ?? (() => cliToken(config, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal)))
+      ? (options.token ?? (() => loginToken(config, credentialAbort.signal)))
       : () => commandToken(command, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal);
   const ttlMs =
     command === undefined
-      ? CLI_TOKEN_TTL_MS
+      ? LOGIN_TOKEN_TTL_MS
       : (config.identityTokenTtlMs ?? DEFAULT_IDENTITY_TOKEN_TTL_MS);
   const tokens = new TokenCache(fetchToken, Date.now, ttlMs);
   const unavailable = () =>
