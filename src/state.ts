@@ -3,14 +3,10 @@
  * transcript so the Stop hook only processes new messages.
  */
 
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { createStateStore, pruneStateEntries } from "@langchain/plugins-base/storage";
-import {
-  ENGINE_STORAGE_DIR_NAME,
-  HELD_TOOL_RUN_PREFIX,
-  SESSION_MAX_AGE_MS,
-  UNSAFE_FILE_NAME_CHARS,
-} from "./constants.js";
+import { HELD_TOOL_RUN_PREFIX, SESSION_MAX_AGE_MS, UNSAFE_FILE_NAME_CHARS } from "./constants.js";
+import { engineStorageRoot } from "./engine-writer.js";
 import { warn } from "./logger.js";
 import {
   entryInfo,
@@ -146,12 +142,9 @@ export function updateSessionState(
   };
 }
 
-const heldRunsFolder = (stateFilePath: string) =>
-  join(dirname(stateFilePath), ENGINE_STORAGE_DIR_NAME);
-
 const heldRunPath = (...[stateFilePath, sessionId, toolUseId]: HeldRunKey) =>
   join(
-    heldRunsFolder(stateFilePath),
+    engineStorageRoot(stateFilePath),
     `${HELD_TOOL_RUN_PREFIX}${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`,
   );
 
@@ -165,7 +158,7 @@ export function takeHeldRun(...key: HeldRunKey): HeldToolRun | undefined {
 }
 
 export function pruneHeldRuns(stateFilePath: string, now: number = Date.now()): void {
-  const folder = heldRunsFolder(stateFilePath);
+  const folder = engineStorageRoot(stateFilePath);
   for (const name of listDirectory(folder).filter((n) => n.startsWith(HELD_TOOL_RUN_PREFIX))) {
     const modified = entryInfo(join(folder, name))?.mtimeMs ?? now;
     if (now - modified > SESSION_MAX_AGE_MS) removeFile(join(folder, name));

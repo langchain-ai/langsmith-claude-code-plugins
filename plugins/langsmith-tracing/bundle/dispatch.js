@@ -24690,7 +24690,7 @@ async function settleToolRuns(job) {
 }
 
 // dist/src/state.js
-import { dirname as dirname19, join as join26 } from "node:path";
+import { join as join26 } from "node:path";
 
 // dist/src/utils/files.js
 import { lstatSync as lstatSync4, mkdirSync as mkdirSync8, readdirSync as readdirSync2, readFileSync as readFileSync14, renameSync as renameSync7, rmdirSync as rmdirSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync5 } from "node:fs";
@@ -24821,8 +24821,7 @@ function updateSessionState(state, sessionId, position, turnCount, taskRunMap, c
     }
   };
 }
-var heldRunsFolder = (stateFilePath) => join26(dirname19(stateFilePath), ENGINE_STORAGE_DIR_NAME);
-var heldRunPath = (...[stateFilePath, sessionId, toolUseId]) => join26(heldRunsFolder(stateFilePath), `${HELD_TOOL_RUN_PREFIX}${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`);
+var heldRunPath = (...[stateFilePath, sessionId, toolUseId]) => join26(engineStorageRoot(stateFilePath), `${HELD_TOOL_RUN_PREFIX}${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`);
 var saveHeldRun = (held, ...key) => publishFile(heldRunPath(...key), JSON.stringify(held));
 function takeHeldRun(...key) {
   const held = readJson(readText(heldRunPath(...key)));
@@ -24830,7 +24829,7 @@ function takeHeldRun(...key) {
   return held;
 }
 function pruneHeldRuns(stateFilePath, now = Date.now()) {
-  const folder = heldRunsFolder(stateFilePath);
+  const folder = engineStorageRoot(stateFilePath);
   for (const name of listDirectory(folder).filter((n2) => n2.startsWith(HELD_TOOL_RUN_PREFIX))) {
     const modified = entryInfo(join26(folder, name))?.mtimeMs ?? now;
     if (now - modified > SESSION_MAX_AGE_MS)
@@ -24848,7 +24847,7 @@ import { randomUUID as randomUUID9 } from "node:crypto";
 
 // dist/src/tracing-policy.js
 import { mkdir as mkdir6 } from "node:fs/promises";
-import { dirname as dirname20 } from "node:path";
+import { dirname as dirname19 } from "node:path";
 
 // dist/src/utils/records.js
 function isRecord(value) {
@@ -24896,7 +24895,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     throw new Error("A nonempty session ID and a full/metadata tracing mode are required");
   }
   const path3 = tracingPolicyPath(stateFilePath);
-  await mkdir6(dirname20(path3), { recursive: true });
+  await mkdir6(dirname19(path3), { recursive: true });
   return updatePolicyFile(path3, POLICY_FILE, (policy) => {
     policy.threads = { ...policy.threads, [sessionId]: mode };
   });
@@ -27565,10 +27564,10 @@ async function runQueuedClosings(workerConfig, sessionId) {
 
 // dist/src/legacy-import.js
 import { createHmac } from "node:crypto";
-import { basename as basename4, dirname as dirname21, join as join27 } from "node:path";
+import { basename as basename4, dirname as dirname20, join as join27 } from "node:path";
 function legacyRuns(config) {
   const origin = legacyOrigin(config);
-  const root = dirname21(config.stateFilePath);
+  const root = dirname20(config.stateFilePath);
   const scan = { runs: [], settled: [], unreadable: [] };
   const { runs } = scan;
   for (const [sessionId, file] of legacyFiles(join27(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
@@ -27686,7 +27685,7 @@ function readTurnRecord(path3) {
 }
 
 // dist/src/legacy-sweep.js
-import { join as join28, dirname as dirname22 } from "node:path";
+import { join as join28, dirname as dirname21 } from "node:path";
 function idleMs(info, now) {
   return info ? now - info.mtimeMs : 0;
 }
@@ -27724,7 +27723,7 @@ function sweepFolder(path3, removable, now) {
   return aged;
 }
 function sweepLegacyLeftovers(stateFilePath, removable, now = Date.now()) {
-  const root = dirname22(stateFilePath);
+  const root = dirname21(stateFilePath);
   return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join28(root, folder), removable, now), 0);
 }
 
