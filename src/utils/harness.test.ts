@@ -121,7 +121,7 @@ describe("slashSkillOf", () => {
 
   it("names a skill typed as a slash command once its body reached the model", () => {
     const turn = turnOf(
-      "<command-name>/plain-terms</command-name>\n<command-args>shorten this</command-args>",
+      "<command-message>plain-terms</command-message>\n<command-name>/plain-terms</command-name>\n<command-args>shorten this</command-args>",
       [[{ type: "text", text: SKILL_BODY }]],
     );
     expect(slashSkillOf(turn)).toEqual({ name: "plain-terms", args: "shorten this" });
@@ -129,19 +129,53 @@ describe("slashSkillOf", () => {
 
   it("reads a command sent as content blocks and keeps a plugin namespace", () => {
     const turn = turnOf(
-      [{ type: "text", text: "<command-name>/myplugin:deploy</command-name>" }],
+      [
+        {
+          type: "text",
+          text: "<command-message>myplugin:deploy</command-message>\n<command-name>/myplugin:deploy</command-name>",
+        },
+      ],
       [SKILL_BODY],
     );
     expect(slashSkillOf(turn)).toEqual({ name: "myplugin:deploy" });
+  });
+
+  it("names a bundled skill whose body does not open with the base directory", () => {
+    const turn = turnOf(
+      "<command-message>code-review</command-message>\n<command-name>/code-review</command-name>\n<command-args>https://github.com/acme/app/pull/1</command-args>",
+      [
+        [
+          {
+            type: "text",
+            text: "Review target: `https://github.com/acme/app/pull/1`\n\nYou are reviewing a pull request.",
+          },
+        ],
+      ],
+    );
+    expect(slashSkillOf(turn)).toEqual({
+      name: "code-review",
+      args: "https://github.com/acme/app/pull/1",
+    });
   });
 
   it("ignores a built-in command that loads no skill body", () => {
     expect(slashSkillOf(turnOf("<command-name>/plugin</command-name>"))).toBeUndefined();
     expect(
       slashSkillOf(
-        turnOf("<command-name>/model</command-name>", [
-          [{ type: "text", text: "Set model to opus" }],
-        ]),
+        turnOf(
+          "<command-name>/goal</command-name>\n            <command-message>goal</command-message>\n            <command-args></command-args>",
+          [[{ type: "text", text: "A session-scoped Stop hook is now active" }]],
+        ),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("ignores a skill command whose body never reached the model", () => {
+    expect(
+      slashSkillOf(
+        turnOf(
+          "<command-message>plain-terms</command-message>\n<command-name>/plain-terms</command-name>",
+        ),
       ),
     ).toBeUndefined();
   });

@@ -5,7 +5,7 @@ import {
   HARNESS_TASK_NOTIFICATION,
   HARNESS_TASK_NOTIFICATION_KEPT,
   HARNESS_UNWRAPPED_TAG,
-  SKILL_BODY_OPENING,
+  SKILL_COMMAND_OPENING,
 } from "../constants.js";
 import type { HookEventName, HookEventPayload, Turn } from "../types.js";
 
@@ -55,10 +55,11 @@ function contentText(content: Turn["userContent"]): string {
 export function slashSkillOf(turn: Turn): { name: string; args?: string } | undefined {
   const command = [...contentText(turn.userContent).matchAll(HARNESS_COMMAND)][0];
   const name = command && normalizeSkillName(command[1]);
-  const loadedBody = turn.llmCalls[0]?.userMessagesBefore?.some((content) =>
-    contentText(content).trimStart().startsWith(SKILL_BODY_OPENING),
-  );
-  if (!name || !loadedBody) return undefined;
+  const isSkillCommand = contentText(turn.userContent)
+    .trimStart()
+    .startsWith(SKILL_COMMAND_OPENING);
+  const loadedBody = (turn.llmCalls[0]?.userMessagesBefore?.length ?? 0) > 0;
+  if (!name || !isSkillCommand || !loadedBody) return undefined;
   const args = command[2]?.trim();
   return args ? { name, args } : { name };
 }

@@ -513,7 +513,7 @@ describe("traceTurn", () => {
   it("records a skill typed as a slash command as a Skill run like the tool's", async () => {
     await traceTurn({
       turn: skillTurn(
-        "<command-name>/plain-terms</command-name>\n<command-args>shorten</command-args>",
+        "<command-message>plain-terms</command-message>\n<command-name>/plain-terms</command-name>\n<command-args>shorten</command-args>",
         [[{ type: "text", text: "Base directory for this skill: /s/plain-terms\n\nBe plain." }]],
       ),
       sessionId: "session-123",

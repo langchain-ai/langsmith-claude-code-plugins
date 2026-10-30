@@ -23702,7 +23702,7 @@ var HARNESS_TASK_NOTIFICATION_KEPT = /<(summary|result)>([\s\S]*?)<\/\1>/g;
 var HARNESS_UNWRAPPED_TAG = /<\/?(bash-input|bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|<\/?pasted_content(\s[^>]*)?>/g;
 var SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
 var SKILL_TOOL_NAME = "Skill";
-var SKILL_BODY_OPENING = "Base directory for this skill";
+var SKILL_COMMAND_OPENING = "<command-message>";
 var SKILL_LAUNCH_OUTPUT_PREFIX = "Launching skill: ";
 var WORKFLOW_TOOL_NAME = "Workflow";
 var WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
@@ -25266,8 +25266,9 @@ function contentText(content) {
 function slashSkillOf(turn) {
   const command = [...contentText(turn.userContent).matchAll(HARNESS_COMMAND)][0];
   const name = command && normalizeSkillName(command[1]);
-  const loadedBody = turn.llmCalls[0]?.userMessagesBefore?.some((content) => contentText(content).trimStart().startsWith(SKILL_BODY_OPENING));
-  if (!name || !loadedBody)
+  const isSkillCommand = contentText(turn.userContent).trimStart().startsWith(SKILL_COMMAND_OPENING);
+  const loadedBody = (turn.llmCalls[0]?.userMessagesBefore?.length ?? 0) > 0;
+  if (!name || !isSkillCommand || !loadedBody)
     return void 0;
   const args = command[2]?.trim();
   return args ? { name, args } : { name };
