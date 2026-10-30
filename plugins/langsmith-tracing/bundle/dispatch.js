@@ -23667,7 +23667,7 @@ var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
 var BASH_LEADING_CD = /^\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))\s*(?:&&|;)/;
 var BASH_GIT_DIRECTORY = /\bgit\s+-C\s+(?:"([^"]+)"|'([^']+)'|(\S+))/;
 var HOME_SHORTHAND = /^~(?=\/|$)/;
-var BASH_ABSOLUTE_PATH = /(?:^|[\s=])(?:"(\/[^"]+)"|'(\/[^']+)'|(\/[^\s;&|"'`<>()]+))/g;
+var BASH_ABSOLUTE_PATH = /(?:^|[\s=])(?:"((?:\/|[A-Za-z]:[\\/])[^"]+)"|'((?:\/|[A-Za-z]:[\\/])[^']+)'|((?:\/|[A-Za-z]:[\\/])[^\s;&|"'`<>()]+))/g;
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
 var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;

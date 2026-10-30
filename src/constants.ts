@@ -54,7 +54,8 @@ const BASH_GIT_DIRECTORY = /\bgit\s+-C\s+(?:"([^"]+)"|'([^']+)'|(\S+))/;
 
 const HOME_SHORTHAND = /^~(?=\/|$)/;
 
-const BASH_ABSOLUTE_PATH = /(?:^|[\s=])(?:"(\/[^"]+)"|'(\/[^']+)'|(\/[^\s;&|"'`<>()]+))/g;
+const BASH_ABSOLUTE_PATH =
+  /(?:^|[\s=])(?:"((?:\/|[A-Za-z]:[\\/])[^"]+)"|'((?:\/|[A-Za-z]:[\\/])[^']+)'|((?:\/|[A-Za-z]:[\\/])[^\s;&|"'`<>()]+))/g;
 
 /** A symbol so it is never serialized and sent to LangSmith. */
 const PINNED_REPOSITORY_KEYS = Symbol("pinned repository metadata keys");
