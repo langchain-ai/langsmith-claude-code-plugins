@@ -43,7 +43,10 @@ export async function loginToken(
   });
   if (profileAuth === undefined) throw new SignInFailure(NO_LOGIN_REASON);
   const loggingFetch: typeof fetch = async (input, init) => {
-    const response = await fetch(input, init);
+    const response = await fetch(input, init).catch((error: unknown) => {
+      if (init?.method === "POST") log(`${REFRESH_FAILED_LOG}${describeFailure(error)}`);
+      throw error;
+    });
     if (init?.method === "POST" && !response.ok)
       log(`${REFRESH_FAILED_LOG}${response.status} ${await response.clone().text()}`);
     return response;
@@ -52,6 +55,11 @@ export async function loginToken(
   if (token === undefined || !BEARER_TOKEN.test(token))
     throw new SignInFailure(UNUSABLE_LOGIN_REASON);
   return token;
+}
+
+function describeFailure(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  return error.cause instanceof Error ? `${error.message} (${error.cause.message})` : error.message;
 }
 
 export function commandToken(

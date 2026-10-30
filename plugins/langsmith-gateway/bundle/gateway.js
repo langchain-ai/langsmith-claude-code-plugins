@@ -15568,7 +15568,7 @@ var LOGIN_TOKEN_TTL_MS = 6e4;
 var LOGIN_CONFIG_PATH = [".langsmith", "config.json"];
 var SIGN_IN_FAILED_LOG = "LangSmith sign-in failed: ";
 var GATEWAY_REFUSED_LOG = "The gateway refused the LangSmith token";
-var REFRESH_FAILED_LOG = "LangSmith refused the login refresh: ";
+var REFRESH_FAILED_LOG = "The login refresh failed: ";
 var NO_LOGIN_REASON = "no saved LangSmith login was found, so run langsmith auth login";
 var UNUSABLE_LOGIN_REASON = "the saved login has no usable access token";
 var EXPIRED_TOKEN_REASON = "the token is expired, so a refresh failed or was refused";
@@ -15854,7 +15854,11 @@ async function loginToken(config, log = () => void 0) {
   if (profileAuth === void 0)
     throw new SignInFailure(NO_LOGIN_REASON);
   const loggingFetch = async (input, init) => {
-    const response = await fetch(input, init);
+    const response = await fetch(input, init).catch((error) => {
+      if (init?.method === "POST")
+        log(`${REFRESH_FAILED_LOG}${describeFailure(error)}`);
+      throw error;
+    });
     if (init?.method === "POST" && !response.ok)
       log(`${REFRESH_FAILED_LOG}${response.status} ${await response.clone().text()}`);
     return response;
@@ -15863,6 +15867,11 @@ async function loginToken(config, log = () => void 0) {
   if (token === void 0 || !BEARER_TOKEN.test(token))
     throw new SignInFailure(UNUSABLE_LOGIN_REASON);
   return token;
+}
+function describeFailure(error) {
+  if (!(error instanceof Error))
+    return String(error);
+  return error.cause instanceof Error ? `${error.message} (${error.cause.message})` : error.message;
 }
 function commandToken(command, timeoutMs = CREDENTIAL_TIMEOUT_MS, signal) {
   return spawnToken(SHELL, ["-c", command], timeoutMs, signal);
