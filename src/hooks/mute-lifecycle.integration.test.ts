@@ -749,13 +749,16 @@ describe("closing hooks hand their work to the uploader", () => {
     expect(h.state.session.tool_tracing_modes?.tool).toBe("metadata");
   });
 
-  it("keeps a mute command's own turn muted while an admin locks muting on", async () => {
+  it.each([
+    { locked: false, mode: "full" },
+    { locked: true, mode: "metadata" },
+  ])("keeps a mute command's own turn $mode when the lock is $locked", async ({ locked, mode }) => {
     reset("full");
-    h.mutedLocked = true;
+    h.mutedLocked = locked;
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
     await hook("prompt", { prompt: "/langsmith-tracing:mute" });
     output.mockRestore();
-    expect(h.state.session.current_turn_tracing).toBe("metadata");
+    expect(h.state.session.current_turn_tracing).toBe(mode);
   });
 
   it("an interrupted turn is counted at once and later closed with the session's repository", async () => {

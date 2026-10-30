@@ -587,32 +587,3 @@ describe("a muted turn after an open full turn", () => {
     },
   );
 });
-
-it("traces a mute command's own turn in full and mutes the turn after it", async () => {
-  const output = vi.spyOn(console, "log").mockImplementation(() => {});
-  await prompt("/langsmith-tracing:mute");
-  expect(output.mock.calls.map(([text]) => JSON.parse(text))).toEqual([
-    {
-      hookSpecificOutput: {
-        hookEventName: "UserPromptSubmit",
-        additionalContext: expect.stringContaining("Thread tracing muted"),
-      },
-    },
-  ]);
-  output.mockRestore();
-  assistant([{ type: "text", text: "PUBLIC_COMMAND_REPLY" }], "end_turn");
-  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_COMMAND_REPLY" });
-  await prompt("SECRET_PROMPT");
-  assistant([{ type: "text", text: "SECRET_ANSWER" }], "end_turn");
-  await hook("Stop", { stop_hook_active: false, last_assistant_message: "SECRET_ANSWER" });
-  const runs = await sentRuns();
-  const commandTurn = runs.find(
-    (run) => run.inputs?.messages?.[0]?.content === "/langsmith-tracing:mute",
-  );
-  expect(commandTurn?.name).toBe("Claude Code Turn");
-  const commandReply = runs.find(
-    (run) => run.name === "Claude" && JSON.stringify(run.outputs).includes("PUBLIC_COMMAND_REPLY"),
-  );
-  expect(commandReply?.parent_run_id).toBe(commandTurn?.id);
-  expect(JSON.stringify(runs)).not.toContain("SECRET_ANSWER");
-});

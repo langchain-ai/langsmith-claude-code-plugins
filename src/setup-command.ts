@@ -8,9 +8,8 @@ import {
 import type { SetupOutcome } from "@langchain/plugins-base/settings";
 import { loadConfig } from "./config.js";
 import { HARNESS_DIRECTORY } from "./constants.js";
-import { uploadReplicas } from "./engine-writer.js";
+import { readUploadNotices, uploadReplicas } from "./engine-writer.js";
 import { resolveTurnTracingMode } from "./tracing-mode.js";
-import { readUploadNotices } from "./upload-notices.js";
 import { hasUsableDestination } from "./utils/replicas.js";
 import type { Config } from "./types.js";
 
