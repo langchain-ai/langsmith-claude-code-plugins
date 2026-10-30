@@ -205,7 +205,6 @@ export interface LLMCall {
   endTime: string;
   /** Reasoning effort the call ran at, when the transcript records one. */
   effort?: string;
-  /** Folder the session was in when this response was written. */
   cwd?: string;
   /** Tool calls made in this response. */
   toolCalls: ToolCall[];
