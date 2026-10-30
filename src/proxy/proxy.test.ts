@@ -846,6 +846,30 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     await loginToken(base, log);
     expect(log.mock.calls).toEqual([[REFRESH_FAILED_LOG + '400 {"error":"invalid_grant"}']]);
   });
+  it("logs the network error when the login refresh can't reach LangSmith", async () => {
+    const closed = http.createServer();
+    closed.listen(0, "127.0.0.1");
+    await once(closed, "listening");
+    const { port } = closed.address() as { port: number };
+    closed.close();
+    saveLogin(home, {
+      api_url: `http://127.0.0.1:${port}`,
+      oauth: { access_token: jwt(1), refresh_token: "first", expires_at: "2020-01-01T00:00:00Z" },
+    });
+    const log = vi.fn();
+    await loginToken(base, log);
+    expect(log.mock.calls).toEqual([
+      [`${REFRESH_FAILED_LOG}fetch failed (connect ECONNREFUSED 127.0.0.1:${port})`],
+    ]);
+  });
+  it("logs the real reason when loading the login fails unexpectedly", async () => {
+    const log = vi.fn();
+    const load = async () => {
+      throw new Error("refresh lock timed out");
+    };
+    await expect(new TokenCache(load, Date.now, 60_000, log).get()).rejects.toThrow();
+    expect(log.mock.calls).toEqual([[SIGN_IN_FAILED_LOG + "refresh lock timed out"]]);
+  });
   it.each([
     ["no login", undefined, NO_LOGIN_REASON],
     ["a malformed token", { oauth: { access_token: "not-a-jwt" } }, UNUSABLE_LOGIN_REASON],
