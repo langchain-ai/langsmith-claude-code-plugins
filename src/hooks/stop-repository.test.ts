@@ -60,13 +60,13 @@ function transcriptWith(call: Record<string, unknown>, cwd?: string): string {
 }
 
 async function closingRunMetadata(
-  call: Record<string, unknown>,
-  lineCwd?: string,
-  hookCwd = plain,
+  tool: { name: string; input: object },
+  lineCwd: string | undefined,
+  hookCwd: string,
 ): Promise<Record<string, unknown>> {
   const input = {
     session_id: "stop-repos",
-    transcript_path: transcriptWith(call, lineCwd),
+    transcript_path: transcriptWith({ type: "tool_use", id: "t1", ...tool }, lineCwd),
     cwd: hookCwd,
     hook_event_name: "Stop",
     stop_hook_active: false,
@@ -98,31 +98,21 @@ async function closingRunMetadata(
 }
 
 describe("closeStoppedTurn", () => {
-  it("labels the turn's closing run with the repository its tools touched", async () => {
-    const read = {
-      type: "tool_use",
-      id: "t1",
-      name: "Read",
-      input: { file_path: join(beta, "seed.txt") },
-    };
+  const read = (file_path: string) => ({ name: "Read", input: { file_path } });
 
-    expect(await closingRunMetadata(read)).toMatchObject({
+  it.each<[name: string, tool: { name: string; input: object }, line?: string, hook?: string]>([
+    ["the repository its tools touched", read(`${beta}/seed.txt`), undefined, plain],
+    [
+      "the folder its first call started in",
+      { name: "Bash", input: { command: "ls" } },
+      beta,
+      plain,
+    ],
+    ["the hook's folder when the transcript records none", read("seed.txt"), undefined, beta],
+  ])("labels the turn's closing run from %s", async (_name, tool, line, hook = plain) => {
+    expect(await closingRunMetadata(tool, line, hook)).toMatchObject({
       ls_git_repo: "acme/beta",
       ls_git_branch: "trunk-beta",
-    });
-  });
-
-  it("labels the turn's closing run from the folder its first call started in", async () => {
-    const shell = { type: "tool_use", id: "t1", name: "Bash", input: { command: "ls" } };
-
-    expect(await closingRunMetadata(shell, beta)).toMatchObject({ ls_git_repo: "acme/beta" });
-  });
-
-  it("labels the turn's closing run from the hook's folder when the transcript records none", async () => {
-    const read = { type: "tool_use", id: "t1", name: "Read", input: { file_path: "seed.txt" } };
-
-    expect(await closingRunMetadata(read, undefined, beta)).toMatchObject({
-      ls_git_repo: "acme/beta",
     });
   });
 });

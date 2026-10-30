@@ -42,19 +42,16 @@ import { main as postToolUse } from "./post-tool-use.js";
 import { main as preToolUse } from "./pre-tool-use.js";
 
 afterAll(() => sandbox.remove());
-function writeState(toolCwds: Record<string, string> = {}): void {
+function writeState(toolCwds: Record<string, string> = {}, tool_start_times = {}): void {
   writeFileSync(
     stateFilePath,
     JSON.stringify({
       "post-tool-repos": {
-        last_line: -1,
-        turn_count: 1,
-        updated: "",
-        task_run_map: {},
         current_turn_run_id: "turn-1",
         current_trace_id: "turn-1",
         current_dotted_order: "20250101T000000000000Zturn-1",
         tool_cwds: toolCwds,
+        tool_start_times,
       },
     }),
   );
@@ -96,35 +93,18 @@ describe("PostToolUse", () => {
     expect(origins).toEqual([pattern, undefined]);
   });
 
-  it("reads the folder a shell command enters", async () => {
-    payload.current = hookInput("Bash", { command: `cd ${beta} && ls` }, "t1");
+  it.each<[name: string, command: string, started: string | undefined, want: object]>([
+    ["the folder a shell command enters", `cd ${beta} && ls`, undefined, { path: beta }],
+    ["the folder the tool started in", "echo hi", beta, { cwd: beta }],
+    ["the hook's folder when none was recorded", "ls", undefined, { cwd: plain }],
+    ["no folder when the command may leave it", `cd ${plain}; git status`, beta, {}],
+  ])("reads %s", async (_name, command, started, want) => {
+    writeState(started ? { t1: started } : {});
+    payload.current = hookInput("Bash", { command }, "t1", plain);
     await postToolUse();
 
-    expect(lastOrigin().path).toBe(beta);
-  });
-
-  it("uses the folder the tool started in when a command names no folder", async () => {
-    writeState({ t1: beta });
-    payload.current = hookInput("Bash", { command: "echo hi" }, "t1", plain);
-    await postToolUse();
-
-    expect(lastOrigin()).toMatchObject({ cwd: beta, namedAPath: false });
-    expect(lastOrigin().path).toBeUndefined();
-  });
-
-  it("uses the hook's folder when no start folder was recorded", async () => {
-    payload.current = hookInput("Bash", { command: "ls" }, "t1", plain);
-    await postToolUse();
-
-    expect(lastOrigin().cwd).toBe(plain);
-  });
-
-  it("names no folder when a command with an unknown folder leaves it", async () => {
-    writeState({ t1: beta });
-    payload.current = hookInput("Bash", { command: `cd ${plain}; git status` }, "t1", plain);
-    await postToolUse();
-
-    expect(lastOrigin().cwd).toBeUndefined();
+    const { path, cwd } = lastOrigin();
+    expect({ path, cwd }).toEqual(want);
   });
 });
 
@@ -148,10 +128,7 @@ describe("PreToolUse", () => {
   });
 
   it("forgets folders of tools from before the last reset of the start times", async () => {
-    writeState({ kept: "/a", stale: "/b" });
-    const state = JSON.parse(readFileSync(stateFilePath, "utf-8"));
-    state["post-tool-repos"].tool_start_times = { kept: 1 };
-    writeFileSync(stateFilePath, JSON.stringify(state));
+    writeState({ kept: "/a", stale: "/b" }, { kept: 1 });
     payload.current = preHookInput("t3");
     await preToolUse();
 

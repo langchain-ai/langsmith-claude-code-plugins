@@ -593,27 +593,19 @@ describe("groupIntoTurns", () => {
     expect(groupIntoTurns(messages)[0].llmCalls[0].effort).toBe(expected);
   });
 
-  it("keeps the folder the transcript says each call ran in", () => {
+  it("keeps the folder each call started in, taken from its first chunk", () => {
     const messages: TranscriptMessage[] = [
       makeUser("Hi"),
-      { ...makeAssistant("msg_1", "First"), cwd: "/work/one" },
-      { ...makeAssistant("msg_2", "Second"), cwd: "/work/two" },
-      makeAssistant("msg_3", "Third"),
+      { ...makeAssistant("msg_1", "A"), cwd: "/work/one" },
+      { ...makeAssistant("msg_1", "B"), cwd: "/work/after" },
+      { ...makeAssistant("msg_2", "C"), cwd: "/work/two" },
+      makeAssistant("msg_3", "D"),
     ];
     expect(groupIntoTurns(messages)[0].llmCalls.map((call) => call.cwd)).toEqual([
       "/work/one",
       "/work/two",
       undefined,
     ]);
-  });
-
-  it("takes a call's folder from its first chunk, the one before its tools ran", () => {
-    const messages: TranscriptMessage[] = [
-      makeUser("Hi"),
-      { ...makeAssistant("msg_1", "A"), cwd: "/work/before" },
-      { ...makeAssistant("msg_1", "B"), cwd: "/work/after" },
-    ];
-    expect(groupIntoTurns(messages)[0].llmCalls[0].cwd).toBe("/work/before");
   });
 
   it("starts a new turn for a teammate message that arrives after the turn finished", () => {

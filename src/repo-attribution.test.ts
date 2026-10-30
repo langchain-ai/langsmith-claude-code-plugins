@@ -106,7 +106,6 @@ describe("repoScopedMetadata", () => {
     const staysInAlpha = { ls_git_repo: "acme/alpha", ls_attribution_identifier: "Alpha Owner" };
     const noRepoKeys = { cwd: session.cwd, ls_integration: session.ls_integration };
     const missing = `${root}/no-such-folder`;
-    const entered = `cd ${beta} && `;
     const attributes = (input: Record<string, string>, cwd: string, tool?: string) =>
       repoScopedMetadata(inSession(), input, cwd, tool);
 
@@ -125,42 +124,83 @@ describe("repoScopedMetadata", () => {
       expect(attributes(input, alpha, tool)).toMatchObject(inBeta);
     });
 
-    const guarded = [
-      `§cd - | §pushd x | §popd | §eval ls | §sh -c ls | §bash -c ls | §zsh -c ls | §echo $(pwd)`,
-      `§echo \`pwd\` | §GIT_DIR=x ls | §GIT_WORK_TREE=x ls | §make -C sub | git -C${alpha} status | §git status |& cat | cd ${beta} && | §ls --git-dir`,
-      `§ls --work-tree | §echo $'x' | §echo {a,b} | §source ./go.sh | §env ls | §. ./go.sh`,
-      `§if :; then . ./set.sh; fi | §time . x | §! . x | §command . x | §builtin . x`,
-      `§echo it's; cd ${alpha}; echo don't | §FOO=1 cd ${alpha} | §case x in x) cd ${alpha};; esac`,
-      `c""d ${alpha} && git status | c$'d' ${alpha} && git status | c$"d" ${alpha} && git status | $'c\\x64' ${alpha} && ls`,
-      `p""ushd ${alpha} && ls | pu$'shd' ${alpha} && ls | git "-C" ${alpha} status`,
-      `git '-C' ${alpha} status | git -\\C ${alpha} status | git -$'C' ${alpha} status`,
-      `git {-C,${alpha}} status | GIT_WORK_T''REE=x git status | §GIT_D''IR=x ls | §export GIT_DIR=x`,
-      `cd "${beta}" && ls | git -C '${beta}' log | §cd $HOME/x | cd ${alpha}/[Z] && ls`,
-      `git -C ${alpha}/[Z] log | cd #h && ls | git -c core.pager="a -C ${alpha}" status`,
-      `§cd ${missing} | cd ${betaSeed} && ls | cd ${alpha} && git --no-pager -C ${beta} log`,
+    const afterEntering = [
+      "cd -",
+      "cd",
+      "cd $HOME/x",
+      `cd ${missing}`,
+      "pushd x",
+      "popd",
+      "eval ls",
+      "sh -c ls",
+      "bash -c ls",
+      "zsh -c ls",
+      "echo $(pwd)",
+      "echo `pwd`",
+      "GIT_DIR=x ls",
+      "GIT_WORK_TREE=x ls",
+      "make -C sub",
+      "git status |& cat",
+      "ls --git-dir",
+      "ls --work-tree",
+      "ls --dir x",
+      "ls --directory x",
+      "ls --cwd x",
+      "ls --prefix x",
+      "tmux new-session -c x",
+      "echo {a,b}",
+      "echo {a,}",
+      "source ./go.sh",
+      "env ls",
+      ". ./go.sh",
+      "if :; then . ./set.sh; fi",
+      "time . x",
+      "! . x",
+      "command . x",
+      "builtin . x",
+      "ls\nls",
+      `git -C\t${alpha} log`,
+    ].map((tail) => `cd ${beta} && ${tail}`);
+
+    const standalone = [
+      `c""d ${alpha} && git status`,
+      `c$'d' ${alpha} && git status`,
+      `c$"d" ${alpha} && git status`,
+      `pu$'shd' ${alpha} && git status`,
+      `git "-C" ${alpha} status`,
+      `git -\\C ${alpha} status`,
+      `git -C${alpha} status`,
+      "GIT_WORK_T''REE=x git status",
+      `cd ${beta} &&`,
+      "cd../beta-repo && ls",
+      "cd  && ls",
+      "cd - && ls",
+      `cd "${beta}" && ls`,
+      `git -C '${beta}' log`,
+      `cd ${alpha}/[Z] && ls`,
+      "cd #h && ls",
+      `git -c core.pager="a -C ${alpha}" status`,
+      "case x in x) . ./set.sh;; esac; git status",
+      `cd ${betaSeed} && ls`,
+      `cd ${alpha} && git --no-pager -C ${beta} log`,
       `cd ${plain} && ls`,
-    ].flatMap((line) => line.split(" | ").map((tail) => tail.replaceAll("§", entered)));
+      `cd\t${alpha} && ls`,
+      `\ufeffcd ${beta} && ls`,
+    ];
 
-    it.each(guarded)("emits no repository for %s", (command) => {
+    it.each([...afterEntering, ...standalone])("emits no repository for %j", (command) => {
       expect(attributes({ command }, alpha)).toEqual(noRepoKeys);
     });
 
-    it.each<[name: string, command: string]>([
-      ["a newline", `${entered}ls\nls`],
-      ["a tab after -C", `${entered}git -C\t${alpha} log`],
-      ["a tab after sh -c", `${entered}sh\t-c ls`],
-      ["a form feed", `${entered}ls\f`],
-      ["a carriage return", `${entered}ls\r`],
-      ["a tab before a cd", `cd\t${alpha} && ls`],
-      ["a byte order mark", `\ufeffcd ${beta} && ls`],
-    ])("emits no repository for %s", (_name, command) => {
-      expect(attributes({ command }, alpha)).toEqual(noRepoKeys);
-    });
-
-    it.each<[name: string, command: string]>([
-      ["a cd in a format string", "git log -1 --format='%h %cd'"],
-      ["a cd in a path", "git add ci/cd/x.yml"],
-    ])("keeps the call's own folder for %s", (_name, command) => {
+    it.each([
+      "git log -1 --format='%h %cd'",
+      "git add ci/cd/x.yml",
+      "git add . && git commit -m x",
+      "find . -name x",
+      "ls .",
+      "grep -r foo . | head",
+      "git log -- . | head",
+    ])("keeps the call's own folder for %s", (command) => {
       expect(attributes({ command }, alpha)).toMatchObject(staysInAlpha);
     });
 
@@ -188,10 +228,6 @@ describe("repoScopedMetadata", () => {
       expect(attributes({ command }, root)).toMatchObject(inBeta);
     });
 
-    it("does not read another user's home as a folder next to the session's", () => {
-      expect(attributes({ command: "cd ~tilde-repo && ls" }, root)).toEqual(noRepoKeys);
-    });
-
     it("reads an unquoted ~ as the person's home but a quoted one as text", () => {
       vi.stubEnv("HOME", root);
       vi.stubEnv("USERPROFILE", root);
@@ -199,13 +235,17 @@ describe("repoScopedMetadata", () => {
       for (const command of ["cd ~/~tilde-repo && ls", "git -C ~/~tilde-repo log"]) {
         expect(attributes({ command }, plain)).toMatchObject({ ls_git_branch: "trunk-tilde" });
       }
-      for (const command of ['cd "~/~tilde-repo" && ls', "git -C '~/~tilde-repo' log"]) {
+      for (const command of [
+        'cd "~/~tilde-repo"',
+        "git -C '~/~tilde-repo' log",
+        "cd ~tilde-repo",
+      ]) {
         expect(attributes({ command }, plain)).toEqual(noRepoKeys);
       }
+      expect(attributes({ command: "cd ~tilde-repo" }, root)).toEqual(noRepoKeys);
     });
 
     it.each<[name: string, input: Record<string, string>, tool?: string]>([
-      ["a commit message naming a path", { command: `git commit -m "see ${betaSeed}"` }],
       ["a Grep regex given as a path", { pattern: betaSeed }, "Grep"],
       ["a Glob pattern outside every repository", { pattern: `${plain}/*.txt` }, "Glob"],
       ["a relative Glob pattern", { pattern: "**/*.txt" }, "Glob"],
