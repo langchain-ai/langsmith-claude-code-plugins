@@ -331,4 +331,88 @@ describe("a turn working across repositories", () => {
     });
     expect(opening + closing).not.toContain("a new release of gh");
   }, 120_000);
+
+  it("names a typed skill on its own run only when the Skill call failed", async () => {
+    const session = "failed-skill";
+    const path = join(sandbox.root, `${session}.jsonl`);
+    const base = { session_id: session, transcript_path: path, cwd: alpha };
+    const at = (n: number) => `2025-01-01T00:00:0${n}Z`;
+    const assistant = (id: string, content: object[], n: number) => ({
+      type: "assistant",
+      timestamp: at(n),
+      message: {
+        id,
+        role: "assistant",
+        model: "claude-sonnet-4-5-20250929",
+        content,
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    });
+
+    await prompt(base);
+    await hook("PostToolUse", {
+      ...base,
+      hook_event_name: "PostToolUse",
+      tool_name: "Skill",
+      tool_input: { skill: "foo" },
+      tool_response: { success: false, error: "Unknown skill: foo" },
+      tool_use_id: "skill-call",
+    });
+    writeFileSync(
+      path,
+      [
+        {
+          type: "user",
+          timestamp: at(0),
+          promptId: "p1",
+          message: {
+            role: "user",
+            content: "<command-message>foo</command-message>\n<command-name>/foo</command-name>",
+          },
+        },
+        {
+          type: "user",
+          timestamp: at(0),
+          promptId: "p1",
+          isMeta: true,
+          message: {
+            role: "user",
+            content: [{ type: "text", text: "Base directory for this skill: /s/foo" }],
+          },
+        },
+        assistant(
+          "msg_1",
+          [{ type: "tool_use", id: "skill-call", name: "Skill", input: { skill: "foo" } }],
+          1,
+        ),
+        {
+          type: "user",
+          timestamp: at(2),
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "skill-call",
+                content: "Unknown skill: foo",
+                is_error: true,
+              },
+            ],
+          },
+        },
+        assistant("msg_2", [{ type: "text", text: "Could not load it." }], 3),
+      ]
+        .map((line) => JSON.stringify(line))
+        .join("\n"),
+    );
+    await stop(base);
+
+    await settled(() => {
+      const names = posted
+        .filter((run) => run.name === "Skill")
+        .map((run) => run.extra?.metadata?.ls_skill_name);
+      expect(names).toHaveLength(2);
+      expect(names.filter(Boolean)).toEqual(["foo"]);
+    });
+  }, 120_000);
 });
