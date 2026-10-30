@@ -41,1939 +41,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/address.mjs
-function ensureAddress(value) {
-  if (value == null)
-    return void 0;
-  if (typeof value !== "object") {
-    throw new Error("address must be an AgentAddress, ExperimentAddress or EvaluatorAddress object.");
-  }
-  const { kind, id, environment } = value;
-  if (kind === "EVALUATOR")
-    return { kind };
-  if (kind === "EXPERIMENT") {
-    if (typeof id !== "string" || !UUID_PATTERN.test(id)) {
-      throw new Error(`Experiment id must be a UUID, got ${JSON.stringify(id)}.`);
-    }
-    return { kind, id: id.toLowerCase() };
-  }
-  if (kind !== "AGENT") {
-    throw new Error("address must be an AgentAddress, ExperimentAddress or EvaluatorAddress object.");
-  }
-  if (typeof id !== "string" || !AGENT_ID_PATTERN.test(id)) {
-    throw new Error(`Address agent id must be 1 to 63 lowercase ASCII letters, digits, or hyphens, start with a letter, and end with a letter or digit, got ${JSON.stringify(id)}. Use an id such as "support-agent".`);
-  }
-  const normalized = typeof environment === "string" ? environment.toLowerCase() : void 0;
-  if (normalized === void 0 || !ENVIRONMENTS.includes(normalized)) {
-    throw new Error(`Address environment must be one of ${ENVIRONMENTS.join(", ")}, got ${JSON.stringify(environment)}.`);
-  }
-  return {
-    kind,
-    id,
-    environment: normalized.toUpperCase()
-  };
-}
-function ensureAgent(value) {
-  const address = ensureAddress(value);
-  if (address && address.kind !== "AGENT") {
-    throw new Error(`Only an AgentAddress can receive traces, got ${address.kind}.`);
-  }
-  return address;
-}
-function addressToLrn(address) {
-  return `lrn:agents/${address.id}/environments/${address.environment.toLowerCase()}`;
-}
-function addressFromLrn(value) {
-  const match = typeof value === "string" ? LRN_PATTERN.exec(value) : null;
-  if (!match)
-    throw new Error("Not an agent address.");
-  return ensureAgent({ kind: "AGENT", id: match[1], environment: match[2] });
-}
-function addressFromEnv() {
-  const values = ENV_NAMES.map((name) => getEnvironmentVariable(name));
-  if (!values.some(Boolean))
-    return void 0;
-  try {
-    const missing = ENV_NAMES.filter((_, i) => !values[i]);
-    if (missing.length)
-      throw new Error(`An address needs ${missing.join(" and ")} as well.`);
-    return ensureAgent({
-      kind: "AGENT",
-      id: values[0],
-      environment: values[1]
-    });
-  } catch (e) {
-    throw new EnvAddressError(`The LANGSMITH_AGENT_* env vars can't address a run: ${e.message}`);
-  }
-}
-function envNames() {
-  return ENV_NAMES;
-}
-var UUID_PATTERN, AGENT_ID_PATTERN, ENVIRONMENTS, LRN_PATTERN, ENV_NAMES, EnvAddressError;
-var init_address = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/address.mjs"() {
-    init_env3();
-    UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    AGENT_ID_PATTERN = /^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
-    ENVIRONMENTS = ["local", "development", "staging", "production"];
-    LRN_PATTERN = /^lrn:agents\/([^/]+)\/environments\/([^/]+)$/;
-    ENV_NAMES = ["LANGSMITH_AGENT_ID", "LANGSMITH_AGENT_ENVIRONMENT"];
-    EnvAddressError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.name = "EnvAddressError";
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/max.mjs
-var init_max = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/max.mjs"() {
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/nil.mjs
-var init_nil = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/nil.mjs"() {
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/regex.mjs
-var regex_default;
-var init_regex = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/regex.mjs"() {
-    regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/validate.mjs
-function validate(uuid) {
-  return typeof uuid === "string" && regex_default.test(uuid);
-}
-var validate_default;
-var init_validate = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/validate.mjs"() {
-    init_regex();
-    validate_default = validate;
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/parse.mjs
-function parse(uuid) {
-  if (!validate_default(uuid)) {
-    throw TypeError("Invalid UUID");
-  }
-  let v;
-  return Uint8Array.of(
-    (v = parseInt(uuid.slice(0, 8), 16)) >>> 24,
-    v >>> 16 & 255,
-    v >>> 8 & 255,
-    v & 255,
-    // Parse ........-####-....-....-............
-    (v = parseInt(uuid.slice(9, 13), 16)) >>> 8,
-    v & 255,
-    // Parse ........-....-####-....-............
-    (v = parseInt(uuid.slice(14, 18), 16)) >>> 8,
-    v & 255,
-    // Parse ........-....-....-####-............
-    (v = parseInt(uuid.slice(19, 23), 16)) >>> 8,
-    v & 255,
-    // Parse ........-....-....-....-############
-    // (Use "/" to avoid 32-bit truncation when bit-shifting high-order bytes)
-    (v = parseInt(uuid.slice(24, 36), 16)) / 1099511627776 & 255,
-    v / 4294967296 & 255,
-    v >>> 24 & 255,
-    v >>> 16 & 255,
-    v >>> 8 & 255,
-    v & 255
-  );
-}
-var parse_default;
-var init_parse = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/parse.mjs"() {
-    init_validate();
-    parse_default = parse;
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/stringify.mjs
-function unsafeStringify(arr2, offset = 0) {
-  return (byteToHex[arr2[offset + 0]] + byteToHex[arr2[offset + 1]] + byteToHex[arr2[offset + 2]] + byteToHex[arr2[offset + 3]] + "-" + byteToHex[arr2[offset + 4]] + byteToHex[arr2[offset + 5]] + "-" + byteToHex[arr2[offset + 6]] + byteToHex[arr2[offset + 7]] + "-" + byteToHex[arr2[offset + 8]] + byteToHex[arr2[offset + 9]] + "-" + byteToHex[arr2[offset + 10]] + byteToHex[arr2[offset + 11]] + byteToHex[arr2[offset + 12]] + byteToHex[arr2[offset + 13]] + byteToHex[arr2[offset + 14]] + byteToHex[arr2[offset + 15]]).toLowerCase();
-}
-var byteToHex;
-var init_stringify = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/stringify.mjs"() {
-    init_validate();
-    byteToHex = [];
-    for (let i = 0; i < 256; ++i) {
-      byteToHex.push((i + 256).toString(16).slice(1));
-    }
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/rng.mjs
-function rng() {
-  return crypto.getRandomValues(rnds8);
-}
-var rnds8;
-var init_rng = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/rng.mjs"() {
-    rnds8 = new Uint8Array(16);
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v4.mjs
-function v4(options, buf, offset) {
-  if (!buf && !options && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return _v4(options, buf, offset);
-}
-function _v4(options, buf, offset) {
-  options = options || {};
-  const rnds = options.random ?? options.rng?.() ?? rng();
-  if (rnds.length < 16) {
-    throw new Error("Random bytes length must be >= 16");
-  }
-  rnds[6] = rnds[6] & 15 | 64;
-  rnds[8] = rnds[8] & 63 | 128;
-  if (buf) {
-    offset = offset || 0;
-    if (offset < 0 || offset + 16 > buf.length) {
-      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
-    }
-    for (let i = 0; i < 16; ++i) {
-      buf[offset + i] = rnds[i];
-    }
-    return buf;
-  }
-  return unsafeStringify(rnds);
-}
-var v4_default;
-var init_v4 = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v4.mjs"() {
-    init_rng();
-    init_stringify();
-    v4_default = v4;
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/sha1.mjs
-function f(s, x, y, z) {
-  switch (s) {
-    case 0:
-      return x & y ^ ~x & z;
-    case 1:
-      return x ^ y ^ z;
-    case 2:
-      return x & y ^ x & z ^ y & z;
-    case 3:
-      return x ^ y ^ z;
-  }
-}
-function ROTL(x, n2) {
-  return x << n2 | x >>> 32 - n2;
-}
-function sha1(bytes) {
-  const K = [1518500249, 1859775393, 2400959708, 3395469782];
-  const H = [1732584193, 4023233417, 2562383102, 271733878, 3285377520];
-  const newBytes = new Uint8Array(bytes.length + 1);
-  newBytes.set(bytes);
-  newBytes[bytes.length] = 128;
-  bytes = newBytes;
-  const l = bytes.length / 4 + 2;
-  const N = Math.ceil(l / 16);
-  const M = new Array(N);
-  for (let i = 0; i < N; ++i) {
-    const arr2 = new Uint32Array(16);
-    for (let j = 0; j < 16; ++j) {
-      arr2[j] = bytes[i * 64 + j * 4] << 24 | bytes[i * 64 + j * 4 + 1] << 16 | bytes[i * 64 + j * 4 + 2] << 8 | bytes[i * 64 + j * 4 + 3];
-    }
-    M[i] = arr2;
-  }
-  M[N - 1][14] = (bytes.length - 1) * 8 / 2 ** 32;
-  M[N - 1][14] = Math.floor(M[N - 1][14]);
-  M[N - 1][15] = (bytes.length - 1) * 8 & 4294967295;
-  for (let i = 0; i < N; ++i) {
-    const W = new Uint32Array(80);
-    for (let t = 0; t < 16; ++t) {
-      W[t] = M[i][t];
-    }
-    for (let t = 16; t < 80; ++t) {
-      W[t] = ROTL(W[t - 3] ^ W[t - 8] ^ W[t - 14] ^ W[t - 16], 1);
-    }
-    let a = H[0];
-    let b = H[1];
-    let c = H[2];
-    let d = H[3];
-    let e = H[4];
-    for (let t = 0; t < 80; ++t) {
-      const s = Math.floor(t / 20);
-      const T = ROTL(a, 5) + f(s, b, c, d) + e + K[s] + W[t] >>> 0;
-      e = d;
-      d = c;
-      c = ROTL(b, 30) >>> 0;
-      b = a;
-      a = T;
-    }
-    H[0] = H[0] + a >>> 0;
-    H[1] = H[1] + b >>> 0;
-    H[2] = H[2] + c >>> 0;
-    H[3] = H[3] + d >>> 0;
-    H[4] = H[4] + e >>> 0;
-  }
-  return Uint8Array.of(H[0] >> 24, H[0] >> 16, H[0] >> 8, H[0], H[1] >> 24, H[1] >> 16, H[1] >> 8, H[1], H[2] >> 24, H[2] >> 16, H[2] >> 8, H[2], H[3] >> 24, H[3] >> 16, H[3] >> 8, H[3], H[4] >> 24, H[4] >> 16, H[4] >> 8, H[4]);
-}
-var sha1_default;
-var init_sha1 = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/sha1.mjs"() {
-    sha1_default = sha1;
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v35.mjs
-function stringToBytes(str) {
-  str = unescape(encodeURIComponent(str));
-  const bytes = new Uint8Array(str.length);
-  for (let i = 0; i < str.length; ++i) {
-    bytes[i] = str.charCodeAt(i);
-  }
-  return bytes;
-}
-function v35(version, hash, value, namespace, buf, offset) {
-  const valueBytes = typeof value === "string" ? stringToBytes(value) : value;
-  const namespaceBytes = typeof namespace === "string" ? parse_default(namespace) : namespace;
-  if (typeof namespace === "string") {
-    namespace = parse_default(namespace);
-  }
-  if (namespace?.length !== 16) {
-    throw TypeError("Namespace must be array-like (16 iterable integer values, 0-255)");
-  }
-  let bytes = new Uint8Array(16 + valueBytes.length);
-  bytes.set(namespaceBytes);
-  bytes.set(valueBytes, namespaceBytes.length);
-  bytes = hash(bytes);
-  bytes[6] = bytes[6] & 15 | version;
-  bytes[8] = bytes[8] & 63 | 128;
-  if (buf) {
-    offset ?? (offset = 0);
-    if (offset < 0 || offset + 16 > buf.length) {
-      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
-    }
-    for (let i = 0; i < 16; ++i) {
-      buf[offset + i] = bytes[i];
-    }
-    return buf;
-  }
-  return unsafeStringify(bytes);
-}
-var DNS, URL2;
-var init_v35 = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v35.mjs"() {
-    init_parse();
-    init_stringify();
-    DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
-    URL2 = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v5.mjs
-function v5(value, namespace, buf, offset) {
-  return v35(80, sha1_default, value, namespace, buf, offset);
-}
-var v5_default;
-var init_v5 = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v5.mjs"() {
-    init_sha1();
-    init_v35();
-    init_v35();
-    v5.DNS = DNS;
-    v5.URL = URL2;
-    v5_default = v5;
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v7.mjs
-function v7(options, buf, offset) {
-  let bytes;
-  if (options) {
-    bytes = v7Bytes(options.random ?? options.rng?.() ?? rng(), options.msecs, options.seq, buf, offset);
-  } else {
-    const now = Date.now();
-    const rnds = rng();
-    updateV7State(_state, now, rnds);
-    bytes = v7Bytes(rnds, _state.msecs, _state.seq, buf, offset);
-  }
-  return buf ?? unsafeStringify(bytes);
-}
-function updateV7State(state, now, rnds) {
-  state.msecs ?? (state.msecs = -Infinity);
-  state.seq ?? (state.seq = 0);
-  if (now > state.msecs) {
-    state.seq = rnds[6] << 23 | rnds[7] << 16 | rnds[8] << 8 | rnds[9];
-    state.msecs = now;
-  } else {
-    state.seq = state.seq + 1 | 0;
-    if (state.seq === 0) {
-      state.msecs++;
-    }
-  }
-  return state;
-}
-function v7Bytes(rnds, msecs, seq, buf, offset = 0) {
-  if (rnds.length < 16) {
-    throw new Error("Random bytes length must be >= 16");
-  }
-  if (!buf) {
-    buf = new Uint8Array(16);
-    offset = 0;
-  } else {
-    if (offset < 0 || offset + 16 > buf.length) {
-      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
-    }
-  }
-  msecs ?? (msecs = Date.now());
-  seq ?? (seq = rnds[6] * 127 << 24 | rnds[7] << 16 | rnds[8] << 8 | rnds[9]);
-  buf[offset++] = msecs / 1099511627776 & 255;
-  buf[offset++] = msecs / 4294967296 & 255;
-  buf[offset++] = msecs / 16777216 & 255;
-  buf[offset++] = msecs / 65536 & 255;
-  buf[offset++] = msecs / 256 & 255;
-  buf[offset++] = msecs & 255;
-  buf[offset++] = 112 | seq >>> 28 & 15;
-  buf[offset++] = seq >>> 20 & 255;
-  buf[offset++] = 128 | seq >>> 14 & 63;
-  buf[offset++] = seq >>> 6 & 255;
-  buf[offset++] = seq << 2 & 255 | rnds[10] & 3;
-  buf[offset++] = rnds[11];
-  buf[offset++] = rnds[12];
-  buf[offset++] = rnds[13];
-  buf[offset++] = rnds[14];
-  buf[offset++] = rnds[15];
-  return buf;
-}
-var _state, v7_default;
-var init_v7 = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v7.mjs"() {
-    init_rng();
-    init_stringify();
-    _state = {};
-    v7_default = v7;
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/version.mjs
-var init_version = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/version.mjs"() {
-    init_validate();
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/index.mjs
-var init_src = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/index.mjs"() {
-    init_max();
-    init_nil();
-    init_parse();
-    init_stringify();
-    init_v4();
-    init_v5();
-    init_v7();
-    init_validate();
-    init_version();
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/api_url.mjs
-function getOpenAPIBaseUrl(apiUrl) {
-  const url = apiUrl.replace(/\/$/, "");
-  for (const suffix of ["/api/v1", "/api"]) {
-    if (url.endsWith(suffix))
-      return url.slice(0, -suffix.length);
-  }
-  return url;
-}
-var init_api_url = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/api_url.mjs"() {
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/experimental/otel/constants.mjs
-var GEN_AI_OPERATION_NAME, GEN_AI_SYSTEM, GEN_AI_REQUEST_MODEL, GEN_AI_RESPONSE_MODEL, GEN_AI_USAGE_INPUT_TOKENS, GEN_AI_USAGE_OUTPUT_TOKENS, GEN_AI_USAGE_TOTAL_TOKENS, GEN_AI_REQUEST_MAX_TOKENS, GEN_AI_REQUEST_TEMPERATURE, GEN_AI_REQUEST_TOP_P, GEN_AI_REQUEST_FREQUENCY_PENALTY, GEN_AI_REQUEST_PRESENCE_PENALTY, GEN_AI_RESPONSE_FINISH_REASONS, GENAI_PROMPT, GENAI_COMPLETION, GEN_AI_REQUEST_EXTRA_QUERY, GEN_AI_REQUEST_EXTRA_BODY, GEN_AI_SERIALIZED_NAME, GEN_AI_SERIALIZED_SIGNATURE, GEN_AI_SERIALIZED_DOC, GEN_AI_RESPONSE_ID, GEN_AI_TOOL_NAME, GEN_AI_TOOL_CALL_ID, GEN_AI_TOOL_DEFINITIONS, GEN_AI_RESPONSE_SERVICE_TIER, GEN_AI_RESPONSE_SYSTEM_FINGERPRINT, GEN_AI_USAGE_INPUT_TOKEN_DETAILS, GEN_AI_USAGE_OUTPUT_TOKEN_DETAILS, LANGSMITH_SESSION_ID, LANGSMITH_SESSION_NAME, LANGSMITH_RUN_TYPE, LANGSMITH_NAME, LANGSMITH_METADATA, LANGSMITH_TAGS, LANGSMITH_REQUEST_STREAMING, LANGSMITH_REQUEST_HEADERS, LANGSMITH_USAGE_METADATA;
-var init_constants = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/experimental/otel/constants.mjs"() {
-    GEN_AI_OPERATION_NAME = "gen_ai.operation.name";
-    GEN_AI_SYSTEM = "gen_ai.system";
-    GEN_AI_REQUEST_MODEL = "gen_ai.request.model";
-    GEN_AI_RESPONSE_MODEL = "gen_ai.response.model";
-    GEN_AI_USAGE_INPUT_TOKENS = "gen_ai.usage.input_tokens";
-    GEN_AI_USAGE_OUTPUT_TOKENS = "gen_ai.usage.output_tokens";
-    GEN_AI_USAGE_TOTAL_TOKENS = "gen_ai.usage.total_tokens";
-    GEN_AI_REQUEST_MAX_TOKENS = "gen_ai.request.max_tokens";
-    GEN_AI_REQUEST_TEMPERATURE = "gen_ai.request.temperature";
-    GEN_AI_REQUEST_TOP_P = "gen_ai.request.top_p";
-    GEN_AI_REQUEST_FREQUENCY_PENALTY = "gen_ai.request.frequency_penalty";
-    GEN_AI_REQUEST_PRESENCE_PENALTY = "gen_ai.request.presence_penalty";
-    GEN_AI_RESPONSE_FINISH_REASONS = "gen_ai.response.finish_reasons";
-    GENAI_PROMPT = "gen_ai.prompt";
-    GENAI_COMPLETION = "gen_ai.completion";
-    GEN_AI_REQUEST_EXTRA_QUERY = "gen_ai.request.extra_query";
-    GEN_AI_REQUEST_EXTRA_BODY = "gen_ai.request.extra_body";
-    GEN_AI_SERIALIZED_NAME = "gen_ai.serialized.name";
-    GEN_AI_SERIALIZED_SIGNATURE = "gen_ai.serialized.signature";
-    GEN_AI_SERIALIZED_DOC = "gen_ai.serialized.doc";
-    GEN_AI_RESPONSE_ID = "gen_ai.response.id";
-    GEN_AI_TOOL_NAME = "gen_ai.tool.name";
-    GEN_AI_TOOL_CALL_ID = "gen_ai.tool.call.id";
-    GEN_AI_TOOL_DEFINITIONS = "gen_ai.tool.definitions";
-    GEN_AI_RESPONSE_SERVICE_TIER = "gen_ai.response.service_tier";
-    GEN_AI_RESPONSE_SYSTEM_FINGERPRINT = "gen_ai.response.system_fingerprint";
-    GEN_AI_USAGE_INPUT_TOKEN_DETAILS = "gen_ai.usage.input_token_details";
-    GEN_AI_USAGE_OUTPUT_TOKEN_DETAILS = "gen_ai.usage.output_token_details";
-    LANGSMITH_SESSION_ID = "langsmith.trace.session_id";
-    LANGSMITH_SESSION_NAME = "langsmith.trace.session_name";
-    LANGSMITH_RUN_TYPE = "langsmith.span.kind";
-    LANGSMITH_NAME = "langsmith.trace.name";
-    LANGSMITH_METADATA = "langsmith.metadata";
-    LANGSMITH_TAGS = "langsmith.span.tags";
-    LANGSMITH_REQUEST_STREAMING = "langsmith.request.streaming";
-    LANGSMITH_REQUEST_HEADERS = "langsmith.request.headers";
-    LANGSMITH_USAGE_METADATA = "langsmith.usage_metadata";
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/singletons/otel.mjs
-function getOTELTrace() {
-  return OTELProviderSingleton.getTraceInstance();
-}
-function getOTELContext() {
-  return OTELProviderSingleton.getContextInstance();
-}
-function getDefaultOTLPTracerComponents() {
-  return OTELProviderSingleton.getDefaultOTLPTracerComponents();
-}
-var MockTracer, MockOTELTrace, MockOTELContext, OTEL_TRACE_KEY, OTEL_CONTEXT_KEY, OTEL_GET_DEFAULT_OTLP_TRACER_PROVIDER_KEY, mockOTELTrace, mockOTELContext, OTELProvider, OTELProviderSingleton;
-var init_otel = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/singletons/otel.mjs"() {
-    init_env3();
-    MockTracer = class {
-      constructor() {
-        Object.defineProperty(this, "hasWarned", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: false
-        });
-      }
-      startActiveSpan(_name, ...args) {
-        if (!this.hasWarned && resolveTracingMode() === "otel") {
-          console.warn('OTel tracing mode is active (via LANGSMITH_TRACING_MODE, OTEL_ENABLED, or LANGSMITH_OTEL_ENABLED), but the required OTEL instances have not been initialized. Please add:\n```\nimport { initializeOTEL } from "langsmith/experimental/otel/setup";\ninitializeOTEL();\n```\nat the beginning of your code.');
-          this.hasWarned = true;
-        }
-        let fn;
-        if (args.length === 1 && typeof args[0] === "function") {
-          fn = args[0];
-        } else if (args.length === 2 && typeof args[1] === "function") {
-          fn = args[1];
-        } else if (args.length === 3 && typeof args[2] === "function") {
-          fn = args[2];
-        }
-        if (typeof fn === "function") {
-          return fn();
-        }
-        return void 0;
-      }
-    };
-    MockOTELTrace = class {
-      constructor() {
-        Object.defineProperty(this, "mockTracer", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: new MockTracer()
-        });
-      }
-      getTracer(_name, _version) {
-        return this.mockTracer;
-      }
-      getActiveSpan() {
-        return void 0;
-      }
-      setSpan(context, _span) {
-        return context;
-      }
-      getSpan(_context) {
-        return void 0;
-      }
-      setSpanContext(context, _spanContext) {
-        return context;
-      }
-      getTracerProvider() {
-        return void 0;
-      }
-      setGlobalTracerProvider(_tracerProvider) {
-        return false;
-      }
-    };
-    MockOTELContext = class {
-      active() {
-        return {};
-      }
-      with(_context, fn) {
-        return fn();
-      }
-    };
-    OTEL_TRACE_KEY = /* @__PURE__ */ Symbol.for("ls:otel_trace");
-    OTEL_CONTEXT_KEY = /* @__PURE__ */ Symbol.for("ls:otel_context");
-    OTEL_GET_DEFAULT_OTLP_TRACER_PROVIDER_KEY = /* @__PURE__ */ Symbol.for("ls:otel_get_default_otlp_tracer_provider");
-    mockOTELTrace = new MockOTELTrace();
-    mockOTELContext = new MockOTELContext();
-    OTELProvider = class {
-      getTraceInstance() {
-        return globalThis[OTEL_TRACE_KEY] ?? mockOTELTrace;
-      }
-      getContextInstance() {
-        return globalThis[OTEL_CONTEXT_KEY] ?? mockOTELContext;
-      }
-      initializeGlobalInstances(otel) {
-        if (globalThis[OTEL_TRACE_KEY] === void 0) {
-          globalThis[OTEL_TRACE_KEY] = otel.trace;
-        }
-        if (globalThis[OTEL_CONTEXT_KEY] === void 0) {
-          globalThis[OTEL_CONTEXT_KEY] = otel.context;
-        }
-      }
-      setDefaultOTLPTracerComponents(components) {
-        globalThis[OTEL_GET_DEFAULT_OTLP_TRACER_PROVIDER_KEY] = components;
-      }
-      getDefaultOTLPTracerComponents() {
-        return globalThis[OTEL_GET_DEFAULT_OTLP_TRACER_PROVIDER_KEY] ?? void 0;
-      }
-    };
-    OTELProviderSingleton = new OTELProvider();
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/experimental/otel/translator.mjs
-function getOperationName(runType) {
-  return WELL_KNOWN_OPERATION_NAMES[runType] || runType;
-}
-function isPrimitive(value) {
-  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
-}
-var WELL_KNOWN_OPERATION_NAMES, LangSmithToOTELTranslator;
-var init_translator = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/experimental/otel/translator.mjs"() {
-    init_constants();
-    init_otel();
-    WELL_KNOWN_OPERATION_NAMES = {
-      llm: "chat",
-      tool: "execute_tool",
-      retriever: "embeddings",
-      embedding: "embeddings",
-      prompt: "chat"
-    };
-    LangSmithToOTELTranslator = class {
-      constructor() {
-        Object.defineProperty(this, "spans", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: /* @__PURE__ */ new Map()
-        });
-      }
-      exportBatch(operations, otelContextMap) {
-        for (const op of operations) {
-          try {
-            if (!op.run) {
-              continue;
-            }
-            if (op.operation === "post") {
-              const span = this.createSpanForRun(op, op.run, otelContextMap.get(op.id));
-              if (span && !op.run.end_time) {
-                this.spans.set(op.id, span);
-              }
-            } else {
-              this.updateSpanForRun(op, op.run);
-            }
-          } catch (e) {
-            console.error(`Error processing operation ${op.id}:`, e);
-          }
-        }
-      }
-      createSpanForRun(op, runInfo, otelContext) {
-        const activeSpan = otelContext && getOTELTrace().getSpan(otelContext);
-        if (!activeSpan) {
-          return;
-        }
-        try {
-          return this.finishSpanSetup(activeSpan, runInfo, op);
-        } catch (e) {
-          console.error(`Failed to create span for run ${op.id}:`, e);
-          return void 0;
-        }
-      }
-      finishSpanSetup(span, runInfo, op) {
-        this.setSpanAttributes(span, runInfo, op);
-        if (runInfo.error) {
-          span.setStatus({ code: 2 });
-          span.recordException(new Error(runInfo.error));
-        } else {
-          span.setStatus({ code: 1 });
-        }
-        if (runInfo.end_time) {
-          span.end(new Date(runInfo.end_time));
-        }
-        return span;
-      }
-      updateSpanForRun(op, runInfo) {
-        try {
-          const span = this.spans.get(op.id);
-          if (!span) {
-            console.debug(`No span found for run ${op.id} during update`);
-            return;
-          }
-          this.setSpanAttributes(span, runInfo, op);
-          if (runInfo.error) {
-            span.setStatus({ code: 2 });
-            span.recordException(new Error(runInfo.error));
-          } else {
-            span.setStatus({ code: 1 });
-          }
-          const endTime = runInfo.end_time;
-          if (endTime) {
-            span.end(new Date(endTime));
-            this.spans.delete(op.id);
-          }
-        } catch (e) {
-          console.error(`Failed to update span for run ${op.id}:`, e);
-        }
-      }
-      extractModelName(runInfo) {
-        if (runInfo.extra?.metadata) {
-          const metadata = runInfo.extra.metadata;
-          if (metadata.ls_model_name) {
-            return metadata.ls_model_name;
-          }
-          if (metadata.invocation_params) {
-            const invocationParams = metadata.invocation_params;
-            if (invocationParams.model) {
-              return invocationParams.model;
-            } else if (invocationParams.model_name) {
-              return invocationParams.model_name;
-            }
-          }
-        }
-        return;
-      }
-      setSpanAttributes(span, runInfo, op) {
-        if ("run_type" in runInfo && runInfo.run_type) {
-          span.setAttribute(LANGSMITH_RUN_TYPE, runInfo.run_type);
-          const operationName = getOperationName(runInfo.run_type || "chain");
-          span.setAttribute(GEN_AI_OPERATION_NAME, operationName);
-        }
-        if ("name" in runInfo && runInfo.name) {
-          span.setAttribute(LANGSMITH_NAME, runInfo.name);
-        }
-        if ("session_id" in runInfo && runInfo.session_id) {
-          span.setAttribute(LANGSMITH_SESSION_ID, runInfo.session_id);
-        }
-        if ("session_name" in runInfo && runInfo.session_name) {
-          span.setAttribute(LANGSMITH_SESSION_NAME, runInfo.session_name);
-        }
-        this.setGenAiSystem(span, runInfo);
-        const modelName = this.extractModelName(runInfo);
-        if (modelName) {
-          span.setAttribute(GEN_AI_REQUEST_MODEL, modelName);
-        }
-        if (runInfo.extra?.metadata?.usage_metadata && typeof runInfo.extra.metadata.usage_metadata === "object") {
-          span.setAttribute(LANGSMITH_USAGE_METADATA, JSON.stringify(runInfo.extra.metadata.usage_metadata));
-        }
-        if ("prompt_tokens" in runInfo && typeof runInfo.prompt_tokens === "number") {
-          span.setAttribute(GEN_AI_USAGE_INPUT_TOKENS, runInfo.prompt_tokens);
-        }
-        if ("completion_tokens" in runInfo && typeof runInfo.completion_tokens === "number") {
-          span.setAttribute(GEN_AI_USAGE_OUTPUT_TOKENS, runInfo.completion_tokens);
-        }
-        if ("total_tokens" in runInfo && typeof runInfo.total_tokens === "number") {
-          span.setAttribute(GEN_AI_USAGE_TOTAL_TOKENS, runInfo.total_tokens);
-        }
-        this.setInvocationParameters(span, runInfo);
-        if ("run_type" in runInfo && runInfo.run_type === "tool") {
-          if ("name" in runInfo && runInfo.name) {
-            span.setAttribute(GEN_AI_TOOL_NAME, runInfo.name);
-          }
-          const toolCallId = runInfo.extra?.tool_call_id || runInfo.extra?.metadata?.tool_call_id;
-          if (toolCallId != null) {
-            span.setAttribute(GEN_AI_TOOL_CALL_ID, String(toolCallId));
-          }
-        }
-        const metadata = runInfo.extra?.metadata || {};
-        for (const [key, value] of Object.entries(metadata)) {
-          if (value !== null && value !== void 0) {
-            span.setAttribute(`${LANGSMITH_METADATA}.${key}`, isPrimitive(value) ? String(value) : JSON.stringify(value));
-          }
-        }
-        const tags = runInfo.tags;
-        if (tags && Array.isArray(tags)) {
-          span.setAttribute(LANGSMITH_TAGS, tags.join(", "));
-        } else if (tags) {
-          span.setAttribute(LANGSMITH_TAGS, String(tags));
-        }
-        if ("serialized" in runInfo && typeof runInfo.serialized === "object") {
-          const serialized = runInfo.serialized;
-          if (serialized.name) {
-            span.setAttribute(GEN_AI_SERIALIZED_NAME, String(serialized.name));
-          }
-          if (serialized.signature) {
-            span.setAttribute(GEN_AI_SERIALIZED_SIGNATURE, String(serialized.signature));
-          }
-          if (serialized.doc) {
-            span.setAttribute(GEN_AI_SERIALIZED_DOC, String(serialized.doc));
-          }
-        }
-        this.setIOAttributes(span, op);
-      }
-      setGenAiSystem(span, runInfo) {
-        let system = "langchain";
-        const modelName = this.extractModelName(runInfo);
-        if (modelName) {
-          const modelLower = modelName.toLowerCase();
-          if (modelLower.includes("anthropic") || modelLower.startsWith("claude")) {
-            system = "anthropic";
-          } else if (modelLower.includes("bedrock")) {
-            system = "aws.bedrock";
-          } else if (modelLower.includes("azure") && modelLower.includes("openai")) {
-            system = "az.ai.openai";
-          } else if (modelLower.includes("azure") && modelLower.includes("inference")) {
-            system = "az.ai.inference";
-          } else if (modelLower.includes("cohere")) {
-            system = "cohere";
-          } else if (modelLower.includes("deepseek")) {
-            system = "deepseek";
-          } else if (modelLower.includes("gemini")) {
-            system = "gemini";
-          } else if (modelLower.includes("groq")) {
-            system = "groq";
-          } else if (modelLower.includes("watson") || modelLower.includes("ibm")) {
-            system = "ibm.watsonx.ai";
-          } else if (modelLower.includes("mistral")) {
-            system = "mistral_ai";
-          } else if (modelLower.includes("gpt") || modelLower.includes("openai")) {
-            system = "openai";
-          } else if (modelLower.includes("perplexity") || modelLower.includes("sonar")) {
-            system = "perplexity";
-          } else if (modelLower.includes("vertex")) {
-            system = "vertex_ai";
-          } else if (modelLower.includes("xai") || modelLower.includes("grok")) {
-            system = "xai";
-          }
-        }
-        span.setAttribute(GEN_AI_SYSTEM, system);
-      }
-      setInvocationParameters(span, runInfo) {
-        const tools = runInfo.extra?.invocation_params?.tools;
-        if (Array.isArray(tools) && tools.length > 0) {
-          span.setAttribute(GEN_AI_TOOL_DEFINITIONS, JSON.stringify(tools));
-        }
-        if (!runInfo.extra?.metadata?.invocation_params) {
-          return;
-        }
-        const invocationParams = runInfo.extra.metadata.invocation_params;
-        if (invocationParams.max_tokens !== void 0) {
-          span.setAttribute(GEN_AI_REQUEST_MAX_TOKENS, invocationParams.max_tokens);
-        }
-        if (invocationParams.temperature !== void 0) {
-          span.setAttribute(GEN_AI_REQUEST_TEMPERATURE, invocationParams.temperature);
-        }
-        if (invocationParams.top_p !== void 0) {
-          span.setAttribute(GEN_AI_REQUEST_TOP_P, invocationParams.top_p);
-        }
-        if (invocationParams.frequency_penalty !== void 0) {
-          span.setAttribute(GEN_AI_REQUEST_FREQUENCY_PENALTY, invocationParams.frequency_penalty);
-        }
-        if (invocationParams.presence_penalty !== void 0) {
-          span.setAttribute(GEN_AI_REQUEST_PRESENCE_PENALTY, invocationParams.presence_penalty);
-        }
-      }
-      setIOAttributes(span, op) {
-        if (op.run.inputs) {
-          try {
-            const inputs = op.run.inputs;
-            if (typeof inputs === "object" && inputs !== null) {
-              if (inputs.model && Array.isArray(inputs.messages)) {
-                span.setAttribute(GEN_AI_REQUEST_MODEL, inputs.model);
-              }
-              if (inputs.stream !== void 0) {
-                span.setAttribute(LANGSMITH_REQUEST_STREAMING, inputs.stream);
-              }
-              if (inputs.extra_headers) {
-                span.setAttribute(LANGSMITH_REQUEST_HEADERS, JSON.stringify(inputs.extra_headers));
-              }
-              if (inputs.extra_query) {
-                span.setAttribute(GEN_AI_REQUEST_EXTRA_QUERY, JSON.stringify(inputs.extra_query));
-              }
-              if (inputs.extra_body) {
-                span.setAttribute(GEN_AI_REQUEST_EXTRA_BODY, JSON.stringify(inputs.extra_body));
-              }
-            }
-            span.setAttribute(GENAI_PROMPT, JSON.stringify(inputs));
-          } catch (e) {
-            console.debug(`Failed to process inputs for run ${op.id}`, e);
-          }
-        }
-        if (op.run.outputs) {
-          try {
-            const outputs = op.run.outputs;
-            const tokenUsage = this.getUnifiedRunTokens(outputs);
-            if (tokenUsage) {
-              span.setAttribute(GEN_AI_USAGE_INPUT_TOKENS, tokenUsage[0]);
-              span.setAttribute(GEN_AI_USAGE_OUTPUT_TOKENS, tokenUsage[1]);
-              span.setAttribute(GEN_AI_USAGE_TOTAL_TOKENS, tokenUsage[0] + tokenUsage[1]);
-            }
-            if (outputs && typeof outputs === "object") {
-              if (outputs.model) {
-                span.setAttribute(GEN_AI_RESPONSE_MODEL, String(outputs.model));
-              }
-              if (outputs.id) {
-                span.setAttribute(GEN_AI_RESPONSE_ID, outputs.id);
-              }
-              if (outputs.choices && Array.isArray(outputs.choices)) {
-                const finishReasons = outputs.choices.map((choice) => choice.finish_reason).filter((reason) => reason).map(String);
-                if (finishReasons.length > 0) {
-                  span.setAttribute(GEN_AI_RESPONSE_FINISH_REASONS, finishReasons.join(", "));
-                }
-              }
-              if (outputs.service_tier) {
-                span.setAttribute(GEN_AI_RESPONSE_SERVICE_TIER, outputs.service_tier);
-              }
-              if (outputs.system_fingerprint) {
-                span.setAttribute(GEN_AI_RESPONSE_SYSTEM_FINGERPRINT, outputs.system_fingerprint);
-              }
-              if (outputs.usage_metadata && typeof outputs.usage_metadata === "object") {
-                const usageMetadata = outputs.usage_metadata;
-                span.setAttribute(LANGSMITH_USAGE_METADATA, JSON.stringify(usageMetadata));
-                if (usageMetadata.input_token_details) {
-                  span.setAttribute(GEN_AI_USAGE_INPUT_TOKEN_DETAILS, JSON.stringify(usageMetadata.input_token_details));
-                }
-                if (usageMetadata.output_token_details) {
-                  span.setAttribute(GEN_AI_USAGE_OUTPUT_TOKEN_DETAILS, JSON.stringify(usageMetadata.output_token_details));
-                }
-              }
-            }
-            span.setAttribute(GENAI_COMPLETION, JSON.stringify(outputs));
-          } catch (e) {
-            console.debug(`Failed to process outputs for run ${op.id}`, e);
-          }
-        }
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      getUnifiedRunTokens(outputs) {
-        if (!outputs) {
-          return null;
-        }
-        let tokenUsage = this.extractUnifiedRunTokens(outputs.usage_metadata);
-        if (tokenUsage) {
-          return tokenUsage;
-        }
-        const keys = Object.keys(outputs);
-        for (const key of keys) {
-          const haystack = outputs[key];
-          if (!haystack || typeof haystack !== "object") {
-            continue;
-          }
-          tokenUsage = this.extractUnifiedRunTokens(haystack.usage_metadata);
-          if (tokenUsage) {
-            return tokenUsage;
-          }
-          if (haystack.lc === 1 && haystack.kwargs && typeof haystack.kwargs === "object") {
-            tokenUsage = this.extractUnifiedRunTokens(haystack.kwargs.usage_metadata);
-            if (tokenUsage) {
-              return tokenUsage;
-            }
-          }
-        }
-        const generations = outputs.generations || [];
-        if (!Array.isArray(generations)) {
-          return null;
-        }
-        const flatGenerations = Array.isArray(generations[0]) ? generations.flat() : generations;
-        for (const generation of flatGenerations) {
-          if (typeof generation === "object" && generation.message && typeof generation.message === "object" && generation.message.kwargs && typeof generation.message.kwargs === "object") {
-            tokenUsage = this.extractUnifiedRunTokens(generation.message.kwargs.usage_metadata);
-            if (tokenUsage) {
-              return tokenUsage;
-            }
-          }
-        }
-        return null;
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      extractUnifiedRunTokens(outputs) {
-        if (!outputs || typeof outputs !== "object") {
-          return null;
-        }
-        if (typeof outputs.input_tokens !== "number" || typeof outputs.output_tokens !== "number") {
-          return null;
-        }
-        return [outputs.input_tokens, outputs.output_tokens];
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/is-network-error/index.mjs
-function isNetworkError(error) {
-  const isValid = error && isError(error) && error.name === "TypeError" && typeof error.message === "string";
-  if (!isValid) {
-    return false;
-  }
-  const { message, stack } = error;
-  if (message === "Load failed") {
-    return stack === void 0 || // Sentry adds its own stack trace to the fetch error, so also check for that
-    "__sentry_captured__" in error;
-  }
-  if (message.startsWith("error sending request for url")) {
-    return true;
-  }
-  return errorMessages.has(message);
-}
-var objectToString, isError, errorMessages;
-var init_is_network_error = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/is-network-error/index.mjs"() {
-    objectToString = Object.prototype.toString;
-    isError = (value) => objectToString.call(value) === "[object Error]";
-    errorMessages = /* @__PURE__ */ new Set([
-      "network error",
-      // Chrome
-      "Failed to fetch",
-      // Chrome
-      "NetworkError when attempting to fetch resource.",
-      // Firefox
-      "The Internet connection appears to be offline.",
-      // Safari 16
-      "Network request failed",
-      // `cross-fetch`
-      "fetch failed",
-      // Undici (Node.js)
-      "terminated",
-      // Undici (Node.js)
-      " A network error occurred.",
-      // Bun (WebKit)
-      "Network connection lost"
-      // Cloudflare Workers (fetch)
-    ]);
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/p-retry/index.mjs
-function validateRetries(retries) {
-  if (typeof retries === "number") {
-    if (retries < 0) {
-      throw new TypeError("Expected `retries` to be a non-negative number.");
-    }
-    if (Number.isNaN(retries)) {
-      throw new TypeError("Expected `retries` to be a valid number or Infinity, got NaN.");
-    }
-  } else if (retries !== void 0) {
-    throw new TypeError("Expected `retries` to be a number or Infinity.");
-  }
-}
-function validateNumberOption(name, value, { min = 0, allowInfinity = false } = {}) {
-  if (value === void 0) {
-    return;
-  }
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    throw new TypeError(`Expected \`${name}\` to be a number${allowInfinity ? " or Infinity" : ""}.`);
-  }
-  if (!allowInfinity && !Number.isFinite(value)) {
-    throw new TypeError(`Expected \`${name}\` to be a finite number.`);
-  }
-  if (value < min) {
-    throw new TypeError(`Expected \`${name}\` to be \u2265 ${min}.`);
-  }
-}
-function calculateDelay(retriesConsumed, options) {
-  const attempt = Math.max(1, retriesConsumed + 1);
-  const random = options.randomize ? Math.random() + 1 : 1;
-  let timeout = Math.round(random * options.minTimeout * options.factor ** (attempt - 1));
-  timeout = Math.min(timeout, options.maxTimeout);
-  return timeout;
-}
-function calculateRemainingTime(start, max) {
-  if (!Number.isFinite(max)) {
-    return max;
-  }
-  return max - (performance.now() - start);
-}
-async function onAttemptFailure({ error, attemptNumber, retriesConsumed, startTime, options }) {
-  const normalizedError = error instanceof Error ? error : new TypeError(`Non-error was thrown: "${error}". You should only throw errors.`);
-  if (normalizedError instanceof AbortError) {
-    throw normalizedError.originalError;
-  }
-  const retriesLeft = Number.isFinite(options.retries) ? Math.max(0, options.retries - retriesConsumed) : options.retries;
-  const maxRetryTime = options.maxRetryTime ?? Number.POSITIVE_INFINITY;
-  const context = Object.freeze({
-    error: normalizedError,
-    attemptNumber,
-    retriesLeft,
-    retriesConsumed
-  });
-  await options.onFailedAttempt(context);
-  if (calculateRemainingTime(startTime, maxRetryTime) <= 0) {
-    throw normalizedError;
-  }
-  const consumeRetry = await options.shouldConsumeRetry(context);
-  const remainingTime = calculateRemainingTime(startTime, maxRetryTime);
-  if (remainingTime <= 0 || retriesLeft <= 0) {
-    throw normalizedError;
-  }
-  if (normalizedError instanceof TypeError && !isNetworkError(normalizedError)) {
-    if (consumeRetry) {
-      throw normalizedError;
-    }
-    options.signal?.throwIfAborted();
-    return false;
-  }
-  if (!await options.shouldRetry(context)) {
-    throw normalizedError;
-  }
-  if (!consumeRetry) {
-    options.signal?.throwIfAborted();
-    return false;
-  }
-  const delayTime = calculateDelay(retriesConsumed, options);
-  const finalDelay = Math.min(delayTime, remainingTime);
-  if (finalDelay > 0) {
-    await new Promise((resolve2, reject) => {
-      const onAbort = () => {
-        clearTimeout(timeoutToken);
-        options.signal?.removeEventListener("abort", onAbort);
-        reject(options.signal.reason);
-      };
-      const timeoutToken = setTimeout(() => {
-        options.signal?.removeEventListener("abort", onAbort);
-        resolve2();
-      }, finalDelay);
-      if (options.unref) {
-        timeoutToken.unref?.();
-      }
-      options.signal?.addEventListener("abort", onAbort, { once: true });
-    });
-  }
-  options.signal?.throwIfAborted();
-  return true;
-}
-async function pRetry(input, options = {}) {
-  options = { ...options };
-  validateRetries(options.retries);
-  if (Object.hasOwn(options, "forever")) {
-    throw new Error("The `forever` option is no longer supported. For many use-cases, you can set `retries: Infinity` instead.");
-  }
-  options.retries ?? (options.retries = 10);
-  options.factor ?? (options.factor = 2);
-  options.minTimeout ?? (options.minTimeout = 1e3);
-  options.maxTimeout ?? (options.maxTimeout = Number.POSITIVE_INFINITY);
-  options.maxRetryTime ?? (options.maxRetryTime = Number.POSITIVE_INFINITY);
-  options.randomize ?? (options.randomize = false);
-  options.onFailedAttempt ?? (options.onFailedAttempt = () => {
-  });
-  options.shouldRetry ?? (options.shouldRetry = () => true);
-  options.shouldConsumeRetry ?? (options.shouldConsumeRetry = () => true);
-  validateNumberOption("factor", options.factor, {
-    min: 0,
-    allowInfinity: false
-  });
-  validateNumberOption("minTimeout", options.minTimeout, {
-    min: 0,
-    allowInfinity: false
-  });
-  validateNumberOption("maxTimeout", options.maxTimeout, {
-    min: 0,
-    allowInfinity: true
-  });
-  validateNumberOption("maxRetryTime", options.maxRetryTime, {
-    min: 0,
-    allowInfinity: true
-  });
-  if (!(options.factor > 0)) {
-    options.factor = 1;
-  }
-  options.signal?.throwIfAborted();
-  let attemptNumber = 0;
-  let retriesConsumed = 0;
-  const startTime = performance.now();
-  while (Number.isFinite(options.retries) ? retriesConsumed <= options.retries : true) {
-    attemptNumber++;
-    try {
-      options.signal?.throwIfAborted();
-      const result = await input(attemptNumber);
-      options.signal?.throwIfAborted();
-      return result;
-    } catch (error) {
-      if (await onAttemptFailure({
-        error,
-        attemptNumber,
-        retriesConsumed,
-        startTime,
-        options
-      })) {
-        retriesConsumed++;
-      }
-    }
-  }
-  throw new Error("Retry attempts exhausted without throwing an error.");
-}
-var AbortError;
-var init_p_retry = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/p-retry/index.mjs"() {
-    init_is_network_error();
-    AbortError = class extends Error {
-      constructor(message) {
-        super();
-        if (message instanceof Error) {
-          this.originalError = message;
-          ({ message } = message);
-        } else {
-          this.originalError = new Error(message);
-          this.originalError.stack = this.stack;
-        }
-        this.name = "AbortError";
-        this.message = message;
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/eventemitter3@4.0.7/node_modules/eventemitter3/index.js
-var require_eventemitter3 = __commonJS({
-  "node_modules/.pnpm/eventemitter3@4.0.7/node_modules/eventemitter3/index.js"(exports, module) {
-    "use strict";
-    var has2 = Object.prototype.hasOwnProperty;
-    var prefix = "~";
-    function Events() {
-    }
-    if (Object.create) {
-      Events.prototype = /* @__PURE__ */ Object.create(null);
-      if (!new Events().__proto__) prefix = false;
-    }
-    function EE(fn, context, once) {
-      this.fn = fn;
-      this.context = context;
-      this.once = once || false;
-    }
-    function addListener(emitter, event, fn, context, once) {
-      if (typeof fn !== "function") {
-        throw new TypeError("The listener must be a function");
-      }
-      var listener = new EE(fn, context || emitter, once), evt = prefix ? prefix + event : event;
-      if (!emitter._events[evt]) emitter._events[evt] = listener, emitter._eventsCount++;
-      else if (!emitter._events[evt].fn) emitter._events[evt].push(listener);
-      else emitter._events[evt] = [emitter._events[evt], listener];
-      return emitter;
-    }
-    function clearEvent(emitter, evt) {
-      if (--emitter._eventsCount === 0) emitter._events = new Events();
-      else delete emitter._events[evt];
-    }
-    function EventEmitter() {
-      this._events = new Events();
-      this._eventsCount = 0;
-    }
-    EventEmitter.prototype.eventNames = function eventNames() {
-      var names = [], events, name;
-      if (this._eventsCount === 0) return names;
-      for (name in events = this._events) {
-        if (has2.call(events, name)) names.push(prefix ? name.slice(1) : name);
-      }
-      if (Object.getOwnPropertySymbols) {
-        return names.concat(Object.getOwnPropertySymbols(events));
-      }
-      return names;
-    };
-    EventEmitter.prototype.listeners = function listeners(event) {
-      var evt = prefix ? prefix + event : event, handlers = this._events[evt];
-      if (!handlers) return [];
-      if (handlers.fn) return [handlers.fn];
-      for (var i = 0, l = handlers.length, ee = new Array(l); i < l; i++) {
-        ee[i] = handlers[i].fn;
-      }
-      return ee;
-    };
-    EventEmitter.prototype.listenerCount = function listenerCount(event) {
-      var evt = prefix ? prefix + event : event, listeners = this._events[evt];
-      if (!listeners) return 0;
-      if (listeners.fn) return 1;
-      return listeners.length;
-    };
-    EventEmitter.prototype.emit = function emit(event, a1, a2, a3, a4, a5) {
-      var evt = prefix ? prefix + event : event;
-      if (!this._events[evt]) return false;
-      var listeners = this._events[evt], len = arguments.length, args, i;
-      if (listeners.fn) {
-        if (listeners.once) this.removeListener(event, listeners.fn, void 0, true);
-        switch (len) {
-          case 1:
-            return listeners.fn.call(listeners.context), true;
-          case 2:
-            return listeners.fn.call(listeners.context, a1), true;
-          case 3:
-            return listeners.fn.call(listeners.context, a1, a2), true;
-          case 4:
-            return listeners.fn.call(listeners.context, a1, a2, a3), true;
-          case 5:
-            return listeners.fn.call(listeners.context, a1, a2, a3, a4), true;
-          case 6:
-            return listeners.fn.call(listeners.context, a1, a2, a3, a4, a5), true;
-        }
-        for (i = 1, args = new Array(len - 1); i < len; i++) {
-          args[i - 1] = arguments[i];
-        }
-        listeners.fn.apply(listeners.context, args);
-      } else {
-        var length = listeners.length, j;
-        for (i = 0; i < length; i++) {
-          if (listeners[i].once) this.removeListener(event, listeners[i].fn, void 0, true);
-          switch (len) {
-            case 1:
-              listeners[i].fn.call(listeners[i].context);
-              break;
-            case 2:
-              listeners[i].fn.call(listeners[i].context, a1);
-              break;
-            case 3:
-              listeners[i].fn.call(listeners[i].context, a1, a2);
-              break;
-            case 4:
-              listeners[i].fn.call(listeners[i].context, a1, a2, a3);
-              break;
-            default:
-              if (!args) for (j = 1, args = new Array(len - 1); j < len; j++) {
-                args[j - 1] = arguments[j];
-              }
-              listeners[i].fn.apply(listeners[i].context, args);
-          }
-        }
-      }
-      return true;
-    };
-    EventEmitter.prototype.on = function on(event, fn, context) {
-      return addListener(this, event, fn, context, false);
-    };
-    EventEmitter.prototype.once = function once(event, fn, context) {
-      return addListener(this, event, fn, context, true);
-    };
-    EventEmitter.prototype.removeListener = function removeListener(event, fn, context, once) {
-      var evt = prefix ? prefix + event : event;
-      if (!this._events[evt]) return this;
-      if (!fn) {
-        clearEvent(this, evt);
-        return this;
-      }
-      var listeners = this._events[evt];
-      if (listeners.fn) {
-        if (listeners.fn === fn && (!once || listeners.once) && (!context || listeners.context === context)) {
-          clearEvent(this, evt);
-        }
-      } else {
-        for (var i = 0, events = [], length = listeners.length; i < length; i++) {
-          if (listeners[i].fn !== fn || once && !listeners[i].once || context && listeners[i].context !== context) {
-            events.push(listeners[i]);
-          }
-        }
-        if (events.length) this._events[evt] = events.length === 1 ? events[0] : events;
-        else clearEvent(this, evt);
-      }
-      return this;
-    };
-    EventEmitter.prototype.removeAllListeners = function removeAllListeners(event) {
-      var evt;
-      if (event) {
-        evt = prefix ? prefix + event : event;
-        if (this._events[evt]) clearEvent(this, evt);
-      } else {
-        this._events = new Events();
-        this._eventsCount = 0;
-      }
-      return this;
-    };
-    EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
-    EventEmitter.prototype.addListener = EventEmitter.prototype.on;
-    EventEmitter.prefixed = prefix;
-    EventEmitter.EventEmitter = EventEmitter;
-    if ("undefined" !== typeof module) {
-      module.exports = EventEmitter;
-    }
-  }
-});
-
-// node_modules/.pnpm/p-finally@1.0.0/node_modules/p-finally/index.js
-var require_p_finally = __commonJS({
-  "node_modules/.pnpm/p-finally@1.0.0/node_modules/p-finally/index.js"(exports, module) {
-    "use strict";
-    module.exports = (promise, onFinally) => {
-      onFinally = onFinally || (() => {
-      });
-      return promise.then(
-        (val) => new Promise((resolve2) => {
-          resolve2(onFinally());
-        }).then(() => val),
-        (err) => new Promise((resolve2) => {
-          resolve2(onFinally());
-        }).then(() => {
-          throw err;
-        })
-      );
-    };
-  }
-});
-
-// node_modules/.pnpm/p-timeout@3.2.0/node_modules/p-timeout/index.js
-var require_p_timeout = __commonJS({
-  "node_modules/.pnpm/p-timeout@3.2.0/node_modules/p-timeout/index.js"(exports, module) {
-    "use strict";
-    var pFinally = require_p_finally();
-    var TimeoutError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.name = "TimeoutError";
-      }
-    };
-    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve2, reject) => {
-      if (typeof milliseconds !== "number" || milliseconds < 0) {
-        throw new TypeError("Expected `milliseconds` to be a positive number");
-      }
-      if (milliseconds === Infinity) {
-        resolve2(promise);
-        return;
-      }
-      const timer = setTimeout(() => {
-        if (typeof fallback === "function") {
-          try {
-            resolve2(fallback());
-          } catch (error) {
-            reject(error);
-          }
-          return;
-        }
-        const message = typeof fallback === "string" ? fallback : `Promise timed out after ${milliseconds} milliseconds`;
-        const timeoutError = fallback instanceof Error ? fallback : new TimeoutError(message);
-        if (typeof promise.cancel === "function") {
-          promise.cancel();
-        }
-        reject(timeoutError);
-      }, milliseconds);
-      pFinally(
-        // eslint-disable-next-line promise/prefer-await-to-then
-        promise.then(resolve2, reject),
-        () => {
-          clearTimeout(timer);
-        }
-      );
-    });
-    module.exports = pTimeout;
-    module.exports.default = pTimeout;
-    module.exports.TimeoutError = TimeoutError;
-  }
-});
-
-// node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/lower-bound.js
-var require_lower_bound = __commonJS({
-  "node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/lower-bound.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    function lowerBound(array, value, comparator) {
-      let first = 0;
-      let count = array.length;
-      while (count > 0) {
-        const step = count / 2 | 0;
-        let it = first + step;
-        if (comparator(array[it], value) <= 0) {
-          first = ++it;
-          count -= step + 1;
-        } else {
-          count = step;
-        }
-      }
-      return first;
-    }
-    exports.default = lowerBound;
-  }
-});
-
-// node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/priority-queue.js
-var require_priority_queue = __commonJS({
-  "node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/priority-queue.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var lower_bound_1 = require_lower_bound();
-    var PriorityQueue = class {
-      constructor() {
-        this._queue = [];
-      }
-      enqueue(run, options) {
-        options = Object.assign({ priority: 0 }, options);
-        const element = {
-          priority: options.priority,
-          run
-        };
-        if (this.size && this._queue[this.size - 1].priority >= options.priority) {
-          this._queue.push(element);
-          return;
-        }
-        const index = lower_bound_1.default(this._queue, element, (a, b) => b.priority - a.priority);
-        this._queue.splice(index, 0, element);
-      }
-      dequeue() {
-        const item = this._queue.shift();
-        return item === null || item === void 0 ? void 0 : item.run;
-      }
-      filter(options) {
-        return this._queue.filter((element) => element.priority === options.priority).map((element) => element.run);
-      }
-      get size() {
-        return this._queue.length;
-      }
-    };
-    exports.default = PriorityQueue;
-  }
-});
-
-// node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/index.js
-var require_dist = __commonJS({
-  "node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var EventEmitter = require_eventemitter3();
-    var p_timeout_1 = require_p_timeout();
-    var priority_queue_1 = require_priority_queue();
-    var empty = () => {
-    };
-    var timeoutError = new p_timeout_1.TimeoutError();
-    var PQueue2 = class extends EventEmitter {
-      constructor(options) {
-        var _a2, _b, _c, _d;
-        super();
-        this._intervalCount = 0;
-        this._intervalEnd = 0;
-        this._pendingCount = 0;
-        this._resolveEmpty = empty;
-        this._resolveIdle = empty;
-        options = Object.assign({ carryoverConcurrencyCount: false, intervalCap: Infinity, interval: 0, concurrency: Infinity, autoStart: true, queueClass: priority_queue_1.default }, options);
-        if (!(typeof options.intervalCap === "number" && options.intervalCap >= 1)) {
-          throw new TypeError(`Expected \`intervalCap\` to be a number from 1 and up, got \`${(_b = (_a2 = options.intervalCap) === null || _a2 === void 0 ? void 0 : _a2.toString()) !== null && _b !== void 0 ? _b : ""}\` (${typeof options.intervalCap})`);
-        }
-        if (options.interval === void 0 || !(Number.isFinite(options.interval) && options.interval >= 0)) {
-          throw new TypeError(`Expected \`interval\` to be a finite number >= 0, got \`${(_d = (_c = options.interval) === null || _c === void 0 ? void 0 : _c.toString()) !== null && _d !== void 0 ? _d : ""}\` (${typeof options.interval})`);
-        }
-        this._carryoverConcurrencyCount = options.carryoverConcurrencyCount;
-        this._isIntervalIgnored = options.intervalCap === Infinity || options.interval === 0;
-        this._intervalCap = options.intervalCap;
-        this._interval = options.interval;
-        this._queue = new options.queueClass();
-        this._queueClass = options.queueClass;
-        this.concurrency = options.concurrency;
-        this._timeout = options.timeout;
-        this._throwOnTimeout = options.throwOnTimeout === true;
-        this._isPaused = options.autoStart === false;
-      }
-      get _doesIntervalAllowAnother() {
-        return this._isIntervalIgnored || this._intervalCount < this._intervalCap;
-      }
-      get _doesConcurrentAllowAnother() {
-        return this._pendingCount < this._concurrency;
-      }
-      _next() {
-        this._pendingCount--;
-        this._tryToStartAnother();
-        this.emit("next");
-      }
-      _resolvePromises() {
-        this._resolveEmpty();
-        this._resolveEmpty = empty;
-        if (this._pendingCount === 0) {
-          this._resolveIdle();
-          this._resolveIdle = empty;
-          this.emit("idle");
-        }
-      }
-      _onResumeInterval() {
-        this._onInterval();
-        this._initializeIntervalIfNeeded();
-        this._timeoutId = void 0;
-      }
-      _isIntervalPaused() {
-        const now = Date.now();
-        if (this._intervalId === void 0) {
-          const delay = this._intervalEnd - now;
-          if (delay < 0) {
-            this._intervalCount = this._carryoverConcurrencyCount ? this._pendingCount : 0;
-          } else {
-            if (this._timeoutId === void 0) {
-              this._timeoutId = setTimeout(() => {
-                this._onResumeInterval();
-              }, delay);
-            }
-            return true;
-          }
-        }
-        return false;
-      }
-      _tryToStartAnother() {
-        if (this._queue.size === 0) {
-          if (this._intervalId) {
-            clearInterval(this._intervalId);
-          }
-          this._intervalId = void 0;
-          this._resolvePromises();
-          return false;
-        }
-        if (!this._isPaused) {
-          const canInitializeInterval = !this._isIntervalPaused();
-          if (this._doesIntervalAllowAnother && this._doesConcurrentAllowAnother) {
-            const job = this._queue.dequeue();
-            if (!job) {
-              return false;
-            }
-            this.emit("active");
-            job();
-            if (canInitializeInterval) {
-              this._initializeIntervalIfNeeded();
-            }
-            return true;
-          }
-        }
-        return false;
-      }
-      _initializeIntervalIfNeeded() {
-        if (this._isIntervalIgnored || this._intervalId !== void 0) {
-          return;
-        }
-        this._intervalId = setInterval(() => {
-          this._onInterval();
-        }, this._interval);
-        this._intervalEnd = Date.now() + this._interval;
-      }
-      _onInterval() {
-        if (this._intervalCount === 0 && this._pendingCount === 0 && this._intervalId) {
-          clearInterval(this._intervalId);
-          this._intervalId = void 0;
-        }
-        this._intervalCount = this._carryoverConcurrencyCount ? this._pendingCount : 0;
-        this._processQueue();
-      }
-      /**
-      Executes all queued functions until it reaches the limit.
-      */
-      _processQueue() {
-        while (this._tryToStartAnother()) {
-        }
-      }
-      get concurrency() {
-        return this._concurrency;
-      }
-      set concurrency(newConcurrency) {
-        if (!(typeof newConcurrency === "number" && newConcurrency >= 1)) {
-          throw new TypeError(`Expected \`concurrency\` to be a number from 1 and up, got \`${newConcurrency}\` (${typeof newConcurrency})`);
-        }
-        this._concurrency = newConcurrency;
-        this._processQueue();
-      }
-      /**
-      Adds a sync or async task to the queue. Always returns a promise.
-      */
-      async add(fn, options = {}) {
-        return new Promise((resolve2, reject) => {
-          const run = async () => {
-            this._pendingCount++;
-            this._intervalCount++;
-            try {
-              const operation = this._timeout === void 0 && options.timeout === void 0 ? fn() : p_timeout_1.default(Promise.resolve(fn()), options.timeout === void 0 ? this._timeout : options.timeout, () => {
-                if (options.throwOnTimeout === void 0 ? this._throwOnTimeout : options.throwOnTimeout) {
-                  reject(timeoutError);
-                }
-                return void 0;
-              });
-              resolve2(await operation);
-            } catch (error) {
-              reject(error);
-            }
-            this._next();
-          };
-          this._queue.enqueue(run, options);
-          this._tryToStartAnother();
-          this.emit("add");
-        });
-      }
-      /**
-          Same as `.add()`, but accepts an array of sync or async functions.
-      
-          @returns A promise that resolves when all functions are resolved.
-          */
-      async addAll(functions, options) {
-        return Promise.all(functions.map(async (function_) => this.add(function_, options)));
-      }
-      /**
-      Start (or resume) executing enqueued tasks within concurrency limit. No need to call this if queue is not paused (via `options.autoStart = false` or by `.pause()` method.)
-      */
-      start() {
-        if (!this._isPaused) {
-          return this;
-        }
-        this._isPaused = false;
-        this._processQueue();
-        return this;
-      }
-      /**
-      Put queue execution on hold.
-      */
-      pause() {
-        this._isPaused = true;
-      }
-      /**
-      Clear the queue.
-      */
-      clear() {
-        this._queue = new this._queueClass();
-      }
-      /**
-          Can be called multiple times. Useful if you for example add additional items at a later time.
-      
-          @returns A promise that settles when the queue becomes empty.
-          */
-      async onEmpty() {
-        if (this._queue.size === 0) {
-          return;
-        }
-        return new Promise((resolve2) => {
-          const existingResolve = this._resolveEmpty;
-          this._resolveEmpty = () => {
-            existingResolve();
-            resolve2();
-          };
-        });
-      }
-      /**
-          The difference with `.onEmpty` is that `.onIdle` guarantees that all work from the queue has finished. `.onEmpty` merely signals that the queue is empty, but it could mean that some promises haven't completed yet.
-      
-          @returns A promise that settles when the queue becomes empty, and all promises have completed; `queue.size === 0 && queue.pending === 0`.
-          */
-      async onIdle() {
-        if (this._pendingCount === 0 && this._queue.size === 0) {
-          return;
-        }
-        return new Promise((resolve2) => {
-          const existingResolve = this._resolveIdle;
-          this._resolveIdle = () => {
-            existingResolve();
-            resolve2();
-          };
-        });
-      }
-      /**
-      Size of the queue.
-      */
-      get size() {
-        return this._queue.size;
-      }
-      /**
-          Size of the queue, filtered by the given options.
-      
-          For example, this can be used to find the number of items remaining in the queue with a specific priority level.
-          */
-      sizeBy(options) {
-        return this._queue.filter(options).length;
-      }
-      /**
-      Number of pending promises.
-      */
-      get pending() {
-        return this._pendingCount;
-      }
-      /**
-      Whether the queue is currently paused.
-      */
-      get isPaused() {
-        return this._isPaused;
-      }
-      get timeout() {
-        return this._timeout;
-      }
-      /**
-      Set the timeout for future operations.
-      */
-      set timeout(milliseconds) {
-        this._timeout = milliseconds;
-      }
-    };
-    exports.default = PQueue2;
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/p-queue.mjs
-var import_p_queue, PQueue;
-var init_p_queue = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/p-queue.mjs"() {
-    import_p_queue = __toESM(require_dist(), 1);
-    PQueue = "default" in import_p_queue.default ? import_p_queue.default.default : import_p_queue.default;
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/async_caller.mjs
-var STATUS_RETRYABLE, AsyncCaller;
-var init_async_caller = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/async_caller.mjs"() {
-    init_p_retry();
-    init_p_queue();
-    STATUS_RETRYABLE = [
-      408,
-      // Request Timeout
-      425,
-      // Too Early
-      429,
-      // Too Many Requests
-      500,
-      // Internal Server Error
-      502,
-      // Bad Gateway
-      503,
-      // Service Unavailable
-      504
-      // Gateway Timeout
-    ];
-    AsyncCaller = class {
-      constructor(params) {
-        Object.defineProperty(this, "maxConcurrency", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: void 0
-        });
-        Object.defineProperty(this, "maxRetries", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: void 0
-        });
-        Object.defineProperty(this, "maxQueueSizeBytes", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: void 0
-        });
-        Object.defineProperty(this, "queue", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: void 0
-        });
-        Object.defineProperty(this, "onFailedResponseHook", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: void 0
-        });
-        Object.defineProperty(this, "queueSizeBytes", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: 0
-        });
-        this.maxConcurrency = params.maxConcurrency ?? Infinity;
-        this.maxRetries = params.maxRetries ?? 6;
-        this.maxQueueSizeBytes = params.maxQueueSizeBytes;
-        this.queue = new PQueue({ concurrency: this.maxConcurrency });
-        this.onFailedResponseHook = params?.onFailedResponseHook;
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      call(callable, ...args) {
-        return this.callWithOptions({}, callable, ...args);
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      callWithOptions(options, callable, ...args) {
-        const sizeBytes = options.sizeBytes ?? 0;
-        if (this.maxQueueSizeBytes !== void 0 && sizeBytes > 0 && this.queueSizeBytes + sizeBytes > this.maxQueueSizeBytes) {
-          return Promise.reject(new Error(`Queue size limit (${this.maxQueueSizeBytes} bytes) exceeded. Current queue size: ${this.queueSizeBytes} bytes, attempted addition: ${sizeBytes} bytes.`));
-        }
-        if (sizeBytes > 0) {
-          this.queueSizeBytes += sizeBytes;
-        }
-        const onFailedResponseHook = this.onFailedResponseHook;
-        let promise = this.queue.add(() => pRetry(() => callable(...args).catch((error) => {
-          if (error instanceof Error) {
-            throw error;
-          } else {
-            throw new Error(error);
-          }
-        }), {
-          async onFailedAttempt({ error }) {
-            if (typeof error !== "object" || error == null)
-              throw error;
-            const errorMessage = "message" in error && typeof error.message === "string" ? error.message : void 0;
-            if (errorMessage?.startsWith("Cancel") || errorMessage?.startsWith("TimeoutError") || errorMessage?.startsWith("AbortError")) {
-              throw error;
-            }
-            if ("name" in error && error.name === "TimeoutError") {
-              throw error;
-            }
-            if ("code" in error && error.code === "ECONNABORTED") {
-              throw error;
-            }
-            const response = "response" in error ? error.response : void 0;
-            if (onFailedResponseHook) {
-              const handled = await onFailedResponseHook(response);
-              if (handled)
-                return;
-            }
-            const status = response?.status ?? ("status" in error ? error.status : void 0);
-            if (status != null && (typeof status === "number" || typeof status === "string") && !STATUS_RETRYABLE.includes(+status)) {
-              throw error;
-            }
-          },
-          retries: this.maxRetries,
-          randomize: true
-        }), { throwOnTimeout: true });
-        if (sizeBytes > 0) {
-          promise = promise.finally(() => {
-            this.queueSizeBytes -= sizeBytes;
-          });
-        }
-        if (options.signal) {
-          return Promise.race([
-            promise,
-            new Promise((_, reject) => {
-              options.signal?.addEventListener("abort", () => {
-                reject(new Error("AbortError"));
-              });
-            })
-          ]);
-        }
-        return promise;
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/messages.mjs
-function isLangChainMessage(message) {
-  return typeof message?._getType === "function";
-}
-function convertLangChainMessageToExample(message) {
-  const converted = {
-    type: message._getType(),
-    data: { content: message.content }
-  };
-  if (message?.additional_kwargs && Object.keys(message.additional_kwargs).length > 0) {
-    converted.data.additional_kwargs = { ...message.additional_kwargs };
-  }
-  return converted;
-}
-var init_messages = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/messages.mjs"() {
-  }
-});
-
 // node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/internal/tslib.mjs
 function __classPrivateFieldSet(receiver, state, value, kind, f2) {
   if (kind === "m")
@@ -2218,7 +285,7 @@ var init_sleep = __esm({
 
 // node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/version.mjs
 var VERSION;
-var init_version2 = __esm({
+var init_version = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/version.mjs"() {
     VERSION = "0.11.4";
   }
@@ -2263,7 +330,7 @@ function getBrowserInfo() {
 var getPlatformProperties, normalizeArch, normalizePlatform, _platformHeaders, getPlatformHeaders;
 var init_detect_platform = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/internal/detect-platform.mjs"() {
-    init_version2();
+    init_version();
     getPlatformProperties = () => {
       const detectedPlatform = getDetectedPlatform();
       if (detectedPlatform === "deno") {
@@ -2785,7 +852,7 @@ function stringify(object3, opts = {}) {
   return joined.length > 0 ? prefix + joined : "";
 }
 var array_prefix_generators, push_to_array, toISOString, defaults, sentinel;
-var init_stringify2 = __esm({
+var init_stringify = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/internal/qs/stringify.mjs"() {
     init_utils();
     init_formats();
@@ -2837,7 +904,7 @@ function stringifyQuery(query) {
 }
 var init_query = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/internal/utils/query.mjs"() {
-    init_stringify2();
+    init_stringify();
   }
 });
 
@@ -3371,7 +1438,7 @@ async function defaultParseResponse(client, props) {
   }));
   return body;
 }
-var init_parse2 = __esm({
+var init_parse = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/internal/parse.mjs"() {
     init_streaming();
     init_log();
@@ -3383,7 +1450,7 @@ var _APIPromise_client, APIPromise;
 var init_api_promise = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/core/api-promise.mjs"() {
     init_tslib();
-    init_parse2();
+    init_parse();
     APIPromise = class _APIPromise extends Promise {
       constructor(client, responsePromise, parseResponse = defaultParseResponse) {
         super((resolve2) => {
@@ -3467,7 +1534,7 @@ var init_pagination = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/core/pagination.mjs"() {
     init_tslib();
     init_error();
-    init_parse2();
+    init_parse();
     init_api_promise();
     init_values();
     AbstractPage = class {
@@ -5777,7 +3844,7 @@ var init_client = __esm({
     init_shims();
     init_request_options();
     init_query();
-    init_version2();
+    init_version();
     init_error();
     init_pagination();
     init_uploads2();
@@ -6485,6 +4552,2145 @@ var init_client = __esm({
   }
 });
 
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/env.mjs
+function getRuntimeEnvironment() {
+  if (runtimeEnvironment === void 0) {
+    const env = getEnv();
+    const releaseEnv = getShas();
+    runtimeEnvironment = {
+      library: "langsmith",
+      runtime: env,
+      sdk: "langsmith-js",
+      sdk_version: VERSION,
+      ...releaseEnv
+    };
+  }
+  return runtimeEnvironment;
+}
+function isSensitiveEnvVarName(key) {
+  const lowered = key.toLowerCase();
+  return EXCLUDED_SUBSTRINGS.some((sub) => lowered.includes(sub));
+}
+function getLangSmithEnvVarsMetadata() {
+  const allEnvVars = getLangSmithEnvironmentVariables();
+  const envVars = {};
+  const excluded = [
+    "LANGCHAIN_API_KEY",
+    "LANGCHAIN_ENDPOINT",
+    "LANGCHAIN_TRACING_V2",
+    "LANGCHAIN_PROJECT",
+    "LANGCHAIN_SESSION",
+    "LANGSMITH_API_KEY",
+    "LANGSMITH_ENDPOINT",
+    "LANGSMITH_TRACING_V2",
+    "LANGSMITH_CONFIG_FILE",
+    "LANGSMITH_PROJECT",
+    "LANGSMITH_SESSION",
+    "LANGSMITH_AGENT_ID",
+    "LANGSMITH_AGENT_ENVIRONMENT"
+  ];
+  for (const [key, value] of Object.entries(allEnvVars)) {
+    if (typeof value === "string" && !excluded.includes(key) && !isSensitiveEnvVarName(key)) {
+      if (key !== "LANGSMITH_REVISION_ID" && key !== "LANGCHAIN_REVISION_ID") {
+        envVars[key] = value;
+      }
+    }
+  }
+  const revisionId = allEnvVars.LANGSMITH_REVISION_ID || allEnvVars.LANGCHAIN_REVISION_ID;
+  if (revisionId) {
+    envVars["revision_id"] = revisionId;
+  }
+  return envVars;
+}
+function getLangSmithEnvironmentVariables() {
+  const envVars = {};
+  try {
+    if (typeof process !== "undefined" && process.env) {
+      for (const [key, value] of Object.entries(process.env)) {
+        if ((key.startsWith("LANGCHAIN_") || key.startsWith("LANGSMITH_")) && value != null) {
+          if (isSensitiveEnvVarName(key) && typeof value === "string") {
+            envVars[key] = value.slice(0, 2) + "*".repeat(value.length - 4) + value.slice(-2);
+          } else {
+            envVars[key] = value;
+          }
+        }
+      }
+    }
+  } catch (_e) {
+  }
+  return envVars;
+}
+function getEnvironmentVariable(name) {
+  try {
+    return typeof process !== "undefined" ? (
+      // eslint-disable-next-line no-process-env
+      process.env?.[name]
+    ) : void 0;
+  } catch (_e) {
+    return void 0;
+  }
+}
+function getLangSmithEnvironmentVariable(name) {
+  return getEnvironmentVariable(`LANGSMITH_${name}`) || getEnvironmentVariable(`LANGCHAIN_${name}`);
+}
+function getShas() {
+  if (cachedCommitSHAs !== void 0) {
+    return cachedCommitSHAs;
+  }
+  const common_release_envs = [
+    "VERCEL_GIT_COMMIT_SHA",
+    "NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA",
+    "COMMIT_REF",
+    "RENDER_GIT_COMMIT",
+    "CI_COMMIT_SHA",
+    "CIRCLE_SHA1",
+    "CF_PAGES_COMMIT_SHA",
+    "REACT_APP_GIT_SHA",
+    "SOURCE_VERSION",
+    "GITHUB_SHA",
+    "TRAVIS_COMMIT",
+    "GIT_COMMIT",
+    "BUILD_VCS_NUMBER",
+    "bamboo_planRepository_revision",
+    "Build.SourceVersion",
+    "BITBUCKET_COMMIT",
+    "DRONE_COMMIT_SHA",
+    "SEMAPHORE_GIT_SHA",
+    "BUILDKITE_COMMIT"
+  ];
+  const shas = {};
+  for (const env of common_release_envs) {
+    const envVar = getEnvironmentVariable(env);
+    if (envVar !== void 0) {
+      shas[env] = envVar;
+    }
+  }
+  cachedCommitSHAs = shas;
+  return shas;
+}
+function getOtelEnabled() {
+  return getEnvironmentVariable("OTEL_ENABLED") === "true" || getLangSmithEnvironmentVariable("OTEL_ENABLED") === "true";
+}
+function resolveTracingMode(configValue) {
+  if (configValue !== void 0) {
+    return configValue;
+  }
+  const envMode = getLangSmithEnvironmentVariable("TRACING_MODE");
+  if (envMode !== void 0 && envMode !== "") {
+    const lower = envMode.toLowerCase();
+    if (!_VALID_TRACING_MODES.has(lower)) {
+      throw new Error(`Invalid LANGSMITH_TRACING_MODE=${JSON.stringify(envMode)}. Must be one of: ${[..._VALID_TRACING_MODES].sort().join(", ")}`);
+    }
+    if (getOtelEnabled()) {
+      console.warn("Both LANGSMITH_TRACING_MODE and the legacy OTEL_ENABLED / LANGSMITH_OTEL_ENABLED env vars are set. LANGSMITH_TRACING_MODE takes precedence.");
+    }
+    return lower;
+  }
+  if (getOtelEnabled()) {
+    return "otel";
+  }
+  return "langsmith";
+}
+var globalEnv, isBrowser, isWebWorker, isJsDom, isDeno, isNode, getEnv, runtimeEnvironment, EXCLUDED_SUBSTRINGS, cachedCommitSHAs, _VALID_TRACING_MODES;
+var init_env2 = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/env.mjs"() {
+    init_lib();
+    isBrowser = () => typeof window !== "undefined" && typeof window.document !== "undefined";
+    isWebWorker = () => typeof globalThis === "object" && globalThis.constructor && globalThis.constructor.name === "DedicatedWorkerGlobalScope";
+    isJsDom = () => typeof window !== "undefined" && window.name === "nodejs" || typeof navigator !== "undefined" && navigator.userAgent.includes("jsdom");
+    isDeno = () => typeof globalThis.Deno !== "undefined";
+    isNode = () => typeof process !== "undefined" && typeof process.versions !== "undefined" && typeof process.versions.node !== "undefined" && !isDeno();
+    getEnv = () => {
+      if (globalEnv) {
+        return globalEnv;
+      }
+      if (typeof Bun !== "undefined") {
+        globalEnv = "bun";
+      } else if (isBrowser()) {
+        globalEnv = "browser";
+      } else if (isNode()) {
+        globalEnv = "node";
+      } else if (isWebWorker()) {
+        globalEnv = "webworker";
+      } else if (isJsDom()) {
+        globalEnv = "jsdom";
+      } else if (isDeno()) {
+        globalEnv = "deno";
+      } else {
+        globalEnv = "other";
+      }
+      return globalEnv;
+    };
+    EXCLUDED_SUBSTRINGS = [
+      "key",
+      "secret",
+      "token",
+      "password",
+      "passwd",
+      "pwd",
+      "credential",
+      "email"
+    ];
+    _VALID_TRACING_MODES = /* @__PURE__ */ new Set(["langsmith", "otel"]);
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/address.mjs
+function ensureAddress(value) {
+  if (value == null)
+    return void 0;
+  if (typeof value !== "object") {
+    throw new Error("address must be an AgentAddress, ExperimentAddress or EvaluatorAddress object.");
+  }
+  const { kind, id, environment } = value;
+  if (kind === "EVALUATOR")
+    return { kind };
+  if (kind === "EXPERIMENT") {
+    if (typeof id !== "string" || !UUID_PATTERN.test(id)) {
+      throw new Error(`Experiment id must be a UUID, got ${JSON.stringify(id)}.`);
+    }
+    return { kind, id: id.toLowerCase() };
+  }
+  if (kind !== "AGENT") {
+    throw new Error("address must be an AgentAddress, ExperimentAddress or EvaluatorAddress object.");
+  }
+  if (typeof id !== "string" || !AGENT_ID_PATTERN.test(id)) {
+    throw new Error(`Address agent id must be 1 to 63 lowercase ASCII letters, digits, or hyphens, start with a letter, and end with a letter or digit, got ${JSON.stringify(id)}. Use an id such as "support-agent".`);
+  }
+  const normalized = typeof environment === "string" ? environment.toLowerCase() : void 0;
+  if (normalized === void 0 || !ENVIRONMENTS.includes(normalized)) {
+    throw new Error(`Address environment must be one of ${ENVIRONMENTS.join(", ")}, got ${JSON.stringify(environment)}.`);
+  }
+  return {
+    kind,
+    id,
+    environment: normalized.toUpperCase()
+  };
+}
+function ensureAgent(value) {
+  const address = ensureAddress(value);
+  if (address && address.kind !== "AGENT") {
+    throw new Error(`Only an AgentAddress can receive traces, got ${address.kind}.`);
+  }
+  return address;
+}
+function addressToLrn(address) {
+  return `lrn:agents/${address.id}/environments/${address.environment.toLowerCase()}`;
+}
+function addressFromLrn(value) {
+  const match = typeof value === "string" ? LRN_PATTERN.exec(value) : null;
+  if (!match)
+    throw new Error("Not an agent address.");
+  return ensureAgent({ kind: "AGENT", id: match[1], environment: match[2] });
+}
+function addressFromEnv() {
+  const values = ENV_NAMES.map((name) => getEnvironmentVariable(name));
+  if (!values.some(Boolean))
+    return void 0;
+  try {
+    const missing = ENV_NAMES.filter((_, i) => !values[i]);
+    if (missing.length)
+      throw new Error(`An address needs ${missing.join(" and ")} as well.`);
+    return ensureAgent({
+      kind: "AGENT",
+      id: values[0],
+      environment: values[1]
+    });
+  } catch (e) {
+    throw new EnvAddressError(`The LANGSMITH_AGENT_* env vars can't address a run: ${e.message}`);
+  }
+}
+function envNames() {
+  return ENV_NAMES;
+}
+var AgentAddress, ExperimentAddress, EvaluatorAddress, UUID_PATTERN, AGENT_ID_PATTERN, ENVIRONMENTS, LRN_PATTERN, ENV_NAMES, EnvAddressError;
+var init_address = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/address.mjs"() {
+    init_env2();
+    AgentAddress = class {
+      constructor(id, environment) {
+        const address = ensureAgent({ kind: "AGENT", id, environment });
+        this.kind = address.kind;
+        this.id = address.id;
+        this.environment = address.environment;
+        Object.freeze(this);
+      }
+    };
+    ExperimentAddress = class {
+      constructor(id) {
+        const address = ensureAddress({ kind: "EXPERIMENT", id });
+        this.kind = address.kind;
+        this.id = address.id;
+        Object.freeze(this);
+      }
+    };
+    EvaluatorAddress = class {
+      constructor() {
+        this.kind = "EVALUATOR";
+        Object.freeze(this);
+      }
+    };
+    UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    AGENT_ID_PATTERN = /^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
+    ENVIRONMENTS = ["local", "development", "staging", "production"];
+    LRN_PATTERN = /^lrn:agents\/([^/]+)\/environments\/([^/]+)$/;
+    ENV_NAMES = ["LANGSMITH_AGENT_ID", "LANGSMITH_AGENT_ENVIRONMENT"];
+    EnvAddressError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "EnvAddressError";
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/max.mjs
+var init_max = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/max.mjs"() {
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/nil.mjs
+var init_nil = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/nil.mjs"() {
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/regex.mjs
+var regex_default;
+var init_regex = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/regex.mjs"() {
+    regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/validate.mjs
+function validate(uuid) {
+  return typeof uuid === "string" && regex_default.test(uuid);
+}
+var validate_default;
+var init_validate = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/validate.mjs"() {
+    init_regex();
+    validate_default = validate;
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/parse.mjs
+function parse(uuid) {
+  if (!validate_default(uuid)) {
+    throw TypeError("Invalid UUID");
+  }
+  let v;
+  return Uint8Array.of(
+    (v = parseInt(uuid.slice(0, 8), 16)) >>> 24,
+    v >>> 16 & 255,
+    v >>> 8 & 255,
+    v & 255,
+    // Parse ........-####-....-....-............
+    (v = parseInt(uuid.slice(9, 13), 16)) >>> 8,
+    v & 255,
+    // Parse ........-....-####-....-............
+    (v = parseInt(uuid.slice(14, 18), 16)) >>> 8,
+    v & 255,
+    // Parse ........-....-....-####-............
+    (v = parseInt(uuid.slice(19, 23), 16)) >>> 8,
+    v & 255,
+    // Parse ........-....-....-....-############
+    // (Use "/" to avoid 32-bit truncation when bit-shifting high-order bytes)
+    (v = parseInt(uuid.slice(24, 36), 16)) / 1099511627776 & 255,
+    v / 4294967296 & 255,
+    v >>> 24 & 255,
+    v >>> 16 & 255,
+    v >>> 8 & 255,
+    v & 255
+  );
+}
+var parse_default;
+var init_parse2 = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/parse.mjs"() {
+    init_validate();
+    parse_default = parse;
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/stringify.mjs
+function unsafeStringify(arr2, offset = 0) {
+  return (byteToHex[arr2[offset + 0]] + byteToHex[arr2[offset + 1]] + byteToHex[arr2[offset + 2]] + byteToHex[arr2[offset + 3]] + "-" + byteToHex[arr2[offset + 4]] + byteToHex[arr2[offset + 5]] + "-" + byteToHex[arr2[offset + 6]] + byteToHex[arr2[offset + 7]] + "-" + byteToHex[arr2[offset + 8]] + byteToHex[arr2[offset + 9]] + "-" + byteToHex[arr2[offset + 10]] + byteToHex[arr2[offset + 11]] + byteToHex[arr2[offset + 12]] + byteToHex[arr2[offset + 13]] + byteToHex[arr2[offset + 14]] + byteToHex[arr2[offset + 15]]).toLowerCase();
+}
+var byteToHex;
+var init_stringify2 = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/stringify.mjs"() {
+    init_validate();
+    byteToHex = [];
+    for (let i = 0; i < 256; ++i) {
+      byteToHex.push((i + 256).toString(16).slice(1));
+    }
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/rng.mjs
+function rng() {
+  return crypto.getRandomValues(rnds8);
+}
+var rnds8;
+var init_rng = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/rng.mjs"() {
+    rnds8 = new Uint8Array(16);
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v4.mjs
+function v4(options, buf, offset) {
+  if (!buf && !options && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return _v4(options, buf, offset);
+}
+function _v4(options, buf, offset) {
+  options = options || {};
+  const rnds = options.random ?? options.rng?.() ?? rng();
+  if (rnds.length < 16) {
+    throw new Error("Random bytes length must be >= 16");
+  }
+  rnds[6] = rnds[6] & 15 | 64;
+  rnds[8] = rnds[8] & 63 | 128;
+  if (buf) {
+    offset = offset || 0;
+    if (offset < 0 || offset + 16 > buf.length) {
+      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
+    }
+    for (let i = 0; i < 16; ++i) {
+      buf[offset + i] = rnds[i];
+    }
+    return buf;
+  }
+  return unsafeStringify(rnds);
+}
+var v4_default;
+var init_v4 = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v4.mjs"() {
+    init_rng();
+    init_stringify2();
+    v4_default = v4;
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/sha1.mjs
+function f(s, x, y, z) {
+  switch (s) {
+    case 0:
+      return x & y ^ ~x & z;
+    case 1:
+      return x ^ y ^ z;
+    case 2:
+      return x & y ^ x & z ^ y & z;
+    case 3:
+      return x ^ y ^ z;
+  }
+}
+function ROTL(x, n2) {
+  return x << n2 | x >>> 32 - n2;
+}
+function sha1(bytes) {
+  const K = [1518500249, 1859775393, 2400959708, 3395469782];
+  const H = [1732584193, 4023233417, 2562383102, 271733878, 3285377520];
+  const newBytes = new Uint8Array(bytes.length + 1);
+  newBytes.set(bytes);
+  newBytes[bytes.length] = 128;
+  bytes = newBytes;
+  const l = bytes.length / 4 + 2;
+  const N = Math.ceil(l / 16);
+  const M = new Array(N);
+  for (let i = 0; i < N; ++i) {
+    const arr2 = new Uint32Array(16);
+    for (let j = 0; j < 16; ++j) {
+      arr2[j] = bytes[i * 64 + j * 4] << 24 | bytes[i * 64 + j * 4 + 1] << 16 | bytes[i * 64 + j * 4 + 2] << 8 | bytes[i * 64 + j * 4 + 3];
+    }
+    M[i] = arr2;
+  }
+  M[N - 1][14] = (bytes.length - 1) * 8 / 2 ** 32;
+  M[N - 1][14] = Math.floor(M[N - 1][14]);
+  M[N - 1][15] = (bytes.length - 1) * 8 & 4294967295;
+  for (let i = 0; i < N; ++i) {
+    const W = new Uint32Array(80);
+    for (let t = 0; t < 16; ++t) {
+      W[t] = M[i][t];
+    }
+    for (let t = 16; t < 80; ++t) {
+      W[t] = ROTL(W[t - 3] ^ W[t - 8] ^ W[t - 14] ^ W[t - 16], 1);
+    }
+    let a = H[0];
+    let b = H[1];
+    let c = H[2];
+    let d = H[3];
+    let e = H[4];
+    for (let t = 0; t < 80; ++t) {
+      const s = Math.floor(t / 20);
+      const T = ROTL(a, 5) + f(s, b, c, d) + e + K[s] + W[t] >>> 0;
+      e = d;
+      d = c;
+      c = ROTL(b, 30) >>> 0;
+      b = a;
+      a = T;
+    }
+    H[0] = H[0] + a >>> 0;
+    H[1] = H[1] + b >>> 0;
+    H[2] = H[2] + c >>> 0;
+    H[3] = H[3] + d >>> 0;
+    H[4] = H[4] + e >>> 0;
+  }
+  return Uint8Array.of(H[0] >> 24, H[0] >> 16, H[0] >> 8, H[0], H[1] >> 24, H[1] >> 16, H[1] >> 8, H[1], H[2] >> 24, H[2] >> 16, H[2] >> 8, H[2], H[3] >> 24, H[3] >> 16, H[3] >> 8, H[3], H[4] >> 24, H[4] >> 16, H[4] >> 8, H[4]);
+}
+var sha1_default;
+var init_sha1 = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/sha1.mjs"() {
+    sha1_default = sha1;
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v35.mjs
+function stringToBytes(str) {
+  str = unescape(encodeURIComponent(str));
+  const bytes = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; ++i) {
+    bytes[i] = str.charCodeAt(i);
+  }
+  return bytes;
+}
+function v35(version, hash, value, namespace, buf, offset) {
+  const valueBytes = typeof value === "string" ? stringToBytes(value) : value;
+  const namespaceBytes = typeof namespace === "string" ? parse_default(namespace) : namespace;
+  if (typeof namespace === "string") {
+    namespace = parse_default(namespace);
+  }
+  if (namespace?.length !== 16) {
+    throw TypeError("Namespace must be array-like (16 iterable integer values, 0-255)");
+  }
+  let bytes = new Uint8Array(16 + valueBytes.length);
+  bytes.set(namespaceBytes);
+  bytes.set(valueBytes, namespaceBytes.length);
+  bytes = hash(bytes);
+  bytes[6] = bytes[6] & 15 | version;
+  bytes[8] = bytes[8] & 63 | 128;
+  if (buf) {
+    offset ?? (offset = 0);
+    if (offset < 0 || offset + 16 > buf.length) {
+      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
+    }
+    for (let i = 0; i < 16; ++i) {
+      buf[offset + i] = bytes[i];
+    }
+    return buf;
+  }
+  return unsafeStringify(bytes);
+}
+var DNS, URL2;
+var init_v35 = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v35.mjs"() {
+    init_parse2();
+    init_stringify2();
+    DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+    URL2 = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v5.mjs
+function v5(value, namespace, buf, offset) {
+  return v35(80, sha1_default, value, namespace, buf, offset);
+}
+var v5_default;
+var init_v5 = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v5.mjs"() {
+    init_sha1();
+    init_v35();
+    init_v35();
+    v5.DNS = DNS;
+    v5.URL = URL2;
+    v5_default = v5;
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v7.mjs
+function v7(options, buf, offset) {
+  let bytes;
+  if (options) {
+    bytes = v7Bytes(options.random ?? options.rng?.() ?? rng(), options.msecs, options.seq, buf, offset);
+  } else {
+    const now = Date.now();
+    const rnds = rng();
+    updateV7State(_state, now, rnds);
+    bytes = v7Bytes(rnds, _state.msecs, _state.seq, buf, offset);
+  }
+  return buf ?? unsafeStringify(bytes);
+}
+function updateV7State(state, now, rnds) {
+  state.msecs ?? (state.msecs = -Infinity);
+  state.seq ?? (state.seq = 0);
+  if (now > state.msecs) {
+    state.seq = rnds[6] << 23 | rnds[7] << 16 | rnds[8] << 8 | rnds[9];
+    state.msecs = now;
+  } else {
+    state.seq = state.seq + 1 | 0;
+    if (state.seq === 0) {
+      state.msecs++;
+    }
+  }
+  return state;
+}
+function v7Bytes(rnds, msecs, seq, buf, offset = 0) {
+  if (rnds.length < 16) {
+    throw new Error("Random bytes length must be >= 16");
+  }
+  if (!buf) {
+    buf = new Uint8Array(16);
+    offset = 0;
+  } else {
+    if (offset < 0 || offset + 16 > buf.length) {
+      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
+    }
+  }
+  msecs ?? (msecs = Date.now());
+  seq ?? (seq = rnds[6] * 127 << 24 | rnds[7] << 16 | rnds[8] << 8 | rnds[9]);
+  buf[offset++] = msecs / 1099511627776 & 255;
+  buf[offset++] = msecs / 4294967296 & 255;
+  buf[offset++] = msecs / 16777216 & 255;
+  buf[offset++] = msecs / 65536 & 255;
+  buf[offset++] = msecs / 256 & 255;
+  buf[offset++] = msecs & 255;
+  buf[offset++] = 112 | seq >>> 28 & 15;
+  buf[offset++] = seq >>> 20 & 255;
+  buf[offset++] = 128 | seq >>> 14 & 63;
+  buf[offset++] = seq >>> 6 & 255;
+  buf[offset++] = seq << 2 & 255 | rnds[10] & 3;
+  buf[offset++] = rnds[11];
+  buf[offset++] = rnds[12];
+  buf[offset++] = rnds[13];
+  buf[offset++] = rnds[14];
+  buf[offset++] = rnds[15];
+  return buf;
+}
+var _state, v7_default;
+var init_v7 = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/v7.mjs"() {
+    init_rng();
+    init_stringify2();
+    _state = {};
+    v7_default = v7;
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/version.mjs
+var init_version2 = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/version.mjs"() {
+    init_validate();
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/index.mjs
+var init_src = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/uuid/src/index.mjs"() {
+    init_max();
+    init_nil();
+    init_parse2();
+    init_stringify2();
+    init_v4();
+    init_v5();
+    init_v7();
+    init_validate();
+    init_version2();
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/api_url.mjs
+function getOpenAPIBaseUrl(apiUrl) {
+  const url = apiUrl.replace(/\/$/, "");
+  for (const suffix of ["/api/v1", "/api"]) {
+    if (url.endsWith(suffix))
+      return url.slice(0, -suffix.length);
+  }
+  return url;
+}
+var init_api_url = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/api_url.mjs"() {
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/experimental/otel/constants.mjs
+var GEN_AI_OPERATION_NAME, GEN_AI_SYSTEM, GEN_AI_REQUEST_MODEL, GEN_AI_RESPONSE_MODEL, GEN_AI_USAGE_INPUT_TOKENS, GEN_AI_USAGE_OUTPUT_TOKENS, GEN_AI_USAGE_TOTAL_TOKENS, GEN_AI_REQUEST_MAX_TOKENS, GEN_AI_REQUEST_TEMPERATURE, GEN_AI_REQUEST_TOP_P, GEN_AI_REQUEST_FREQUENCY_PENALTY, GEN_AI_REQUEST_PRESENCE_PENALTY, GEN_AI_RESPONSE_FINISH_REASONS, GENAI_PROMPT, GENAI_COMPLETION, GEN_AI_REQUEST_EXTRA_QUERY, GEN_AI_REQUEST_EXTRA_BODY, GEN_AI_SERIALIZED_NAME, GEN_AI_SERIALIZED_SIGNATURE, GEN_AI_SERIALIZED_DOC, GEN_AI_RESPONSE_ID, GEN_AI_TOOL_NAME, GEN_AI_TOOL_CALL_ID, GEN_AI_TOOL_DEFINITIONS, GEN_AI_RESPONSE_SERVICE_TIER, GEN_AI_RESPONSE_SYSTEM_FINGERPRINT, GEN_AI_USAGE_INPUT_TOKEN_DETAILS, GEN_AI_USAGE_OUTPUT_TOKEN_DETAILS, LANGSMITH_SESSION_ID, LANGSMITH_SESSION_NAME, LANGSMITH_RUN_TYPE, LANGSMITH_NAME, LANGSMITH_METADATA, LANGSMITH_TAGS, LANGSMITH_REQUEST_STREAMING, LANGSMITH_REQUEST_HEADERS, LANGSMITH_USAGE_METADATA;
+var init_constants = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/experimental/otel/constants.mjs"() {
+    GEN_AI_OPERATION_NAME = "gen_ai.operation.name";
+    GEN_AI_SYSTEM = "gen_ai.system";
+    GEN_AI_REQUEST_MODEL = "gen_ai.request.model";
+    GEN_AI_RESPONSE_MODEL = "gen_ai.response.model";
+    GEN_AI_USAGE_INPUT_TOKENS = "gen_ai.usage.input_tokens";
+    GEN_AI_USAGE_OUTPUT_TOKENS = "gen_ai.usage.output_tokens";
+    GEN_AI_USAGE_TOTAL_TOKENS = "gen_ai.usage.total_tokens";
+    GEN_AI_REQUEST_MAX_TOKENS = "gen_ai.request.max_tokens";
+    GEN_AI_REQUEST_TEMPERATURE = "gen_ai.request.temperature";
+    GEN_AI_REQUEST_TOP_P = "gen_ai.request.top_p";
+    GEN_AI_REQUEST_FREQUENCY_PENALTY = "gen_ai.request.frequency_penalty";
+    GEN_AI_REQUEST_PRESENCE_PENALTY = "gen_ai.request.presence_penalty";
+    GEN_AI_RESPONSE_FINISH_REASONS = "gen_ai.response.finish_reasons";
+    GENAI_PROMPT = "gen_ai.prompt";
+    GENAI_COMPLETION = "gen_ai.completion";
+    GEN_AI_REQUEST_EXTRA_QUERY = "gen_ai.request.extra_query";
+    GEN_AI_REQUEST_EXTRA_BODY = "gen_ai.request.extra_body";
+    GEN_AI_SERIALIZED_NAME = "gen_ai.serialized.name";
+    GEN_AI_SERIALIZED_SIGNATURE = "gen_ai.serialized.signature";
+    GEN_AI_SERIALIZED_DOC = "gen_ai.serialized.doc";
+    GEN_AI_RESPONSE_ID = "gen_ai.response.id";
+    GEN_AI_TOOL_NAME = "gen_ai.tool.name";
+    GEN_AI_TOOL_CALL_ID = "gen_ai.tool.call.id";
+    GEN_AI_TOOL_DEFINITIONS = "gen_ai.tool.definitions";
+    GEN_AI_RESPONSE_SERVICE_TIER = "gen_ai.response.service_tier";
+    GEN_AI_RESPONSE_SYSTEM_FINGERPRINT = "gen_ai.response.system_fingerprint";
+    GEN_AI_USAGE_INPUT_TOKEN_DETAILS = "gen_ai.usage.input_token_details";
+    GEN_AI_USAGE_OUTPUT_TOKEN_DETAILS = "gen_ai.usage.output_token_details";
+    LANGSMITH_SESSION_ID = "langsmith.trace.session_id";
+    LANGSMITH_SESSION_NAME = "langsmith.trace.session_name";
+    LANGSMITH_RUN_TYPE = "langsmith.span.kind";
+    LANGSMITH_NAME = "langsmith.trace.name";
+    LANGSMITH_METADATA = "langsmith.metadata";
+    LANGSMITH_TAGS = "langsmith.span.tags";
+    LANGSMITH_REQUEST_STREAMING = "langsmith.request.streaming";
+    LANGSMITH_REQUEST_HEADERS = "langsmith.request.headers";
+    LANGSMITH_USAGE_METADATA = "langsmith.usage_metadata";
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/singletons/otel.mjs
+function getOTELTrace() {
+  return OTELProviderSingleton.getTraceInstance();
+}
+function getOTELContext() {
+  return OTELProviderSingleton.getContextInstance();
+}
+function getDefaultOTLPTracerComponents() {
+  return OTELProviderSingleton.getDefaultOTLPTracerComponents();
+}
+var MockTracer, MockOTELTrace, MockOTELContext, OTEL_TRACE_KEY, OTEL_CONTEXT_KEY, OTEL_GET_DEFAULT_OTLP_TRACER_PROVIDER_KEY, mockOTELTrace, mockOTELContext, OTELProvider, OTELProviderSingleton;
+var init_otel = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/singletons/otel.mjs"() {
+    init_env2();
+    MockTracer = class {
+      constructor() {
+        Object.defineProperty(this, "hasWarned", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: false
+        });
+      }
+      startActiveSpan(_name, ...args) {
+        if (!this.hasWarned && resolveTracingMode() === "otel") {
+          console.warn('OTel tracing mode is active (via LANGSMITH_TRACING_MODE, OTEL_ENABLED, or LANGSMITH_OTEL_ENABLED), but the required OTEL instances have not been initialized. Please add:\n```\nimport { initializeOTEL } from "langsmith/experimental/otel/setup";\ninitializeOTEL();\n```\nat the beginning of your code.');
+          this.hasWarned = true;
+        }
+        let fn;
+        if (args.length === 1 && typeof args[0] === "function") {
+          fn = args[0];
+        } else if (args.length === 2 && typeof args[1] === "function") {
+          fn = args[1];
+        } else if (args.length === 3 && typeof args[2] === "function") {
+          fn = args[2];
+        }
+        if (typeof fn === "function") {
+          return fn();
+        }
+        return void 0;
+      }
+    };
+    MockOTELTrace = class {
+      constructor() {
+        Object.defineProperty(this, "mockTracer", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: new MockTracer()
+        });
+      }
+      getTracer(_name, _version) {
+        return this.mockTracer;
+      }
+      getActiveSpan() {
+        return void 0;
+      }
+      setSpan(context, _span) {
+        return context;
+      }
+      getSpan(_context) {
+        return void 0;
+      }
+      setSpanContext(context, _spanContext) {
+        return context;
+      }
+      getTracerProvider() {
+        return void 0;
+      }
+      setGlobalTracerProvider(_tracerProvider) {
+        return false;
+      }
+    };
+    MockOTELContext = class {
+      active() {
+        return {};
+      }
+      with(_context, fn) {
+        return fn();
+      }
+    };
+    OTEL_TRACE_KEY = /* @__PURE__ */ Symbol.for("ls:otel_trace");
+    OTEL_CONTEXT_KEY = /* @__PURE__ */ Symbol.for("ls:otel_context");
+    OTEL_GET_DEFAULT_OTLP_TRACER_PROVIDER_KEY = /* @__PURE__ */ Symbol.for("ls:otel_get_default_otlp_tracer_provider");
+    mockOTELTrace = new MockOTELTrace();
+    mockOTELContext = new MockOTELContext();
+    OTELProvider = class {
+      getTraceInstance() {
+        return globalThis[OTEL_TRACE_KEY] ?? mockOTELTrace;
+      }
+      getContextInstance() {
+        return globalThis[OTEL_CONTEXT_KEY] ?? mockOTELContext;
+      }
+      initializeGlobalInstances(otel) {
+        if (globalThis[OTEL_TRACE_KEY] === void 0) {
+          globalThis[OTEL_TRACE_KEY] = otel.trace;
+        }
+        if (globalThis[OTEL_CONTEXT_KEY] === void 0) {
+          globalThis[OTEL_CONTEXT_KEY] = otel.context;
+        }
+      }
+      setDefaultOTLPTracerComponents(components) {
+        globalThis[OTEL_GET_DEFAULT_OTLP_TRACER_PROVIDER_KEY] = components;
+      }
+      getDefaultOTLPTracerComponents() {
+        return globalThis[OTEL_GET_DEFAULT_OTLP_TRACER_PROVIDER_KEY] ?? void 0;
+      }
+    };
+    OTELProviderSingleton = new OTELProvider();
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/experimental/otel/translator.mjs
+function getOperationName(runType) {
+  return WELL_KNOWN_OPERATION_NAMES[runType] || runType;
+}
+function isPrimitive(value) {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+var WELL_KNOWN_OPERATION_NAMES, LangSmithToOTELTranslator;
+var init_translator = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/experimental/otel/translator.mjs"() {
+    init_constants();
+    init_otel();
+    WELL_KNOWN_OPERATION_NAMES = {
+      llm: "chat",
+      tool: "execute_tool",
+      retriever: "embeddings",
+      embedding: "embeddings",
+      prompt: "chat"
+    };
+    LangSmithToOTELTranslator = class {
+      constructor() {
+        Object.defineProperty(this, "spans", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: /* @__PURE__ */ new Map()
+        });
+      }
+      exportBatch(operations, otelContextMap) {
+        for (const op of operations) {
+          try {
+            if (!op.run) {
+              continue;
+            }
+            if (op.operation === "post") {
+              const span = this.createSpanForRun(op, op.run, otelContextMap.get(op.id));
+              if (span && !op.run.end_time) {
+                this.spans.set(op.id, span);
+              }
+            } else {
+              this.updateSpanForRun(op, op.run);
+            }
+          } catch (e) {
+            console.error(`Error processing operation ${op.id}:`, e);
+          }
+        }
+      }
+      createSpanForRun(op, runInfo, otelContext) {
+        const activeSpan = otelContext && getOTELTrace().getSpan(otelContext);
+        if (!activeSpan) {
+          return;
+        }
+        try {
+          return this.finishSpanSetup(activeSpan, runInfo, op);
+        } catch (e) {
+          console.error(`Failed to create span for run ${op.id}:`, e);
+          return void 0;
+        }
+      }
+      finishSpanSetup(span, runInfo, op) {
+        this.setSpanAttributes(span, runInfo, op);
+        if (runInfo.error) {
+          span.setStatus({ code: 2 });
+          span.recordException(new Error(runInfo.error));
+        } else {
+          span.setStatus({ code: 1 });
+        }
+        if (runInfo.end_time) {
+          span.end(new Date(runInfo.end_time));
+        }
+        return span;
+      }
+      updateSpanForRun(op, runInfo) {
+        try {
+          const span = this.spans.get(op.id);
+          if (!span) {
+            console.debug(`No span found for run ${op.id} during update`);
+            return;
+          }
+          this.setSpanAttributes(span, runInfo, op);
+          if (runInfo.error) {
+            span.setStatus({ code: 2 });
+            span.recordException(new Error(runInfo.error));
+          } else {
+            span.setStatus({ code: 1 });
+          }
+          const endTime = runInfo.end_time;
+          if (endTime) {
+            span.end(new Date(endTime));
+            this.spans.delete(op.id);
+          }
+        } catch (e) {
+          console.error(`Failed to update span for run ${op.id}:`, e);
+        }
+      }
+      extractModelName(runInfo) {
+        if (runInfo.extra?.metadata) {
+          const metadata = runInfo.extra.metadata;
+          if (metadata.ls_model_name) {
+            return metadata.ls_model_name;
+          }
+          if (metadata.invocation_params) {
+            const invocationParams = metadata.invocation_params;
+            if (invocationParams.model) {
+              return invocationParams.model;
+            } else if (invocationParams.model_name) {
+              return invocationParams.model_name;
+            }
+          }
+        }
+        return;
+      }
+      setSpanAttributes(span, runInfo, op) {
+        if ("run_type" in runInfo && runInfo.run_type) {
+          span.setAttribute(LANGSMITH_RUN_TYPE, runInfo.run_type);
+          const operationName = getOperationName(runInfo.run_type || "chain");
+          span.setAttribute(GEN_AI_OPERATION_NAME, operationName);
+        }
+        if ("name" in runInfo && runInfo.name) {
+          span.setAttribute(LANGSMITH_NAME, runInfo.name);
+        }
+        if ("session_id" in runInfo && runInfo.session_id) {
+          span.setAttribute(LANGSMITH_SESSION_ID, runInfo.session_id);
+        }
+        if ("session_name" in runInfo && runInfo.session_name) {
+          span.setAttribute(LANGSMITH_SESSION_NAME, runInfo.session_name);
+        }
+        this.setGenAiSystem(span, runInfo);
+        const modelName = this.extractModelName(runInfo);
+        if (modelName) {
+          span.setAttribute(GEN_AI_REQUEST_MODEL, modelName);
+        }
+        if (runInfo.extra?.metadata?.usage_metadata && typeof runInfo.extra.metadata.usage_metadata === "object") {
+          span.setAttribute(LANGSMITH_USAGE_METADATA, JSON.stringify(runInfo.extra.metadata.usage_metadata));
+        }
+        if ("prompt_tokens" in runInfo && typeof runInfo.prompt_tokens === "number") {
+          span.setAttribute(GEN_AI_USAGE_INPUT_TOKENS, runInfo.prompt_tokens);
+        }
+        if ("completion_tokens" in runInfo && typeof runInfo.completion_tokens === "number") {
+          span.setAttribute(GEN_AI_USAGE_OUTPUT_TOKENS, runInfo.completion_tokens);
+        }
+        if ("total_tokens" in runInfo && typeof runInfo.total_tokens === "number") {
+          span.setAttribute(GEN_AI_USAGE_TOTAL_TOKENS, runInfo.total_tokens);
+        }
+        this.setInvocationParameters(span, runInfo);
+        if ("run_type" in runInfo && runInfo.run_type === "tool") {
+          if ("name" in runInfo && runInfo.name) {
+            span.setAttribute(GEN_AI_TOOL_NAME, runInfo.name);
+          }
+          const toolCallId = runInfo.extra?.tool_call_id || runInfo.extra?.metadata?.tool_call_id;
+          if (toolCallId != null) {
+            span.setAttribute(GEN_AI_TOOL_CALL_ID, String(toolCallId));
+          }
+        }
+        const metadata = runInfo.extra?.metadata || {};
+        for (const [key, value] of Object.entries(metadata)) {
+          if (value !== null && value !== void 0) {
+            span.setAttribute(`${LANGSMITH_METADATA}.${key}`, isPrimitive(value) ? String(value) : JSON.stringify(value));
+          }
+        }
+        const tags = runInfo.tags;
+        if (tags && Array.isArray(tags)) {
+          span.setAttribute(LANGSMITH_TAGS, tags.join(", "));
+        } else if (tags) {
+          span.setAttribute(LANGSMITH_TAGS, String(tags));
+        }
+        if ("serialized" in runInfo && typeof runInfo.serialized === "object") {
+          const serialized = runInfo.serialized;
+          if (serialized.name) {
+            span.setAttribute(GEN_AI_SERIALIZED_NAME, String(serialized.name));
+          }
+          if (serialized.signature) {
+            span.setAttribute(GEN_AI_SERIALIZED_SIGNATURE, String(serialized.signature));
+          }
+          if (serialized.doc) {
+            span.setAttribute(GEN_AI_SERIALIZED_DOC, String(serialized.doc));
+          }
+        }
+        this.setIOAttributes(span, op);
+      }
+      setGenAiSystem(span, runInfo) {
+        let system = "langchain";
+        const modelName = this.extractModelName(runInfo);
+        if (modelName) {
+          const modelLower = modelName.toLowerCase();
+          if (modelLower.includes("anthropic") || modelLower.startsWith("claude")) {
+            system = "anthropic";
+          } else if (modelLower.includes("bedrock")) {
+            system = "aws.bedrock";
+          } else if (modelLower.includes("azure") && modelLower.includes("openai")) {
+            system = "az.ai.openai";
+          } else if (modelLower.includes("azure") && modelLower.includes("inference")) {
+            system = "az.ai.inference";
+          } else if (modelLower.includes("cohere")) {
+            system = "cohere";
+          } else if (modelLower.includes("deepseek")) {
+            system = "deepseek";
+          } else if (modelLower.includes("gemini")) {
+            system = "gemini";
+          } else if (modelLower.includes("groq")) {
+            system = "groq";
+          } else if (modelLower.includes("watson") || modelLower.includes("ibm")) {
+            system = "ibm.watsonx.ai";
+          } else if (modelLower.includes("mistral")) {
+            system = "mistral_ai";
+          } else if (modelLower.includes("gpt") || modelLower.includes("openai")) {
+            system = "openai";
+          } else if (modelLower.includes("perplexity") || modelLower.includes("sonar")) {
+            system = "perplexity";
+          } else if (modelLower.includes("vertex")) {
+            system = "vertex_ai";
+          } else if (modelLower.includes("xai") || modelLower.includes("grok")) {
+            system = "xai";
+          }
+        }
+        span.setAttribute(GEN_AI_SYSTEM, system);
+      }
+      setInvocationParameters(span, runInfo) {
+        const tools = runInfo.extra?.invocation_params?.tools;
+        if (Array.isArray(tools) && tools.length > 0) {
+          span.setAttribute(GEN_AI_TOOL_DEFINITIONS, JSON.stringify(tools));
+        }
+        if (!runInfo.extra?.metadata?.invocation_params) {
+          return;
+        }
+        const invocationParams = runInfo.extra.metadata.invocation_params;
+        if (invocationParams.max_tokens !== void 0) {
+          span.setAttribute(GEN_AI_REQUEST_MAX_TOKENS, invocationParams.max_tokens);
+        }
+        if (invocationParams.temperature !== void 0) {
+          span.setAttribute(GEN_AI_REQUEST_TEMPERATURE, invocationParams.temperature);
+        }
+        if (invocationParams.top_p !== void 0) {
+          span.setAttribute(GEN_AI_REQUEST_TOP_P, invocationParams.top_p);
+        }
+        if (invocationParams.frequency_penalty !== void 0) {
+          span.setAttribute(GEN_AI_REQUEST_FREQUENCY_PENALTY, invocationParams.frequency_penalty);
+        }
+        if (invocationParams.presence_penalty !== void 0) {
+          span.setAttribute(GEN_AI_REQUEST_PRESENCE_PENALTY, invocationParams.presence_penalty);
+        }
+      }
+      setIOAttributes(span, op) {
+        if (op.run.inputs) {
+          try {
+            const inputs = op.run.inputs;
+            if (typeof inputs === "object" && inputs !== null) {
+              if (inputs.model && Array.isArray(inputs.messages)) {
+                span.setAttribute(GEN_AI_REQUEST_MODEL, inputs.model);
+              }
+              if (inputs.stream !== void 0) {
+                span.setAttribute(LANGSMITH_REQUEST_STREAMING, inputs.stream);
+              }
+              if (inputs.extra_headers) {
+                span.setAttribute(LANGSMITH_REQUEST_HEADERS, JSON.stringify(inputs.extra_headers));
+              }
+              if (inputs.extra_query) {
+                span.setAttribute(GEN_AI_REQUEST_EXTRA_QUERY, JSON.stringify(inputs.extra_query));
+              }
+              if (inputs.extra_body) {
+                span.setAttribute(GEN_AI_REQUEST_EXTRA_BODY, JSON.stringify(inputs.extra_body));
+              }
+            }
+            span.setAttribute(GENAI_PROMPT, JSON.stringify(inputs));
+          } catch (e) {
+            console.debug(`Failed to process inputs for run ${op.id}`, e);
+          }
+        }
+        if (op.run.outputs) {
+          try {
+            const outputs = op.run.outputs;
+            const tokenUsage = this.getUnifiedRunTokens(outputs);
+            if (tokenUsage) {
+              span.setAttribute(GEN_AI_USAGE_INPUT_TOKENS, tokenUsage[0]);
+              span.setAttribute(GEN_AI_USAGE_OUTPUT_TOKENS, tokenUsage[1]);
+              span.setAttribute(GEN_AI_USAGE_TOTAL_TOKENS, tokenUsage[0] + tokenUsage[1]);
+            }
+            if (outputs && typeof outputs === "object") {
+              if (outputs.model) {
+                span.setAttribute(GEN_AI_RESPONSE_MODEL, String(outputs.model));
+              }
+              if (outputs.id) {
+                span.setAttribute(GEN_AI_RESPONSE_ID, outputs.id);
+              }
+              if (outputs.choices && Array.isArray(outputs.choices)) {
+                const finishReasons = outputs.choices.map((choice) => choice.finish_reason).filter((reason) => reason).map(String);
+                if (finishReasons.length > 0) {
+                  span.setAttribute(GEN_AI_RESPONSE_FINISH_REASONS, finishReasons.join(", "));
+                }
+              }
+              if (outputs.service_tier) {
+                span.setAttribute(GEN_AI_RESPONSE_SERVICE_TIER, outputs.service_tier);
+              }
+              if (outputs.system_fingerprint) {
+                span.setAttribute(GEN_AI_RESPONSE_SYSTEM_FINGERPRINT, outputs.system_fingerprint);
+              }
+              if (outputs.usage_metadata && typeof outputs.usage_metadata === "object") {
+                const usageMetadata = outputs.usage_metadata;
+                span.setAttribute(LANGSMITH_USAGE_METADATA, JSON.stringify(usageMetadata));
+                if (usageMetadata.input_token_details) {
+                  span.setAttribute(GEN_AI_USAGE_INPUT_TOKEN_DETAILS, JSON.stringify(usageMetadata.input_token_details));
+                }
+                if (usageMetadata.output_token_details) {
+                  span.setAttribute(GEN_AI_USAGE_OUTPUT_TOKEN_DETAILS, JSON.stringify(usageMetadata.output_token_details));
+                }
+              }
+            }
+            span.setAttribute(GENAI_COMPLETION, JSON.stringify(outputs));
+          } catch (e) {
+            console.debug(`Failed to process outputs for run ${op.id}`, e);
+          }
+        }
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getUnifiedRunTokens(outputs) {
+        if (!outputs) {
+          return null;
+        }
+        let tokenUsage = this.extractUnifiedRunTokens(outputs.usage_metadata);
+        if (tokenUsage) {
+          return tokenUsage;
+        }
+        const keys = Object.keys(outputs);
+        for (const key of keys) {
+          const haystack = outputs[key];
+          if (!haystack || typeof haystack !== "object") {
+            continue;
+          }
+          tokenUsage = this.extractUnifiedRunTokens(haystack.usage_metadata);
+          if (tokenUsage) {
+            return tokenUsage;
+          }
+          if (haystack.lc === 1 && haystack.kwargs && typeof haystack.kwargs === "object") {
+            tokenUsage = this.extractUnifiedRunTokens(haystack.kwargs.usage_metadata);
+            if (tokenUsage) {
+              return tokenUsage;
+            }
+          }
+        }
+        const generations = outputs.generations || [];
+        if (!Array.isArray(generations)) {
+          return null;
+        }
+        const flatGenerations = Array.isArray(generations[0]) ? generations.flat() : generations;
+        for (const generation of flatGenerations) {
+          if (typeof generation === "object" && generation.message && typeof generation.message === "object" && generation.message.kwargs && typeof generation.message.kwargs === "object") {
+            tokenUsage = this.extractUnifiedRunTokens(generation.message.kwargs.usage_metadata);
+            if (tokenUsage) {
+              return tokenUsage;
+            }
+          }
+        }
+        return null;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      extractUnifiedRunTokens(outputs) {
+        if (!outputs || typeof outputs !== "object") {
+          return null;
+        }
+        if (typeof outputs.input_tokens !== "number" || typeof outputs.output_tokens !== "number") {
+          return null;
+        }
+        return [outputs.input_tokens, outputs.output_tokens];
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/is-network-error/index.mjs
+function isNetworkError(error) {
+  const isValid = error && isError(error) && error.name === "TypeError" && typeof error.message === "string";
+  if (!isValid) {
+    return false;
+  }
+  const { message, stack } = error;
+  if (message === "Load failed") {
+    return stack === void 0 || // Sentry adds its own stack trace to the fetch error, so also check for that
+    "__sentry_captured__" in error;
+  }
+  if (message.startsWith("error sending request for url")) {
+    return true;
+  }
+  return errorMessages.has(message);
+}
+var objectToString, isError, errorMessages;
+var init_is_network_error = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/is-network-error/index.mjs"() {
+    objectToString = Object.prototype.toString;
+    isError = (value) => objectToString.call(value) === "[object Error]";
+    errorMessages = /* @__PURE__ */ new Set([
+      "network error",
+      // Chrome
+      "Failed to fetch",
+      // Chrome
+      "NetworkError when attempting to fetch resource.",
+      // Firefox
+      "The Internet connection appears to be offline.",
+      // Safari 16
+      "Network request failed",
+      // `cross-fetch`
+      "fetch failed",
+      // Undici (Node.js)
+      "terminated",
+      // Undici (Node.js)
+      " A network error occurred.",
+      // Bun (WebKit)
+      "Network connection lost"
+      // Cloudflare Workers (fetch)
+    ]);
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/p-retry/index.mjs
+function validateRetries(retries) {
+  if (typeof retries === "number") {
+    if (retries < 0) {
+      throw new TypeError("Expected `retries` to be a non-negative number.");
+    }
+    if (Number.isNaN(retries)) {
+      throw new TypeError("Expected `retries` to be a valid number or Infinity, got NaN.");
+    }
+  } else if (retries !== void 0) {
+    throw new TypeError("Expected `retries` to be a number or Infinity.");
+  }
+}
+function validateNumberOption(name, value, { min = 0, allowInfinity = false } = {}) {
+  if (value === void 0) {
+    return;
+  }
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    throw new TypeError(`Expected \`${name}\` to be a number${allowInfinity ? " or Infinity" : ""}.`);
+  }
+  if (!allowInfinity && !Number.isFinite(value)) {
+    throw new TypeError(`Expected \`${name}\` to be a finite number.`);
+  }
+  if (value < min) {
+    throw new TypeError(`Expected \`${name}\` to be \u2265 ${min}.`);
+  }
+}
+function calculateDelay(retriesConsumed, options) {
+  const attempt = Math.max(1, retriesConsumed + 1);
+  const random = options.randomize ? Math.random() + 1 : 1;
+  let timeout = Math.round(random * options.minTimeout * options.factor ** (attempt - 1));
+  timeout = Math.min(timeout, options.maxTimeout);
+  return timeout;
+}
+function calculateRemainingTime(start, max) {
+  if (!Number.isFinite(max)) {
+    return max;
+  }
+  return max - (performance.now() - start);
+}
+async function onAttemptFailure({ error, attemptNumber, retriesConsumed, startTime, options }) {
+  const normalizedError = error instanceof Error ? error : new TypeError(`Non-error was thrown: "${error}". You should only throw errors.`);
+  if (normalizedError instanceof AbortError) {
+    throw normalizedError.originalError;
+  }
+  const retriesLeft = Number.isFinite(options.retries) ? Math.max(0, options.retries - retriesConsumed) : options.retries;
+  const maxRetryTime = options.maxRetryTime ?? Number.POSITIVE_INFINITY;
+  const context = Object.freeze({
+    error: normalizedError,
+    attemptNumber,
+    retriesLeft,
+    retriesConsumed
+  });
+  await options.onFailedAttempt(context);
+  if (calculateRemainingTime(startTime, maxRetryTime) <= 0) {
+    throw normalizedError;
+  }
+  const consumeRetry = await options.shouldConsumeRetry(context);
+  const remainingTime = calculateRemainingTime(startTime, maxRetryTime);
+  if (remainingTime <= 0 || retriesLeft <= 0) {
+    throw normalizedError;
+  }
+  if (normalizedError instanceof TypeError && !isNetworkError(normalizedError)) {
+    if (consumeRetry) {
+      throw normalizedError;
+    }
+    options.signal?.throwIfAborted();
+    return false;
+  }
+  if (!await options.shouldRetry(context)) {
+    throw normalizedError;
+  }
+  if (!consumeRetry) {
+    options.signal?.throwIfAborted();
+    return false;
+  }
+  const delayTime = calculateDelay(retriesConsumed, options);
+  const finalDelay = Math.min(delayTime, remainingTime);
+  if (finalDelay > 0) {
+    await new Promise((resolve2, reject) => {
+      const onAbort = () => {
+        clearTimeout(timeoutToken);
+        options.signal?.removeEventListener("abort", onAbort);
+        reject(options.signal.reason);
+      };
+      const timeoutToken = setTimeout(() => {
+        options.signal?.removeEventListener("abort", onAbort);
+        resolve2();
+      }, finalDelay);
+      if (options.unref) {
+        timeoutToken.unref?.();
+      }
+      options.signal?.addEventListener("abort", onAbort, { once: true });
+    });
+  }
+  options.signal?.throwIfAborted();
+  return true;
+}
+async function pRetry(input, options = {}) {
+  options = { ...options };
+  validateRetries(options.retries);
+  if (Object.hasOwn(options, "forever")) {
+    throw new Error("The `forever` option is no longer supported. For many use-cases, you can set `retries: Infinity` instead.");
+  }
+  options.retries ?? (options.retries = 10);
+  options.factor ?? (options.factor = 2);
+  options.minTimeout ?? (options.minTimeout = 1e3);
+  options.maxTimeout ?? (options.maxTimeout = Number.POSITIVE_INFINITY);
+  options.maxRetryTime ?? (options.maxRetryTime = Number.POSITIVE_INFINITY);
+  options.randomize ?? (options.randomize = false);
+  options.onFailedAttempt ?? (options.onFailedAttempt = () => {
+  });
+  options.shouldRetry ?? (options.shouldRetry = () => true);
+  options.shouldConsumeRetry ?? (options.shouldConsumeRetry = () => true);
+  validateNumberOption("factor", options.factor, {
+    min: 0,
+    allowInfinity: false
+  });
+  validateNumberOption("minTimeout", options.minTimeout, {
+    min: 0,
+    allowInfinity: false
+  });
+  validateNumberOption("maxTimeout", options.maxTimeout, {
+    min: 0,
+    allowInfinity: true
+  });
+  validateNumberOption("maxRetryTime", options.maxRetryTime, {
+    min: 0,
+    allowInfinity: true
+  });
+  if (!(options.factor > 0)) {
+    options.factor = 1;
+  }
+  options.signal?.throwIfAborted();
+  let attemptNumber = 0;
+  let retriesConsumed = 0;
+  const startTime = performance.now();
+  while (Number.isFinite(options.retries) ? retriesConsumed <= options.retries : true) {
+    attemptNumber++;
+    try {
+      options.signal?.throwIfAborted();
+      const result = await input(attemptNumber);
+      options.signal?.throwIfAborted();
+      return result;
+    } catch (error) {
+      if (await onAttemptFailure({
+        error,
+        attemptNumber,
+        retriesConsumed,
+        startTime,
+        options
+      })) {
+        retriesConsumed++;
+      }
+    }
+  }
+  throw new Error("Retry attempts exhausted without throwing an error.");
+}
+var AbortError;
+var init_p_retry = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/p-retry/index.mjs"() {
+    init_is_network_error();
+    AbortError = class extends Error {
+      constructor(message) {
+        super();
+        if (message instanceof Error) {
+          this.originalError = message;
+          ({ message } = message);
+        } else {
+          this.originalError = new Error(message);
+          this.originalError.stack = this.stack;
+        }
+        this.name = "AbortError";
+        this.message = message;
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/eventemitter3@4.0.7/node_modules/eventemitter3/index.js
+var require_eventemitter3 = __commonJS({
+  "node_modules/.pnpm/eventemitter3@4.0.7/node_modules/eventemitter3/index.js"(exports, module) {
+    "use strict";
+    var has2 = Object.prototype.hasOwnProperty;
+    var prefix = "~";
+    function Events() {
+    }
+    if (Object.create) {
+      Events.prototype = /* @__PURE__ */ Object.create(null);
+      if (!new Events().__proto__) prefix = false;
+    }
+    function EE(fn, context, once) {
+      this.fn = fn;
+      this.context = context;
+      this.once = once || false;
+    }
+    function addListener(emitter, event, fn, context, once) {
+      if (typeof fn !== "function") {
+        throw new TypeError("The listener must be a function");
+      }
+      var listener = new EE(fn, context || emitter, once), evt = prefix ? prefix + event : event;
+      if (!emitter._events[evt]) emitter._events[evt] = listener, emitter._eventsCount++;
+      else if (!emitter._events[evt].fn) emitter._events[evt].push(listener);
+      else emitter._events[evt] = [emitter._events[evt], listener];
+      return emitter;
+    }
+    function clearEvent(emitter, evt) {
+      if (--emitter._eventsCount === 0) emitter._events = new Events();
+      else delete emitter._events[evt];
+    }
+    function EventEmitter() {
+      this._events = new Events();
+      this._eventsCount = 0;
+    }
+    EventEmitter.prototype.eventNames = function eventNames() {
+      var names = [], events, name;
+      if (this._eventsCount === 0) return names;
+      for (name in events = this._events) {
+        if (has2.call(events, name)) names.push(prefix ? name.slice(1) : name);
+      }
+      if (Object.getOwnPropertySymbols) {
+        return names.concat(Object.getOwnPropertySymbols(events));
+      }
+      return names;
+    };
+    EventEmitter.prototype.listeners = function listeners(event) {
+      var evt = prefix ? prefix + event : event, handlers = this._events[evt];
+      if (!handlers) return [];
+      if (handlers.fn) return [handlers.fn];
+      for (var i = 0, l = handlers.length, ee = new Array(l); i < l; i++) {
+        ee[i] = handlers[i].fn;
+      }
+      return ee;
+    };
+    EventEmitter.prototype.listenerCount = function listenerCount(event) {
+      var evt = prefix ? prefix + event : event, listeners = this._events[evt];
+      if (!listeners) return 0;
+      if (listeners.fn) return 1;
+      return listeners.length;
+    };
+    EventEmitter.prototype.emit = function emit(event, a1, a2, a3, a4, a5) {
+      var evt = prefix ? prefix + event : event;
+      if (!this._events[evt]) return false;
+      var listeners = this._events[evt], len = arguments.length, args, i;
+      if (listeners.fn) {
+        if (listeners.once) this.removeListener(event, listeners.fn, void 0, true);
+        switch (len) {
+          case 1:
+            return listeners.fn.call(listeners.context), true;
+          case 2:
+            return listeners.fn.call(listeners.context, a1), true;
+          case 3:
+            return listeners.fn.call(listeners.context, a1, a2), true;
+          case 4:
+            return listeners.fn.call(listeners.context, a1, a2, a3), true;
+          case 5:
+            return listeners.fn.call(listeners.context, a1, a2, a3, a4), true;
+          case 6:
+            return listeners.fn.call(listeners.context, a1, a2, a3, a4, a5), true;
+        }
+        for (i = 1, args = new Array(len - 1); i < len; i++) {
+          args[i - 1] = arguments[i];
+        }
+        listeners.fn.apply(listeners.context, args);
+      } else {
+        var length = listeners.length, j;
+        for (i = 0; i < length; i++) {
+          if (listeners[i].once) this.removeListener(event, listeners[i].fn, void 0, true);
+          switch (len) {
+            case 1:
+              listeners[i].fn.call(listeners[i].context);
+              break;
+            case 2:
+              listeners[i].fn.call(listeners[i].context, a1);
+              break;
+            case 3:
+              listeners[i].fn.call(listeners[i].context, a1, a2);
+              break;
+            case 4:
+              listeners[i].fn.call(listeners[i].context, a1, a2, a3);
+              break;
+            default:
+              if (!args) for (j = 1, args = new Array(len - 1); j < len; j++) {
+                args[j - 1] = arguments[j];
+              }
+              listeners[i].fn.apply(listeners[i].context, args);
+          }
+        }
+      }
+      return true;
+    };
+    EventEmitter.prototype.on = function on(event, fn, context) {
+      return addListener(this, event, fn, context, false);
+    };
+    EventEmitter.prototype.once = function once(event, fn, context) {
+      return addListener(this, event, fn, context, true);
+    };
+    EventEmitter.prototype.removeListener = function removeListener(event, fn, context, once) {
+      var evt = prefix ? prefix + event : event;
+      if (!this._events[evt]) return this;
+      if (!fn) {
+        clearEvent(this, evt);
+        return this;
+      }
+      var listeners = this._events[evt];
+      if (listeners.fn) {
+        if (listeners.fn === fn && (!once || listeners.once) && (!context || listeners.context === context)) {
+          clearEvent(this, evt);
+        }
+      } else {
+        for (var i = 0, events = [], length = listeners.length; i < length; i++) {
+          if (listeners[i].fn !== fn || once && !listeners[i].once || context && listeners[i].context !== context) {
+            events.push(listeners[i]);
+          }
+        }
+        if (events.length) this._events[evt] = events.length === 1 ? events[0] : events;
+        else clearEvent(this, evt);
+      }
+      return this;
+    };
+    EventEmitter.prototype.removeAllListeners = function removeAllListeners(event) {
+      var evt;
+      if (event) {
+        evt = prefix ? prefix + event : event;
+        if (this._events[evt]) clearEvent(this, evt);
+      } else {
+        this._events = new Events();
+        this._eventsCount = 0;
+      }
+      return this;
+    };
+    EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
+    EventEmitter.prototype.addListener = EventEmitter.prototype.on;
+    EventEmitter.prefixed = prefix;
+    EventEmitter.EventEmitter = EventEmitter;
+    if ("undefined" !== typeof module) {
+      module.exports = EventEmitter;
+    }
+  }
+});
+
+// node_modules/.pnpm/p-finally@1.0.0/node_modules/p-finally/index.js
+var require_p_finally = __commonJS({
+  "node_modules/.pnpm/p-finally@1.0.0/node_modules/p-finally/index.js"(exports, module) {
+    "use strict";
+    module.exports = (promise, onFinally) => {
+      onFinally = onFinally || (() => {
+      });
+      return promise.then(
+        (val) => new Promise((resolve2) => {
+          resolve2(onFinally());
+        }).then(() => val),
+        (err) => new Promise((resolve2) => {
+          resolve2(onFinally());
+        }).then(() => {
+          throw err;
+        })
+      );
+    };
+  }
+});
+
+// node_modules/.pnpm/p-timeout@3.2.0/node_modules/p-timeout/index.js
+var require_p_timeout = __commonJS({
+  "node_modules/.pnpm/p-timeout@3.2.0/node_modules/p-timeout/index.js"(exports, module) {
+    "use strict";
+    var pFinally = require_p_finally();
+    var TimeoutError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "TimeoutError";
+      }
+    };
+    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve2, reject) => {
+      if (typeof milliseconds !== "number" || milliseconds < 0) {
+        throw new TypeError("Expected `milliseconds` to be a positive number");
+      }
+      if (milliseconds === Infinity) {
+        resolve2(promise);
+        return;
+      }
+      const timer = setTimeout(() => {
+        if (typeof fallback === "function") {
+          try {
+            resolve2(fallback());
+          } catch (error) {
+            reject(error);
+          }
+          return;
+        }
+        const message = typeof fallback === "string" ? fallback : `Promise timed out after ${milliseconds} milliseconds`;
+        const timeoutError = fallback instanceof Error ? fallback : new TimeoutError(message);
+        if (typeof promise.cancel === "function") {
+          promise.cancel();
+        }
+        reject(timeoutError);
+      }, milliseconds);
+      pFinally(
+        // eslint-disable-next-line promise/prefer-await-to-then
+        promise.then(resolve2, reject),
+        () => {
+          clearTimeout(timer);
+        }
+      );
+    });
+    module.exports = pTimeout;
+    module.exports.default = pTimeout;
+    module.exports.TimeoutError = TimeoutError;
+  }
+});
+
+// node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/lower-bound.js
+var require_lower_bound = __commonJS({
+  "node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/lower-bound.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    function lowerBound(array, value, comparator) {
+      let first = 0;
+      let count = array.length;
+      while (count > 0) {
+        const step = count / 2 | 0;
+        let it = first + step;
+        if (comparator(array[it], value) <= 0) {
+          first = ++it;
+          count -= step + 1;
+        } else {
+          count = step;
+        }
+      }
+      return first;
+    }
+    exports.default = lowerBound;
+  }
+});
+
+// node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/priority-queue.js
+var require_priority_queue = __commonJS({
+  "node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/priority-queue.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var lower_bound_1 = require_lower_bound();
+    var PriorityQueue = class {
+      constructor() {
+        this._queue = [];
+      }
+      enqueue(run, options) {
+        options = Object.assign({ priority: 0 }, options);
+        const element = {
+          priority: options.priority,
+          run
+        };
+        if (this.size && this._queue[this.size - 1].priority >= options.priority) {
+          this._queue.push(element);
+          return;
+        }
+        const index = lower_bound_1.default(this._queue, element, (a, b) => b.priority - a.priority);
+        this._queue.splice(index, 0, element);
+      }
+      dequeue() {
+        const item = this._queue.shift();
+        return item === null || item === void 0 ? void 0 : item.run;
+      }
+      filter(options) {
+        return this._queue.filter((element) => element.priority === options.priority).map((element) => element.run);
+      }
+      get size() {
+        return this._queue.length;
+      }
+    };
+    exports.default = PriorityQueue;
+  }
+});
+
+// node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/index.js
+var require_dist = __commonJS({
+  "node_modules/.pnpm/p-queue@6.6.2/node_modules/p-queue/dist/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var EventEmitter = require_eventemitter3();
+    var p_timeout_1 = require_p_timeout();
+    var priority_queue_1 = require_priority_queue();
+    var empty = () => {
+    };
+    var timeoutError = new p_timeout_1.TimeoutError();
+    var PQueue2 = class extends EventEmitter {
+      constructor(options) {
+        var _a2, _b, _c, _d;
+        super();
+        this._intervalCount = 0;
+        this._intervalEnd = 0;
+        this._pendingCount = 0;
+        this._resolveEmpty = empty;
+        this._resolveIdle = empty;
+        options = Object.assign({ carryoverConcurrencyCount: false, intervalCap: Infinity, interval: 0, concurrency: Infinity, autoStart: true, queueClass: priority_queue_1.default }, options);
+        if (!(typeof options.intervalCap === "number" && options.intervalCap >= 1)) {
+          throw new TypeError(`Expected \`intervalCap\` to be a number from 1 and up, got \`${(_b = (_a2 = options.intervalCap) === null || _a2 === void 0 ? void 0 : _a2.toString()) !== null && _b !== void 0 ? _b : ""}\` (${typeof options.intervalCap})`);
+        }
+        if (options.interval === void 0 || !(Number.isFinite(options.interval) && options.interval >= 0)) {
+          throw new TypeError(`Expected \`interval\` to be a finite number >= 0, got \`${(_d = (_c = options.interval) === null || _c === void 0 ? void 0 : _c.toString()) !== null && _d !== void 0 ? _d : ""}\` (${typeof options.interval})`);
+        }
+        this._carryoverConcurrencyCount = options.carryoverConcurrencyCount;
+        this._isIntervalIgnored = options.intervalCap === Infinity || options.interval === 0;
+        this._intervalCap = options.intervalCap;
+        this._interval = options.interval;
+        this._queue = new options.queueClass();
+        this._queueClass = options.queueClass;
+        this.concurrency = options.concurrency;
+        this._timeout = options.timeout;
+        this._throwOnTimeout = options.throwOnTimeout === true;
+        this._isPaused = options.autoStart === false;
+      }
+      get _doesIntervalAllowAnother() {
+        return this._isIntervalIgnored || this._intervalCount < this._intervalCap;
+      }
+      get _doesConcurrentAllowAnother() {
+        return this._pendingCount < this._concurrency;
+      }
+      _next() {
+        this._pendingCount--;
+        this._tryToStartAnother();
+        this.emit("next");
+      }
+      _resolvePromises() {
+        this._resolveEmpty();
+        this._resolveEmpty = empty;
+        if (this._pendingCount === 0) {
+          this._resolveIdle();
+          this._resolveIdle = empty;
+          this.emit("idle");
+        }
+      }
+      _onResumeInterval() {
+        this._onInterval();
+        this._initializeIntervalIfNeeded();
+        this._timeoutId = void 0;
+      }
+      _isIntervalPaused() {
+        const now = Date.now();
+        if (this._intervalId === void 0) {
+          const delay = this._intervalEnd - now;
+          if (delay < 0) {
+            this._intervalCount = this._carryoverConcurrencyCount ? this._pendingCount : 0;
+          } else {
+            if (this._timeoutId === void 0) {
+              this._timeoutId = setTimeout(() => {
+                this._onResumeInterval();
+              }, delay);
+            }
+            return true;
+          }
+        }
+        return false;
+      }
+      _tryToStartAnother() {
+        if (this._queue.size === 0) {
+          if (this._intervalId) {
+            clearInterval(this._intervalId);
+          }
+          this._intervalId = void 0;
+          this._resolvePromises();
+          return false;
+        }
+        if (!this._isPaused) {
+          const canInitializeInterval = !this._isIntervalPaused();
+          if (this._doesIntervalAllowAnother && this._doesConcurrentAllowAnother) {
+            const job = this._queue.dequeue();
+            if (!job) {
+              return false;
+            }
+            this.emit("active");
+            job();
+            if (canInitializeInterval) {
+              this._initializeIntervalIfNeeded();
+            }
+            return true;
+          }
+        }
+        return false;
+      }
+      _initializeIntervalIfNeeded() {
+        if (this._isIntervalIgnored || this._intervalId !== void 0) {
+          return;
+        }
+        this._intervalId = setInterval(() => {
+          this._onInterval();
+        }, this._interval);
+        this._intervalEnd = Date.now() + this._interval;
+      }
+      _onInterval() {
+        if (this._intervalCount === 0 && this._pendingCount === 0 && this._intervalId) {
+          clearInterval(this._intervalId);
+          this._intervalId = void 0;
+        }
+        this._intervalCount = this._carryoverConcurrencyCount ? this._pendingCount : 0;
+        this._processQueue();
+      }
+      /**
+      Executes all queued functions until it reaches the limit.
+      */
+      _processQueue() {
+        while (this._tryToStartAnother()) {
+        }
+      }
+      get concurrency() {
+        return this._concurrency;
+      }
+      set concurrency(newConcurrency) {
+        if (!(typeof newConcurrency === "number" && newConcurrency >= 1)) {
+          throw new TypeError(`Expected \`concurrency\` to be a number from 1 and up, got \`${newConcurrency}\` (${typeof newConcurrency})`);
+        }
+        this._concurrency = newConcurrency;
+        this._processQueue();
+      }
+      /**
+      Adds a sync or async task to the queue. Always returns a promise.
+      */
+      async add(fn, options = {}) {
+        return new Promise((resolve2, reject) => {
+          const run = async () => {
+            this._pendingCount++;
+            this._intervalCount++;
+            try {
+              const operation = this._timeout === void 0 && options.timeout === void 0 ? fn() : p_timeout_1.default(Promise.resolve(fn()), options.timeout === void 0 ? this._timeout : options.timeout, () => {
+                if (options.throwOnTimeout === void 0 ? this._throwOnTimeout : options.throwOnTimeout) {
+                  reject(timeoutError);
+                }
+                return void 0;
+              });
+              resolve2(await operation);
+            } catch (error) {
+              reject(error);
+            }
+            this._next();
+          };
+          this._queue.enqueue(run, options);
+          this._tryToStartAnother();
+          this.emit("add");
+        });
+      }
+      /**
+          Same as `.add()`, but accepts an array of sync or async functions.
+      
+          @returns A promise that resolves when all functions are resolved.
+          */
+      async addAll(functions, options) {
+        return Promise.all(functions.map(async (function_) => this.add(function_, options)));
+      }
+      /**
+      Start (or resume) executing enqueued tasks within concurrency limit. No need to call this if queue is not paused (via `options.autoStart = false` or by `.pause()` method.)
+      */
+      start() {
+        if (!this._isPaused) {
+          return this;
+        }
+        this._isPaused = false;
+        this._processQueue();
+        return this;
+      }
+      /**
+      Put queue execution on hold.
+      */
+      pause() {
+        this._isPaused = true;
+      }
+      /**
+      Clear the queue.
+      */
+      clear() {
+        this._queue = new this._queueClass();
+      }
+      /**
+          Can be called multiple times. Useful if you for example add additional items at a later time.
+      
+          @returns A promise that settles when the queue becomes empty.
+          */
+      async onEmpty() {
+        if (this._queue.size === 0) {
+          return;
+        }
+        return new Promise((resolve2) => {
+          const existingResolve = this._resolveEmpty;
+          this._resolveEmpty = () => {
+            existingResolve();
+            resolve2();
+          };
+        });
+      }
+      /**
+          The difference with `.onEmpty` is that `.onIdle` guarantees that all work from the queue has finished. `.onEmpty` merely signals that the queue is empty, but it could mean that some promises haven't completed yet.
+      
+          @returns A promise that settles when the queue becomes empty, and all promises have completed; `queue.size === 0 && queue.pending === 0`.
+          */
+      async onIdle() {
+        if (this._pendingCount === 0 && this._queue.size === 0) {
+          return;
+        }
+        return new Promise((resolve2) => {
+          const existingResolve = this._resolveIdle;
+          this._resolveIdle = () => {
+            existingResolve();
+            resolve2();
+          };
+        });
+      }
+      /**
+      Size of the queue.
+      */
+      get size() {
+        return this._queue.size;
+      }
+      /**
+          Size of the queue, filtered by the given options.
+      
+          For example, this can be used to find the number of items remaining in the queue with a specific priority level.
+          */
+      sizeBy(options) {
+        return this._queue.filter(options).length;
+      }
+      /**
+      Number of pending promises.
+      */
+      get pending() {
+        return this._pendingCount;
+      }
+      /**
+      Whether the queue is currently paused.
+      */
+      get isPaused() {
+        return this._isPaused;
+      }
+      get timeout() {
+        return this._timeout;
+      }
+      /**
+      Set the timeout for future operations.
+      */
+      set timeout(milliseconds) {
+        this._timeout = milliseconds;
+      }
+    };
+    exports.default = PQueue2;
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/p-queue.mjs
+var import_p_queue, PQueue;
+var init_p_queue = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/p-queue.mjs"() {
+    import_p_queue = __toESM(require_dist(), 1);
+    PQueue = "default" in import_p_queue.default ? import_p_queue.default.default : import_p_queue.default;
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/async_caller.mjs
+var STATUS_RETRYABLE, AsyncCaller;
+var init_async_caller = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/async_caller.mjs"() {
+    init_p_retry();
+    init_p_queue();
+    STATUS_RETRYABLE = [
+      408,
+      // Request Timeout
+      425,
+      // Too Early
+      429,
+      // Too Many Requests
+      500,
+      // Internal Server Error
+      502,
+      // Bad Gateway
+      503,
+      // Service Unavailable
+      504
+      // Gateway Timeout
+    ];
+    AsyncCaller = class {
+      constructor(params) {
+        Object.defineProperty(this, "maxConcurrency", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: void 0
+        });
+        Object.defineProperty(this, "maxRetries", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: void 0
+        });
+        Object.defineProperty(this, "maxQueueSizeBytes", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: void 0
+        });
+        Object.defineProperty(this, "queue", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: void 0
+        });
+        Object.defineProperty(this, "onFailedResponseHook", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: void 0
+        });
+        Object.defineProperty(this, "queueSizeBytes", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: 0
+        });
+        this.maxConcurrency = params.maxConcurrency ?? Infinity;
+        this.maxRetries = params.maxRetries ?? 6;
+        this.maxQueueSizeBytes = params.maxQueueSizeBytes;
+        this.queue = new PQueue({ concurrency: this.maxConcurrency });
+        this.onFailedResponseHook = params?.onFailedResponseHook;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      call(callable, ...args) {
+        return this.callWithOptions({}, callable, ...args);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      callWithOptions(options, callable, ...args) {
+        const sizeBytes = options.sizeBytes ?? 0;
+        if (this.maxQueueSizeBytes !== void 0 && sizeBytes > 0 && this.queueSizeBytes + sizeBytes > this.maxQueueSizeBytes) {
+          return Promise.reject(new Error(`Queue size limit (${this.maxQueueSizeBytes} bytes) exceeded. Current queue size: ${this.queueSizeBytes} bytes, attempted addition: ${sizeBytes} bytes.`));
+        }
+        if (sizeBytes > 0) {
+          this.queueSizeBytes += sizeBytes;
+        }
+        const onFailedResponseHook = this.onFailedResponseHook;
+        let promise = this.queue.add(() => pRetry(() => callable(...args).catch((error) => {
+          if (error instanceof Error) {
+            throw error;
+          } else {
+            throw new Error(error);
+          }
+        }), {
+          async onFailedAttempt({ error }) {
+            if (typeof error !== "object" || error == null)
+              throw error;
+            const errorMessage = "message" in error && typeof error.message === "string" ? error.message : void 0;
+            if (errorMessage?.startsWith("Cancel") || errorMessage?.startsWith("TimeoutError") || errorMessage?.startsWith("AbortError")) {
+              throw error;
+            }
+            if ("name" in error && error.name === "TimeoutError") {
+              throw error;
+            }
+            if ("code" in error && error.code === "ECONNABORTED") {
+              throw error;
+            }
+            const response = "response" in error ? error.response : void 0;
+            if (onFailedResponseHook) {
+              const handled = await onFailedResponseHook(response);
+              if (handled)
+                return;
+            }
+            const status = response?.status ?? ("status" in error ? error.status : void 0);
+            if (status != null && (typeof status === "number" || typeof status === "string") && !STATUS_RETRYABLE.includes(+status)) {
+              throw error;
+            }
+          },
+          retries: this.maxRetries,
+          randomize: true
+        }), { throwOnTimeout: true });
+        if (sizeBytes > 0) {
+          promise = promise.finally(() => {
+            this.queueSizeBytes -= sizeBytes;
+          });
+        }
+        if (options.signal) {
+          return Promise.race([
+            promise,
+            new Promise((_, reject) => {
+              options.signal?.addEventListener("abort", () => {
+                reject(new Error("AbortError"));
+              });
+            })
+          ]);
+        }
+        return promise;
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/messages.mjs
+function isLangChainMessage(message) {
+  return typeof message?._getType === "function";
+}
+function convertLangChainMessageToExample(message) {
+  const converted = {
+    type: message._getType(),
+    data: { content: message.content }
+  };
+  if (message?.additional_kwargs && Object.keys(message.additional_kwargs).length > 0) {
+    converted.data.additional_kwargs = { ...message.additional_kwargs };
+  }
+  return converted;
+}
+var init_messages = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/messages.mjs"() {
+  }
+});
+
 // node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/warn.mjs
 function warnOnce2(message, options) {
   const key = options?.code ?? message;
@@ -6937,7 +7143,7 @@ function applyToPayload(run, { update = false } = {}) {
 var init_addressing = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/addressing.mjs"() {
     init_address();
-    init_env3();
+    init_env2();
     init_warn();
   }
 });
@@ -7153,7 +7359,10 @@ function isStale(entry2, ttlSeconds) {
   const ageMs = Date.now() - entry2.createdAt;
   return ageMs > ttlSeconds * 1e3;
 }
-var PromptCache, promptCacheSingleton;
+function configureGlobalPromptCache(config) {
+  promptCacheSingleton.configure(config);
+}
+var PromptCache, promptCacheSingleton, Cache;
 var init_prompt_cache = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/prompt_cache/index.mjs"() {
     init_fs();
@@ -7422,17 +7631,27 @@ var init_prompt_cache = __esm({
       }
     };
     promptCacheSingleton = new PromptCache();
+    Cache = class extends PromptCache {
+      constructor(config = {}) {
+        console.warn("The 'Cache' class is deprecated and will be removed in a future version. Use 'PromptCache' instead.");
+        super(config);
+      }
+    };
   }
 });
 
 // node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/singletons/fetch.mjs
-var DEFAULT_FETCH_IMPLEMENTATION, globalFetchSupportsWebStreaming, LANGSMITH_FETCH_IMPLEMENTATION_KEY, _shouldStreamForGlobalFetchImplementation, _getFetchImplementation;
+var DEFAULT_FETCH_IMPLEMENTATION, globalFetchSupportsWebStreaming, LANGSMITH_FETCH_IMPLEMENTATION_KEY, overrideFetchImplementation, _shouldStreamForGlobalFetchImplementation, _getFetchImplementation;
 var init_fetch = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/singletons/fetch.mjs"() {
-    init_env3();
+    init_env2();
     DEFAULT_FETCH_IMPLEMENTATION = (...args) => fetch(...args);
     globalFetchSupportsWebStreaming = void 0;
     LANGSMITH_FETCH_IMPLEMENTATION_KEY = /* @__PURE__ */ Symbol.for("ls:fetch_implementation");
+    overrideFetchImplementation = (fetch2, supportsWebStreaming) => {
+      globalThis[LANGSMITH_FETCH_IMPLEMENTATION_KEY] = fetch2;
+      globalFetchSupportsWebStreaming = supportsWebStreaming;
+    };
     _shouldStreamForGlobalFetchImplementation = () => {
       const overriddenFetchImpl = globalThis[LANGSMITH_FETCH_IMPLEMENTATION_KEY];
       if (overriddenFetchImpl === void 0) {
@@ -7452,6 +7671,462 @@ var init_fetch = __esm({
         }
         return res;
       };
+    };
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/profile-lock.mjs
+function sleep2(ms) {
+  return new Promise((resolve2) => setTimeout(resolve2, ms));
+}
+function isEEXIST(err) {
+  return typeof err === "object" && err !== null && err.code === "EEXIST";
+}
+function lockMetadataLines(lockDir) {
+  try {
+    return readFileSync6(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
+  } catch {
+    return void 0;
+  }
+}
+function lockCreatedAtMs(lockDir) {
+  const lines2 = lockMetadataLines(lockDir);
+  if (lines2 && lines2[0] && lines2[0].trim()) {
+    const parsed = Date.parse(lines2[0].trim());
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return statMtimeMs(lockDir);
+}
+function lockOwner(lockDir) {
+  const lines2 = lockMetadataLines(lockDir);
+  if (lines2 && lines2.length >= 2 && lines2[1].trim()) {
+    return lines2[1].trim();
+  }
+  return void 0;
+}
+async function removeStaleLock(lockDir) {
+  const createdAt = lockCreatedAtMs(lockDir);
+  if (createdAt === void 0 || Date.now() - createdAt <= LOCK_STALE_AFTER_MS) {
+    return false;
+  }
+  await rmRecursive(lockDir);
+  return true;
+}
+async function acquireOAuthRefreshLock(configPath, deadline) {
+  const lockDir = `${configPath}.oauth.lock.lock`;
+  const parent = path2.dirname(lockDir);
+  if (parent) {
+    await mkdir2(parent);
+  }
+  const owner = globalThis.crypto.randomUUID();
+  for (; ; ) {
+    try {
+      await mkdirExclusive(lockDir);
+    } catch (err) {
+      if (!isEEXIST(err)) {
+        throw err;
+      }
+      if (!await removeStaleLock(lockDir)) {
+        if (Date.now() >= deadline) {
+          throw new Error("timed out acquiring OAuth refresh lock");
+        }
+        await sleep2(Math.min(LOCK_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())));
+      }
+      continue;
+    }
+    try {
+      await writeFileAtomic(path2.join(lockDir, LOCK_METADATA_FILE), `${(/* @__PURE__ */ new Date()).toISOString()}
+${owner}
+`);
+    } catch (err) {
+      await rmRecursive(lockDir);
+      throw err;
+    }
+    break;
+  }
+  return {
+    async release() {
+      if (lockOwner(lockDir) === owner) {
+        await rmRecursive(lockDir);
+      }
+    }
+  };
+}
+var LOCK_POLL_INTERVAL_MS, LOCK_STALE_AFTER_MS, LOCK_METADATA_FILE;
+var init_profile_lock = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/profile-lock.mjs"() {
+    init_fs();
+    LOCK_POLL_INTERVAL_MS = 10;
+    LOCK_STALE_AFTER_MS = 1e4;
+    LOCK_METADATA_FILE = "created_at";
+  }
+});
+
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/profiles.mjs
+function isBrowserLikeRuntime() {
+  const env = getEnv();
+  return env === "browser" || env === "webworker";
+}
+function getProfileConfigPath(selected) {
+  const explicitPath = selected || getEnvironmentVariable("LANGSMITH_CONFIG_FILE");
+  if (explicitPath) {
+    return explicitPath;
+  }
+  const home = getEnvironmentVariable("HOME") ?? getEnvironmentVariable("USERPROFILE");
+  if (!home) {
+    return void 0;
+  }
+  return path2.join(home, ".langsmith", "config.json");
+}
+function resolveProfileName(config, selected) {
+  const chosen = selected || getEnvironmentVariable("LANGSMITH_PROFILE");
+  if (chosen) {
+    return chosen;
+  }
+  if (config.current_profile) {
+    return config.current_profile;
+  }
+  if (config.profiles?.default) {
+    return "default";
+  }
+  return void 0;
+}
+function loadProfileState(selection = {}) {
+  if (isBrowserLikeRuntime()) {
+    return void 0;
+  }
+  const configPath = getProfileConfigPath(selection.configPath);
+  if (!configPath || !existsSync2(configPath)) {
+    return void 0;
+  }
+  try {
+    const config = JSON.parse(readFileSync6(configPath));
+    const profileName = resolveProfileName(config, selection.profile);
+    const profile = profileName ? config.profiles?.[profileName] : void 0;
+    if (!profileName || !profile) {
+      return void 0;
+    }
+    return { configPath, config, profileName, profile };
+  } catch {
+    return void 0;
+  }
+}
+function hasValue(value) {
+  return value !== void 0 && value !== null && value.trim() !== "";
+}
+function trimConfigValue(value) {
+  return value?.trim().replace(/^["']|["']$/g, "");
+}
+function shouldRefreshProfileToken(profile) {
+  const oauth = profile.oauth;
+  if (!oauth?.refresh_token) {
+    return false;
+  }
+  if (!oauth.access_token) {
+    return true;
+  }
+  if (!oauth.expires_at) {
+    return false;
+  }
+  const expiresAt = Date.parse(oauth.expires_at);
+  if (Number.isNaN(expiresAt)) {
+    return false;
+  }
+  return expiresAt <= Date.now() + TOKEN_REFRESH_LEEWAY_MS;
+}
+function normalizeConfigUrl(apiUrl) {
+  let normalized = apiUrl;
+  while (normalized.endsWith("/")) {
+    normalized = normalized.slice(0, -1);
+  }
+  const apiV1Suffix = "/api/v1";
+  return normalized.endsWith(apiV1Suffix) ? normalized.slice(0, -apiV1Suffix.length) : normalized;
+}
+function oauthDiscoveryCandidates(apiUrl) {
+  const given = normalizeConfigUrl(apiUrl);
+  const origin = given.endsWith("/api") ? given.slice(0, -"/api".length) : given;
+  const candidates = [];
+  for (const candidate of [given, `${origin}/api`, origin]) {
+    if (candidate && candidate !== "/api" && !candidates.includes(candidate)) {
+      candidates.push(candidate);
+    }
+  }
+  return candidates;
+}
+function isTrustedOAuthMetadata(doc, base) {
+  const { issuer } = doc;
+  if (typeof issuer !== "string" || issuer.replace(/\/+$/, "") !== base.replace(/\/+$/, "")) {
+    return false;
+  }
+  let issuerUrl;
+  try {
+    issuerUrl = new URL(issuer);
+  } catch {
+    return false;
+  }
+  for (const endpoint of [
+    doc.device_authorization_endpoint,
+    doc.token_endpoint
+  ]) {
+    if (typeof endpoint !== "string" || !endpoint) {
+      return false;
+    }
+    try {
+      const url = new URL(endpoint);
+      if (url.protocol !== issuerUrl.protocol || url.host !== issuerUrl.host) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+function oauthMetadataUrls(base) {
+  const appended = `${base}${WELL_KNOWN_OAUTH_PATH}`;
+  let inserted;
+  try {
+    const url = new URL(base);
+    inserted = `${url.origin}${WELL_KNOWN_OAUTH_PATH}${url.pathname === "/" ? "" : url.pathname}`;
+  } catch {
+    return [appended];
+  }
+  return inserted === appended ? [inserted] : [inserted, appended];
+}
+async function fetchOAuthMetadata(url, base, fetchImplementation) {
+  let response;
+  try {
+    response = await fetchImplementation(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(OAUTH_DISCOVERY_TIMEOUT_MS)
+    });
+  } catch {
+    return void 0;
+  }
+  if (!response.ok) {
+    return void 0;
+  }
+  let doc;
+  try {
+    doc = await response.json();
+  } catch {
+    return void 0;
+  }
+  if (!doc || typeof doc !== "object" || !isTrustedOAuthMetadata(doc, base)) {
+    return void 0;
+  }
+  return doc;
+}
+async function resolveTokenEndpoint(apiUrl, fetchImplementation) {
+  for (const base of oauthDiscoveryCandidates(apiUrl)) {
+    for (const url of oauthMetadataUrls(base)) {
+      const doc = await fetchOAuthMetadata(url, base, fetchImplementation);
+      if (doc) {
+        return doc.token_endpoint;
+      }
+    }
+  }
+  return `${normalizeConfigUrl(apiUrl)}/oauth/token`;
+}
+function applyTokenResponse(profile, token) {
+  profile.oauth ?? (profile.oauth = {});
+  if (token.access_token) {
+    profile.oauth.access_token = token.access_token;
+  }
+  if (token.refresh_token) {
+    profile.oauth.refresh_token = token.refresh_token;
+  }
+  if (typeof token.expires_in === "number" && token.expires_in > 0) {
+    profile.oauth.expires_at = new Date(Date.now() + token.expires_in * 1e3).toISOString();
+  }
+}
+function getAbortReason(signal) {
+  return signal.reason ?? new Error("The operation was aborted.");
+}
+async function waitForAbortSignal(promise, signal) {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    throw getAbortReason(signal);
+  }
+  let cleanup;
+  const abortPromise = new Promise((_, reject) => {
+    const onAbort = () => {
+      reject(getAbortReason(signal));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    cleanup = () => {
+      signal.removeEventListener("abort", onAbort);
+    };
+  });
+  try {
+    return await Promise.race([promise, abortPromise]);
+  } finally {
+    cleanup?.();
+  }
+}
+function loadProfileClientConfig(selection = {}) {
+  const state = loadProfileState(selection);
+  const profile = state?.profile;
+  if (!state || !profile) {
+    return {};
+  }
+  const apiKey = trimConfigValue(profile.api_key);
+  const oauthAccessToken = trimConfigValue(profile.oauth?.access_token);
+  const oauthRefreshToken = trimConfigValue(profile.oauth?.refresh_token);
+  return {
+    apiUrl: profile.api_url,
+    apiKey,
+    workspaceId: profile.workspace_id,
+    oauthAccessToken,
+    oauthRefreshToken,
+    profileAuth: apiKey || oauthAccessToken || oauthRefreshToken ? new ProfileAuth(state) : void 0
+  };
+}
+function currentAuthHeaderFromProfile(profile) {
+  const oauthAccessToken = trimConfigValue(profile.oauth?.access_token);
+  if (oauthAccessToken) {
+    return { name: "Authorization", value: `Bearer ${oauthAccessToken}` };
+  }
+  if (trimConfigValue(profile.oauth?.refresh_token)) {
+    return void 0;
+  }
+  return authHeaderFromProfile(profile);
+}
+function authHeaderFromProfile(profile) {
+  const oauthAccessToken = trimConfigValue(profile.oauth?.access_token);
+  if (oauthAccessToken) {
+    return { name: "Authorization", value: `Bearer ${oauthAccessToken}` };
+  }
+  const apiKey = trimConfigValue(profile.api_key);
+  if (apiKey) {
+    return { name: "x-api-key", value: apiKey };
+  }
+  return void 0;
+}
+var DEFAULT_API_URL, OAUTH_CLIENT_ID, TOKEN_REFRESH_LEEWAY_MS, TOKEN_REFRESH_TIMEOUT_MS, OAUTH_DISCOVERY_TIMEOUT_MS, WELL_KNOWN_OAUTH_PATH, ProfileAuth;
+var init_profiles = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/profiles.mjs"() {
+    init_env2();
+    init_fs();
+    init_profile_lock();
+    DEFAULT_API_URL = "https://api.smith.langchain.com";
+    OAUTH_CLIENT_ID = "langsmith-cli";
+    TOKEN_REFRESH_LEEWAY_MS = 6e4;
+    TOKEN_REFRESH_TIMEOUT_MS = 1e4;
+    OAUTH_DISCOVERY_TIMEOUT_MS = 5e3;
+    WELL_KNOWN_OAUTH_PATH = "/.well-known/oauth-authorization-server";
+    ProfileAuth = class {
+      constructor(state) {
+        Object.defineProperty(this, "state", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: state
+        });
+        Object.defineProperty(this, "refreshPromise", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: void 0
+        });
+        Object.defineProperty(this, "managedAuthorizationValue", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: void 0
+        });
+        this.rememberProfileAuthHeader(this.currentAuthHeader());
+      }
+      currentAuthHeader() {
+        const header = currentAuthHeaderFromProfile(this.state.profile);
+        this.rememberProfileAuthHeader(header);
+        return header;
+      }
+      async getAuthHeader(fetchImplementation, signal) {
+        if (shouldRefreshProfileToken(this.state.profile)) {
+          if (!this.refreshPromise) {
+            this.refreshPromise = this.refreshOAuthToken(fetchImplementation).finally(() => {
+              this.refreshPromise = void 0;
+            });
+          }
+          await waitForAbortSignal(this.refreshPromise, signal);
+        }
+        const header = authHeaderFromProfile(this.state.profile);
+        this.rememberProfileAuthHeader(header);
+        return header;
+      }
+      isProfileAuthorizationHeader(value) {
+        return value === this.managedAuthorizationValue;
+      }
+      reloadProfile() {
+        try {
+          const config = JSON.parse(readFileSync6(this.state.configPath));
+          const profile = config.profiles?.[this.state.profileName];
+          if (!profile) {
+            return void 0;
+          }
+          this.state.config = config;
+          this.state.profile = profile;
+          return profile;
+        } catch {
+          return void 0;
+        }
+      }
+      async refreshOAuthToken(fetchImplementation) {
+        var _a2;
+        const refreshToken = this.state.profile.oauth?.refresh_token;
+        if (!refreshToken) {
+          return;
+        }
+        const refreshApiUrl = trimConfigValue(this.state.profile.api_url) ?? DEFAULT_API_URL;
+        const deadline = Date.now() + TOKEN_REFRESH_TIMEOUT_MS;
+        let lock2;
+        try {
+          lock2 = await acquireOAuthRefreshLock(this.state.configPath, deadline);
+          const fresh = this.reloadProfile();
+          if (fresh && !shouldRefreshProfileToken(this.state.profile)) {
+            return;
+          }
+          const body = new URLSearchParams({
+            grant_type: "refresh_token",
+            client_id: OAUTH_CLIENT_ID,
+            refresh_token: this.state.profile.oauth?.refresh_token ?? refreshToken
+          });
+          const tokenEndpoint = await resolveTokenEndpoint(refreshApiUrl, fetchImplementation);
+          const response = await fetchImplementation(tokenEndpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: body.toString(),
+            signal: AbortSignal.timeout(Math.max(0, deadline - Date.now()))
+          });
+          if (!response.ok) {
+            return;
+          }
+          const token = await response.json();
+          if (!token.access_token) {
+            return;
+          }
+          applyTokenResponse(this.state.profile, token);
+          (_a2 = this.state.config).profiles ?? (_a2.profiles = {});
+          this.state.config.profiles[this.state.profileName] = this.state.profile;
+          await writeFileAtomic(this.state.configPath, `${JSON.stringify(this.state.config, null, 2)}
+`);
+        } catch {
+          return;
+        } finally {
+          await lock2?.release();
+        }
+      }
+      rememberProfileAuthHeader(header) {
+        this.managedAuthorizationValue = header?.name === "Authorization" ? header.value : void 0;
+      }
     };
   }
 });
@@ -7743,7 +8418,7 @@ function replaceGetterValues(replacer) {
 var LIMIT_REPLACE_NODE, CIRCULAR_REPLACE_NODE, arr, replacerStack, encoder2;
 var init_fast_safe_stringify = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/fast-safe-stringify/index.mjs"() {
-    init_env3();
+    init_env2();
     LIMIT_REPLACE_NODE = "[...]";
     CIRCULAR_REPLACE_NODE = { result: "[Circular]" };
     arr = [];
@@ -8204,7 +8879,7 @@ var init_client2 = __esm({
     init_otel();
     init_async_caller();
     init_messages();
-    init_env3();
+    init_env2();
     init_lib();
     init_client();
     init_uuid2();
@@ -13444,9 +14119,9 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
 
 // node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/env.mjs
 var isEnvTracingEnabled;
-var init_env2 = __esm({
+var init_env3 = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/env.mjs"() {
-    init_env3();
+    init_env2();
     isEnvTracingEnabled = (tracingEnabled) => {
       if (tracingEnabled !== void 0) {
         return tracingEnabled;
@@ -13642,12 +14317,12 @@ var init_run_trees = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/run_trees.mjs"() {
     init_address();
     init_client2();
-    init_env2();
+    init_env3();
     init_error2();
     init_constants2();
     init_context_vars();
-    init_env3();
-    init_env3();
+    init_env2();
+    init_env2();
     init_warn();
     init_uuid2();
     init_src();
@@ -14546,13 +15221,32 @@ var init_run_trees = __esm({
 });
 
 // node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/project.mjs
+var getDefaultProjectName;
 var init_project = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/project.mjs"() {
-    init_env3();
+    init_env2();
+    getDefaultProjectName = () => {
+      return getLangSmithEnvironmentVariable("PROJECT") ?? getEnvironmentVariable("LANGCHAIN_SESSION") ?? // TODO: Deprecate
+      "default";
+    };
   }
 });
 
 // node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/uuid.mjs
+function uuid7() {
+  return v7_default();
+}
+function computeRunIdForSecondaryReplica(runId, projectName) {
+  if (typeof projectName !== "string" || projectName.length === 0) {
+    throw new Error("projectName must be a non-empty string");
+  }
+  assertUuid(runId, "runId");
+  const normalizedRunId = runId.toLowerCase();
+  if (getUuidVersion(normalizedRunId) !== 7) {
+    throw new Error("runId must be a UUID v7");
+  }
+  return nonCryptographicUuid7Deterministic(normalizedRunId, projectName);
+}
 var init_uuid3 = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/uuid.mjs"() {
     init_src();
@@ -14562,6 +15256,13 @@ var init_uuid3 = __esm({
 });
 
 // node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/singletons/traceable.mjs
+function getCurrentRunTree(permitAbsentRunTree = false) {
+  const runTree = AsyncLocalStorageProviderSingleton.getInstance().getStore();
+  if (!permitAbsentRunTree && runTree === void 0) {
+    throw new Error("Could not get the current run tree.\n\nPlease make sure you are calling this method within a traceable function and that tracing is enabled.");
+  }
+  return runTree;
+}
 var MockAsyncLocalStorage, TRACING_ALS_KEY, mockAsyncLocalStorage, AsyncLocalStorageProvider, AsyncLocalStorageProviderSingleton;
 var init_traceable = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/singletons/traceable.mjs"() {
@@ -14590,14 +15291,18 @@ var init_traceable = __esm({
 });
 
 // node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/guard.mjs
+function isTracingEnabled() {
+  return getCurrentRunTree(true)?.tracingEnabled ?? isEnvTracingEnabled();
+}
 var init_guard = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/guard.mjs"() {
-    init_env2();
+    init_env3();
     init_traceable();
   }
 });
 
 // node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/index.mjs
+var LS_MESSAGE_VIEW_EXCLUDE;
 var init_lib = __esm({
   "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/index.mjs"() {
     init_client2();
@@ -14609,654 +15314,60 @@ var init_lib = __esm({
     init_guard();
     init_prompt_cache();
     init_error();
-    init_version2();
+    init_version();
+    LS_MESSAGE_VIEW_EXCLUDE = "ls_message_view_exclude";
   }
 });
 
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/env.mjs
-function getRuntimeEnvironment() {
-  if (runtimeEnvironment === void 0) {
-    const env = getEnv();
-    const releaseEnv = getShas();
-    runtimeEnvironment = {
-      library: "langsmith",
-      runtime: env,
-      sdk: "langsmith-js",
-      sdk_version: VERSION,
-      ...releaseEnv
-    };
-  }
-  return runtimeEnvironment;
-}
-function isSensitiveEnvVarName(key) {
-  const lowered = key.toLowerCase();
-  return EXCLUDED_SUBSTRINGS.some((sub) => lowered.includes(sub));
-}
-function getLangSmithEnvVarsMetadata() {
-  const allEnvVars = getLangSmithEnvironmentVariables();
-  const envVars = {};
-  const excluded = [
-    "LANGCHAIN_API_KEY",
-    "LANGCHAIN_ENDPOINT",
-    "LANGCHAIN_TRACING_V2",
-    "LANGCHAIN_PROJECT",
-    "LANGCHAIN_SESSION",
-    "LANGSMITH_API_KEY",
-    "LANGSMITH_ENDPOINT",
-    "LANGSMITH_TRACING_V2",
-    "LANGSMITH_CONFIG_FILE",
-    "LANGSMITH_PROJECT",
-    "LANGSMITH_SESSION",
-    "LANGSMITH_AGENT_ID",
-    "LANGSMITH_AGENT_ENVIRONMENT"
-  ];
-  for (const [key, value] of Object.entries(allEnvVars)) {
-    if (typeof value === "string" && !excluded.includes(key) && !isSensitiveEnvVarName(key)) {
-      if (key !== "LANGSMITH_REVISION_ID" && key !== "LANGCHAIN_REVISION_ID") {
-        envVars[key] = value;
-      }
-    }
-  }
-  const revisionId = allEnvVars.LANGSMITH_REVISION_ID || allEnvVars.LANGCHAIN_REVISION_ID;
-  if (revisionId) {
-    envVars["revision_id"] = revisionId;
-  }
-  return envVars;
-}
-function getLangSmithEnvironmentVariables() {
-  const envVars = {};
-  try {
-    if (typeof process !== "undefined" && process.env) {
-      for (const [key, value] of Object.entries(process.env)) {
-        if ((key.startsWith("LANGCHAIN_") || key.startsWith("LANGSMITH_")) && value != null) {
-          if (isSensitiveEnvVarName(key) && typeof value === "string") {
-            envVars[key] = value.slice(0, 2) + "*".repeat(value.length - 4) + value.slice(-2);
-          } else {
-            envVars[key] = value;
-          }
-        }
-      }
-    }
-  } catch (_e) {
-  }
-  return envVars;
-}
-function getEnvironmentVariable(name) {
-  try {
-    return typeof process !== "undefined" ? (
-      // eslint-disable-next-line no-process-env
-      process.env?.[name]
-    ) : void 0;
-  } catch (_e) {
-    return void 0;
-  }
-}
-function getLangSmithEnvironmentVariable(name) {
-  return getEnvironmentVariable(`LANGSMITH_${name}`) || getEnvironmentVariable(`LANGCHAIN_${name}`);
-}
-function getShas() {
-  if (cachedCommitSHAs !== void 0) {
-    return cachedCommitSHAs;
-  }
-  const common_release_envs = [
-    "VERCEL_GIT_COMMIT_SHA",
-    "NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA",
-    "COMMIT_REF",
-    "RENDER_GIT_COMMIT",
-    "CI_COMMIT_SHA",
-    "CIRCLE_SHA1",
-    "CF_PAGES_COMMIT_SHA",
-    "REACT_APP_GIT_SHA",
-    "SOURCE_VERSION",
-    "GITHUB_SHA",
-    "TRAVIS_COMMIT",
-    "GIT_COMMIT",
-    "BUILD_VCS_NUMBER",
-    "bamboo_planRepository_revision",
-    "Build.SourceVersion",
-    "BITBUCKET_COMMIT",
-    "DRONE_COMMIT_SHA",
-    "SEMAPHORE_GIT_SHA",
-    "BUILDKITE_COMMIT"
-  ];
-  const shas = {};
-  for (const env of common_release_envs) {
-    const envVar = getEnvironmentVariable(env);
-    if (envVar !== void 0) {
-      shas[env] = envVar;
-    }
-  }
-  cachedCommitSHAs = shas;
-  return shas;
-}
-function getOtelEnabled() {
-  return getEnvironmentVariable("OTEL_ENABLED") === "true" || getLangSmithEnvironmentVariable("OTEL_ENABLED") === "true";
-}
-function resolveTracingMode(configValue) {
-  if (configValue !== void 0) {
-    return configValue;
-  }
-  const envMode = getLangSmithEnvironmentVariable("TRACING_MODE");
-  if (envMode !== void 0 && envMode !== "") {
-    const lower = envMode.toLowerCase();
-    if (!_VALID_TRACING_MODES.has(lower)) {
-      throw new Error(`Invalid LANGSMITH_TRACING_MODE=${JSON.stringify(envMode)}. Must be one of: ${[..._VALID_TRACING_MODES].sort().join(", ")}`);
-    }
-    if (getOtelEnabled()) {
-      console.warn("Both LANGSMITH_TRACING_MODE and the legacy OTEL_ENABLED / LANGSMITH_OTEL_ENABLED env vars are set. LANGSMITH_TRACING_MODE takes precedence.");
-    }
-    return lower;
-  }
-  if (getOtelEnabled()) {
-    return "otel";
-  }
-  return "langsmith";
-}
-var globalEnv, isBrowser, isWebWorker, isJsDom, isDeno, isNode, getEnv, runtimeEnvironment, EXCLUDED_SUBSTRINGS, cachedCommitSHAs, _VALID_TRACING_MODES;
-var init_env3 = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/env.mjs"() {
+// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/index.mjs
+var langsmith_exports = {};
+__export(langsmith_exports, {
+  APIConnectionError: () => APIConnectionError,
+  APIConnectionTimeoutError: () => APIConnectionTimeoutError,
+  APIError: () => APIError,
+  APIPromise: () => APIPromise,
+  APIUserAbortError: () => APIUserAbortError,
+  AgentAddress: () => AgentAddress,
+  AuthenticationError: () => AuthenticationError,
+  BadRequestError: () => BadRequestError,
+  Cache: () => Cache,
+  Client: () => Client,
+  ConflictError: () => ConflictError,
+  EnvAddressError: () => EnvAddressError,
+  EvaluatorAddress: () => EvaluatorAddress,
+  ExperimentAddress: () => ExperimentAddress,
+  InternalServerError: () => InternalServerError,
+  LS_MESSAGE_VIEW_EXCLUDE: () => LS_MESSAGE_VIEW_EXCLUDE,
+  Langsmith: () => Langsmith,
+  LangsmithError: () => LangsmithError,
+  NotFoundError: () => NotFoundError,
+  PagePromise: () => PagePromise,
+  PermissionDeniedError: () => PermissionDeniedError,
+  PromptCache: () => PromptCache,
+  RateLimitError: () => RateLimitError,
+  RunTree: () => RunTree,
+  UnprocessableEntityError: () => UnprocessableEntityError,
+  __version__: () => VERSION,
+  computeRunIdForSecondaryReplica: () => computeRunIdForSecondaryReplica,
+  configureGlobalPromptCache: () => configureGlobalPromptCache,
+  default: () => Langsmith,
+  getDefaultProjectName: () => getDefaultProjectName,
+  isTracingEnabled: () => isTracingEnabled,
+  overrideFetchImplementation: () => overrideFetchImplementation,
+  promptCacheSingleton: () => promptCacheSingleton,
+  toFile: () => toFile,
+  uuid7: () => uuid7,
+  uuid7FromTime: () => uuid7FromTime
+});
+var init_langsmith = __esm({
+  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/index.mjs"() {
+    init_client();
+    init_uploads2();
+    init_api_promise();
+    init_client();
+    init_pagination();
+    init_error();
     init_lib();
-    isBrowser = () => typeof window !== "undefined" && typeof window.document !== "undefined";
-    isWebWorker = () => typeof globalThis === "object" && globalThis.constructor && globalThis.constructor.name === "DedicatedWorkerGlobalScope";
-    isJsDom = () => typeof window !== "undefined" && window.name === "nodejs" || typeof navigator !== "undefined" && navigator.userAgent.includes("jsdom");
-    isDeno = () => typeof globalThis.Deno !== "undefined";
-    isNode = () => typeof process !== "undefined" && typeof process.versions !== "undefined" && typeof process.versions.node !== "undefined" && !isDeno();
-    getEnv = () => {
-      if (globalEnv) {
-        return globalEnv;
-      }
-      if (typeof Bun !== "undefined") {
-        globalEnv = "bun";
-      } else if (isBrowser()) {
-        globalEnv = "browser";
-      } else if (isNode()) {
-        globalEnv = "node";
-      } else if (isWebWorker()) {
-        globalEnv = "webworker";
-      } else if (isJsDom()) {
-        globalEnv = "jsdom";
-      } else if (isDeno()) {
-        globalEnv = "deno";
-      } else {
-        globalEnv = "other";
-      }
-      return globalEnv;
-    };
-    EXCLUDED_SUBSTRINGS = [
-      "key",
-      "secret",
-      "token",
-      "password",
-      "passwd",
-      "pwd",
-      "credential",
-      "email"
-    ];
-    _VALID_TRACING_MODES = /* @__PURE__ */ new Set(["langsmith", "otel"]);
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/profile-lock.mjs
-function sleep2(ms) {
-  return new Promise((resolve2) => setTimeout(resolve2, ms));
-}
-function isEEXIST(err) {
-  return typeof err === "object" && err !== null && err.code === "EEXIST";
-}
-function lockMetadataLines(lockDir) {
-  try {
-    return readFileSync6(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
-  } catch {
-    return void 0;
-  }
-}
-function lockCreatedAtMs(lockDir) {
-  const lines2 = lockMetadataLines(lockDir);
-  if (lines2 && lines2[0] && lines2[0].trim()) {
-    const parsed = Date.parse(lines2[0].trim());
-    if (!Number.isNaN(parsed)) {
-      return parsed;
-    }
-  }
-  return statMtimeMs(lockDir);
-}
-function lockOwner(lockDir) {
-  const lines2 = lockMetadataLines(lockDir);
-  if (lines2 && lines2.length >= 2 && lines2[1].trim()) {
-    return lines2[1].trim();
-  }
-  return void 0;
-}
-async function removeStaleLock(lockDir) {
-  const createdAt = lockCreatedAtMs(lockDir);
-  if (createdAt === void 0 || Date.now() - createdAt <= LOCK_STALE_AFTER_MS) {
-    return false;
-  }
-  await rmRecursive(lockDir);
-  return true;
-}
-async function acquireOAuthRefreshLock(configPath, deadline) {
-  const lockDir = `${configPath}.oauth.lock.lock`;
-  const parent = path2.dirname(lockDir);
-  if (parent) {
-    await mkdir2(parent);
-  }
-  const owner = globalThis.crypto.randomUUID();
-  for (; ; ) {
-    try {
-      await mkdirExclusive(lockDir);
-    } catch (err) {
-      if (!isEEXIST(err)) {
-        throw err;
-      }
-      if (!await removeStaleLock(lockDir)) {
-        if (Date.now() >= deadline) {
-          throw new Error("timed out acquiring OAuth refresh lock");
-        }
-        await sleep2(Math.min(LOCK_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())));
-      }
-      continue;
-    }
-    try {
-      await writeFileAtomic(path2.join(lockDir, LOCK_METADATA_FILE), `${(/* @__PURE__ */ new Date()).toISOString()}
-${owner}
-`);
-    } catch (err) {
-      await rmRecursive(lockDir);
-      throw err;
-    }
-    break;
-  }
-  return {
-    async release() {
-      if (lockOwner(lockDir) === owner) {
-        await rmRecursive(lockDir);
-      }
-    }
-  };
-}
-var LOCK_POLL_INTERVAL_MS, LOCK_STALE_AFTER_MS, LOCK_METADATA_FILE;
-var init_profile_lock = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/profile-lock.mjs"() {
-    init_fs();
-    LOCK_POLL_INTERVAL_MS = 10;
-    LOCK_STALE_AFTER_MS = 1e4;
-    LOCK_METADATA_FILE = "created_at";
-  }
-});
-
-// node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/profiles.mjs
-var profiles_exports = {};
-__export(profiles_exports, {
-  DEFAULT_API_URL: () => DEFAULT_API_URL,
-  ProfileAuth: () => ProfileAuth,
-  hasValue: () => hasValue,
-  loadProfileClientConfig: () => loadProfileClientConfig,
-  resolveTokenEndpoint: () => resolveTokenEndpoint
-});
-function isBrowserLikeRuntime() {
-  const env = getEnv();
-  return env === "browser" || env === "webworker";
-}
-function getProfileConfigPath(selected) {
-  const explicitPath = selected || getEnvironmentVariable("LANGSMITH_CONFIG_FILE");
-  if (explicitPath) {
-    return explicitPath;
-  }
-  const home = getEnvironmentVariable("HOME") ?? getEnvironmentVariable("USERPROFILE");
-  if (!home) {
-    return void 0;
-  }
-  return path2.join(home, ".langsmith", "config.json");
-}
-function resolveProfileName(config, selected) {
-  const chosen = selected || getEnvironmentVariable("LANGSMITH_PROFILE");
-  if (chosen) {
-    return chosen;
-  }
-  if (config.current_profile) {
-    return config.current_profile;
-  }
-  if (config.profiles?.default) {
-    return "default";
-  }
-  return void 0;
-}
-function loadProfileState(selection = {}) {
-  if (isBrowserLikeRuntime()) {
-    return void 0;
-  }
-  const configPath = getProfileConfigPath(selection.configPath);
-  if (!configPath || !existsSync2(configPath)) {
-    return void 0;
-  }
-  try {
-    const config = JSON.parse(readFileSync6(configPath));
-    const profileName = resolveProfileName(config, selection.profile);
-    const profile = profileName ? config.profiles?.[profileName] : void 0;
-    if (!profileName || !profile) {
-      return void 0;
-    }
-    return { configPath, config, profileName, profile };
-  } catch {
-    return void 0;
-  }
-}
-function hasValue(value) {
-  return value !== void 0 && value !== null && value.trim() !== "";
-}
-function trimConfigValue(value) {
-  return value?.trim().replace(/^["']|["']$/g, "");
-}
-function shouldRefreshProfileToken(profile) {
-  const oauth = profile.oauth;
-  if (!oauth?.refresh_token) {
-    return false;
-  }
-  if (!oauth.access_token) {
-    return true;
-  }
-  if (!oauth.expires_at) {
-    return false;
-  }
-  const expiresAt = Date.parse(oauth.expires_at);
-  if (Number.isNaN(expiresAt)) {
-    return false;
-  }
-  return expiresAt <= Date.now() + TOKEN_REFRESH_LEEWAY_MS;
-}
-function normalizeConfigUrl(apiUrl) {
-  let normalized = apiUrl;
-  while (normalized.endsWith("/")) {
-    normalized = normalized.slice(0, -1);
-  }
-  const apiV1Suffix = "/api/v1";
-  return normalized.endsWith(apiV1Suffix) ? normalized.slice(0, -apiV1Suffix.length) : normalized;
-}
-function oauthDiscoveryCandidates(apiUrl) {
-  const given = normalizeConfigUrl(apiUrl);
-  const origin = given.endsWith("/api") ? given.slice(0, -"/api".length) : given;
-  const candidates = [];
-  for (const candidate of [given, `${origin}/api`, origin]) {
-    if (candidate && candidate !== "/api" && !candidates.includes(candidate)) {
-      candidates.push(candidate);
-    }
-  }
-  return candidates;
-}
-function isTrustedOAuthMetadata(doc, base) {
-  const { issuer } = doc;
-  if (typeof issuer !== "string" || issuer.replace(/\/+$/, "") !== base.replace(/\/+$/, "")) {
-    return false;
-  }
-  let issuerUrl;
-  try {
-    issuerUrl = new URL(issuer);
-  } catch {
-    return false;
-  }
-  for (const endpoint of [
-    doc.device_authorization_endpoint,
-    doc.token_endpoint
-  ]) {
-    if (typeof endpoint !== "string" || !endpoint) {
-      return false;
-    }
-    try {
-      const url = new URL(endpoint);
-      if (url.protocol !== issuerUrl.protocol || url.host !== issuerUrl.host) {
-        return false;
-      }
-    } catch {
-      return false;
-    }
-  }
-  return true;
-}
-function oauthMetadataUrls(base) {
-  const appended = `${base}${WELL_KNOWN_OAUTH_PATH}`;
-  let inserted;
-  try {
-    const url = new URL(base);
-    inserted = `${url.origin}${WELL_KNOWN_OAUTH_PATH}${url.pathname === "/" ? "" : url.pathname}`;
-  } catch {
-    return [appended];
-  }
-  return inserted === appended ? [inserted] : [inserted, appended];
-}
-async function fetchOAuthMetadata(url, base, fetchImplementation) {
-  let response;
-  try {
-    response = await fetchImplementation(url, {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(OAUTH_DISCOVERY_TIMEOUT_MS)
-    });
-  } catch {
-    return void 0;
-  }
-  if (!response.ok) {
-    return void 0;
-  }
-  let doc;
-  try {
-    doc = await response.json();
-  } catch {
-    return void 0;
-  }
-  if (!doc || typeof doc !== "object" || !isTrustedOAuthMetadata(doc, base)) {
-    return void 0;
-  }
-  return doc;
-}
-async function resolveTokenEndpoint(apiUrl, fetchImplementation) {
-  for (const base of oauthDiscoveryCandidates(apiUrl)) {
-    for (const url of oauthMetadataUrls(base)) {
-      const doc = await fetchOAuthMetadata(url, base, fetchImplementation);
-      if (doc) {
-        return doc.token_endpoint;
-      }
-    }
-  }
-  return `${normalizeConfigUrl(apiUrl)}/oauth/token`;
-}
-function applyTokenResponse(profile, token) {
-  profile.oauth ?? (profile.oauth = {});
-  if (token.access_token) {
-    profile.oauth.access_token = token.access_token;
-  }
-  if (token.refresh_token) {
-    profile.oauth.refresh_token = token.refresh_token;
-  }
-  if (typeof token.expires_in === "number" && token.expires_in > 0) {
-    profile.oauth.expires_at = new Date(Date.now() + token.expires_in * 1e3).toISOString();
-  }
-}
-function getAbortReason(signal) {
-  return signal.reason ?? new Error("The operation was aborted.");
-}
-async function waitForAbortSignal(promise, signal) {
-  if (!signal) {
-    return promise;
-  }
-  if (signal.aborted) {
-    throw getAbortReason(signal);
-  }
-  let cleanup;
-  const abortPromise = new Promise((_, reject) => {
-    const onAbort = () => {
-      reject(getAbortReason(signal));
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-    cleanup = () => {
-      signal.removeEventListener("abort", onAbort);
-    };
-  });
-  try {
-    return await Promise.race([promise, abortPromise]);
-  } finally {
-    cleanup?.();
-  }
-}
-function loadProfileClientConfig(selection = {}) {
-  const state = loadProfileState(selection);
-  const profile = state?.profile;
-  if (!state || !profile) {
-    return {};
-  }
-  const apiKey = trimConfigValue(profile.api_key);
-  const oauthAccessToken = trimConfigValue(profile.oauth?.access_token);
-  const oauthRefreshToken = trimConfigValue(profile.oauth?.refresh_token);
-  return {
-    apiUrl: profile.api_url,
-    apiKey,
-    workspaceId: profile.workspace_id,
-    oauthAccessToken,
-    oauthRefreshToken,
-    profileAuth: apiKey || oauthAccessToken || oauthRefreshToken ? new ProfileAuth(state) : void 0
-  };
-}
-function currentAuthHeaderFromProfile(profile) {
-  const oauthAccessToken = trimConfigValue(profile.oauth?.access_token);
-  if (oauthAccessToken) {
-    return { name: "Authorization", value: `Bearer ${oauthAccessToken}` };
-  }
-  if (trimConfigValue(profile.oauth?.refresh_token)) {
-    return void 0;
-  }
-  return authHeaderFromProfile(profile);
-}
-function authHeaderFromProfile(profile) {
-  const oauthAccessToken = trimConfigValue(profile.oauth?.access_token);
-  if (oauthAccessToken) {
-    return { name: "Authorization", value: `Bearer ${oauthAccessToken}` };
-  }
-  const apiKey = trimConfigValue(profile.api_key);
-  if (apiKey) {
-    return { name: "x-api-key", value: apiKey };
-  }
-  return void 0;
-}
-var DEFAULT_API_URL, OAUTH_CLIENT_ID, TOKEN_REFRESH_LEEWAY_MS, TOKEN_REFRESH_TIMEOUT_MS, OAUTH_DISCOVERY_TIMEOUT_MS, WELL_KNOWN_OAUTH_PATH, ProfileAuth;
-var init_profiles = __esm({
-  "node_modules/.pnpm/langsmith@0.11.4/node_modules/langsmith/lib/utils/profiles.mjs"() {
-    init_env3();
-    init_fs();
-    init_profile_lock();
-    DEFAULT_API_URL = "https://api.smith.langchain.com";
-    OAUTH_CLIENT_ID = "langsmith-cli";
-    TOKEN_REFRESH_LEEWAY_MS = 6e4;
-    TOKEN_REFRESH_TIMEOUT_MS = 1e4;
-    OAUTH_DISCOVERY_TIMEOUT_MS = 5e3;
-    WELL_KNOWN_OAUTH_PATH = "/.well-known/oauth-authorization-server";
-    ProfileAuth = class {
-      constructor(state) {
-        Object.defineProperty(this, "state", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: state
-        });
-        Object.defineProperty(this, "refreshPromise", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: void 0
-        });
-        Object.defineProperty(this, "managedAuthorizationValue", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: void 0
-        });
-        this.rememberProfileAuthHeader(this.currentAuthHeader());
-      }
-      currentAuthHeader() {
-        const header = currentAuthHeaderFromProfile(this.state.profile);
-        this.rememberProfileAuthHeader(header);
-        return header;
-      }
-      async getAuthHeader(fetchImplementation, signal) {
-        if (shouldRefreshProfileToken(this.state.profile)) {
-          if (!this.refreshPromise) {
-            this.refreshPromise = this.refreshOAuthToken(fetchImplementation).finally(() => {
-              this.refreshPromise = void 0;
-            });
-          }
-          await waitForAbortSignal(this.refreshPromise, signal);
-        }
-        const header = authHeaderFromProfile(this.state.profile);
-        this.rememberProfileAuthHeader(header);
-        return header;
-      }
-      isProfileAuthorizationHeader(value) {
-        return value === this.managedAuthorizationValue;
-      }
-      reloadProfile() {
-        try {
-          const config = JSON.parse(readFileSync6(this.state.configPath));
-          const profile = config.profiles?.[this.state.profileName];
-          if (!profile) {
-            return void 0;
-          }
-          this.state.config = config;
-          this.state.profile = profile;
-          return profile;
-        } catch {
-          return void 0;
-        }
-      }
-      async refreshOAuthToken(fetchImplementation) {
-        var _a2;
-        const refreshToken = this.state.profile.oauth?.refresh_token;
-        if (!refreshToken) {
-          return;
-        }
-        const refreshApiUrl = trimConfigValue(this.state.profile.api_url) ?? DEFAULT_API_URL;
-        const deadline = Date.now() + TOKEN_REFRESH_TIMEOUT_MS;
-        let lock2;
-        try {
-          lock2 = await acquireOAuthRefreshLock(this.state.configPath, deadline);
-          const fresh = this.reloadProfile();
-          if (fresh && !shouldRefreshProfileToken(this.state.profile)) {
-            return;
-          }
-          const body = new URLSearchParams({
-            grant_type: "refresh_token",
-            client_id: OAUTH_CLIENT_ID,
-            refresh_token: this.state.profile.oauth?.refresh_token ?? refreshToken
-          });
-          const tokenEndpoint = await resolveTokenEndpoint(refreshApiUrl, fetchImplementation);
-          const response = await fetchImplementation(tokenEndpoint, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded"
-            },
-            body: body.toString(),
-            signal: AbortSignal.timeout(Math.max(0, deadline - Date.now()))
-          });
-          if (!response.ok) {
-            return;
-          }
-          const token = await response.json();
-          if (!token.access_token) {
-            return;
-          }
-          applyTokenResponse(this.state.profile, token);
-          (_a2 = this.state.config).profiles ?? (_a2.profiles = {});
-          this.state.config.profiles[this.state.profileName] = this.state.profile;
-          await writeFileAtomic(this.state.configPath, `${JSON.stringify(this.state.config, null, 2)}
-`);
-        } catch {
-          return;
-        } finally {
-          await lock2?.release();
-        }
-      }
-      rememberProfileAuthHeader(header) {
-        this.managedAuthorizationValue = header?.name === "Authorization" ? header.value : void 0;
-      }
-    };
   }
 });
 
@@ -15457,7 +15568,7 @@ var LOGIN_TOKEN_TTL_MS = 6e4;
 var LOGIN_CONFIG_PATH = [".langsmith", "config.json"];
 var SIGN_IN_FAILED_LOG = "LangSmith sign-in failed: ";
 var GATEWAY_REFUSED_LOG = "The gateway refused the LangSmith token";
-var REFRESH_FAILED_LOG = "LangSmith refused the login refresh: ";
+var REFRESH_FAILED_LOG = "The login refresh failed: ";
 var NO_LOGIN_REASON = "no saved LangSmith login was found, so run langsmith auth login";
 var UNUSABLE_LOGIN_REASON = "the saved login has no usable access token";
 var EXPIRED_TOKEN_REASON = "the token is expired, so a refresh failed or was refused";
@@ -15734,15 +15845,20 @@ function cliEnvironment() {
 var SignInFailure = class extends Error {
 };
 async function loginToken(config, log = () => void 0) {
-  const { loadProfileClientConfig: loadProfileClientConfig2 } = await Promise.resolve().then(() => (init_profiles(), profiles_exports));
-  const { profileAuth } = loadProfileClientConfig2({
-    configPath: join5(userHome(), ...LOGIN_CONFIG_PATH),
-    profile: config.profile
+  const { Client: Client2 } = await Promise.resolve().then(() => (init_langsmith(), langsmith_exports));
+  const { profileAuth } = Client2.getDefaultClientConfig({
+    profile: config.profile,
+    profileConfigPath: join5(userHome(), ...LOGIN_CONFIG_PATH),
+    preferProfileAuth: true
   });
   if (profileAuth === void 0)
     throw new SignInFailure(NO_LOGIN_REASON);
   const loggingFetch = async (input, init) => {
-    const response = await fetch(input, init);
+    const response = await fetch(input, init).catch((error) => {
+      if (init?.method === "POST")
+        log(`${REFRESH_FAILED_LOG}${describeFailure(error)}`);
+      throw error;
+    });
     if (init?.method === "POST" && !response.ok)
       log(`${REFRESH_FAILED_LOG}${response.status} ${await response.clone().text()}`);
     return response;
@@ -15751,6 +15867,11 @@ async function loginToken(config, log = () => void 0) {
   if (token === void 0 || !BEARER_TOKEN.test(token))
     throw new SignInFailure(UNUSABLE_LOGIN_REASON);
   return token;
+}
+function describeFailure(error) {
+  if (!(error instanceof Error))
+    return String(error);
+  return error.cause instanceof Error ? `${error.message} (${error.cause.message})` : error.message;
 }
 function commandToken(command, timeoutMs = CREDENTIAL_TIMEOUT_MS, signal) {
   return spawnToken(SHELL, ["-c", command], timeoutMs, signal);
