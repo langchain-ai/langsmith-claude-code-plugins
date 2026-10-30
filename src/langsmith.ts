@@ -31,7 +31,7 @@ import {
 import { loadState, getSessionState } from "./state.js";
 import * as logger from "./logger.js";
 import { ASSISTANT_RUN_NAME, SERVER_TOOL_RESULT_TYPE, USER_PROMPT_TURN_NAME } from "./constants.js";
-import { stripContentMarkup } from "./utils/harness.js";
+import { stripContentMarkup, typedSkillName } from "./utils/harness.js";
 import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import {
   repoScopedMetadata,
@@ -296,14 +296,22 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
           dotted_order: toolDottedOrder,
           metadata: codingAgentMetadata({
             sessionId,
-            base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, sessionCwd),
+            base: repoScopedMetadata(
+              turnMetadataBase,
+              toolCall.tool_use.input,
+              llmCall.cwd ?? sessionCwd,
+            ),
             turnId,
             turnNumber: turnNum,
             runtimeVersion,
             agentType,
             toolName: toolCall.tool_use.name,
             runName: toolCall.tool_use.name,
-            skillName: skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input),
+            skillName: skillNameFromTool(
+              toolCall.tool_use.name,
+              toolCall.tool_use.input,
+              toolCall.result?.isError,
+            ),
           }),
         },
         toolMode,
@@ -335,6 +343,10 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
         runtimeVersion,
         agentType,
         modelName: llmCall.model,
+        skillName:
+          llmIndex === 0 && llmCall.userMessagesBefore?.length
+            ? skillNameFromTool("Skill", { skill: typedSkillName(turn.userContent) })
+            : undefined,
         usageMetadata: buildUsageMetadata(llmCall.usage),
         runSpecific: {
           ls_provider: resolveProvider(llmCall.model),

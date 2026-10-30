@@ -501,6 +501,64 @@ describe("traceTurn", () => {
     ]);
   });
 
+  it("names the skill on the model call that receives a typed skill's instructions", async () => {
+    const typed =
+      "<command-message>review-pr</command-message>\n<command-name>/review-pr</command-name>";
+    const body = [[{ type: "text", text: "Review the PR." }]];
+    const turn = (userContent: string): Turn => ({
+      userContent,
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        call([{ type: "text", text: "Done." }], { userMessagesBefore: body }),
+        call([{ type: "text", text: "Again." }]),
+      ],
+      isComplete: true,
+    });
+
+    await traceTurn({ turn: turn(typed), sessionId: "session-123", turnNum: 1 });
+    expect(llmRuns().map((run) => run.extra.metadata.ls_skill_name)).toEqual([
+      "review-pr",
+      undefined,
+    ]);
+
+    mockCreateRun.mockClear();
+    await traceTurn({
+      turn: turn("<command-name>/model</command-name>"),
+      sessionId: "session-123",
+      turnNum: 1,
+    });
+    expect(llmRuns().map((run) => run.extra.metadata.ls_skill_name)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it("leaves a failed Skill call untagged", async () => {
+    const skill = { type: "tool_use" as const, id: "tool_1", name: "Skill", input: { skill: "x" } };
+    const result = (isError: boolean) => ({
+      content: "Unknown skill: x",
+      timestamp: "2025-01-01T00:00:03Z",
+      isError,
+    });
+    const run = async (isError: boolean) => {
+      mockCreateRun.mockClear();
+      await traceTurn({
+        turn: {
+          userContent: "go",
+          userTimestamp: "2025-01-01T00:00:00Z",
+          llmCalls: [call([skill], { toolCalls: [{ tool_use: skill, result: result(isError) }] })],
+          isComplete: true,
+        },
+        sessionId: "session-123",
+        turnNum: 1,
+      });
+      return mockCreateRun.mock.calls.map(([r]) => r).find((r) => r.name === "Skill");
+    };
+
+    expect((await run(true))?.extra.metadata.ls_skill_name).toBeUndefined();
+    expect((await run(false))?.extra.metadata.ls_skill_name).toBe("x");
+  });
+
   it("shows server tool results and non-text tool results as tool messages", async () => {
     const image = {
       type: "image",

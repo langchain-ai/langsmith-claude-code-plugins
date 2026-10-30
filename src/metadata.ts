@@ -2,7 +2,7 @@ import type {
   CodingAgentMetadataOptions,
   CodingAgentRunType,
 } from "@langchain/plugins-base/metadata";
-import { LS_INTEGRATION } from "./constants.js";
+import { LS_INTEGRATION, SKILL_NAME_LEADING_SLASH } from "./constants.js";
 import { LS_INTEGRATION_VERSION } from "./integration-version.js";
 import type { ClaudeMetadataOptions } from "./types.js";
 
@@ -32,8 +32,11 @@ export function codingAgentMetadata(options: ClaudeMetadataOptions): CodingAgent
 export function skillNameFromTool(
   toolName: string | undefined,
   toolInput: unknown,
+  isError?: boolean,
 ): string | undefined {
-  if (toolName !== "Skill") return undefined;
+  if (toolName !== "Skill" || isError) return undefined;
   const skill = (toolInput as { skill?: unknown } | null | undefined)?.skill;
-  return typeof skill === "string" ? skill : undefined;
+  return typeof skill === "string"
+    ? skill.trim().replace(SKILL_NAME_LEADING_SLASH, "") || undefined
+    : undefined;
 }

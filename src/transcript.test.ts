@@ -734,4 +734,26 @@ describe("groupIntoTurns", () => {
     const turns = groupIntoTurns(messages);
     expect(turns[0].userTimestamp).toBe("2025-06-15T12:30:00.500Z");
   });
+
+  it("carries a tool result's error flag and the folder the response was written in", () => {
+    const use = { id: "t1", name: "Skill", input: { skill: "nope" } };
+    const result: ToolResultMessage = {
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "t1", content: "Unknown skill", is_error: true },
+        ],
+      },
+      timestamp: T1,
+    };
+    const turns = groupIntoTurns([
+      makeUser("go"),
+      { ...makeAssistant("msg_1", "a", { toolUses: [use] }), cwd: "/work/repo" },
+      result,
+    ]);
+
+    expect(turns[0].llmCalls[0].cwd).toBe("/work/repo");
+    expect(turns[0].llmCalls[0].toolCalls[0].result?.isError).toBe(true);
+  });
 });

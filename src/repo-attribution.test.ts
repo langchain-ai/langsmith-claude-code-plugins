@@ -19,6 +19,7 @@ const { git, makeDir, makeRepo, root } = sandbox;
 
 const alpha = makeRepo("alpha repo", "trunk-alpha", "Alpha Owner", "git@github.com:acme/alpha.git");
 const beta = makeRepo("beta repo", "trunk-beta", "Beta Owner", "https://gitlab.com/acme/beta.git");
+makeRepo("gamma", "trunk-gamma", "Gamma Owner", "git@github.com:acme/gamma.git");
 const plain = makeDir(root, "plain folder");
 const nested = join(makeDir(alpha, "sub dir"), "nested.txt");
 const betaNested = join(makeDir(beta, "sub dir"), "nested.txt");
@@ -81,6 +82,8 @@ describe("repoScopedMetadata", () => {
     ["a notebook path", { notebook_path: betaSeed }, inBeta],
     ["a bare path", { path: betaSeed }, inBeta],
     ["a relative directory", { cwd: "beta repo" }, inBeta, root],
+    ["a git -C command", { command: "git -C gamma log -1" }, { ls_git_repo: "acme/gamma" }, root],
+    ["an absolute glob pattern", { pattern: join(beta, "**", "*.ts") }, inBeta],
     ["a file nothing has created yet", { file_path: join(alpha, "new", "deep", "x.txt") }, inAlpha],
     ["a file in the git directory", { file_path: join(alpha, ".git", "config") }, inAlpha],
     [
@@ -98,6 +101,12 @@ describe("repoScopedMetadata", () => {
     expect(repoScopedMetadata(base, { path: "notion/page/abc123" }, alpha)).toMatchObject({
       ls_attribution_identifier: "Alpha Owner",
     });
+  });
+
+  it("keeps a chained git -C command with the folder it ran in", () => {
+    const chained = { command: "git -C gamma status && ls" };
+
+    expect(repoScopedMetadata(noRepository, chained, root)).not.toHaveProperty("ls_git_repo");
   });
 
   it("attributes a shell command to the repository it ran in", () => {

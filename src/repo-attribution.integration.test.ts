@@ -88,7 +88,12 @@ async function hook(
 }
 
 /** Calls only the Stop hook traces: one reaching into the other repository, one relative to the session's own. */
-function transcript(reaching: string, editing = "seed.txt", shell = false): string {
+function transcript(
+  reaching: string,
+  editing = "seed.txt",
+  shell = false,
+  assistantCwd?: string,
+): string {
   const calls = [
     { type: "tool_use", id: "reaching", name: "Glob", input: { path: reaching } },
     { type: "tool_use", id: "relative", name: "Edit", input: { file_path: editing } },
@@ -101,6 +106,7 @@ function transcript(reaching: string, editing = "seed.txt", shell = false): stri
     {
       type: "assistant",
       timestamp: at(1),
+      ...(assistantCwd ? { cwd: assistantCwd } : {}),
       message: {
         id: "msg_1",
         role: "assistant",
@@ -230,6 +236,24 @@ describe("a turn working across repositories", () => {
       expect(toolRun("Glob")).toMatchObject({ ls_git_repo: "acme/b" });
       expect(toolRun("Bash").ls_git_repo).toBeUndefined();
       expect(toolRun("Bash").ls_attribution_identifier).toBeUndefined();
+    });
+  }, 120_000);
+
+  it("attributes a shell command to the folder it ran in rather than where the session ended", async () => {
+    const session = "shell-moved";
+    const path = join(sandbox.root, `${session}.jsonl`);
+    const base = { session_id: session, transcript_path: path, cwd: alpha };
+
+    await prompt(base);
+    writeFileSync(
+      path,
+      transcript(join(beta, "seed.txt"), join(alpha, "seed.txt"), true, sandbox.root),
+    );
+    await stop(base);
+
+    await settled(() => {
+      expect(toolRun("Glob")).toMatchObject({ ls_git_repo: "acme/b" });
+      expect(toolRun("Bash").ls_git_repo).toBeUndefined();
     });
   }, 120_000);
 

@@ -23700,6 +23700,10 @@ var HARNESS_COMMAND = /<command-name>([\s\S]*?)<\/command-name>\s*(?:<command-ar
 var HARNESS_TASK_NOTIFICATION = /^(?:\s*<task-notification>\s*<task-id>(?:(?!<\/task-notification>)[\s\S])*<\/task-notification>)+\s*$/;
 var HARNESS_TASK_NOTIFICATION_KEPT = /<(summary|result)>([\s\S]*?)<\/\1>/g;
 var HARNESS_UNWRAPPED_TAG = /<\/?(bash-input|bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|<\/?pasted_content(\s[^>]*)?>/g;
+var SKILL_COMMAND_OPENING = "<command-message>";
+var SKILL_NAME_LEADING_SLASH = /^\//;
+var GIT_DIR_COMMAND = /^\s*git\s+-C\s+([^\s"'$`\\;&|<>()*?~]+)(?![^]*[;&|\n])/;
+var GLOB_CHARACTER = /[*?[{]/;
 var SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
 var WORKFLOW_TOOL_NAME = "Workflow";
 var WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
@@ -23857,7 +23861,7 @@ function attributionReady(metadata) {
 }
 
 // dist/src/repo-attribution.js
-import { dirname as dirname17, join as join25 } from "node:path";
+import { dirname as dirname18, join as join25 } from "node:path";
 
 // node_modules/.pnpm/@langchain+plugins-base@0.5.1_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/git/attribution.js
 import { isAbsolute as isAbsolute4 } from "node:path";
@@ -24514,12 +24518,15 @@ function loadConfig(options) {
 
 // dist/src/repo-attribution-paths.js
 import { existsSync as existsSync3 } from "node:fs";
-import { isAbsolute as isAbsolute5, resolve as resolve14 } from "node:path";
+import { dirname as dirname17, isAbsolute as isAbsolute5, resolve as resolve14 } from "node:path";
 function toolPathFromInput(toolInput, sessionCwd) {
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
     return { namedAPath: false };
   }
-  const input = toolInput;
+  const named = toolInput;
+  const gitDir = typeof named.command === "string" ? GIT_DIR_COMMAND.exec(named.command)?.[1] : "";
+  const globDir = typeof named.pattern === "string" && isAbsolute5(named.pattern) && named.path === void 0 ? dirname17(`${named.pattern.split(GLOB_CHARACTER)[0]}_`) : "";
+  const input = gitDir || globDir && existsSync3(globDir) ? { ...named, path: gitDir || globDir } : named;
   let namedAPath = false;
   for (const key of TOOL_PATH_INPUT_KEYS) {
     const value = input[key];
@@ -24541,7 +24548,7 @@ function toolPathFromInput(toolInput, sessionCwd) {
 var attributor;
 function repositoryAttributor() {
   attributor ??= createRepositoryAttributor({
-    githubLoginMarkerPath: join25(dirname17(resolveStateFilePath()), GH_LOGIN_MARKER_FILE)
+    githubLoginMarkerPath: join25(dirname18(resolveStateFilePath()), GH_LOGIN_MARKER_FILE)
   });
   return attributor;
 }
@@ -24696,7 +24703,7 @@ import { randomUUID as randomUUID8 } from "node:crypto";
 
 // dist/src/tracing-policy.js
 import { mkdir as mkdir6 } from "node:fs/promises";
-import { dirname as dirname18 } from "node:path";
+import { dirname as dirname19 } from "node:path";
 
 // dist/src/utils/records.js
 function isRecord(value) {
@@ -24744,7 +24751,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     throw new Error("A nonempty session ID and a full/metadata tracing mode are required");
   }
   const path3 = tracingPolicyPath(stateFilePath);
-  await mkdir6(dirname18(path3), { recursive: true });
+  await mkdir6(dirname19(path3), { recursive: true });
   return updatePolicyFile(path3, POLICY_FILE, (policy) => {
     policy.threads = { ...policy.threads, [sessionId]: mode };
   });
@@ -25086,6 +25093,7 @@ function mergeAssistantChunks(chunks) {
     // SSE usage is cumulative; last chunk has final totals.
     effort: chunks.find((c) => c.effort)?.effort,
     // Only some chunks carry effort; take the first.
+    cwd: first.cwd,
     startTime: first.timestamp,
     endTime: last.timestamp
   };
@@ -25117,6 +25125,7 @@ function findToolResult(toolUseId, toolResults) {
         return {
           content,
           timestamp: msg.timestamp,
+          isError: block.is_error,
           agentId: msg.toolUseResult?.agentId
         };
       }
@@ -25153,7 +25162,7 @@ function groupIntoTurns(messages) {
         const result = findToolResult(tu.id, toolResults);
         return {
           tool_use: tu,
-          result: result ? { content: result.content, timestamp: result.timestamp } : void 0,
+          result: result ? { content: result.content, timestamp: result.timestamp, isError: result.isError } : void 0,
           agentId: result?.agentId
         };
       });
@@ -25162,6 +25171,7 @@ function groupIntoTurns(messages) {
         model: merged.model,
         usage: merged.usage,
         effort: merged.effort,
+        cwd: merged.cwd,
         startTime: merged.startTime,
         endTime: merged.endTime,
         toolCalls,
@@ -25240,6 +25250,11 @@ function isPayloadForHook(input, event) {
 function stripHarnessMarkup(text) {
   return text.replace(HARNESS_DROPPED_ELEMENT, "").replace(HARNESS_COMMAND, (_, name, args = "") => `${name.trim()} ${args.trim()}`.trim()).replace(HARNESS_TASK_NOTIFICATION, (block) => [...block.matchAll(HARNESS_TASK_NOTIFICATION_KEPT)].map((m) => m[2].trim()).join("\n\n")).replace(HARNESS_UNWRAPPED_TAG, "").trim();
 }
+function typedSkillName(content) {
+  if (typeof content !== "string" || !content.startsWith(SKILL_COMMAND_OPENING))
+    return void 0;
+  return [...content.matchAll(HARNESS_COMMAND)][0]?.[1];
+}
 function stripContentMarkup(content) {
   if (typeof content === "string")
     return stripHarnessMarkup(content) || void 0;
@@ -25270,11 +25285,11 @@ function codingAgentMetadata(options) {
     threadId: sessionId
   };
 }
-function skillNameFromTool(toolName, toolInput) {
-  if (toolName !== "Skill")
+function skillNameFromTool(toolName, toolInput, isError2) {
+  if (toolName !== "Skill" || isError2)
     return void 0;
   const skill = toolInput?.skill;
-  return typeof skill === "string" ? skill : void 0;
+  return typeof skill === "string" ? skill.trim().replace(SKILL_NAME_LEADING_SLASH, "") || void 0 : void 0;
 }
 
 // dist/src/engine-session.js
@@ -25559,14 +25574,14 @@ async function traceTurn(options) {
         dotted_order: toolDottedOrder,
         metadata: codingAgentMetadata({
           sessionId,
-          base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, sessionCwd),
+          base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, llmCall.cwd ?? sessionCwd),
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
           agentType,
           toolName: toolCall.tool_use.name,
           runName: toolCall.tool_use.name,
-          skillName: skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input)
+          skillName: skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input, toolCall.result?.isError)
         })
       }, toolMode);
       if (toolCall.agentId) {
@@ -25588,6 +25603,7 @@ async function traceTurn(options) {
       runtimeVersion,
       agentType,
       modelName: llmCall.model,
+      skillName: llmIndex === 0 && llmCall.userMessagesBefore?.length ? skillNameFromTool("Skill", { skill: typedSkillName(turn.userContent) }) : void 0,
       usageMetadata: buildUsageMetadata(llmCall.usage),
       runSpecific: {
         ls_provider: resolveProvider(llmCall.model),
@@ -27307,10 +27323,10 @@ async function runQueuedClosings(workerConfig, sessionId) {
 
 // dist/src/legacy-import.js
 import { createHmac } from "node:crypto";
-import { basename as basename4, dirname as dirname19, join as join26 } from "node:path";
+import { basename as basename4, dirname as dirname20, join as join26 } from "node:path";
 function legacyRuns(config) {
   const origin = legacyOrigin(config);
-  const root = dirname19(config.stateFilePath);
+  const root = dirname20(config.stateFilePath);
   const scan = { runs: [], settled: [], unreadable: [] };
   const { runs } = scan;
   for (const [sessionId, file] of legacyFiles(join26(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
@@ -27428,7 +27444,7 @@ function readTurnRecord(path3) {
 }
 
 // dist/src/legacy-sweep.js
-import { join as join27, dirname as dirname20 } from "node:path";
+import { join as join27, dirname as dirname21 } from "node:path";
 function idleMs(info, now) {
   return info ? now - info.mtimeMs : 0;
 }
@@ -27466,7 +27482,7 @@ function sweepFolder(path3, removable, now) {
   return aged;
 }
 function sweepLegacyLeftovers(stateFilePath, removable, now = Date.now()) {
-  const root = dirname20(stateFilePath);
+  const root = dirname21(stateFilePath);
   return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join27(root, folder), removable, now), 0);
 }
 

@@ -103,6 +103,10 @@ const HARNESS_TASK_NOTIFICATION =
 const HARNESS_TASK_NOTIFICATION_KEPT = /<(summary|result)>([\s\S]*?)<\/\1>/g;
 const HARNESS_UNWRAPPED_TAG =
   /<\/?(bash-input|bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|<\/?pasted_content(\s[^>]*)?>/g;
+const SKILL_COMMAND_OPENING = "<command-message>";
+const SKILL_NAME_LEADING_SLASH = /^\//;
+const GIT_DIR_COMMAND = /^\s*git\s+-C\s+([^\s"'$`\\;&|<>()*?~]+)(?![^]*[;&|\n])/;
+const GLOB_CHARACTER = /[*?[{]/;
 const SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
 
 const WORKFLOW_TOOL_NAME = "Workflow";
@@ -168,6 +172,10 @@ export {
   TASK_NOTIFICATION_OPENING,
   HARNESS_DROPPED_ELEMENT,
   HARNESS_COMMAND,
+  SKILL_COMMAND_OPENING,
+  SKILL_NAME_LEADING_SLASH,
+  GIT_DIR_COMMAND,
+  GLOB_CHARACTER,
   HARNESS_TASK_NOTIFICATION,
   HARNESS_TASK_NOTIFICATION_KEPT,
   HARNESS_UNWRAPPED_TAG,
