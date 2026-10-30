@@ -25,6 +25,7 @@ import {
   KEY_HEADER,
   MAX_REQUEST_BYTES,
   NO_LOGIN_REASON,
+  REFRESH_FAILED_LOG,
   SIGN_IN_FAILED_LOG,
   UNUSABLE_LOGIN_REASON,
   UPSTREAM,
@@ -831,6 +832,19 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     const saved = JSON.parse(readFileSync(join(home, ".langsmith", "config.json"), "utf8"));
     expect(saved.profiles.test.oauth.access_token).toBe(token);
     expect(saved.profiles.test.oauth.refresh_token).toBe("rotated-1");
+  });
+  it("logs LangSmith's reply when it refuses a login refresh", async () => {
+    const server = http.createServer((req, res) => {
+      req.resume();
+      res.writeHead(req.method === "POST" ? 400 : 404).end('{"error":"invalid_grant"}');
+    });
+    saveLogin(home, {
+      api_url: `http://127.0.0.1:${await listen(server)}`,
+      oauth: { access_token: jwt(1), refresh_token: "first", expires_at: "2020-01-01T00:00:00Z" },
+    });
+    const log = vi.fn();
+    await loginToken(base, log);
+    expect(log.mock.calls).toEqual([[REFRESH_FAILED_LOG + '400 {"error":"invalid_grant"}']]);
   });
   it.each([
     ["no login", undefined, NO_LOGIN_REASON],

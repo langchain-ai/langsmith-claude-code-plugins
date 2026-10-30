@@ -295,7 +295,7 @@ export function createProxy(
   const command = config.identityTokenCommand;
   const fetchToken =
     command === undefined
-      ? (options.token ?? (() => loginToken(config)))
+      ? (options.token ?? (() => loginToken(config, options.log)))
       : () => commandToken(command, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal);
   const ttlMs =
     command === undefined

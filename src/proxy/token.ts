@@ -14,6 +14,7 @@ import {
   LOGIN_TOKEN_TTL_MS,
   MAX_TOKEN_BYTES,
   NO_LOGIN_REASON,
+  REFRESH_FAILED_LOG,
   REJECTION_RECHECK_MS,
   RETRY_AFTER_MS,
   SHELL,
@@ -30,14 +31,23 @@ export function cliEnvironment(): NodeJS.ProcessEnv {
 }
 export class SignInFailure extends Error {}
 
-export async function loginToken(config: ProxyConfig): Promise<string> {
+export async function loginToken(
+  config: ProxyConfig,
+  log: (message: string) => void = () => undefined,
+): Promise<string> {
   const { loadProfileClientConfig } = await import("langsmith/lib/utils/profiles");
   const { profileAuth } = loadProfileClientConfig({
     configPath: join(userHome(), ...LOGIN_CONFIG_PATH),
     profile: config.profile,
   });
   if (profileAuth === undefined) throw new SignInFailure(NO_LOGIN_REASON);
-  const token = bearerCredential((await profileAuth.getAuthHeader(fetch))?.value);
+  const loggingFetch: typeof fetch = async (input, init) => {
+    const response = await fetch(input, init);
+    if (init?.method === "POST" && !response.ok)
+      log(`${REFRESH_FAILED_LOG}${response.status} ${await response.clone().text()}`);
+    return response;
+  };
+  const token = bearerCredential((await profileAuth.getAuthHeader(loggingFetch))?.value);
   if (token === undefined || !BEARER_TOKEN.test(token))
     throw new SignInFailure(UNUSABLE_LOGIN_REASON);
   return token;

@@ -15457,6 +15457,7 @@ var LOGIN_TOKEN_TTL_MS = 6e4;
 var LOGIN_CONFIG_PATH = [".langsmith", "config.json"];
 var SIGN_IN_FAILED_LOG = "LangSmith sign-in failed: ";
 var GATEWAY_REFUSED_LOG = "The gateway refused the LangSmith token";
+var REFRESH_FAILED_LOG = "LangSmith refused the login refresh: ";
 var NO_LOGIN_REASON = "no saved LangSmith login was found, so run langsmith auth login";
 var UNUSABLE_LOGIN_REASON = "the saved login has no usable access token";
 var EXPIRED_TOKEN_REASON = "the token is expired, so a refresh failed or was refused";
@@ -15732,7 +15733,7 @@ function cliEnvironment() {
 }
 var SignInFailure = class extends Error {
 };
-async function loginToken(config) {
+async function loginToken(config, log = () => void 0) {
   const { loadProfileClientConfig: loadProfileClientConfig2 } = await Promise.resolve().then(() => (init_profiles(), profiles_exports));
   const { profileAuth } = loadProfileClientConfig2({
     configPath: join5(userHome(), ...LOGIN_CONFIG_PATH),
@@ -15740,7 +15741,13 @@ async function loginToken(config) {
   });
   if (profileAuth === void 0)
     throw new SignInFailure(NO_LOGIN_REASON);
-  const token = bearerCredential((await profileAuth.getAuthHeader(fetch))?.value);
+  const loggingFetch = async (input, init) => {
+    const response = await fetch(input, init);
+    if (init?.method === "POST" && !response.ok)
+      log(`${REFRESH_FAILED_LOG}${response.status} ${await response.clone().text()}`);
+    return response;
+  };
+  const token = bearerCredential((await profileAuth.getAuthHeader(loggingFetch))?.value);
   if (token === void 0 || !BEARER_TOKEN.test(token))
     throw new SignInFailure(UNUSABLE_LOGIN_REASON);
   return token;
@@ -16092,7 +16099,7 @@ function createProxy(config, options = {}) {
   const upstreamOrigin = new URL(endpoints(config).gatewayUrl);
   const credentialAbort = new AbortController();
   const command = config.identityTokenCommand;
-  const fetchToken = command === void 0 ? options.token ?? (() => loginToken(config)) : () => commandToken(command, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal);
+  const fetchToken = command === void 0 ? options.token ?? (() => loginToken(config, options.log)) : () => commandToken(command, CREDENTIAL_TIMEOUT_MS, credentialAbort.signal);
   const ttlMs = command === void 0 ? LOGIN_TOKEN_TTL_MS : config.identityTokenTtlMs ?? DEFAULT_IDENTITY_TOKEN_TTL_MS;
   const tokens = new TokenCache(fetchToken, Date.now, ttlMs, options.log);
   const unavailable = () => command === void 0 ? loginGuidance(config) : commandGuidance(config);
