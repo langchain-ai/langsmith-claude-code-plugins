@@ -3,9 +3,10 @@ import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import { rootFromGitMarker } from "@langchain/plugins-base/git";
 import {
-  BASH_ABSOLUTE_PATH,
   BASH_GIT_DIRECTORY,
-  BASH_LEADING_CD,
+  BASH_CD_STEP,
+  BASH_PLAIN_STEP,
+  GLOB_TOOL_NAME,
   HOME_SHORTHAND,
   TOOL_PATH_INPUT_KEYS,
 } from "./constants.js";
@@ -26,27 +27,41 @@ function existingPath(path: string | undefined, from: string | undefined): strin
   return resolved && existsSync(resolved) ? resolved : undefined;
 }
 
-function firstGroup(match: RegExpMatchArray | null): string | undefined {
-  return match?.slice(1).find((group) => group !== undefined);
+function folderArgument(match: RegExpMatchArray): string {
+  return match[1] ?? match[2] ?? match[3];
 }
 
 function pathFromBashCommand(command: string, sessionCwd?: string): string | undefined {
-  const enteredDirectory = existingPath(firstGroup(command.match(BASH_LEADING_CD)), sessionCwd);
-  const gitDirectory = existingPath(firstGroup(command.match(BASH_GIT_DIRECTORY)), sessionCwd);
-  const named = gitDirectory ?? enteredDirectory;
-  if (named) return named;
-  for (const match of command.matchAll(BASH_ABSOLUTE_PATH)) {
-    const candidate = firstGroup(match);
-    if (candidate && insideGitRepository(candidate)) return candidate;
+  let current: string | undefined;
+  let rest = command;
+  for (;;) {
+    const from = current ?? sessionCwd;
+    const git = rest.match(BASH_GIT_DIRECTORY);
+    if (git) return existingPath(folderArgument(git), from) ?? current;
+    const cd = rest.match(BASH_CD_STEP);
+    if (cd) {
+      const entered = existingPath(folderArgument(cd), from);
+      if (!entered) return current;
+      current = entered;
+      if (cd[4] !== "&&") return current;
+      rest = rest.slice(cd[0].length);
+      continue;
+    }
+    const plain = rest.match(BASH_PLAIN_STEP);
+    if (!plain) return current;
+    rest = rest.slice(plain[0].length);
   }
-  return undefined;
 }
 
-function pathFromPattern(pattern: string): string | undefined {
+function pathFromGlobPattern(pattern: string): string | undefined {
   return isAbsolute(pattern) && insideGitRepository(pattern) ? pattern : undefined;
 }
 
-export function toolPathFromInput(toolInput: unknown, sessionCwd?: string): ToolPathLookup {
+export function toolPathFromInput(
+  toolInput: unknown,
+  sessionCwd?: string,
+  toolName?: string,
+): ToolPathLookup {
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
     return { namedAPath: false };
   }
@@ -62,8 +77,8 @@ export function toolPathFromInput(toolInput: unknown, sessionCwd?: string): Tool
     if (existsSync(resolved)) return { path: resolved, namedAPath };
   }
   const inferred =
-    typeof input.pattern === "string"
-      ? pathFromPattern(input.pattern)
+    toolName === GLOB_TOOL_NAME && typeof input.pattern === "string"
+      ? pathFromGlobPattern(input.pattern)
       : typeof input.command === "string"
         ? pathFromBashCommand(input.command, sessionCwd)
         : undefined;

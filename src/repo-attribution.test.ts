@@ -99,19 +99,46 @@ describe("repoScopedMetadata", () => {
     const noRepoKeys = { cwd: session.cwd, ls_integration: session.ls_integration };
     const missing = join(root, "no such folder");
 
-    it.each<[name: string, input: Record<string, string>]>([
+    it.each<[name: string, input: Record<string, string>, tool?: string]>([
       ["git -C with a quoted folder", { command: `git -C "${beta}" log` }],
       ["git -C with a relative folder", { command: "git -C '../beta repo' log" }],
       ["a leading cd into a quoted folder", { command: `cd "${beta}" && ls` }],
-      ["a leading cd ended by a semicolon", { command: `cd '${beta}'; ls` }],
-      ["a relative leading cd", { command: 'cd "../beta repo" && ls' }],
-      ["an absolute file argument", { command: `cat "${betaSeed}"` }],
-      ["the first repository an argument names", { command: `diff "${betaSeed}" "${alphaSeed}"` }],
-      ["a Glob pattern with a wildcard", { pattern: `${beta}/**/*.txt` }],
-      ["a Glob pattern ending in a partial file name", { pattern: `${beta}/seed*` }],
-      ["a Grep pattern given as a file", { pattern: betaSeed }],
-    ])("attributes %s to the repository it names", (_name, input) => {
-      expect(repoScopedMetadata(inSession(), input, alpha)).toMatchObject(inBeta);
+      ["a cd ended by a semicolon", { command: `cd '${beta}'; ls` }],
+      ["a relative cd", { command: 'cd "../beta repo" && ls' }],
+      ["the last of several cds", { command: `cd "${alpha}" && ls && cd "${beta}" && git status` }],
+      ["a cd after a plain command", { command: `ls -la && cd "${beta}" && git status` }],
+      ["a git -C after a cd", { command: `cd "${alpha}" && git -C "${beta}" log` }],
+      ["a Glob pattern with a wildcard", { pattern: `${beta}/**/*.txt` }, "Glob"],
+      ["a Glob pattern ending in a partial file name", { pattern: `${beta}/seed*` }, "Glob"],
+    ])("attributes %s to the repository it names", (_name, input, tool) => {
+      expect(repoScopedMetadata(inSession(), input, alpha, tool)).toMatchObject(inBeta);
+    });
+
+    it.each<[name: string, command: string]>([
+      ["a semicolon ends the chain after the first cd", `cd "${alpha}"; cd "${beta}" && ls`],
+      ["a cd into nothing keeps the folder before it", `cd "${alpha}" && cd "${missing}" && ls`],
+      [
+        "a git -C into nothing keeps the folder before it",
+        `cd "${alpha}" && git -C "${missing}" log`,
+      ],
+    ])("keeps the earlier folder when %s", (_name, command) => {
+      expect(repoScopedMetadata(inSession(), { command }, plain)).toMatchObject(staysInAlpha);
+    });
+
+    it("resolves a relative git -C against the folder a cd entered", () => {
+      const command = 'cd "alpha repo" && git -C "../beta repo" log';
+
+      expect(repoScopedMetadata(inSession(), { command }, root)).toMatchObject(inBeta);
+    });
+
+    it.each<[name: string, command: string]>([
+      ["a command before a semicolon", `echo hi; cd "${beta}" && ls`],
+      ["a pipe", `ls | head && cd "${beta}"`],
+      ["an or", `false || cd "${beta}"`],
+      ["a subshell", `(cd "${beta}" && ls)`],
+      ["a redirect", `echo hi > out.txt && cd "${beta}"`],
+    ])("stops following cds at %s", (_name, command) => {
+      expect(repoScopedMetadata(inSession(), { command }, alpha)).toMatchObject(staysInAlpha);
     });
 
     it("reads ~ in a folder the command enters as the person's home", () => {
@@ -126,33 +153,35 @@ describe("repoScopedMetadata", () => {
       ).toMatchObject(inBeta);
     });
 
-    it("lets git -C win over the folder a leading cd entered", () => {
-      const command = `cd "${alpha}" && git -C "${beta}" log`;
-
-      expect(repoScopedMetadata(inSession(), { command }, alpha)).toMatchObject(inBeta);
-    });
-
     it("attributes a shell command that entered a folder outside every repository to none", () => {
       expect(repoScopedMetadata(inSession(), { command: `cd "${plain}" && ls` }, alpha)).toEqual(
         noRepoKeys,
       );
     });
 
-    it.each<[name: string, input: Record<string, string>]>([
+    it.each<[name: string, input: Record<string, string>, tool?: string]>([
+      ["a commit message naming a path", { command: `git commit -m "see ${betaSeed}"` }],
+      ["an echo naming a path", { command: `echo "${betaSeed}"` }],
+      ["a grep naming a path", { command: `grep -r foo "${beta}"` }],
+      ["a cat of a path", { command: `cat "${betaSeed}"` }],
+      ["a curl body naming a path", { command: `curl -d "${betaSeed}" http://localhost:1` }],
+      ["a docker volume that looks like a drive", { command: "docker run -v x:/data image" }],
+      ["a variable that looks like a drive path", { command: "PATH=C:\\tools ls" }],
       ["a path in no repository", { command: `ls "${join(plain, "x.txt")}"` }],
-      ["a system path", { command: "cat /etc/hosts" }],
       ["a folder nothing sits at", { command: `cd "${missing}" && ls` }],
       ["a git -C folder nothing sits at", { command: `git -C "${missing}" log` }],
-      ["a Grep regex that looks like a path", { pattern: "/api/v1/users" }],
-      ["a Glob pattern outside every repository", { pattern: `${plain}/*.txt` }],
-      ["a relative Glob pattern", { pattern: "**/*.txt" }],
-    ])("keeps the session repository for %s", (_name, input) => {
-      expect(repoScopedMetadata(inSession(), input, alpha)).toMatchObject(staysInAlpha);
+      ["a Grep regex given as a path", { pattern: betaSeed }, "Grep"],
+      ["a Glob pattern outside every repository", { pattern: `${plain}/*.txt` }, "Glob"],
+      ["a relative Glob pattern", { pattern: "**/*.txt" }, "Glob"],
+    ])("keeps the session repository for %s", (_name, input, tool) => {
+      expect(repoScopedMetadata(inSession(), input, alpha, tool)).toMatchObject(staysInAlpha);
     });
   });
 
   it("reads a relative pattern as no path rather than against the hook's own folder", () => {
-    expect(toolPathFromInput({ pattern: "src/**/*.ts" }, alpha)).toEqual({ namedAPath: false });
+    expect(toolPathFromInput({ pattern: "src/**/*.ts" }, alpha, "Glob")).toEqual({
+      namedAPath: false,
+    });
   });
 
   it("keeps the session repository's author on a tool naming a path nothing sits at", () => {
@@ -197,7 +226,7 @@ describe("repoScopedMetadata", () => {
     vi.stubEnv("CC_LANGSMITH_METADATA", '{"ls_git_repo":"acme/pinned"}');
     const pinned = loadConfig({ cwd: alpha }).customMetadata;
     const uploaderBase = sessionScopedMetadata(pinned, alpha);
-    const turnBase = turnScopedMetadata(uploaderBase, [{ file_path: alphaSeed }], alpha);
+    const turnBase = turnScopedMetadata(uploaderBase, [{ input: { file_path: alphaSeed } }], alpha);
 
     for (const base of [pinned, uploaderBase, turnBase]) {
       for (const path of [alphaSeed, betaSeed, join(plain, "x.txt")]) {
@@ -232,6 +261,12 @@ describe("turnScopedMetadata", () => {
 
   type TurnCase = [name: string, base: Row, inputs: unknown[], want: Row];
 
+  it("reads a relative path against the folder its own tool ran in", () => {
+    const tools = [{ input: { file_path: "seed.txt" }, cwd: beta }];
+
+    expect(turnScopedMetadata(noRepository, tools, root)).toEqual(filledFromBeta);
+  });
+
   it.each<TurnCase>([
     [
       "the repository its first tool lands in",
@@ -246,6 +281,8 @@ describe("turnScopedMetadata", () => {
       filledFromBeta,
     ],
   ])("gives the turn %s", (_name, base, inputs, want) => {
-    expect(turnScopedMetadata(base, inputs, base.cwd as string)).toEqual(want);
+    const tools = inputs.map((input) => ({ input }));
+
+    expect(turnScopedMetadata(base, tools, base.cwd as string)).toEqual(want);
   });
 });

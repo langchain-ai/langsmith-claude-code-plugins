@@ -230,6 +230,12 @@ export interface ToolPathLookup {
   namedAPath: boolean;
 }
 
+export interface TurnTool {
+  input: unknown;
+  name?: string;
+  cwd?: string;
+}
+
 export interface ToolOrigin extends ToolPathLookup {
   cwd?: string;
 }

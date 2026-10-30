@@ -1008,19 +1008,21 @@ describe("traceTurn repository attribution", () => {
   }
 
   it("gives each tool the repository it touched rather than the turn's", async () => {
-    const [onBeta, onAlpha, onShell] = await traceTools(
+    const [onBeta, onAlpha, onShell, onGlob] = await traceTools(
       plain,
       llmCall(
         plain,
         toolCall("t1", "Read", { file_path: join(beta, "seed.txt") }),
         toolCall("t2", "Read", { file_path: join(alpha, "seed.txt") }),
         toolCall("t3", "Bash", { command: `git -C "${alpha}" log` }),
+        toolCall("t4", "Glob", { pattern: join(beta, "**", "*.txt") }),
       ),
     );
 
     expect(onBeta.ls_git_repo).toBe("acme/beta");
     expect(onAlpha.ls_git_repo).toBe("acme/alpha");
     expect(onShell.ls_git_repo).toBe("acme/alpha");
+    expect(onGlob.ls_git_repo).toBe("acme/beta");
   });
 
   it("gives a tool the folder its own call ran in rather than where the session ended", async () => {
@@ -1032,5 +1034,21 @@ describe("traceTurn repository attribution", () => {
 
     expect(before.ls_git_repo).toBeUndefined();
     expect(after.ls_git_repo).toBe("acme/beta");
+  });
+
+  it("labels the turn from the folder its first call started in", async () => {
+    await traceTools(plain, llmCall(alpha, toolCall("t1", "Bash", { command: "ls" })));
+
+    expect(created(USER_PROMPT_TURN_NAME).extra.metadata.ls_git_repo).toBe("acme/alpha");
+  });
+
+  it("labels a turn from a relative path in the folder its own call ran in", async () => {
+    await traceTools(
+      plain,
+      llmCall(plain, toolCall("t1", "Bash", { command: "ls" })),
+      llmCall(beta, toolCall("t2", "Read", { file_path: "seed.txt" })),
+    );
+
+    expect(created(USER_PROMPT_TURN_NAME).extra.metadata.ls_git_repo).toBe("acme/beta");
   });
 });

@@ -607,6 +607,15 @@ describe("groupIntoTurns", () => {
     ]);
   });
 
+  it("takes a call's folder from its first chunk, the one before its tools ran", () => {
+    const messages: TranscriptMessage[] = [
+      makeUser("Hi"),
+      { ...makeAssistant("msg_1", "A"), cwd: "/work/before" },
+      { ...makeAssistant("msg_1", "B"), cwd: "/work/after" },
+    ];
+    expect(groupIntoTurns(messages)[0].llmCalls[0].cwd).toBe("/work/before");
+  });
+
   it("starts a new turn for a teammate message that arrives after the turn finished", () => {
     const messages: TranscriptMessage[] = [
       makeUser("Q1", T0, "p1"),

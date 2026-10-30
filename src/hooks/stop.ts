@@ -13,7 +13,7 @@ import {
   groupIntoTurns,
   readRuntimeVersion,
   completedToolUseIds,
-  turnToolInputs,
+  turnTools,
   turnPrompt,
 } from "../transcript.js";
 import { turnScopedMetadata } from "../repo-attribution.js";
@@ -247,8 +247,12 @@ export async function closeStoppedTurn(
 
   const lastTurnId = turns[turns.length - 1]?.promptId;
   const closingTurn = turns[turns.length - 1];
-  const closingTurnTools = closingTurn ? turnToolInputs(closingTurn) : [];
-  const turnMetadata = turnScopedMetadata(sessionMetadata, closingTurnTools, input.cwd);
+  const closingTurnTools = closingTurn ? turnTools(closingTurn) : [];
+  const turnMetadata = turnScopedMetadata(
+    sessionMetadata,
+    closingTurnTools,
+    closingTurn?.llmCalls[0]?.cwd ?? input.cwd,
+  );
 
   // Process the pending subagent traces SubagentStop had queued when Stop fired. These are
   // synchronous subagents whose SubagentStop fired before PostToolUse recorded

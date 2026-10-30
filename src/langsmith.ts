@@ -25,7 +25,7 @@ import {
   groupIntoTurns,
   resolveProvider,
   completedToolUseIds,
-  turnToolInputs,
+  turnTools,
   turnPrompt,
 } from "./transcript.js";
 import { loadState, getSessionState } from "./state.js";
@@ -195,7 +195,11 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
   // Determine the turn run ID and whether we need to create it
   let turnRunId: string;
   let shouldCreateTurn = false;
-  const turnMetadataBase = turnScopedMetadata(customMetadata, turnToolInputs(turn), sessionCwd);
+  const turnMetadataBase = turnScopedMetadata(
+    customMetadata,
+    turnTools(turn),
+    turn.llmCalls[0]?.cwd ?? sessionCwd,
+  );
 
   if (parentRunId) {
     // UserPromptSubmit already created the Turn run (or this is a subagent under a tool run)
@@ -300,6 +304,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
               turnMetadataBase,
               toolCall.tool_use.input,
               llmCall.cwd ?? sessionCwd,
+              toolCall.tool_use.name,
             ),
             turnId,
             turnNumber: turnNum,

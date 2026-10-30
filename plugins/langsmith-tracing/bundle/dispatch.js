@@ -23664,10 +23664,12 @@ var RUN_PATCH_FIELDS = ["outputs", "end_time", "error"];
 var RUN_SNAPSHOT_FIELDS = [...RUN_CONTEXT_FIELDS, "inputs", ...RUN_PATCH_FIELDS];
 var CURSOR_VERSION_FIELD = "cursor_version";
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
-var BASH_LEADING_CD = /^\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))\s*(?:&&|;)/;
-var BASH_GIT_DIRECTORY = /\bgit\s+-C\s+(?:"([^"]+)"|'([^']+)'|(\S+))/;
+var SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"]+)"|'([^']+)'|([^\s;&|()]+))`;
+var BASH_CD_STEP = new RegExp(String.raw`^\s*cd\s+${SHELL_FOLDER_ARGUMENT}\s*(&&|;|$)`);
+var BASH_GIT_DIRECTORY = new RegExp(String.raw`^\s*git\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
+var BASH_PLAIN_STEP = /^[^;&|()`$<>\n]*&&/;
 var HOME_SHORTHAND = /^~(?=\/|$)/;
-var BASH_ABSOLUTE_PATH = /(?:^|[\s=])(?:"((?:\/|[A-Za-z]:[\\/])[^"]+)"|'((?:\/|[A-Za-z]:[\\/])[^']+)'|((?:\/|[A-Za-z]:[\\/])[^\s;&|"'`<>()]+))/g;
+var GLOB_TOOL_NAME = "Glob";
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
 var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
@@ -24530,26 +24532,38 @@ function existingPath(path3, from) {
   const resolved = isAbsolute5(target) ? target : from && isAbsolute5(from) ? resolve14(from, target) : "";
   return resolved && existsSync3(resolved) ? resolved : void 0;
 }
-function firstGroup(match) {
-  return match?.slice(1).find((group) => group !== void 0);
+function folderArgument(match) {
+  return match[1] ?? match[2] ?? match[3];
 }
 function pathFromBashCommand(command, sessionCwd) {
-  const enteredDirectory = existingPath(firstGroup(command.match(BASH_LEADING_CD)), sessionCwd);
-  const gitDirectory = existingPath(firstGroup(command.match(BASH_GIT_DIRECTORY)), sessionCwd);
-  const named = gitDirectory ?? enteredDirectory;
-  if (named)
-    return named;
-  for (const match of command.matchAll(BASH_ABSOLUTE_PATH)) {
-    const candidate = firstGroup(match);
-    if (candidate && insideGitRepository(candidate))
-      return candidate;
+  let current;
+  let rest = command;
+  for (; ; ) {
+    const from = current ?? sessionCwd;
+    const git = rest.match(BASH_GIT_DIRECTORY);
+    if (git)
+      return existingPath(folderArgument(git), from) ?? current;
+    const cd = rest.match(BASH_CD_STEP);
+    if (cd) {
+      const entered = existingPath(folderArgument(cd), from);
+      if (!entered)
+        return current;
+      current = entered;
+      if (cd[4] !== "&&")
+        return current;
+      rest = rest.slice(cd[0].length);
+      continue;
+    }
+    const plain = rest.match(BASH_PLAIN_STEP);
+    if (!plain)
+      return current;
+    rest = rest.slice(plain[0].length);
   }
-  return void 0;
 }
-function pathFromPattern(pattern) {
+function pathFromGlobPattern(pattern) {
   return isAbsolute5(pattern) && insideGitRepository(pattern) ? pattern : void 0;
 }
-function toolPathFromInput(toolInput, sessionCwd) {
+function toolPathFromInput(toolInput, sessionCwd, toolName) {
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
     return { namedAPath: false };
   }
@@ -24568,7 +24582,7 @@ function toolPathFromInput(toolInput, sessionCwd) {
     if (existsSync3(resolved))
       return { path: resolved, namedAPath };
   }
-  const inferred = typeof input.pattern === "string" ? pathFromPattern(input.pattern) : typeof input.command === "string" ? pathFromBashCommand(input.command, sessionCwd) : void 0;
+  const inferred = toolName === GLOB_TOOL_NAME && typeof input.pattern === "string" ? pathFromGlobPattern(input.pattern) : typeof input.command === "string" ? pathFromBashCommand(input.command, sessionCwd) : void 0;
   return inferred ? { path: inferred, namedAPath: true } : { namedAPath };
 }
 
@@ -24595,20 +24609,20 @@ function withPinsOf(base, scoped) {
   }
   return scoped;
 }
-function toolOrigin(toolInput, sessionCwd) {
-  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd) };
+function toolOrigin(toolInput, sessionCwd, toolName) {
+  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd, toolName) };
 }
 function sessionScopedMetadata(base, sessionCwd) {
   return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, []));
 }
-function repoScopedMetadata(base, toolInput, sessionCwd) {
-  return repositoryAttributor().toolMetadata(withoutUnpinnedRepositoryKeys(base), toolOrigin(toolInput, sessionCwd));
+function repoScopedMetadata(base, toolInput, sessionCwd, toolName) {
+  return repositoryAttributor().toolMetadata(withoutUnpinnedRepositoryKeys(base), toolOrigin(toolInput, sessionCwd, toolName));
 }
 function settledRepositoryMetadata(base, origin) {
   return repositoryAttributor().toolMetadata(base, origin);
 }
-function turnScopedMetadata(base, toolInputs, sessionCwd) {
-  const origins = [...toolInputs].map((input) => toolOrigin(input, sessionCwd));
+function turnScopedMetadata(base, tools, sessionCwd) {
+  const origins = [...tools].map(({ input, name, cwd }) => toolOrigin(input, cwd ?? sessionCwd, name));
   return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, origins));
 }
 
@@ -25100,8 +25114,12 @@ function resolveProvider(model) {
     return "google_vertex_ai";
   return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
 }
-function turnToolInputs(turn) {
-  return turn.llmCalls.flatMap((call) => call.toolCalls.map((tool) => tool.tool_use.input));
+function turnTools(turn) {
+  return turn.llmCalls.flatMap((call) => call.toolCalls.map((tool) => ({
+    input: tool.tool_use.input,
+    name: tool.tool_use.name,
+    cwd: call.cwd
+  })));
 }
 function completedToolUseIds(turns) {
   return turns.flatMap((turn) => turn.llmCalls.flatMap((call) => call.toolCalls.filter((tool) => tool.result !== void 0).map((tool) => tool.tool_use.id)));
@@ -25533,7 +25551,7 @@ async function traceTurn(options) {
   const userContent = textBlocks(stripContentMarkup(turn.userContent) ?? turn.userContent);
   let turnRunId;
   let shouldCreateTurn = false;
-  const turnMetadataBase = turnScopedMetadata(customMetadata, turnToolInputs(turn), sessionCwd);
+  const turnMetadataBase = turnScopedMetadata(customMetadata, turnTools(turn), turn.llmCalls[0]?.cwd ?? sessionCwd);
   if (parentRunId) {
     debug(`Using existing run ${parentRunId} as parent for LLM/tool runs`);
     turnRunId = parentRunId;
@@ -25596,7 +25614,7 @@ async function traceTurn(options) {
         dotted_order: toolDottedOrder,
         metadata: codingAgentMetadata({
           sessionId,
-          base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, llmCall.cwd ?? sessionCwd),
+          base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, llmCall.cwd ?? sessionCwd, toolCall.tool_use.name),
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
@@ -26322,8 +26340,8 @@ async function closeStoppedTurn(_id, closing, config) {
   const mergedTaskRunMap = { ...freshSession.task_run_map, ...allTaskRunMaps };
   const lastTurnId = turns[turns.length - 1]?.promptId;
   const closingTurn = turns[turns.length - 1];
-  const closingTurnTools = closingTurn ? turnToolInputs(closingTurn) : [];
-  const turnMetadata = turnScopedMetadata(sessionMetadata, closingTurnTools, input.cwd);
+  const closingTurnTools = closingTurn ? turnTools(closingTurn) : [];
+  const turnMetadata = turnScopedMetadata(sessionMetadata, closingTurnTools, closingTurn?.llmCalls[0]?.cwd ?? input.cwd);
   const pendingSubagents = sessionState.pending_subagent_traces || [];
   const processedAgentIds = /* @__PURE__ */ new Set();
   if (pendingSubagents.length > 0) {
@@ -27607,7 +27625,7 @@ async function main7() {
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
   const agentId = input.tool_response.agentId;
   const workflow = !agentId ? detectWorkflowLaunch(input.tool_name, input.tool_response) : void 0;
-  const origin = toolOrigin(input.tool_input, input.cwd);
+  const origin = toolOrigin(input.tool_input, input.cwd, input.tool_name);
   if (agentId) {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
   } else if (workflow) {

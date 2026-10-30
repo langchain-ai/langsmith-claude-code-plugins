@@ -48,14 +48,17 @@ const CURSOR_VERSION_FIELD = "cursor_version";
 
 const TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"] as const;
 
-const BASH_LEADING_CD = /^\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))\s*(?:&&|;)/;
+const SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"]+)"|'([^']+)'|([^\s;&|()]+))`;
 
-const BASH_GIT_DIRECTORY = /\bgit\s+-C\s+(?:"([^"]+)"|'([^']+)'|(\S+))/;
+const BASH_CD_STEP = new RegExp(String.raw`^\s*cd\s+${SHELL_FOLDER_ARGUMENT}\s*(&&|;|$)`);
+
+const BASH_GIT_DIRECTORY = new RegExp(String.raw`^\s*git\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
+
+const BASH_PLAIN_STEP = /^[^;&|()`$<>\n]*&&/;
 
 const HOME_SHORTHAND = /^~(?=\/|$)/;
 
-const BASH_ABSOLUTE_PATH =
-  /(?:^|[\s=])(?:"((?:\/|[A-Za-z]:[\\/])[^"]+)"|'((?:\/|[A-Za-z]:[\\/])[^']+)'|((?:\/|[A-Za-z]:[\\/])[^\s;&|"'`<>()]+))/g;
+const GLOB_TOOL_NAME = "Glob";
 
 /** A symbol so it is never serialized and sent to LangSmith. */
 const PINNED_REPOSITORY_KEYS = Symbol("pinned repository metadata keys");
@@ -207,10 +210,11 @@ export {
   HOOK_EVENT_NAMES,
   CURSOR_VERSION_FIELD,
   TOOL_PATH_INPUT_KEYS,
-  BASH_LEADING_CD,
+  BASH_CD_STEP,
   BASH_GIT_DIRECTORY,
-  BASH_ABSOLUTE_PATH,
+  BASH_PLAIN_STEP,
   HOME_SHORTHAND,
+  GLOB_TOOL_NAME,
   PINNED_REPOSITORY_KEYS,
   NO_PINNED_KEYS,
   STATE_FILE_DEFAULT,

@@ -7,7 +7,7 @@ import { REPOSITORY_METADATA_KEYS } from "@langchain/plugins-base/metadata";
 import { pinnedRepositoryKeys, resolveStateFilePath } from "./config.js";
 import { GH_LOGIN_MARKER_FILE, PINNED_REPOSITORY_KEYS } from "./constants.js";
 import { toolPathFromInput } from "./repo-attribution-paths.js";
-import type { ToolOrigin } from "./types.js";
+import type { ToolOrigin, TurnTool } from "./types.js";
 
 let attributor: RepositoryAttributor | undefined;
 
@@ -39,8 +39,8 @@ function withPinsOf(
   return scoped;
 }
 
-export function toolOrigin(toolInput: unknown, sessionCwd?: string): ToolOrigin {
-  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd) };
+export function toolOrigin(toolInput: unknown, sessionCwd?: string, toolName?: string): ToolOrigin {
+  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd, toolName) };
 }
 
 export function sessionScopedMetadata(
@@ -54,10 +54,11 @@ export function repoScopedMetadata(
   base: Record<string, unknown> | undefined,
   toolInput: unknown,
   sessionCwd?: string,
+  toolName?: string,
 ): Record<string, unknown> | undefined {
   return repositoryAttributor().toolMetadata(
     withoutUnpinnedRepositoryKeys(base),
-    toolOrigin(toolInput, sessionCwd),
+    toolOrigin(toolInput, sessionCwd, toolName),
   );
 }
 
@@ -70,10 +71,12 @@ export function settledRepositoryMetadata(
 
 export function turnScopedMetadata(
   base: Record<string, unknown> | undefined,
-  toolInputs: Iterable<unknown>,
+  tools: Iterable<TurnTool>,
   sessionCwd?: string,
 ): Record<string, unknown> | undefined {
-  const origins = [...toolInputs].map((input) => toolOrigin(input, sessionCwd));
+  const origins = [...tools].map(({ input, name, cwd }) =>
+    toolOrigin(input, cwd ?? sessionCwd, name),
+  );
   return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, origins));
 }
 

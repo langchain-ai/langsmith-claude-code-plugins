@@ -16,6 +16,7 @@ import type {
   Turn,
   LLMCall,
   ToolCall,
+  TurnTool,
   ContentBlock,
   ToolUseBlock,
   Usage,
@@ -339,8 +340,14 @@ export function resolveProvider(model: string): string {
   return /^([a-z0-9-]+\.)?anthropic\.claude/.test(model) ? "amazon_bedrock" : "anthropic";
 }
 
-export function turnToolInputs(turn: Turn): unknown[] {
-  return turn.llmCalls.flatMap((call) => call.toolCalls.map((tool) => tool.tool_use.input));
+export function turnTools(turn: Turn): TurnTool[] {
+  return turn.llmCalls.flatMap((call) =>
+    call.toolCalls.map((tool) => ({
+      input: tool.tool_use.input,
+      name: tool.tool_use.name,
+      cwd: call.cwd,
+    })),
+  );
 }
 
 /** Tool snapshots are no longer needed for replay once these turns' cursor is saved.
