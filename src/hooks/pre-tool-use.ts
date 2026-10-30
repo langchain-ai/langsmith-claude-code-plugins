@@ -48,7 +48,11 @@ export async function main(): Promise<void> {
         tool_cwds: input.agent_id
           ? ss.tool_cwds
           : {
-              ...ss.tool_cwds,
+              ...Object.fromEntries(
+                Object.entries(ss.tool_cwds ?? {}).filter(
+                  ([id]) => id in (ss.tool_start_times ?? {}),
+                ),
+              ),
               [input.tool_use_id]: input.cwd,
             },
       },

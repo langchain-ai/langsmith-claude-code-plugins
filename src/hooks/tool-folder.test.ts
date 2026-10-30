@@ -43,7 +43,8 @@ vi.mock("../utils/hook-init.js", () => ({
     }) as unknown as Config,
 }));
 
-import { main } from "./post-tool-use.js";
+import { main as postToolUse } from "./post-tool-use.js";
+import { main as preToolUse } from "./pre-tool-use.js";
 
 afterAll(() => sandbox.remove());
 function writeState(toolCwds: Record<string, string> = {}): void {
@@ -92,9 +93,9 @@ describe("PostToolUse", () => {
     const pattern = join(beta, "**", "*.txt");
 
     payload.current = hookInput("Glob", { pattern }, "t1");
-    await main();
+    await postToolUse();
     payload.current = hookInput("Grep", { pattern }, "t2");
-    await main();
+    await postToolUse();
 
     const origins = captureToolRun.mock.calls.map(([, , , origin]) => origin.path);
     expect(origins).toEqual([pattern, undefined]);
@@ -102,15 +103,15 @@ describe("PostToolUse", () => {
 
   it("reads the folder a shell command enters", async () => {
     payload.current = hookInput("Bash", { command: `cd "${beta}" && ls` }, "t1");
-    await main();
+    await postToolUse();
 
     expect(lastOrigin().path).toBe(beta);
   });
 
-  it("uses the folder the tool started in when a command that stays there has an unknown folder", async () => {
+  it("uses the folder the tool started in when a command names no folder", async () => {
     writeState({ t1: beta });
-    payload.current = hookInput("Bash", { command: `git -C "${plain}/missing" log` }, "t1", plain);
-    await main();
+    payload.current = hookInput("Bash", { command: "echo hi" }, "t1", plain);
+    await postToolUse();
 
     expect(lastOrigin()).toMatchObject({ cwd: beta, namedAPath: false });
     expect(lastOrigin().path).toBeUndefined();
@@ -118,7 +119,7 @@ describe("PostToolUse", () => {
 
   it("uses the hook's folder when no start folder was recorded", async () => {
     payload.current = hookInput("Bash", { command: "ls" }, "t1", plain);
-    await main();
+    await postToolUse();
 
     expect(lastOrigin().cwd).toBe(plain);
   });
@@ -126,17 +127,53 @@ describe("PostToolUse", () => {
   it("names no folder when a command with an unknown folder leaves it", async () => {
     writeState({ t1: beta });
     payload.current = hookInput("Bash", { command: `cd "${plain}"; git status` }, "t1", plain);
-    await main();
+    await postToolUse();
 
     expect(lastOrigin().cwd).toBeUndefined();
   });
+});
 
-  it("forgets a tool's start folder once it has been used", async () => {
-    writeState({ t1: beta, t2: plain });
-    payload.current = hookInput("Bash", { command: "ls" }, "t1");
-    await main();
+const preHookInput = (tool_use_id: string, extra: Record<string, unknown> = {}) => ({
+  session_id: "pre-tool-repos",
+  transcript_path: join(sandbox.root, "transcript.jsonl"),
+  cwd: sandbox.root,
+  hook_event_name: "PreToolUse",
+  tool_name: "Bash",
+  tool_input: { command: "ls" },
+  tool_use_id,
+  ...extra,
+});
+
+describe("PreToolUse", () => {
+  it("records the folder each main-agent tool starts in and none for a subagent's", async () => {
+    writeFileSync(stateFilePath, "{}");
+    payload.current = preHookInput("t1");
+    await preToolUse();
+    payload.current = preHookInput("t2", { agent_id: "agent-1" });
+    await preToolUse();
 
     const state = JSON.parse(readFileSync(stateFilePath, "utf-8"));
-    expect(state["post-tool-repos"].tool_cwds).toEqual({ t2: plain });
+    expect(state["pre-tool-repos"].tool_cwds).toEqual({ t1: sandbox.root });
+  });
+
+  it("forgets folders of tools from before the last reset of the start times", async () => {
+    writeFileSync(
+      stateFilePath,
+      JSON.stringify({
+        "pre-tool-repos": {
+          last_line: -1,
+          turn_count: 0,
+          updated: "",
+          task_run_map: {},
+          tool_start_times: { kept: 1 },
+          tool_cwds: { kept: "/a", stale: "/b" },
+        },
+      }),
+    );
+    payload.current = preHookInput("t3");
+    await preToolUse();
+
+    const state = JSON.parse(readFileSync(stateFilePath, "utf-8"));
+    expect(state["pre-tool-repos"].tool_cwds).toEqual({ kept: "/a", t3: sandbox.root });
   });
 });

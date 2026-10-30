@@ -5,6 +5,8 @@ import { rootFromGitMarker } from "@langchain/plugins-base/git";
 import {
   BASH_CD_STEP,
   BASH_FOLDER_CHANGE,
+  BASH_GIT_REDIRECT,
+  BASH_QUOTED,
   BASH_GIT_CONFIG_FLAG,
   BASH_GIT_DIRECTORY_FLAG,
   BASH_GIT_ENVIRONMENT,
@@ -41,7 +43,6 @@ function folderArgument(match: RegExpMatchArray): string {
 }
 
 function pathFromBashCommand(command: string, callCwd?: string): string | undefined {
-  if (BASH_GIT_ENVIRONMENT.test(command)) return undefined;
   let folder = callCwd !== undefined && isAbsolute(callCwd) ? callCwd : undefined;
   let named = false;
   let rest = command.trimStart();
@@ -68,12 +69,19 @@ function pathFromBashCommand(command: string, callCwd?: string): string | undefi
     }
     if (BASH_GIT_OPTION.test(rest)) return undefined;
   }
-  return named && !BASH_FOLDER_CHANGE.test(rest) ? folder : undefined;
+  return named && !mayPointElsewhere(rest) ? folder : undefined;
 }
 
-export function commandLeavesItsFolder(toolInput: unknown): boolean {
+function mayPointElsewhere(command: string): boolean {
+  const unquoted = command.replace(BASH_QUOTED, '""');
+  return [BASH_FOLDER_CHANGE, BASH_GIT_REDIRECT, BASH_GIT_ENVIRONMENT].some((pattern) =>
+    pattern.test(unquoted),
+  );
+}
+
+export function commandMayPointElsewhere(toolInput: unknown): boolean {
   const command = (toolInput as { command?: unknown } | null)?.command;
-  return typeof command === "string" && BASH_FOLDER_CHANGE.test(command);
+  return typeof command === "string" && mayPointElsewhere(command);
 }
 
 function pathFromGlobPattern(pattern: string): string | undefined {

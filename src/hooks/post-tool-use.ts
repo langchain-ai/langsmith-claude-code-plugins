@@ -239,9 +239,6 @@ export async function main(): Promise<void> {
               "post",
             )),
         last_tool_end_time: toolEndTime,
-        tool_cwds: Object.fromEntries(
-          Object.entries(freshSession.tool_cwds ?? {}).filter(([id]) => id !== input.tool_use_id),
-        ),
         ...backgroundUpdate,
         // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this
         // tool call from the transcript. A deferred Agent tool is skipped there

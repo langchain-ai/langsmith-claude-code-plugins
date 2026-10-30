@@ -52,7 +52,12 @@ const SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"$\`]+)"|'([^']+)'|(~(?:\/[^\s;&
 
 const BASH_CD_STEP = new RegExp(String.raw`^cd\s+${SHELL_FOLDER_ARGUMENT}\s*(?:&&\s*|$)`);
 
-const BASH_FOLDER_CHANGE = /\b(?:cd|pushd|popd)\b/;
+const BASH_QUOTED = /"[^"]*"|'[^']*'/g;
+
+const BASH_FOLDER_CHANGE =
+  /(?:^|[;&|({\n])\s*(?:(?:then|do|else|time|builtin|command|!)\s+)*(?:cd|pushd|popd|eval)(?=\s|;|&|\||\)|$)/;
+
+const BASH_GIT_REDIRECT = /\bgit\b[^;&|\n]*\s(?:-C|--git-dir|--work-tree)(?=[\s=]|$)/;
 
 const BASH_GIT_WORD = /^git(?=\s)/;
 
@@ -219,7 +224,9 @@ export {
   CURSOR_VERSION_FIELD,
   TOOL_PATH_INPUT_KEYS,
   BASH_CD_STEP,
+  BASH_QUOTED,
   BASH_FOLDER_CHANGE,
+  BASH_GIT_REDIRECT,
   BASH_GIT_WORD,
   BASH_GIT_CONFIG_FLAG,
   BASH_GIT_DIRECTORY_FLAG,

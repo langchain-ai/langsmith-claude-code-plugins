@@ -23666,7 +23666,9 @@ var CURSOR_VERSION_FIELD = "cursor_version";
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
 var SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"$\`]+)"|'([^']+)'|(~(?:\/[^\s;&|()$\`\\"'<>]*)?|[^\s;&|()$\`\\"'<>~-][^\s;&|()$\`\\"'<>]*))`;
 var BASH_CD_STEP = new RegExp(String.raw`^cd\s+${SHELL_FOLDER_ARGUMENT}\s*(?:&&\s*|$)`);
-var BASH_FOLDER_CHANGE = /\b(?:cd|pushd|popd)\b/;
+var BASH_QUOTED = /"[^"]*"|'[^']*'/g;
+var BASH_FOLDER_CHANGE = /(?:^|[;&|({\n])\s*(?:(?:then|do|else|time|builtin|command|!)\s+)*(?:cd|pushd|popd|eval)(?=\s|;|&|\||\)|$)/;
+var BASH_GIT_REDIRECT = /\bgit\b[^;&|\n]*\s(?:-C|--git-dir|--work-tree)(?=[\s=]|$)/;
 var BASH_GIT_WORD = /^git(?=\s)/;
 var BASH_GIT_CONFIG_FLAG = /^\s+-c\s+(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
 var BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
@@ -24545,8 +24547,6 @@ function folderArgument(match) {
   return match[1] ?? match[2] ?? match[3];
 }
 function pathFromBashCommand(command, callCwd) {
-  if (BASH_GIT_ENVIRONMENT.test(command))
-    return void 0;
   let folder = callCwd !== void 0 && isAbsolute5(callCwd) ? callCwd : void 0;
   let named = false;
   let rest = command.trimStart();
@@ -24577,11 +24577,15 @@ function pathFromBashCommand(command, callCwd) {
     if (BASH_GIT_OPTION.test(rest))
       return void 0;
   }
-  return named && !BASH_FOLDER_CHANGE.test(rest) ? folder : void 0;
+  return named && !mayPointElsewhere(rest) ? folder : void 0;
 }
-function commandLeavesItsFolder(toolInput) {
+function mayPointElsewhere(command) {
+  const unquoted = command.replace(BASH_QUOTED, '""');
+  return [BASH_FOLDER_CHANGE, BASH_GIT_REDIRECT, BASH_GIT_ENVIRONMENT].some((pattern) => pattern.test(unquoted));
+}
+function commandMayPointElsewhere(toolInput) {
   const command = toolInput?.command;
-  return typeof command === "string" && BASH_FOLDER_CHANGE.test(command);
+  return typeof command === "string" && mayPointElsewhere(command);
 }
 function pathFromGlobPattern(pattern) {
   return isAbsolute5(pattern) && insideGitRepository(pattern) ? pattern : void 0;
@@ -24634,7 +24638,7 @@ function withPinsOf(base, scoped) {
 }
 function toolOrigin(toolInput, sessionCwd, toolName) {
   const lookup = toolPathFromInput(toolInput, sessionCwd, toolName);
-  return { cwd: commandLeavesItsFolder(toolInput) ? void 0 : sessionCwd, ...lookup };
+  return { cwd: commandMayPointElsewhere(toolInput) ? void 0 : sessionCwd, ...lookup };
 }
 function sessionScopedMetadata(base, sessionCwd) {
   return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, []));
@@ -27744,7 +27748,6 @@ async function main7() {
           }
         }, [input.tool_use_id], "post"),
         last_tool_end_time: toolEndTime,
-        tool_cwds: Object.fromEntries(Object.entries(freshSession.tool_cwds ?? {}).filter(([id]) => id !== input.tool_use_id)),
         ...backgroundUpdate,
         // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this
         // tool call from the transcript. A deferred Agent tool is skipped there
@@ -27807,7 +27810,7 @@ async function main9() {
           [input.tool_use_id]: startTime
         },
         tool_cwds: input.agent_id ? ss.tool_cwds : {
-          ...ss.tool_cwds,
+          ...Object.fromEntries(Object.entries(ss.tool_cwds ?? {}).filter(([id]) => id in (ss.tool_start_times ?? {}))),
           [input.tool_use_id]: input.cwd
         }
       }

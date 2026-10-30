@@ -6,7 +6,7 @@ import { createRepositoryAttributor, type RepositoryAttributor } from "@langchai
 import { REPOSITORY_METADATA_KEYS } from "@langchain/plugins-base/metadata";
 import { pinnedRepositoryKeys, resolveStateFilePath } from "./config.js";
 import { GH_LOGIN_MARKER_FILE, PINNED_REPOSITORY_KEYS } from "./constants.js";
-import { commandLeavesItsFolder, toolPathFromInput } from "./repo-attribution-paths.js";
+import { commandMayPointElsewhere, toolPathFromInput } from "./repo-attribution-paths.js";
 import type { ToolOrigin, TurnTool } from "./types.js";
 
 let attributor: RepositoryAttributor | undefined;
@@ -41,7 +41,7 @@ function withPinsOf(
 
 export function toolOrigin(toolInput: unknown, sessionCwd?: string, toolName?: string): ToolOrigin {
   const lookup = toolPathFromInput(toolInput, sessionCwd, toolName);
-  return { cwd: commandLeavesItsFolder(toolInput) ? undefined : sessionCwd, ...lookup };
+  return { cwd: commandMayPointElsewhere(toolInput) ? undefined : sessionCwd, ...lookup };
 }
 
 export function sessionScopedMetadata(
