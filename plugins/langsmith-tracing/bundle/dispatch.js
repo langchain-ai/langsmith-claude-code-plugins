@@ -25267,6 +25267,9 @@ function stripContentMarkup(content) {
   });
   return blocks.length > 0 ? blocks : void 0;
 }
+function isFailedToolResponse(response) {
+  return response.is_error === true || response.success === false;
+}
 function normalizeSkillName(name) {
   return name.trim().replace(SKILL_LEADING_SLASH, "").trim() || void 0;
 }
@@ -27699,7 +27702,7 @@ async function main7() {
         agentType: "root",
         toolName: input.tool_name,
         runName: input.tool_name,
-        skillName: skillNameFromTool(input.tool_name, input.tool_input)
+        skillName: isFailedToolResponse(input.tool_response) ? void 0 : skillNameFromTool(input.tool_name, input.tool_input)
       })
     }, tracing, parentRunId, origin);
   }

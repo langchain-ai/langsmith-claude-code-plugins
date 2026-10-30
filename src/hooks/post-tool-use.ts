@@ -16,7 +16,7 @@ import {
   advanceToolTracingProgress,
 } from "../state.js";
 import { expandHome, initHook } from "../utils/hook-init.js";
-import { isPayloadForHook } from "../utils/harness.js";
+import { isFailedToolResponse, isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
 import { toolOrigin } from "../repo-attribution.js";
@@ -152,7 +152,9 @@ export async function main(): Promise<void> {
           agentType: "root",
           toolName: input.tool_name,
           runName: input.tool_name,
-          skillName: skillNameFromTool(input.tool_name, input.tool_input),
+          skillName: isFailedToolResponse(input.tool_response)
+            ? undefined
+            : skillNameFromTool(input.tool_name, input.tool_input),
         }),
       },
       tracing,

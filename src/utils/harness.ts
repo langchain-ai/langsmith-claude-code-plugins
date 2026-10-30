@@ -46,6 +46,10 @@ export function stripContentMarkup(content: Turn["userContent"]): Turn["userCont
   return blocks.length > 0 ? blocks : undefined;
 }
 
+export function isFailedToolResponse(response: Record<string, unknown>): boolean {
+  return response.is_error === true || response.success === false;
+}
+
 export function normalizeSkillName(name: string): string | undefined {
   return name.trim().replace(SKILL_LEADING_SLASH, "").trim() || undefined;
 }
