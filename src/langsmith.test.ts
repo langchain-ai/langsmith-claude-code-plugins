@@ -1,5 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Turn } from "./types.js";
+import { join } from "node:path";
+import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
+import type { LLMCall, Turn } from "./types.js";
+import { createGitSandbox } from "./fixtures/git-sandbox.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "./constants.js";
 
 const mockCreateRun = vi.fn().mockResolvedValue(undefined);
@@ -951,5 +953,84 @@ describe("traceTurn", () => {
       ls_agent_type: "root",
     });
     expect(turnMeta.ls_subagent_type).toBeUndefined(); // never on root
+  });
+});
+
+describe("traceTurn repository attribution", () => {
+  const sandbox = createGitSandbox("ls trace turn repos ");
+  const alpha = sandbox.makeRepo(
+    "alpha repo",
+    "trunk-alpha",
+    "Alpha Owner",
+    "git@github.com:acme/alpha.git",
+  );
+  const beta = sandbox.makeRepo(
+    "beta repo",
+    "trunk-beta",
+    "Beta Owner",
+    "git@github.com:acme/beta.git",
+  );
+  const plain = sandbox.makeDir(sandbox.root, "plain folder");
+
+  afterAll(() => sandbox.remove());
+  beforeEach(() => mockCreateRun.mockClear());
+
+  const toolCall = (id: string, name: string, input: Record<string, unknown>) => ({
+    tool_use: { type: "tool_use" as const, id, name, input },
+    result: { content: "ok", timestamp: "2025-01-01T00:00:03Z" },
+  });
+
+  const llmCall = (cwd: string | undefined, ...calls: LLMCall["toolCalls"]): LLMCall => ({
+    content: [{ type: "text", text: "Working." }],
+    model: "claude-sonnet-4-5",
+    usage: { input_tokens: 1, output_tokens: 1 },
+    startTime: "2025-01-01T00:00:01Z",
+    endTime: "2025-01-01T00:00:02Z",
+    cwd,
+    toolCalls: calls,
+  });
+
+  async function traceTools(
+    sessionCwd: string,
+    ...calls: LLMCall[]
+  ): Promise<Array<Record<string, any>>> {
+    const turn: Turn = {
+      userContent: "go",
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: calls,
+      isComplete: true,
+    };
+    await traceTurn({ turn, sessionId: "repos", turnNum: 1, customMetadata: { cwd: sessionCwd } });
+    return mockCreateRun.mock.calls
+      .map(([run]) => run)
+      .filter((run) => run.run_type === "tool")
+      .map((run) => run.extra.metadata);
+  }
+
+  it("gives each tool the repository it touched rather than the turn's", async () => {
+    const [onBeta, onAlpha, onShell] = await traceTools(
+      plain,
+      llmCall(
+        plain,
+        toolCall("t1", "Read", { file_path: join(beta, "seed.txt") }),
+        toolCall("t2", "Read", { file_path: join(alpha, "seed.txt") }),
+        toolCall("t3", "Bash", { command: `git -C "${alpha}" log` }),
+      ),
+    );
+
+    expect(onBeta.ls_git_repo).toBe("acme/beta");
+    expect(onAlpha.ls_git_repo).toBe("acme/alpha");
+    expect(onShell.ls_git_repo).toBe("acme/alpha");
+  });
+
+  it("gives a tool the folder its own call ran in rather than where the session ended", async () => {
+    const [before, after] = await traceTools(
+      alpha,
+      llmCall(plain, toolCall("t1", "Bash", { command: "ls" })),
+      llmCall(beta, toolCall("t2", "Bash", { command: "ls" })),
+    );
+
+    expect(before.ls_git_repo).toBeUndefined();
+    expect(after.ls_git_repo).toBe("acme/beta");
   });
 });

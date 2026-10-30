@@ -48,6 +48,14 @@ const CURSOR_VERSION_FIELD = "cursor_version";
 
 const TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"] as const;
 
+const BASH_LEADING_CD = /^\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))\s*(?:&&|;)/;
+
+const BASH_GIT_DIRECTORY = /\bgit\s+-C\s+(?:"([^"]+)"|'([^']+)'|(\S+))/;
+
+const HOME_SHORTHAND = /^~(?=\/|$)/;
+
+const BASH_ABSOLUTE_PATH = /(?:^|[\s=])(?:"(\/[^"]+)"|'(\/[^']+)'|(\/[^\s;&|"'`<>()]+))/g;
+
 /** A symbol so it is never serialized and sent to LangSmith. */
 const PINNED_REPOSITORY_KEYS = Symbol("pinned repository metadata keys");
 
@@ -198,6 +206,10 @@ export {
   HOOK_EVENT_NAMES,
   CURSOR_VERSION_FIELD,
   TOOL_PATH_INPUT_KEYS,
+  BASH_LEADING_CD,
+  BASH_GIT_DIRECTORY,
+  BASH_ABSOLUTE_PATH,
+  HOME_SHORTHAND,
   PINNED_REPOSITORY_KEYS,
   NO_PINNED_KEYS,
   STATE_FILE_DEFAULT,

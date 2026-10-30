@@ -296,7 +296,11 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
           dotted_order: toolDottedOrder,
           metadata: codingAgentMetadata({
             sessionId,
-            base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, sessionCwd),
+            base: repoScopedMetadata(
+              turnMetadataBase,
+              toolCall.tool_use.input,
+              llmCall.cwd ?? sessionCwd,
+            ),
             turnId,
             turnNumber: turnNum,
             runtimeVersion,

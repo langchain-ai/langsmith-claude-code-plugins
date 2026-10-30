@@ -23664,6 +23664,10 @@ var RUN_PATCH_FIELDS = ["outputs", "end_time", "error"];
 var RUN_SNAPSHOT_FIELDS = [...RUN_CONTEXT_FIELDS, "inputs", ...RUN_PATCH_FIELDS];
 var CURSOR_VERSION_FIELD = "cursor_version";
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
+var BASH_LEADING_CD = /^\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))\s*(?:&&|;)/;
+var BASH_GIT_DIRECTORY = /\bgit\s+-C\s+(?:"([^"]+)"|'([^']+)'|(\S+))/;
+var HOME_SHORTHAND = /^~(?=\/|$)/;
+var BASH_ABSOLUTE_PATH = /(?:^|[\s=])(?:"(\/[^"]+)"|'(\/[^']+)'|(\/[^\s;&|"'`<>()]+))/g;
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
 var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
@@ -24514,7 +24518,37 @@ function loadConfig(options) {
 
 // dist/src/repo-attribution-paths.js
 import { existsSync as existsSync3 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
 import { isAbsolute as isAbsolute5, resolve as resolve14 } from "node:path";
+function insideGitRepository(path3) {
+  return typeof rootFromGitMarker(path3) === "string";
+}
+function existingPath(path3, from) {
+  if (!path3)
+    return void 0;
+  const target = path3.replace(HOME_SHORTHAND, homedir3());
+  const resolved = isAbsolute5(target) ? target : from && isAbsolute5(from) ? resolve14(from, target) : "";
+  return resolved && existsSync3(resolved) ? resolved : void 0;
+}
+function firstGroup(match) {
+  return match?.slice(1).find((group) => group !== void 0);
+}
+function pathFromBashCommand(command, sessionCwd) {
+  const enteredDirectory = existingPath(firstGroup(command.match(BASH_LEADING_CD)), sessionCwd);
+  const gitDirectory = existingPath(firstGroup(command.match(BASH_GIT_DIRECTORY)), sessionCwd);
+  const named = gitDirectory ?? enteredDirectory;
+  if (named)
+    return named;
+  for (const match of command.matchAll(BASH_ABSOLUTE_PATH)) {
+    const candidate = firstGroup(match);
+    if (candidate && insideGitRepository(candidate))
+      return candidate;
+  }
+  return void 0;
+}
+function pathFromPattern(pattern) {
+  return isAbsolute5(pattern) && insideGitRepository(pattern) ? pattern : void 0;
+}
 function toolPathFromInput(toolInput, sessionCwd) {
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
     return { namedAPath: false };
@@ -24534,7 +24568,8 @@ function toolPathFromInput(toolInput, sessionCwd) {
     if (existsSync3(resolved))
       return { path: resolved, namedAPath };
   }
-  return { namedAPath };
+  const inferred = typeof input.pattern === "string" ? pathFromPattern(input.pattern) : typeof input.command === "string" ? pathFromBashCommand(input.command, sessionCwd) : void 0;
+  return inferred ? { path: inferred, namedAPath: true } : { namedAPath };
 }
 
 // dist/src/repo-attribution.js
@@ -25086,6 +25121,7 @@ function mergeAssistantChunks(chunks) {
     // SSE usage is cumulative; last chunk has final totals.
     effort: chunks.find((c) => c.effort)?.effort,
     // Only some chunks carry effort; take the first.
+    cwd: first.cwd,
     startTime: first.timestamp,
     endTime: last.timestamp
   };
@@ -25162,6 +25198,7 @@ function groupIntoTurns(messages) {
         model: merged.model,
         usage: merged.usage,
         effort: merged.effort,
+        cwd: merged.cwd,
         startTime: merged.startTime,
         endTime: merged.endTime,
         toolCalls,
@@ -25559,7 +25596,7 @@ async function traceTurn(options) {
         dotted_order: toolDottedOrder,
         metadata: codingAgentMetadata({
           sessionId,
-          base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, sessionCwd),
+          base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, llmCall.cwd ?? sessionCwd),
           turnId,
           turnNumber: turnNum,
           runtimeVersion,

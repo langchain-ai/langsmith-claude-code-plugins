@@ -7,6 +7,7 @@ vi.mock("node:child_process", { spy: true });
 import { execFileSync } from "node:child_process";
 import { createGitSandbox } from "./fixtures/git-sandbox.js";
 import { loadConfig } from "./config.js";
+import { toolPathFromInput } from "./repo-attribution-paths.js";
 import {
   clearRepoAttributionCache,
   repoScopedMetadata,
@@ -90,6 +91,68 @@ describe("repoScopedMetadata", () => {
     ],
   ])("attributes %s", (_name, input, want, cwd) => {
     expect(repoScopedMetadata(session, input, cwd)).toMatchObject(want);
+  });
+
+  describe("a tool that names a folder only inside its command or pattern", () => {
+    const inSession = () => sessionScopedMetadata(noRepository, alpha);
+    const staysInAlpha = { ls_git_repo: "acme/alpha", ls_attribution_identifier: "Alpha Owner" };
+    const noRepoKeys = { cwd: session.cwd, ls_integration: session.ls_integration };
+    const missing = join(root, "no such folder");
+
+    it.each<[name: string, input: Record<string, string>]>([
+      ["git -C with a quoted folder", { command: `git -C "${beta}" log` }],
+      ["git -C with a relative folder", { command: "git -C '../beta repo' log" }],
+      ["a leading cd into a quoted folder", { command: `cd "${beta}" && ls` }],
+      ["a leading cd ended by a semicolon", { command: `cd '${beta}'; ls` }],
+      ["a relative leading cd", { command: 'cd "../beta repo" && ls' }],
+      ["an absolute file argument", { command: `cat "${betaSeed}"` }],
+      ["the first repository an argument names", { command: `diff "${betaSeed}" "${alphaSeed}"` }],
+      ["a Glob pattern with a wildcard", { pattern: `${beta}/**/*.txt` }],
+      ["a Glob pattern ending in a partial file name", { pattern: `${beta}/seed*` }],
+      ["a Grep pattern given as a file", { pattern: betaSeed }],
+    ])("attributes %s to the repository it names", (_name, input) => {
+      expect(repoScopedMetadata(inSession(), input, alpha)).toMatchObject(inBeta);
+    });
+
+    it("reads ~ in a folder the command enters as the person's home", () => {
+      vi.stubEnv("HOME", root);
+      vi.stubEnv("USERPROFILE", root);
+
+      expect(
+        repoScopedMetadata(inSession(), { command: 'cd "~/beta repo" && ls' }, plain),
+      ).toMatchObject(inBeta);
+      expect(
+        repoScopedMetadata(inSession(), { command: 'git -C "~/beta repo" log' }, plain),
+      ).toMatchObject(inBeta);
+    });
+
+    it("lets git -C win over the folder a leading cd entered", () => {
+      const command = `cd "${alpha}" && git -C "${beta}" log`;
+
+      expect(repoScopedMetadata(inSession(), { command }, alpha)).toMatchObject(inBeta);
+    });
+
+    it("attributes a shell command that entered a folder outside every repository to none", () => {
+      expect(repoScopedMetadata(inSession(), { command: `cd "${plain}" && ls` }, alpha)).toEqual(
+        noRepoKeys,
+      );
+    });
+
+    it.each<[name: string, input: Record<string, string>]>([
+      ["a path in no repository", { command: `ls "${join(plain, "x.txt")}"` }],
+      ["a system path", { command: "cat /etc/hosts" }],
+      ["a folder nothing sits at", { command: `cd "${missing}" && ls` }],
+      ["a git -C folder nothing sits at", { command: `git -C "${missing}" log` }],
+      ["a Grep regex that looks like a path", { pattern: "/api/v1/users" }],
+      ["a Glob pattern outside every repository", { pattern: `${plain}/*.txt` }],
+      ["a relative Glob pattern", { pattern: "**/*.txt" }],
+    ])("keeps the session repository for %s", (_name, input) => {
+      expect(repoScopedMetadata(inSession(), input, alpha)).toMatchObject(staysInAlpha);
+    });
+  });
+
+  it("reads a relative pattern as no path rather than against the hook's own folder", () => {
+    expect(toolPathFromInput({ pattern: "src/**/*.ts" }, alpha)).toEqual({ namedAPath: false });
   });
 
   it("keeps the session repository's author on a tool naming a path nothing sits at", () => {

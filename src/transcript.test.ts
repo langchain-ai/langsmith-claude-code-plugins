@@ -593,6 +593,20 @@ describe("groupIntoTurns", () => {
     expect(groupIntoTurns(messages)[0].llmCalls[0].effort).toBe(expected);
   });
 
+  it("keeps the folder the transcript says each call ran in", () => {
+    const messages: TranscriptMessage[] = [
+      makeUser("Hi"),
+      { ...makeAssistant("msg_1", "First"), cwd: "/work/one" },
+      { ...makeAssistant("msg_2", "Second"), cwd: "/work/two" },
+      makeAssistant("msg_3", "Third"),
+    ];
+    expect(groupIntoTurns(messages)[0].llmCalls.map((call) => call.cwd)).toEqual([
+      "/work/one",
+      "/work/two",
+      undefined,
+    ]);
+  });
+
   it("starts a new turn for a teammate message that arrives after the turn finished", () => {
     const messages: TranscriptMessage[] = [
       makeUser("Q1", T0, "p1"),
