@@ -25,7 +25,7 @@ export function createGitSandbox(prefix: string) {
   const makeDir = (...segments: string[]): string => {
     const path = join(...segments);
     mkdirSync(path, { recursive: true });
-    return path;
+    return path.replaceAll("\\", "/");
   };
 
   const makeRepo = (name: string, branch: string, user: string, remote?: string): string => {
@@ -41,7 +41,7 @@ export function createGitSandbox(prefix: string) {
   };
 
   return {
-    root,
+    root: root.replaceAll("\\", "/"),
     env,
     git,
     makeDir,
