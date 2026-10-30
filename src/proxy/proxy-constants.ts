@@ -1,11 +1,8 @@
 export const CONFIG_UPDATE_GUIDANCE =
-  "Invalid proxy configuration. A one-time private config update is required, so keep your existing key, CLI, profile, port and addresses, and set enabled and useClaudeSubscription explicitly even when disabled. Do not paste secrets.";
+  "Invalid proxy configuration. A one-time private config update is required, so keep your existing key, profile, port and addresses, and set enabled and useClaudeSubscription explicitly even when disabled. Do not paste secrets.";
 
 export const COMMAND_GUIDANCE =
   "Run /langsmith-gateway:setup --scope global|project within Claude Code, or /langsmith-gateway:disable to turn it off. To sign in with your own identity token, add --workspace-id UUID and --identity-token-command \"your command\", where the command prints one token. See GATEWAY.md for the other flags.";
-
-export const CREDENTIAL_SOURCE_GUIDANCE =
-  "Setup needs either the LangSmith CLI or your own identity token command, and found neither. Install the CLI and sign in, or add --workspace-id UUID and --identity-token-command. Then retry setup.";
 
 export const CONFLICTING_AUTH_GUIDANCE =
   "Conflicting provider setting; it would send requests to another provider instead of the local proxy.";
@@ -27,7 +24,6 @@ export const PINNED_CHANGE_GUIDANCE =
   "The running daemon holds the old values, so disable first for every active scope with /langsmith-gateway:disable --scope global|project. Stop other gateway sessions, then retry setup.";
 
 export const PINNED_FIELD_LABELS = {
-  cli: "CLI path",
   profile: "profile",
   port: "port",
   identityTokenCommand: "identity token command",
@@ -57,7 +53,7 @@ export const ORIGIN_DNS_GUIDANCE = "Endpoints must use public DNS names and HTTP
 
 export const API_URL = "https://api.smith.langchain.com";
 export const UPSTREAM = "https://gateway.smith.langchain.com";
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 export const KEY_HEADER = "x-langsmith-proxy-key";
 export const BEARER_SLOT = "authorization";
 export const API_KEY_SLOT = "x-api-key";
@@ -123,7 +119,15 @@ export const REJECTION_RECHECK_MS = 5000;
 export const UPSTREAM_REJECTED_STATUS = 401;
 export const MAX_IDENTITY_TOKEN_COMMAND = 4096;
 export const CREDENTIAL_TIMEOUT_MS = 10_000;
-export const CLI_TOKEN_TTL_MS = 60_000;
+export const LOGIN_TOKEN_TTL_MS = 60_000;
+export const LOGIN_CONFIG_PATH = [".langsmith", "config.json"];
+export const SIGN_IN_FAILED_LOG = "LangSmith sign-in failed: ";
+export const GATEWAY_REFUSED_LOG = "The gateway refused the LangSmith token";
+export const NO_LOGIN_REASON = "no saved LangSmith login was found, so run langsmith auth login";
+export const UNUSABLE_LOGIN_REASON = "the saved login has no usable access token";
+export const EXPIRED_TOKEN_REASON = "the token is expired, so a refresh failed or was refused";
+export const TOKEN_COMMAND_REASON = "the identity token command printed no usable token";
+export const UNREADABLE_TOKEN_REASON = "the token could not be read";
 export const DEFAULT_IDENTITY_TOKEN_TTL_MS = 5 * 60_000;
 export const MIN_IDENTITY_TOKEN_TTL_MS = 1000;
 export const MAX_IDENTITY_TOKEN_TTL_MS = 60 * 60_000;
@@ -131,7 +135,6 @@ export const MAX_IDENTITY_TOKEN_TTL_MS = 60 * 60_000;
 export const CONFIG_KEYS = [
   "enabled",
   "settingsTargets",
-  "cli",
   "profile",
   "port",
   "secret",
@@ -143,9 +146,10 @@ export const CONFIG_KEYS = [
   "workspaceId",
 ];
 
+export const LEGACY_CONFIG_KEYS = ["cli"];
+
 export const SETUP_FLAGS = [
   "--scope",
-  "--cli",
   "--port",
   "--profile",
   "--api-url",

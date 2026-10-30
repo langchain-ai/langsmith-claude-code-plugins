@@ -49,7 +49,7 @@ export async function handleGatewayInput(
       reason =
         error instanceof SetupError || error instanceof ConfigError
           ? error.message
-          : "Gateway command failed; check private config, CLI installation, permissions, links, concurrent edits and port conflicts privately. " +
+          : "Gateway command failed; check private config, permissions, links, concurrent edits and port conflicts privately. " +
             COMMAND_GUIDANCE;
     }
     try {

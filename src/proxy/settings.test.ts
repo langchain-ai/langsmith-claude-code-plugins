@@ -21,14 +21,11 @@ import { targetPaths, routingEnv, matchesRouting, BASE, HEADERS } from "./scopes
 import { handleGatewayInput } from "./commands.js";
 import { identity } from "./server.js";
 import * as setupModule from "./setup.js";
-import { cliToken } from "./token.js";
+import { loginToken } from "./token.js";
 import {
   args,
-  cliPath,
   home,
-  installCli,
   json,
-  noCliEnv,
   refusal,
   run,
   save,
@@ -54,7 +51,7 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
   it.each([undefined, "claude-gateway"])(
     "preserves omitted/explicit profile %j through setup, disable and re-enable",
     async (profile) => {
-      const options = ["--scope", "global", "--cli", process.execPath];
+      const options = ["--scope", "global"];
       if (profile !== undefined) options.push("--profile", profile);
       await enable("/fake", options, { LANGSMITH_PROFILE: "untrusted" });
       const original = loadConfig()!;
@@ -81,10 +78,8 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
     { current: "selected", profile: "claude-gateway", expected: "claude-gateway" },
     { current: "selected", profile: "explicit-new", expected: "explicit-new" },
   ])(
-    "delegates token selection to an isolated CLI config fixture %j",
+    "selects the login profile from the saved login file %j",
     async ({ current, profile, expected }) => {
-      const cli = join(home, "fake-cli.cjs");
-      const captured = join(home, "captured.json");
       const profiles = Object.fromEntries(
         ["selected", "default", "claude-gateway", "explicit-new"].map((name) => [
           name,
@@ -97,52 +92,10 @@ describe("consented user transport setup (OS-home isolated, no real CLI/network)
         JSON.stringify({ current_profile: current, profiles }),
         { mode: 0o600 },
       );
-      writeFileSync(
-        cli,
-        `#!${process.execPath}
-const fs = require("node:fs"), path = require("node:path");
-const args = process.argv.slice(2);
-const cfg = JSON.parse(fs.readFileSync(path.join(process.env.HOME, ".langsmith/config.json"), "utf8"));
-const index = args.indexOf("--profile");
-const name = index < 0 ? process.env.LANGSMITH_PROFILE || cfg.current_profile || "default" : args[index + 1];
-fs.writeFileSync(${JSON.stringify(captured)}, JSON.stringify({ args, env: process.env, name }));
-process.stdout.write(cfg.profiles[name].oauth.access_token);
-`,
-        { mode: 0o700 },
-      );
-      const options = ["--scope", "global", "--cli", cli];
+      const options = ["--scope", "global"];
       if (profile !== undefined) options.push("--profile", profile);
       await enable("/fake", options, {});
-      const config = loadConfig()!;
-      for (const key of [
-        "LANGSMITH_PROFILE",
-        "LANGSMITH_CONFIG_FILE",
-        "LANGSMITH_ENDPOINT",
-        "LANGSMITH_API_KEY",
-        "NODE_OPTIONS",
-        "HTTPS_PROXY",
-      ])
-        vi.stubEnv(key, "untrusted");
-      try {
-        expect(await cliToken(config)).toBe(profiles[expected].oauth.access_token);
-        const recorded = json(captured);
-        // macOS may add this runtime variable after spawn; no CLI overrides are allowed.
-        delete recorded.env.__CF_USER_TEXT_ENCODING;
-        expect(recorded).toEqual({
-          args: [
-            ...(profile === undefined ? [] : ["--profile", profile]),
-            "--api-url",
-            API_URL,
-            "--format=pretty",
-            "auth",
-            "token",
-          ],
-          env: { HOME: home, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
-          name: expected,
-        });
-      } finally {
-        vi.unstubAllEnvs();
-      }
+      expect(await loginToken(loadConfig()!)).toBe(profiles[expected].oauth.access_token);
     },
   );
   it("validates named scope before any filesystem or daemon effects", async () => {
@@ -265,88 +218,6 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
     expect(loadConfig()).toEqual({ ...original, settingsTargets: expect.any(Array) });
     disable(["--scope", "global"], {});
     expect(json(settings)).toEqual(before);
-  });
-  it("replaces a deleted disabled CLI without validating the old executable", async () => {
-    const before = { model: "keep", env: { ANTHROPIC_CUSTOM_HEADERS: "X-Keep: original" } };
-    save(before);
-    const oldCLI = join(home, "old-langsmith");
-    const newCLI = join(home, "new-langsmith");
-    for (const cli of [oldCLI, newCLI]) writeFileSync(cli, "#!/bin/sh\nexit 1\n", { mode: 0o700 });
-    await enable(
-      "/fake",
-      ["--scope", "global", "--cli", oldCLI, "--profile", "fake-profile", "--port", "52507"],
-      {},
-    );
-    const original = loadConfig()!;
-    disable(["--scope", "global"], {});
-    rmSync(oldCLI);
-    expect(existsSync(original.cli)).toBe(false);
-    await expect(enable("/fake", ["--scope", "global"], {})).rejects.toThrow();
-    vi.clearAllMocks();
-    const validate = vi.spyOn(setupModule, "validateCLI");
-    try {
-      vi.mocked(waitForStopped).mockImplementationOnce(async (old) => {
-        expect(old).toEqual({ ...original, enabled: false, settingsTargets: [] });
-        expect(loadConfig()).toBeUndefined();
-        expect(loadConfig(home, true)).toEqual({
-          ...original,
-          enabled: false,
-          settingsTargets: [],
-        });
-        expect(json(settings)).toEqual(before);
-        expect(ensure).not.toHaveBeenCalled();
-        expect(control).not.toHaveBeenCalled();
-      });
-      await enable(
-        "/fake",
-        [
-          "--scope",
-          "global",
-          "--cli",
-          newCLI,
-          "--profile",
-          "preview-42",
-          "--port",
-          "52508",
-          "--api-url",
-          "https://PR-42-api.review.smith.langchain.com/",
-          "--gateway-url",
-          "https://PR-42-gateway.review.smith.langchain.com:8443/",
-        ],
-        {},
-      );
-      const current = loadConfig()!;
-      expect(current).toEqual({
-        ...original,
-        cli: realpathSync(newCLI),
-        profile: "preview-42",
-        port: 52508,
-        apiUrl: "https://pr-42-api.review.smith.langchain.com",
-        gatewayUrl: "https://pr-42-gateway.review.smith.langchain.com:8443",
-      });
-      expect(validate).toHaveBeenCalledWith(newCLI);
-      expect(validate).not.toHaveBeenCalledWith(original.cli);
-      expect(waitForStopped).toHaveBeenCalledExactlyOnceWith({
-        ...original,
-        enabled: false,
-        settingsTargets: [],
-      });
-      expect(ensure).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining(transport(current)),
-        "/fake",
-      );
-      expect(control).not.toHaveBeenCalled();
-      expect(json(settings).env.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:52508");
-      expect(json(settings).env.ANTHROPIC_CUSTOM_HEADERS).toBe(
-        before.env.ANTHROPIC_CUSTOM_HEADERS + "\nX-LangSmith-Proxy-Key: " + original.secret,
-      );
-      disable(["--scope", "global"], {});
-      expect(json(settings)).toEqual(before);
-      expect(loadConfig()).toBeUndefined();
-      expect(loadConfig(home, true)).toEqual({ ...current, enabled: false, settingsTargets: [] });
-    } finally {
-      validate.mockRestore();
-    }
   });
   it("leaves disabled config/settings untouched when the old listener has not drained", async () => {
     await run();
@@ -546,7 +417,7 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
     expect(ensure).not.toHaveBeenCalled();
   });
   it("names only the pinned setting that actually changed", async () => {
-    await enable("/fake", tokenArgs(), noCliEnv);
+    await enable("/fake", tokenArgs(), {});
     const error = await enable(
       "/fake",
       [
@@ -557,7 +428,7 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
         "--identity-token-command",
         "printf other",
       ],
-      noCliEnv,
+      {},
     ).catch((reason: unknown) => reason);
     expect(error).toBeInstanceOf(SetupError);
     expect(String(error)).toContain("identity token command");
@@ -663,74 +534,13 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
     expect(existsSync(settings)).toBe(false);
     expect(ensure).not.toHaveBeenCalled();
   });
-  it("names both sign-in options when neither is available", async () => {
-    const error = await enable("/fake", ["--scope", "global"], noCliEnv).catch(
-      (reason: unknown) => reason,
-    );
-    expect(error).toBeInstanceOf(SetupError);
-    expect(String(error)).toContain("LangSmith CLI");
-    expect(String(error)).toContain("--identity-token-command");
-    expect(ensure).not.toHaveBeenCalled();
-  });
-  it("sets up with an identity token command and no CLI installed", async () => {
-    await enable("/fake", tokenArgs(), noCliEnv);
-    const config = loadConfig()!;
-    expect(config.identityTokenCommand).toBe(TOKEN_COMMAND);
-    expect(config.cli).toBeUndefined();
-    expect(Object.hasOwn(json(join(configDir(home), "config.json")), "cli")).toBe(false);
-    expect(ensure).toHaveBeenCalled();
-  });
-  it("still discovers an installed CLI when no identity token command is given", async () => {
-    await enable("/fake", ["--scope", "global"], installCli());
-    const config = loadConfig()!;
-    expect(config.cli).toBe(cliPath());
-    expect(config.identityTokenCommand).toBeUndefined();
-  });
-  it("adds a pinned CLI on top of an identity token command", async () => {
-    await enable("/fake", tokenArgs(), noCliEnv);
-    disable(["--scope", "global"], noCliEnv);
-    await enable("/fake", ["--scope", "global", "--cli", process.execPath], noCliEnv);
-    const both = loadConfig()!;
-    expect(both.cli).toBe(realpathSync(process.execPath));
-    expect(both.identityTokenCommand).toBe(TOKEN_COMMAND);
-  });
-  it("adds an identity token command on top of an installed CLI", async () => {
-    const env = installCli();
-    await enable("/fake", ["--scope", "global"], env);
-    disable(["--scope", "global"], env);
-    await enable("/fake", tokenArgs(), env);
-    const both = loadConfig()!;
-    expect(both.cli).toBe(cliPath());
-    expect(both.identityTokenCommand).toBe(TOKEN_COMMAND);
-    expect(both.workspaceId).toBe(WORKSPACE);
-  });
-  it("drops a saved CLI path that no longer exists when a token command is added", async () => {
-    const env = installCli();
-    await enable("/fake", ["--scope", "global"], env);
-    disable(["--scope", "global"], env);
-    rmSync(cliPath());
-    await enable("/fake", tokenArgs(), noCliEnv);
-    const config = loadConfig()!;
-    expect(config.cli).toBeUndefined();
-    expect(config.identityTokenCommand).toBe(TOKEN_COMMAND);
-    expect(Object.hasOwn(json(join(configDir(home), "config.json")), "cli")).toBe(false);
-  });
-  it("re-runs setup on the token path after the saved CLI disappears", async () => {
-    const env = installCli();
-    await enable("/fake", tokenArgs(cliPath()), env);
-    rmSync(cliPath());
-    await enable("/fake", ["--scope", "global"], env);
+  it("adds an identity token command on top of the login", async () => {
+    await enable("/fake", ["--scope", "global"], {});
+    disable(["--scope", "global"], {});
+    await enable("/fake", tokenArgs(), {});
     const config = loadConfig()!;
     expect(config.identityTokenCommand).toBe(TOKEN_COMMAND);
     expect(config.workspaceId).toBe(WORKSPACE);
-  });
-  it("still refuses a genuinely changed pinned CLI while a scope is active", async () => {
-    const env = installCli();
-    await enable("/fake", tokenArgs(cliPath()), env);
-    await expect(
-      enable("/fake", ["--scope", "global", "--cli", process.execPath], env),
-    ).rejects.toThrow("disable first");
-    expect(loadConfig()!.cli).toBe(cliPath());
   });
   it("refuses malformed settings and changed pinned arguments", async () => {
     writeFileSync(settings, "not-json", { mode: 0o600 });
@@ -741,7 +551,7 @@ process.stdout.write(cfg.profiles[name].oauth.access_token);
     await expect(
       enable(
         "/fake",
-        ["--scope", "global", "--cli", process.execPath, "--profile", "other", "--port", "52507"],
+        ["--scope", "global", "--profile", "other", "--port", "52507"],
         {},
       ),
     ).rejects.toThrow("already using: profile.");
@@ -953,7 +763,7 @@ describe("explicit scoped deterministic setup", () => {
         hook_event_name: "UserPromptSubmit",
         prompt: expand(
           "setup",
-          `--scope global --cli ${process.execPath} --profile preview --port 52508 --api-url https://api.preview.test/ --gateway-url https://gateway.preview.test:8443/`,
+          `--scope global --profile preview --port 52508 --api-url https://api.preview.test/ --gateway-url https://gateway.preview.test:8443/`,
         ),
         cwd: home,
       },
@@ -969,7 +779,6 @@ describe("explicit scoped deterministic setup", () => {
     });
     expect(output).toHaveBeenCalledTimes(1);
     expect(loadConfig()).toMatchObject({
-      cli: process.execPath,
       profile: "preview",
       port: 52508,
       apiUrl: "https://api.preview.test",
@@ -1086,7 +895,7 @@ it("rolls back completed writes on a later transaction failure without persisten
 it("rejects project settings hardlinks/symlinks without changing other targets", async () => {
   const cwd = realpathSync(home);
   const p = targetPaths(home, "project", cwd);
-  await enable("/fake", ["--scope", "project", "--cli", process.execPath], {}, home, cwd);
+  await enable("/fake", ["--scope", "project"], {}, home, cwd);
   const config = loadConfig()!;
   const backup = join(home, "backup");
   linkSync(p.settings, backup);
@@ -1112,7 +921,7 @@ it.each(["global", "project"] as const)(
     const p = targetPaths(home, scope, cwd);
     const invoke = (...flags: string[]) =>
       enable("/fake", ["--scope", scope, ...flags], {}, home, cwd);
-    await invoke("--cli", process.execPath);
+    await invoke();
     const original = loadConfig()!;
     const bytes = readFileSync(p.settings, "utf8");
     for (const choice of [true, false]) {
@@ -1222,7 +1031,7 @@ it("omitted setup refuses to switch multiple active true scopes without writes",
   const cwd = realpathSync(home);
   const invoke = (scope: string, ...flags: string[]) =>
     enable("/fake", ["--scope", scope, ...flags], {}, home, cwd);
-  await invoke("global", "--cli", process.execPath, "--use-claude-subscription");
+  await invoke("global", "--use-claude-subscription");
   await invoke("project", "--use-claude-subscription");
   const global = targetPaths(home, "global", cwd);
   const project = targetPaths(home, "project", cwd);
@@ -1330,7 +1139,7 @@ describe.each(["global", "project"] as const)("same-session %s re-enable", (scop
       const args = ["--scope", scope];
       await enable(
         "/fake",
-        [...args, "--cli", process.execPath, "--use-claude-subscription"],
+        [...args, "--use-claude-subscription"],
         {},
         home,
         cwd,
@@ -1425,7 +1234,7 @@ describe.each(["global", "project"] as const)("same-session %s re-enable", (scop
         { mode: 0o600 },
       );
       const args = ["--scope", scope];
-      await enable("/fake", [...args, "--cli", process.execPath], {}, home, cwd);
+      await enable("/fake", [...args], {}, home, cwd);
       const inherited = { ...json(p.settings).env };
       disable(args, inherited, home, cwd);
       if (headers) inherited.ANTHROPIC_CUSTOM_HEADERS = headers(inherited.ANTHROPIC_CUSTOM_HEADERS);
@@ -1453,7 +1262,7 @@ describe.each(["global", "project"] as const)("same-session %s re-enable", (scop
     const cwd = realpathSync(home);
     const p = targetPaths(home, scope, cwd);
     const args = ["--scope", scope];
-    await enable("/fake", [...args, "--cli", process.execPath], {}, home, cwd);
+    await enable("/fake", [...args], {}, home, cwd);
     const inherited = { ANTHROPIC_CUSTOM_HEADERS: json(p.settings).env.ANTHROPIC_CUSTOM_HEADERS };
     disable(args, {}, home, cwd);
     await expect(enable("/fake", args, inherited, home, cwd)).resolves.toMatchObject({
@@ -1508,7 +1317,7 @@ it("re-enables a retired project while other scopes stay active, without trustin
 
 describe("externally provisioned receipt-free routing", () => {
   async function provision() {
-    setupModule.createConfig(process.execPath, "it-profile", 52507, home);
+    setupModule.createConfig("it-profile", 52507, home);
     const config = loadConfig()!;
     save({
       model: "keep",
@@ -1592,7 +1401,7 @@ describe("externally provisioned receipt-free routing", () => {
 });
 
 it("disable leaves empty unrelated env untouched when no routing matches", async () => {
-  setupModule.createConfig(process.execPath, "it-profile", 52507, home);
+  setupModule.createConfig("it-profile", 52507, home);
   save({ env: {}, model: "keep" });
   const before = snapshot(settings);
   disable(["--scope", "global"], {});
@@ -1609,7 +1418,7 @@ it.each([
 ])(
   "rejects invalid optional routing index %j without accepting it as config",
   (settingsTargets) => {
-    setupModule.createConfig(process.execPath, "it-profile", 52507, home);
+    setupModule.createConfig("it-profile", 52507, home);
     const path = join(configDir(home), "config.json");
     writeFileSync(path, JSON.stringify({ ...loadConfig()!, settingsTargets }));
     expect(() => loadConfig()).toThrow("Invalid proxy configuration");
@@ -1632,7 +1441,6 @@ describe("saved routing diagnostics", () => {
   const config = {
     enabled: true,
     useClaudeSubscription: false,
-    cli: "/unused-cli",
     profile: "unused-profile",
     port: 52507,
     secret: "synthetic-proxy-secret",

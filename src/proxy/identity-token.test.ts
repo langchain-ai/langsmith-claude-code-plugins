@@ -277,7 +277,7 @@ describe("identity token configuration", () => {
     writeFileSync(entry, "", { mode: 0o600 });
     await enable(
       entry,
-      `--scope global --cli /bin/sh --port 52599 --identity-token-ttl 60 --workspace-id ${WORKSPACE} --identity-token-command cat /tmp/t.jwt`.split(
+      `--scope global --port 52599 --identity-token-ttl 60 --workspace-id ${WORKSPACE} --identity-token-command cat /tmp/t.jwt`.split(
         " ",
       ),
       {},

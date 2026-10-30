@@ -57,8 +57,6 @@ describe("strict endpoint origins and paired explicit setup arguments", () => {
       parseSetupArgs([
         "--scope",
         "global",
-        "--cli",
-        "/bin/cli",
         "--profile",
         "preview",
         "--port",
@@ -71,7 +69,6 @@ describe("strict endpoint origins and paired explicit setup arguments", () => {
     ).toEqual({
       scope: "global",
       useClaudeSubscription: false,
-      cli: "/bin/cli",
       profile: "preview",
       port: 52507,
       apiUrl: "https://api.preview.test",
@@ -110,10 +107,6 @@ describe("strict endpoint origins and paired explicit setup arguments", () => {
   );
 });
 
-it("rejects control bytes in setup arguments before filesystem validation", () => {
-  expect(() => parseSetupArgs(["--scope", "global", "--cli", "/tmp/cli\n"])).toThrow();
-});
-
 it.each([true, false])("parses subscription flag presence %s with all other options", (choice) => {
   const flags = choice ? ["--use-claude-subscription"] : [];
   expect(
@@ -127,8 +120,6 @@ it.each([true, false])("parses subscription flag presence %s with all other opti
       API_URL,
       "--gateway-url",
       UPSTREAM,
-      "--cli",
-      "/bin/cli",
       "--port",
       "52507",
     ]),

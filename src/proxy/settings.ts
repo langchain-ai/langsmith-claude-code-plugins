@@ -1,5 +1,5 @@
-import { accessSync, constants, mkdirSync, rmdirSync } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { mkdirSync, rmdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { configDir, endpoints, loadConfig, privatePath, userHome } from "./config.js";
 import {
   CONFLICT_ENVIRONMENT_GUIDANCE,
@@ -7,7 +7,6 @@ import {
   CONFLICT_SETTINGS_GUIDANCE,
   CONFLICTING_AUTH_GUIDANCE,
   CONFLICTING_BASE_GUIDANCE,
-  CREDENTIAL_SOURCE_GUIDANCE,
   PINNED_CHANGE_GUIDANCE,
   PINNED_FIELD_LABELS,
   PROVIDER_ROUTING,
@@ -25,7 +24,7 @@ import {
   unchanged,
   type Snapshot,
 } from "./files.js";
-import { createConfig, usableCLI, validateCLI } from "./setup.js";
+import { createConfig } from "./setup.js";
 import { ensure, waitForStopped } from "./lifecycle.js";
 import { parseSetupArgs, parseDisableArgs, SetupError } from "./options.js";
 import {
@@ -101,13 +100,11 @@ function conflicting(
   parts.push(CONFLICT_RETRY_GUIDANCE);
   return fail(parts.join(" "));
 }
-function changedFields(config: ProxyConfig, next: ProxyConfig, pinningCLI: boolean): string[] {
+function changedFields(config: ProxyConfig, next: ProxyConfig): string[] {
   const before = { ...config, ...endpoints(config) };
   const after = { ...next, ...endpoints(next) };
   const keys = Object.keys(PINNED_FIELD_LABELS) as (keyof typeof PINNED_FIELD_LABELS)[];
-  return keys
-    .filter((key) => (key !== "cli" || pinningCLI) && before[key] !== after[key])
-    .map((key) => PINNED_FIELD_LABELS[key]);
+  return keys.filter((key) => before[key] !== after[key]).map((key) => PINNED_FIELD_LABELS[key]);
 }
 function settings(s: Snapshot | undefined): { value: ObjectValue; env: ObjectValue } {
   const value = s ? object(JSON.parse(s.text)) : {};
@@ -138,19 +135,6 @@ function lock(home: string): () => void {
     );
   }
   return () => rmdirSync(path);
-}
-function discoverCLI(env: NodeJS.ProcessEnv): string {
-  for (const dir of (env.PATH ?? "").split(":")) {
-    if (!isAbsolute(dir)) continue;
-    const path = join(dir, "langsmith");
-    try {
-      accessSync(path, constants.X_OK);
-      return path;
-    } catch {
-      /* Try next absolute PATH entry. */
-    }
-  }
-  return fail(CREDENTIAL_SOURCE_GUIDANCE);
 }
 export async function enable(
   entry: string,
@@ -204,10 +188,6 @@ export async function enable(
           enabled: true,
           ...selected,
           useClaudeSubscription,
-          cli:
-            requested.cli === undefined
-              ? usableCLI(config.cli, requested.identityTokenCommand ?? config.identityTokenCommand)
-              : validateCLI(requested.cli),
           profile: requested.profile ?? config.profile,
           port,
           identityTokenCommand: requested.identityTokenCommand ?? config.identityTokenCommand,
@@ -215,7 +195,7 @@ export async function enable(
           workspaceId: requested.workspaceId ?? config.workspaceId,
         }
       : undefined;
-    const changed = config && next ? changedFields(config, next, requested.cli !== undefined) : [];
+    const changed = config && next ? changedFields(config, next) : [];
     if (changed.length && (initiallyEnabled || active.length))
       fail(
         `Setup would change settings an active scope is already using: ${changed.join(", ")}. ${PINNED_CHANGE_GUIDANCE}`,
@@ -261,25 +241,13 @@ export async function enable(
         "Configured transport settings changed. Review them privately or disable this scope before switching subscription forwarding.",
       );
     if (!config) {
-      createConfig(
-        requested.cli ??
-          (requested.identityTokenCommand === undefined ? discoverCLI(env) : undefined),
-        requested.profile,
-        port,
-        home,
-        selected,
-        useClaudeSubscription,
-        {
-          identityTokenCommand: requested.identityTokenCommand,
-          identityTokenTtlMs: requested.identityTokenTtlMs,
-          workspaceId: requested.workspaceId,
-        },
-      );
+      createConfig(requested.profile, port, home, selected, useClaudeSubscription, {
+        identityTokenCommand: requested.identityTokenCommand,
+        identityTokenTtlMs: requested.identityTokenTtlMs,
+        workspaceId: requested.workspaceId,
+      });
       config = loadConfig(home)!;
     }
-    const effective = next ?? config;
-    if (effective.cli !== undefined && validateCLI(effective.cli) !== effective.cli)
-      fail("Pinned CLI path changed; resolve privately before retrying.");
     let configSnapshot = snapshot(p.config, true);
     if (switching) {
       unchanged(p.settings, beforeSettings);
