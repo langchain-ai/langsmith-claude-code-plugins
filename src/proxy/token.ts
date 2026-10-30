@@ -17,9 +17,7 @@ import {
   REJECTION_RECHECK_MS,
   RETRY_AFTER_MS,
   SHELL,
-  SIGN_IN_FAILED_LOG,
   TOKEN_COMMAND_REASON,
-  UNREADABLE_TOKEN_REASON,
   UNUSABLE_LOGIN_REASON,
 } from "./proxy-constants.js";
 import type { CredentialState, ProxyConfig } from "./proxy-models.js";
@@ -28,18 +26,15 @@ import type { CredentialState, ProxyConfig } from "./proxy-models.js";
 export function cliEnvironment(): NodeJS.ProcessEnv {
   return { HOME: userHome(), PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
 }
-export class SignInFailure extends Error {}
-
 export async function loginToken(config: ProxyConfig): Promise<string> {
   const { loadProfileClientConfig } = await import("langsmith/lib/utils/profiles");
   const { profileAuth } = loadProfileClientConfig({
     configPath: join(userHome(), ...LOGIN_CONFIG_PATH),
     profile: config.profile,
   });
-  if (profileAuth === undefined) throw new SignInFailure(NO_LOGIN_REASON);
+  if (profileAuth === undefined) throw new Error(NO_LOGIN_REASON);
   const token = bearerCredential((await profileAuth.getAuthHeader(fetch))?.value);
-  if (token === undefined || !BEARER_TOKEN.test(token))
-    throw new SignInFailure(UNUSABLE_LOGIN_REASON);
+  if (token === undefined || !BEARER_TOKEN.test(token)) throw new Error(UNUSABLE_LOGIN_REASON);
   return token;
 }
 
@@ -77,7 +72,7 @@ function spawnToken(
       signal?.removeEventListener("abort", cancel);
       output = "";
       if (token) resolve(token);
-      else reject(new SignInFailure(TOKEN_COMMAND_REASON));
+      else reject(new Error(TOKEN_COMMAND_REASON));
     };
     // Wait for child close after cancellation before releasing the drain lock.
     const cancel = () => {
@@ -112,6 +107,7 @@ export class TokenCache {
   private failedAt?: number;
   private refusedAt?: number;
   private rejectedAt = 0;
+  private lastFailure = "";
   constructor(
     private readonly load: () => Promise<string>,
     private readonly now = Date.now,
@@ -120,6 +116,9 @@ export class TokenCache {
   ) {}
   get loading(): boolean {
     return this.pending !== undefined;
+  }
+  get failure(): string {
+    return this.lastFailure;
   }
   state(): CredentialState {
     const now = this.now();
@@ -150,7 +149,7 @@ export class TokenCache {
           !Number.isFinite(exp) ||
           exp * 1000 < this.now() + EXPIRY_SKEW_MS
         )
-          throw new SignInFailure(EXPIRED_TOKEN_REASON);
+          throw new Error(EXPIRED_TOKEN_REASON);
         this.succeededAt = this.now();
         this.cached = {
           token,
@@ -159,10 +158,7 @@ export class TokenCache {
         return token;
       })
       .catch((error: unknown) => {
-        this.log(
-          SIGN_IN_FAILED_LOG +
-            (error instanceof SignInFailure ? error.message : UNREADABLE_TOKEN_REASON),
-        );
+        this.lastFailure = error instanceof Error ? error.message : String(error);
         this.cached = undefined;
         this.failedAt = this.now();
         this.retryAt = this.now() + RETRY_AFTER_MS;

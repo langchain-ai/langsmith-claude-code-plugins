@@ -26,11 +26,10 @@ import {
   KEY_HEADER,
   MAX_REQUEST_BYTES,
   NO_LOGIN_REASON,
-  SIGN_IN_FAILED_LOG,
   UNUSABLE_LOGIN_REASON,
   UPSTREAM,
 } from "./proxy-constants.js";
-import { loginGuidance, loginToken, SignInFailure, TokenCache } from "./token.js";
+import { loginGuidance, loginToken, TokenCache } from "./token.js";
 import { control, ensure, gatewayHook, waitForStopped } from "./lifecycle.js";
 import { createConfig } from "./setup.js";
 import {
@@ -844,7 +843,7 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     const log = vi.fn();
     const config = { ...base, useClaudeSubscription: false };
     const token = async () => {
-      throw new SignInFailure(NO_LOGIN_REASON);
+      throw new Error(NO_LOGIN_REASON);
     };
     const proxy = createProxy(config, { token, log });
     config.port = await listen(proxy.server);
@@ -853,25 +852,25 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
       expect(response.status).toBe(503);
     }
     expect(log.mock.calls).toEqual([
-      [SIGN_IN_FAILED_LOG + NO_LOGIN_REASON],
-      [AUTH_UNAVAILABLE_LOG],
-      [AUTH_UNAVAILABLE_LOG],
+      [AUTH_UNAVAILABLE_LOG + NO_LOGIN_REASON],
+      [AUTH_UNAVAILABLE_LOG + NO_LOGIN_REASON],
     ]);
   });
-  it("logs why sign-in failed and when the gateway refused a token, never the token", async () => {
+  it("keeps the exact reason sign-in failed and logs a refused token, never the token", async () => {
+    const expired = new TokenCache(async () => jwt(1));
+    await expect(expired.get()).rejects.toThrow();
+    expect(expired.failure).toBe(EXPIRED_TOKEN_REASON);
+    const crashed = new TokenCache(async () => {
+      throw new Error("spawn langsmith ENOENT");
+    });
+    await expect(crashed.get()).rejects.toThrow();
+    expect(crashed.failure).toBe("spawn langsmith ENOENT");
     const log = vi.fn();
-    const expired = jwt(1);
-    await expect(
-      new TokenCache(async () => expired, Date.now, 60_000, log).get(),
-    ).rejects.toThrow();
     const token = jwt();
     const refused = new TokenCache(async () => token, Date.now, 60_000, log);
     await refused.get();
     refused.reject(token);
-    expect(log.mock.calls).toEqual([
-      [SIGN_IN_FAILED_LOG + EXPIRED_TOKEN_REASON],
-      [GATEWAY_REFUSED_LOG],
-    ]);
+    expect(log.mock.calls).toEqual([[GATEWAY_REFUSED_LOG]]);
   });
 });
 describe("shared lifecycle and explicit configuration", () => {

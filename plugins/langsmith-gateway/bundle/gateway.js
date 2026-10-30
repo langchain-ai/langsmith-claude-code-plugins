@@ -15455,14 +15455,12 @@ var MAX_IDENTITY_TOKEN_COMMAND = 4096;
 var CREDENTIAL_TIMEOUT_MS = 1e4;
 var LOGIN_TOKEN_TTL_MS = 6e4;
 var LOGIN_CONFIG_PATH = [".langsmith", "config.json"];
-var SIGN_IN_FAILED_LOG = "LangSmith sign-in failed: ";
 var GATEWAY_REFUSED_LOG = "The gateway refused the LangSmith token";
-var AUTH_UNAVAILABLE_LOG = "Returned 503 to Claude Code because no LangSmith token was available";
+var AUTH_UNAVAILABLE_LOG = "Returned 503 to Claude Code: ";
 var NO_LOGIN_REASON = "no saved LangSmith login was found, so run langsmith auth login";
 var UNUSABLE_LOGIN_REASON = "the saved login has no usable access token";
 var EXPIRED_TOKEN_REASON = "the token is expired, so a refresh failed or was refused";
 var TOKEN_COMMAND_REASON = "the identity token command printed no usable token";
-var UNREADABLE_TOKEN_REASON = "the token could not be read";
 var DEFAULT_IDENTITY_TOKEN_TTL_MS = 5 * 6e4;
 var MIN_IDENTITY_TOKEN_TTL_MS = 1e3;
 var MAX_IDENTITY_TOKEN_TTL_MS = 60 * 6e4;
@@ -15731,8 +15729,6 @@ import { join as join5 } from "node:path";
 function cliEnvironment() {
   return { HOME: userHome(), PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
 }
-var SignInFailure = class extends Error {
-};
 async function loginToken(config) {
   const { loadProfileClientConfig: loadProfileClientConfig2 } = await Promise.resolve().then(() => (init_profiles(), profiles_exports));
   const { profileAuth } = loadProfileClientConfig2({
@@ -15740,10 +15736,10 @@ async function loginToken(config) {
     profile: config.profile
   });
   if (profileAuth === void 0)
-    throw new SignInFailure(NO_LOGIN_REASON);
+    throw new Error(NO_LOGIN_REASON);
   const token = bearerCredential((await profileAuth.getAuthHeader(fetch))?.value);
   if (token === void 0 || !BEARER_TOKEN.test(token))
-    throw new SignInFailure(UNUSABLE_LOGIN_REASON);
+    throw new Error(UNUSABLE_LOGIN_REASON);
   return token;
 }
 function commandToken(command, timeoutMs = CREDENTIAL_TIMEOUT_MS, signal) {
@@ -15773,7 +15769,7 @@ function spawnToken(command, args, timeoutMs, signal) {
       if (token)
         resolve2(token);
       else
-        reject(new SignInFailure(TOKEN_COMMAND_REASON));
+        reject(new Error(TOKEN_COMMAND_REASON));
     };
     const cancel = () => {
       child.kill("SIGKILL");
@@ -15810,6 +15806,7 @@ var TokenCache = class {
   failedAt;
   refusedAt;
   rejectedAt = 0;
+  lastFailure = "";
   constructor(load, now = Date.now, ttlMs = LOGIN_TOKEN_TTL_MS, log = () => void 0) {
     this.load = load;
     this.now = now;
@@ -15818,6 +15815,9 @@ var TokenCache = class {
   }
   get loading() {
     return this.pending !== void 0;
+  }
+  get failure() {
+    return this.lastFailure;
   }
   state() {
     const now = this.now();
@@ -15848,7 +15848,7 @@ var TokenCache = class {
     this.pending = this.load().then((token) => {
       const exp = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).exp;
       if (typeof exp !== "number" || !Number.isFinite(exp) || exp * 1e3 < this.now() + EXPIRY_SKEW_MS)
-        throw new SignInFailure(EXPIRED_TOKEN_REASON);
+        throw new Error(EXPIRED_TOKEN_REASON);
       this.succeededAt = this.now();
       this.cached = {
         token,
@@ -15856,7 +15856,7 @@ var TokenCache = class {
       };
       return token;
     }).catch((error) => {
-      this.log(SIGN_IN_FAILED_LOG + (error instanceof SignInFailure ? error.message : UNREADABLE_TOKEN_REASON));
+      this.lastFailure = error instanceof Error ? error.message : String(error);
       this.cached = void 0;
       this.failedAt = this.now();
       this.retryAt = this.now() + RETRY_AFTER_MS;
@@ -16191,7 +16191,7 @@ function createProxy(config, options = {}) {
       if (draining)
         throw new RequestError(503, "Local proxy draining");
       const token = await tokens.get().catch(() => {
-        options.log?.(AUTH_UNAVAILABLE_LOG);
+        options.log?.(AUTH_UNAVAILABLE_LOG + tokens.failure);
         throw new RequestError(503, unavailable());
       });
       if (ended || res.destroyed)

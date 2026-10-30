@@ -398,7 +398,7 @@ export function createProxy(
       }
       if (draining) throw new RequestError(503, "Local proxy draining");
       const token = await tokens.get().catch(() => {
-        options.log?.(AUTH_UNAVAILABLE_LOG);
+        options.log?.(AUTH_UNAVAILABLE_LOG + tokens.failure);
         throw new RequestError(503, unavailable());
       });
       if (ended || res.destroyed) return;
