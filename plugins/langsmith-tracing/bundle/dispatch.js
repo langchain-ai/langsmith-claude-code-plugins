@@ -23704,6 +23704,8 @@ var SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
 var SKILL_TOOL_NAME = "Skill";
 var SKILL_COMMAND_OPENING = "<command-message>";
 var SKILL_NAMESPACE_SEPARATOR = ":";
+var SKILL_LEADING_SLASH = /^\//;
+var SLASH_SKILL_RUN_KEY = "slash-skill";
 var SLASH_COMMAND = new RegExp(HARNESS_COMMAND.source);
 var SKILL_LAUNCH_OUTPUT_PREFIX = "Launching skill: ";
 var WORKFLOW_TOOL_NAME = "Workflow";
@@ -25266,7 +25268,7 @@ function stripContentMarkup(content) {
   return blocks.length > 0 ? blocks : void 0;
 }
 function normalizeSkillName(name) {
-  return name.trim().replace(/^\//, "").trim() || void 0;
+  return name.trim().replace(SKILL_LEADING_SLASH, "").trim() || void 0;
 }
 function contentText(content) {
   if (typeof content === "string")
@@ -25287,12 +25289,15 @@ function slashSkillOf(turn) {
 }
 function isSameSkill(first, second) {
   const [a, b] = [first, second].map((name) => name.toLowerCase());
-  const bareA = a.split(SKILL_NAMESPACE_SEPARATOR).at(-1);
-  const bareB = b.split(SKILL_NAMESPACE_SEPARATOR).at(-1);
+  const [bareA, namespacedA] = skillParts(a);
+  const [bareB, namespacedB] = skillParts(b);
   if (!bareA || !bareB)
     return false;
-  const bothNamespaced = bareA !== a && bareB !== b;
-  return bothNamespaced ? a === b : bareA === bareB;
+  return namespacedA && namespacedB ? a === b : bareA === bareB;
+}
+function skillParts(name) {
+  const parts = name.split(SKILL_NAMESPACE_SEPARATOR);
+  return parts.includes("") ? [name, false] : [parts[parts.length - 1], parts.length > 1];
 }
 
 // dist/src/metadata.js
@@ -25568,7 +25573,7 @@ async function traceTurn(options) {
     return name ? [name] : [];
   }));
   if (slashSkill && !loadedSkills.some((name) => isSameSkill(name, slashSkill.name))) {
-    const skillRunId = stableRunId(turn.userTimestamp, sessionId, turnId, "slash-skill");
+    const skillRunId = stableRunId(turn.userTimestamp, sessionId, turnId, SLASH_SKILL_RUN_KEY);
     const skillInput = {
       skill: slashSkill.name,
       ...slashSkill.args && { args: slashSkill.args }
@@ -25592,7 +25597,6 @@ async function traceTurn(options) {
         runtimeVersion,
         agentType,
         toolName: SKILL_TOOL_NAME,
-        runName: SKILL_TOOL_NAME,
         skillName: slashSkill.name
       })
     }, tracing);

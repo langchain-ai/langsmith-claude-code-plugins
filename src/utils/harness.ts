@@ -6,6 +6,7 @@ import {
   HARNESS_TASK_NOTIFICATION_KEPT,
   HARNESS_UNWRAPPED_TAG,
   SKILL_COMMAND_OPENING,
+  SKILL_LEADING_SLASH,
   SKILL_NAMESPACE_SEPARATOR,
   SLASH_COMMAND,
 } from "../constants.js";
@@ -46,7 +47,7 @@ export function stripContentMarkup(content: Turn["userContent"]): Turn["userCont
 }
 
 export function normalizeSkillName(name: string): string | undefined {
-  return name.trim().replace(/^\//, "").trim() || undefined;
+  return name.trim().replace(SKILL_LEADING_SLASH, "").trim() || undefined;
 }
 
 function contentText(content: Turn["userContent"]): string {
@@ -68,9 +69,13 @@ export function slashSkillOf(turn: Turn): SlashSkill | undefined {
 
 export function isSameSkill(first: string, second: string): boolean {
   const [a, b] = [first, second].map((name) => name.toLowerCase());
-  const bareA = a.split(SKILL_NAMESPACE_SEPARATOR).at(-1);
-  const bareB = b.split(SKILL_NAMESPACE_SEPARATOR).at(-1);
+  const [bareA, namespacedA] = skillParts(a);
+  const [bareB, namespacedB] = skillParts(b);
   if (!bareA || !bareB) return false;
-  const bothNamespaced = bareA !== a && bareB !== b;
-  return bothNamespaced ? a === b : bareA === bareB;
+  return namespacedA && namespacedB ? a === b : bareA === bareB;
+}
+
+function skillParts(name: string): [string, boolean] {
+  const parts = name.split(SKILL_NAMESPACE_SEPARATOR);
+  return parts.includes("") ? [name, false] : [parts[parts.length - 1], parts.length > 1];
 }

@@ -529,6 +529,79 @@ describe("traceTurn", () => {
     expect(skill.extra.metadata.ls_skill_name).toBe("plain-terms");
   });
 
+  it("stamps the typed Skill run with explicit ids, times and metadata", async () => {
+    const turn = skillTurn(
+      "<command-message>plain-terms</command-message>\n<command-name>/plain-terms</command-name>",
+      true,
+    );
+    turn.promptId = "prompt-1";
+    await traceTurn({ turn, sessionId: "session-123", turnNum: 3, runtimeVersion: "2.1.181" });
+
+    const turnRunId = "01941f29-7c00-7d4a-8740-4070d92ecde6";
+    const skillRunId = "01941f29-7c00-7ec1-827e-1676208072d7";
+    expect(skillRuns()).toEqual([
+      {
+        id: skillRunId,
+        name: "Skill",
+        run_type: "tool",
+        inputs: { input: { skill: "plain-terms" } },
+        outputs: { output: "Launching skill: plain-terms" },
+        start_time: "2025-01-01T00:00:00Z",
+        end_time: "2025-01-01T00:00:00Z",
+        parent_run_id: turnRunId,
+        trace_id: turnRunId,
+        dotted_order: `20250101T000000000Z${turnRunId}.20250101T000000000Z${skillRunId}`,
+        extra: {
+          metadata: {
+            ls_agent_purpose: "coding",
+            ls_integration: "claude-code",
+            ls_agent_runtime: "Claude Code",
+            ls_trace_schema_version: "coding-agent-v1",
+            ls_agent_type: "root",
+            thread_id: "session-123",
+            ls_agent_runtime_version: "2.1.181",
+            turn_id: "prompt-1",
+            turn_number: 3,
+            tool_name: "Skill",
+            ls_skill_name: "plain-terms",
+          },
+        },
+      },
+    ]);
+  });
+
+  it("records no typed Skill run when only a later model call carries the instructions", async () => {
+    const turn = skillTurn(
+      "<command-message>review-pr</command-message>\n<command-name>/review-pr</command-name>",
+      false,
+    );
+    turn.llmCalls.push(
+      call([{ type: "text", text: "later" }], {
+        instructionsBefore: true,
+        toolCalls: [
+          skillToolCall("t2", "plain-terms", { content: "Launching skill: plain-terms" }),
+        ],
+      }),
+    );
+    await traceTurn({ turn, sessionId: "session-123", turnNum: 1 });
+
+    expect(skillRuns().map((run) => run.extra.metadata.ls_skill_name)).toEqual(["plain-terms"]);
+  });
+
+  it.each(["/a:", "/review:"])("records typed %s and the same name called once", async (typed) => {
+    await traceTurn({
+      turn: skillTurn(
+        `<command-message>${typed.slice(1)}</command-message>\n<command-name>${typed}</command-name>`,
+        true,
+        [skillToolCall("t1", typed.slice(1), { content: "Launching skill" })] as never,
+      ),
+      sessionId: "session-123",
+      turnNum: 1,
+    });
+
+    expect(skillRuns()).toHaveLength(1);
+  });
+
   it("records no Skill run for a built-in slash command", async () => {
     await traceTurn({
       turn: skillTurn("<command-name>/plugin</command-name>", false),

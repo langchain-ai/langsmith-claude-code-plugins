@@ -35,6 +35,7 @@ import {
   SERVER_TOOL_RESULT_TYPE,
   SKILL_LAUNCH_OUTPUT_PREFIX,
   SKILL_TOOL_NAME,
+  SLASH_SKILL_RUN_KEY,
   USER_PROMPT_TURN_NAME,
 } from "./constants.js";
 import { isSameSkill, slashSkillOf, stripContentMarkup } from "./utils/harness.js";
@@ -249,7 +250,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     }),
   );
   if (slashSkill && !loadedSkills.some((name) => isSameSkill(name, slashSkill.name))) {
-    const skillRunId = stableRunId(turn.userTimestamp, sessionId, turnId, "slash-skill");
+    const skillRunId = stableRunId(turn.userTimestamp, sessionId, turnId, SLASH_SKILL_RUN_KEY);
     const skillInput = {
       skill: slashSkill.name,
       ...(slashSkill.args && { args: slashSkill.args }),
@@ -274,7 +275,6 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
           runtimeVersion,
           agentType,
           toolName: SKILL_TOOL_NAME,
-          runName: SKILL_TOOL_NAME,
           skillName: slashSkill.name,
         }),
       },

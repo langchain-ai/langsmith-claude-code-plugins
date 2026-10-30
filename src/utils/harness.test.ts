@@ -207,7 +207,9 @@ describe("isSameSkill", () => {
     ["a:review", "b:review", false],
     ["a:b:review", "c:review", false],
     ["a:", "b:", false],
-    ["a:", "a:", false],
+    ["a:", "a:", true],
+    ["review:", "review:", true],
+    ["a:", "a:b", false],
     ["", "", false],
   ])("compares %j with %j as %s", (first, second, same) => {
     expect(isSameSkill(first, second)).toBe(same);
