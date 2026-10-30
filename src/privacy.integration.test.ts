@@ -188,6 +188,7 @@ describe("muted runs on the wire", () => {
         ls_agent_runtime: "Claude Code",
         ls_agent_runtime_version: "plugin-runtime",
         ls_integration: "claude-code",
+        ls_harness_name: "claude-code",
         ls_integration_version: "plugin-version",
         ls_trace_schema_version: "coding-agent-v1",
         ls_model_name: REDACTED,
