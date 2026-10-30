@@ -15460,6 +15460,8 @@ var AUTH_UNAVAILABLE_LOG = "Returned 503 to Claude Code: ";
 var NO_LOGIN_REASON = "no saved LangSmith login was found, so run langsmith auth login";
 var UNUSABLE_LOGIN_REASON = "the saved login has no usable access token";
 var EXPIRED_TOKEN_REASON = "the token is expired, so a refresh failed or was refused";
+var REFRESH_FAILED_REASON = "the login is expired and refreshing it failed: ";
+var MAX_REFRESH_ERROR_CHARS = 300;
 var TOKEN_COMMAND_REASON = "the identity token command printed no usable token";
 var DEFAULT_IDENTITY_TOKEN_TTL_MS = 5 * 6e4;
 var MIN_IDENTITY_TOKEN_TTL_MS = 1e3;
@@ -15737,10 +15739,28 @@ async function loginToken(config) {
   });
   if (profileAuth === void 0)
     throw new Error(NO_LOGIN_REASON);
-  const token = bearerCredential((await profileAuth.getAuthHeader(fetch))?.value);
+  let refreshFailure;
+  const recordingFetch = async (input, init) => {
+    try {
+      const response = await fetch(input, init);
+      if (!response.ok)
+        refreshFailure = `${response.status} ${(await response.clone().text()).slice(0, MAX_REFRESH_ERROR_CHARS)}`;
+      return response;
+    } catch (error) {
+      refreshFailure = String(error);
+      throw error;
+    }
+  };
+  const token = bearerCredential((await profileAuth.getAuthHeader(recordingFetch))?.value);
   if (token === void 0 || !BEARER_TOKEN.test(token))
     throw new Error(UNUSABLE_LOGIN_REASON);
+  if (refreshFailure !== void 0 && expiryMs(token) < Date.now() + EXPIRY_SKEW_MS)
+    throw new Error(REFRESH_FAILED_REASON + refreshFailure);
   return token;
+}
+function expiryMs(token) {
+  const exp = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).exp;
+  return typeof exp === "number" && Number.isFinite(exp) ? exp * 1e3 : 0;
 }
 function commandToken(command, timeoutMs = CREDENTIAL_TIMEOUT_MS, signal) {
   return spawnToken(SHELL, ["-c", command], timeoutMs, signal);
@@ -15846,13 +15866,13 @@ var TokenCache = class {
     if (this.now() < this.retryAt)
       return Promise.reject(new Error("LangSmith token unavailable"));
     this.pending = this.load().then((token) => {
-      const exp = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).exp;
-      if (typeof exp !== "number" || !Number.isFinite(exp) || exp * 1e3 < this.now() + EXPIRY_SKEW_MS)
+      const expiresAt = expiryMs(token);
+      if (expiresAt < this.now() + EXPIRY_SKEW_MS)
         throw new Error(EXPIRED_TOKEN_REASON);
       this.succeededAt = this.now();
       this.cached = {
         token,
-        until: Math.min(this.now() + this.ttlMs, exp * 1e3 - EXPIRY_MARGIN_MS)
+        until: Math.min(this.now() + this.ttlMs, expiresAt - EXPIRY_MARGIN_MS)
       };
       return token;
     }).catch((error) => {

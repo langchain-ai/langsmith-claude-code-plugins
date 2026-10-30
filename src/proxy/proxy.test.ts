@@ -26,6 +26,7 @@ import {
   KEY_HEADER,
   MAX_REQUEST_BYTES,
   NO_LOGIN_REASON,
+  REFRESH_FAILED_REASON,
   UNUSABLE_LOGIN_REASON,
   UPSTREAM,
 } from "./proxy-constants.js";
@@ -831,6 +832,26 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     const saved = JSON.parse(readFileSync(join(home, ".langsmith", "config.json"), "utf8"));
     expect(saved.profiles.test.oauth.access_token).toBe(token);
     expect(saved.profiles.test.oauth.refresh_token).toBe("rotated-1");
+  });
+  it.each([
+    ["names LangSmith's answer when the expired login can't be refreshed", 1, true],
+    ["keeps a still-valid token when only the early refresh fails", Date.now() / 1000 + 30, false],
+  ])("%s", async (_name, exp, refused) => {
+    const server = http.createServer((req, res) => {
+      req.resume();
+      res.writeHead(req.method === "POST" ? 400 : 404).end('{"error":"invalid_grant"}');
+    });
+    const url = `http://127.0.0.1:${await listen(server)}`;
+    const current = jwt(exp);
+    saveLogin(home, {
+      api_url: url,
+      oauth: { access_token: current, refresh_token: "first", expires_at: "2020-01-01T00:00:00Z" },
+    });
+    if (refused)
+      await expect(loginToken(base)).rejects.toThrow(
+        REFRESH_FAILED_REASON + '400 {"error":"invalid_grant"}',
+      );
+    else expect(await loginToken(base)).toBe(current);
   });
   it.each([
     ["no login", undefined, NO_LOGIN_REASON],

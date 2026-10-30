@@ -12,8 +12,10 @@ import {
   GATEWAY_REFUSED_LOG,
   LOGIN_CONFIG_PATH,
   LOGIN_TOKEN_TTL_MS,
+  MAX_REFRESH_ERROR_CHARS,
   MAX_TOKEN_BYTES,
   NO_LOGIN_REASON,
+  REFRESH_FAILED_REASON,
   REJECTION_RECHECK_MS,
   RETRY_AFTER_MS,
   SHELL,
@@ -33,9 +35,28 @@ export async function loginToken(config: ProxyConfig): Promise<string> {
     profile: config.profile,
   });
   if (profileAuth === undefined) throw new Error(NO_LOGIN_REASON);
-  const token = bearerCredential((await profileAuth.getAuthHeader(fetch))?.value);
+  let refreshFailure: string | undefined;
+  const recordingFetch: typeof fetch = async (input, init) => {
+    try {
+      const response = await fetch(input, init);
+      if (!response.ok)
+        refreshFailure = `${response.status} ${(await response.clone().text()).slice(0, MAX_REFRESH_ERROR_CHARS)}`;
+      return response;
+    } catch (error) {
+      refreshFailure = String(error);
+      throw error;
+    }
+  };
+  const token = bearerCredential((await profileAuth.getAuthHeader(recordingFetch))?.value);
   if (token === undefined || !BEARER_TOKEN.test(token)) throw new Error(UNUSABLE_LOGIN_REASON);
+  if (refreshFailure !== undefined && expiryMs(token) < Date.now() + EXPIRY_SKEW_MS)
+    throw new Error(REFRESH_FAILED_REASON + refreshFailure);
   return token;
+}
+
+function expiryMs(token: string): number {
+  const exp = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).exp;
+  return typeof exp === "number" && Number.isFinite(exp) ? exp * 1000 : 0;
 }
 
 export function commandToken(
@@ -143,17 +164,12 @@ export class TokenCache {
     if (this.now() < this.retryAt) return Promise.reject(new Error("LangSmith token unavailable"));
     this.pending = this.load()
       .then((token) => {
-        const exp = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).exp;
-        if (
-          typeof exp !== "number" ||
-          !Number.isFinite(exp) ||
-          exp * 1000 < this.now() + EXPIRY_SKEW_MS
-        )
-          throw new Error(EXPIRED_TOKEN_REASON);
+        const expiresAt = expiryMs(token);
+        if (expiresAt < this.now() + EXPIRY_SKEW_MS) throw new Error(EXPIRED_TOKEN_REASON);
         this.succeededAt = this.now();
         this.cached = {
           token,
-          until: Math.min(this.now() + this.ttlMs, exp * 1000 - EXPIRY_MARGIN_MS),
+          until: Math.min(this.now() + this.ttlMs, expiresAt - EXPIRY_MARGIN_MS),
         };
         return token;
       })
