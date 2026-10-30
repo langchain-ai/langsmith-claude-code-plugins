@@ -48,15 +48,11 @@ const CURSOR_VERSION_FIELD = "cursor_version";
 
 const TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"] as const;
 
-const SHELL_UNREADABLE_CHARS = process.platform === "win32" ? "$`" : "$`\\\\";
+const SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"$\`]+)"|'([^']+)'|(~(?:\/[^\s;&|()$\`\\"'<>]*)?|[^\s;&|()$\`\\"'<>~-][^\s;&|()$\`\\"'<>]*))`;
 
-const SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"${SHELL_UNREADABLE_CHARS}]+)"|'([^']+)'|(~(?:\/[^\s;&|()${SHELL_UNREADABLE_CHARS}"'<>]*)?|[^\s;&|()${SHELL_UNREADABLE_CHARS}"'<>~-][^\s;&|()${SHELL_UNREADABLE_CHARS}"'<>]*))`;
+const BASH_CD_STEP = new RegExp(String.raw`^cd\s+${SHELL_FOLDER_ARGUMENT}\s*(?:&&\s*|$)`);
 
-const BASH_CD_WORD = /^cd\b/;
-
-const BASH_CD_STEP = new RegExp(String.raw`^cd\s+${SHELL_FOLDER_ARGUMENT}\s*(?:&&|;|$)`);
-
-const BASH_LATER_CD = /\bcd\b/;
+const BASH_FOLDER_CHANGE = /\b(?:cd|pushd|popd)\b/;
 
 const BASH_GIT_WORD = /^git(?=\s)/;
 
@@ -64,9 +60,7 @@ const BASH_GIT_CONFIG_FLAG = /^\s+-c\s+(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
 
 const BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
 
-const BASH_SUBSHELL_STEP = /^\([^()`$]*\)\s*(?:&&|;|$)/;
-
-const BASH_PLAIN_STEP = /^[^;&|()`$<>\n]*(?:&&|;)/;
+const BASH_GIT_DIRECTORY_WORD = /^\s+-C(?=\s|$)/;
 
 const HOME_SHORTHAND = /^~(?=\/|$)/;
 
@@ -222,14 +216,12 @@ export {
   HOOK_EVENT_NAMES,
   CURSOR_VERSION_FIELD,
   TOOL_PATH_INPUT_KEYS,
-  BASH_CD_WORD,
   BASH_CD_STEP,
-  BASH_LATER_CD,
+  BASH_FOLDER_CHANGE,
   BASH_GIT_WORD,
   BASH_GIT_CONFIG_FLAG,
   BASH_GIT_DIRECTORY_FLAG,
-  BASH_SUBSHELL_STEP,
-  BASH_PLAIN_STEP,
+  BASH_GIT_DIRECTORY_WORD,
   HOME_SHORTHAND,
   GLOB_TOOL_NAME,
   PINNED_REPOSITORY_KEYS,

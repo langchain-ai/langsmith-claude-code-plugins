@@ -1113,9 +1113,9 @@ async function waitOutContention(attempt, error2) {
   let isContended = false;
   try {
     const gate = await lstat(gatePath);
-    const isDirectory = gate.isDirectory();
-    isContended = isDirectory || gate.isFile() && code === FILE_EXISTS_CODE;
-    if (isContended && await legacyGateIsAbandoned(gatePath, isDirectory, gate.mtimeMs)) {
+    const isDirectory2 = gate.isDirectory();
+    isContended = isDirectory2 || gate.isFile() && code === FILE_EXISTS_CODE;
+    if (isContended && await legacyGateIsAbandoned(gatePath, isDirectory2, gate.mtimeMs)) {
       if (!await reclaimLegacyGate(gatePath, filePath, tryAcquire))
         await waitForNextScan(deadline, gatePath);
       return;
@@ -1195,10 +1195,10 @@ async function recordLegacyGateOwner(gatePath) {
     throw new Error(FILE_LOCK_COMPATIBLE_OWNER_MESSAGE, { cause: error2 });
   }
 }
-async function legacyGateIsAbandoned(gatePath, isDirectory, modifiedAtMs) {
+async function legacyGateIsAbandoned(gatePath, isDirectory2, modifiedAtMs) {
   let contents;
   try {
-    contents = await readFile(isDirectory ? join(gatePath, FILE_LOCK_COMPATIBLE_OWNER_FILE) : gatePath, FILE_LOCK_ENCODING);
+    contents = await readFile(isDirectory2 ? join(gatePath, FILE_LOCK_COMPATIBLE_OWNER_FILE) : gatePath, FILE_LOCK_ENCODING);
   } catch (error2) {
     if (errorCode(error2) !== FILE_MISSING_CODE)
       return false;
@@ -1206,7 +1206,7 @@ async function legacyGateIsAbandoned(gatePath, isDirectory, modifiedAtMs) {
   }
   const pid = FILE_LOCK_COMPATIBLE_OWNER_PID_PATTERN.test(contents.trim()) ? Number(contents.trim()) : void 0;
   if (pid !== void 0 && Number.isSafeInteger(pid) && pid > 0)
-    return processIsAlive(pid) === false || isDirectory && await ownerHeartbeatStopped(gatePath);
+    return processIsAlive(pid) === false || isDirectory2 && await ownerHeartbeatStopped(gatePath);
   return Date.now() - modifiedAtMs >= FILE_LOCK_COMPATIBLE_ABANDONED_GATE_MS;
 }
 async function ownerHeartbeatStopped(gatePath) {
@@ -1230,8 +1230,8 @@ async function reclaimLegacyGate(gatePath, filePath, tryAcquire) {
         return true;
       throw error2;
     }
-    const isDirectory = gate.isDirectory();
-    if (!await legacyGateIsAbandoned(gatePath, isDirectory, gate.mtimeMs))
+    const isDirectory2 = gate.isDirectory();
+    if (!await legacyGateIsAbandoned(gatePath, isDirectory2, gate.mtimeMs))
       return false;
     const stalePath = `${gatePath}.${randomUUID()}${FILE_LOCK_COMPATIBLE_STALE_SUFFIX}`;
     try {
@@ -1241,7 +1241,7 @@ async function reclaimLegacyGate(gatePath, filePath, tryAcquire) {
         return false;
       throw error2;
     }
-    if (!isDirectory) {
+    if (!isDirectory2) {
       await removeFile(stalePath);
       return true;
     }
@@ -23664,16 +23664,13 @@ var RUN_PATCH_FIELDS = ["outputs", "end_time", "error"];
 var RUN_SNAPSHOT_FIELDS = [...RUN_CONTEXT_FIELDS, "inputs", ...RUN_PATCH_FIELDS];
 var CURSOR_VERSION_FIELD = "cursor_version";
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
-var SHELL_UNREADABLE_CHARS = process.platform === "win32" ? "$`" : "$`\\\\";
-var SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"${SHELL_UNREADABLE_CHARS}]+)"|'([^']+)'|(~(?:\/[^\s;&|()${SHELL_UNREADABLE_CHARS}"'<>]*)?|[^\s;&|()${SHELL_UNREADABLE_CHARS}"'<>~-][^\s;&|()${SHELL_UNREADABLE_CHARS}"'<>]*))`;
-var BASH_CD_WORD = /^cd\b/;
-var BASH_CD_STEP = new RegExp(String.raw`^cd\s+${SHELL_FOLDER_ARGUMENT}\s*(?:&&|;|$)`);
-var BASH_LATER_CD = /\bcd\b/;
+var SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"$\`]+)"|'([^']+)'|(~(?:\/[^\s;&|()$\`\\"'<>]*)?|[^\s;&|()$\`\\"'<>~-][^\s;&|()$\`\\"'<>]*))`;
+var BASH_CD_STEP = new RegExp(String.raw`^cd\s+${SHELL_FOLDER_ARGUMENT}\s*(?:&&\s*|$)`);
+var BASH_FOLDER_CHANGE = /\b(?:cd|pushd|popd)\b/;
 var BASH_GIT_WORD = /^git(?=\s)/;
 var BASH_GIT_CONFIG_FLAG = /^\s+-c\s+(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
 var BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^\s+-C\s+${SHELL_FOLDER_ARGUMENT}`);
-var BASH_SUBSHELL_STEP = /^\([^()`$]*\)\s*(?:&&|;|$)/;
-var BASH_PLAIN_STEP = /^[^;&|()`$<>\n]*(?:&&|;)/;
+var BASH_GIT_DIRECTORY_WORD = /^\s+-C(?=\s|$)/;
 var HOME_SHORTHAND = /^~(?=\/|$)/;
 var GLOB_TOOL_NAME = "Glob";
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
@@ -24525,64 +24522,59 @@ function loadConfig(options) {
 }
 
 // dist/src/repo-attribution-paths.js
-import { existsSync as existsSync3 } from "node:fs";
+import { existsSync as existsSync3, statSync as statSync8 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 import { isAbsolute as isAbsolute5, resolve as resolve14 } from "node:path";
 function insideGitRepository(path3) {
   return typeof rootFromGitMarker(path3) === "string";
 }
-function existingPath(path3, from) {
-  if (!path3)
-    return void 0;
+function directoryAt(path3, from) {
   const target = path3.replace(HOME_SHORTHAND, homedir3());
-  const resolved = isAbsolute5(target) ? target : from && isAbsolute5(from) ? resolve14(from, target) : "";
-  return resolved && existsSync3(resolved) ? resolved : void 0;
+  const resolved = isAbsolute5(target) ? target : from && isAbsolute5(from) ? resolve14(from, target) : void 0;
+  return resolved !== void 0 && isDirectory(resolved) ? resolved : void 0;
+}
+function isDirectory(path3) {
+  try {
+    return statSync8(path3).isDirectory();
+  } catch {
+    return false;
+  }
 }
 function folderArgument(match) {
   return match[1] ?? match[2] ?? match[3];
 }
-function pathFromBashCommand(command, sessionCwd) {
-  let folder;
-  let rest = command.trim();
-  while (rest) {
-    if (BASH_CD_WORD.test(rest)) {
-      const cd = rest.match(BASH_CD_STEP);
-      if (!cd)
-        return void 0;
-      const entered = existingPath(folderArgument(cd), folder ?? sessionCwd);
-      if (!entered)
-        return void 0;
-      folder = entered;
-      rest = rest.slice(cd[0].length).trimStart();
-      continue;
-    }
-    if (BASH_GIT_WORD.test(rest)) {
-      let options = rest.slice(3);
-      let gitFolder = folder ?? sessionCwd;
-      let named = false;
-      for (; ; ) {
-        const config = options.match(BASH_GIT_CONFIG_FLAG);
-        const directory = options.match(BASH_GIT_DIRECTORY_FLAG);
-        const flag = config ?? directory;
-        if (!flag)
-          break;
-        if (directory) {
-          gitFolder = existingPath(folderArgument(directory), gitFolder);
-          if (!gitFolder)
-            return void 0;
-          named = true;
-        }
-        options = options.slice(flag[0].length);
-      }
-      if (named)
-        return BASH_LATER_CD.test(options) ? void 0 : gitFolder;
-    }
-    const step = rest.match(BASH_SUBSHELL_STEP) ?? rest.match(BASH_PLAIN_STEP);
-    if (!step)
-      return BASH_LATER_CD.test(rest) ? void 0 : folder;
-    rest = rest.slice(step[0].length).trimStart();
+function pathFromBashCommand(command, callCwd) {
+  let folder = callCwd;
+  let named = false;
+  let rest = command.trimStart();
+  for (let cd = rest.match(BASH_CD_STEP); cd; cd = rest.match(BASH_CD_STEP)) {
+    folder = directoryAt(folderArgument(cd), folder);
+    if (!folder)
+      return void 0;
+    named = true;
+    rest = rest.slice(cd[0].length);
   }
-  return folder;
+  const git = rest.match(BASH_GIT_WORD);
+  if (git) {
+    rest = rest.slice(git[0].length);
+    for (; ; ) {
+      const config = rest.match(BASH_GIT_CONFIG_FLAG);
+      const directory = rest.match(BASH_GIT_DIRECTORY_FLAG);
+      const flag = config ?? directory;
+      if (!flag)
+        break;
+      if (directory) {
+        folder = directoryAt(folderArgument(directory), folder);
+        if (!folder)
+          return void 0;
+        named = true;
+      }
+      rest = rest.slice(flag[0].length);
+    }
+    if (BASH_GIT_DIRECTORY_WORD.test(rest))
+      return void 0;
+  }
+  return named && !BASH_FOLDER_CHANGE.test(rest) ? folder : void 0;
 }
 function pathFromGlobPattern(pattern) {
   return isAbsolute5(pattern) && insideGitRepository(pattern) ? pattern : void 0;
@@ -24824,7 +24816,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync15, statSync as statSync8, fstatSync as fstatSync3, openSync as openSync5, readSync, closeSync as closeSync5 } from "node:fs";
+import { readFileSync as readFileSync15, statSync as statSync9, fstatSync as fstatSync3, openSync as openSync5, readSync, closeSync as closeSync5 } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
 // dist/src/utils/files.js
@@ -24955,7 +24947,7 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
   const finish = (read) => needle && !anchorFound ? readTranscript(filePath, afterLine, cutAt, turn, { last_line_at: anchor.last_line_at }) : { ...read, anchor: lastAnchor };
   let size;
   try {
-    size = statSync8(filePath).size;
+    size = statSync9(filePath).size;
   } catch {
     return { messages: [], lastLine: afterLine, laterPrompt, anchor };
   }
@@ -25028,7 +25020,7 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
 }
 function getTranscriptEndLine(filePath) {
   try {
-    const size = statSync8(filePath).size;
+    const size = statSync9(filePath).size;
     if (size === 0)
       return -1;
     if (size <= MAX_FULL_READ_BYTES) {
@@ -26241,6 +26233,7 @@ function turnClosedReset(session) {
     current_notification_interrupted: void 0,
     traced_tool_use_ids: [],
     tool_start_times: {},
+    tool_cwds: {},
     turn_count: Math.max(session.turn_count, session.current_turn_number ?? 0)
   };
 }
@@ -26742,6 +26735,7 @@ async function closeEndedSession(_id, closing, config) {
         task_run_map: {},
         traced_tool_use_ids: [],
         tool_start_times: {},
+        tool_cwds: {},
         tool_tracing_modes: {},
         tool_tracing_progress: {},
         pending_subagent_traces: [],
@@ -27021,6 +27015,7 @@ async function main4() {
         task_run_map: preservedTaskRunMap,
         traced_tool_use_ids: [],
         tool_start_times: {},
+        tool_cwds: {},
         pending_subagent_traces: [],
         open_turns: preservedOpenTurns,
         notification_done_agents: ss.notification_done_agents
@@ -27649,7 +27644,7 @@ async function main7() {
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
   const agentId = input.tool_response.agentId;
   const workflow = !agentId ? detectWorkflowLaunch(input.tool_name, input.tool_response) : void 0;
-  const origin = toolOrigin(input.tool_input, input.cwd, input.tool_name);
+  const origin = toolOrigin(input.tool_input, sessionState.tool_cwds?.[input.tool_use_id] ?? input.cwd, input.tool_name);
   if (agentId) {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
   } else if (workflow) {
@@ -27804,6 +27799,10 @@ async function main9() {
         tool_start_times: {
           ...ss.tool_start_times,
           [input.tool_use_id]: startTime
+        },
+        tool_cwds: {
+          ...ss.tool_cwds,
+          [input.tool_use_id]: input.cwd
         }
       }
     };

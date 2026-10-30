@@ -29,6 +29,7 @@ const beta = sandbox.makeRepo(
   "Beta Owner",
   "git@github.com:acme/beta.git",
 );
+const plain = sandbox.makeDir(sandbox.root, "plain folder");
 const stateFilePath = join(sandbox.root, "state.json");
 
 vi.mock("../utils/hook-init.js", () => ({
@@ -45,8 +46,7 @@ vi.mock("../utils/hook-init.js", () => ({
 import { main } from "./post-tool-use.js";
 
 afterAll(() => sandbox.remove());
-beforeEach(() => {
-  captureToolRun.mockClear();
+function writeState(toolCwds: Record<string, string> = {}): void {
   writeFileSync(
     stateFilePath,
     JSON.stringify({
@@ -58,31 +58,61 @@ beforeEach(() => {
         current_turn_run_id: "turn-1",
         current_trace_id: "turn-1",
         current_dotted_order: "20250101T000000000000Zturn-1",
+        tool_cwds: toolCwds,
       },
     }),
   );
+}
+
+beforeEach(() => {
+  captureToolRun.mockClear();
+  writeState();
 });
+
+const hookInput = (
+  tool_name: string,
+  tool_input: unknown,
+  tool_use_id: string,
+  cwd = sandbox.root,
+) => ({
+  session_id: "post-tool-repos",
+  transcript_path: join(sandbox.root, "transcript.jsonl"),
+  cwd,
+  hook_event_name: "PostToolUse",
+  tool_name,
+  tool_input,
+  tool_response: {},
+  tool_use_id,
+});
+
+const lastOrigin = () => captureToolRun.mock.calls.at(-1)?.[3];
 
 describe("PostToolUse", () => {
   it("reads a Glob pattern as the folder searched, but a Grep pattern as text", async () => {
     const pattern = join(beta, "**", "*.txt");
-    const hookInput = (tool_name: string, tool_use_id: string) => ({
-      session_id: "post-tool-repos",
-      transcript_path: join(sandbox.root, "transcript.jsonl"),
-      cwd: sandbox.root,
-      hook_event_name: "PostToolUse",
-      tool_name,
-      tool_input: { pattern },
-      tool_response: {},
-      tool_use_id,
-    });
 
-    payload.current = hookInput("Glob", "t1");
+    payload.current = hookInput("Glob", { pattern }, "t1");
     await main();
-    payload.current = hookInput("Grep", "t2");
+    payload.current = hookInput("Grep", { pattern }, "t2");
     await main();
 
     const origins = captureToolRun.mock.calls.map(([, , , origin]) => origin.path);
     expect(origins).toEqual([pattern, undefined]);
+  });
+
+  it("reads the folder a shell command enters", async () => {
+    payload.current = hookInput("Bash", { command: `cd "${beta}" && ls` }, "t1");
+    await main();
+
+    expect(lastOrigin().path).toBe(beta);
+  });
+
+  it("falls back to the folder the tool started in when a command's folder is unknown", async () => {
+    writeState({ t1: beta });
+    payload.current = hookInput("Bash", { command: `cd "${plain}"; git status` }, "t1", plain);
+    await main();
+
+    expect(lastOrigin()).toMatchObject({ cwd: beta, namedAPath: false });
+    expect(lastOrigin().path).toBeUndefined();
   });
 });

@@ -358,6 +358,7 @@ export async function main(): Promise<void> {
         task_run_map: preservedTaskRunMap,
         traced_tool_use_ids: [],
         tool_start_times: {},
+        tool_cwds: {},
         pending_subagent_traces: [],
         open_turns: preservedOpenTurns,
         notification_done_agents: ss.notification_done_agents,

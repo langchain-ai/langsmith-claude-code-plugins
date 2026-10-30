@@ -223,6 +223,7 @@ export async function closeEndedSession(
         task_run_map: {},
         traced_tool_use_ids: [],
         tool_start_times: {},
+        tool_cwds: {},
         tool_tracing_modes: {},
         tool_tracing_progress: {},
         pending_subagent_traces: [],

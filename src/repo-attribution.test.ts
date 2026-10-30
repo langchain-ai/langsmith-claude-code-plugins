@@ -22,6 +22,7 @@ const alpha = makeRepo("alpha repo", "trunk-alpha", "Alpha Owner", "git@github.c
 const beta = makeRepo("beta repo", "trunk-beta", "Beta Owner", "https://gitlab.com/acme/beta.git");
 const plain = makeDir(root, "plain folder");
 makeRepo("~tilde-repo", "trunk-tilde", "Tilde Owner");
+makeDir(alpha, "-");
 const nested = join(makeDir(alpha, "sub dir"), "nested.txt");
 const betaNested = join(makeDir(beta, "sub dir"), "nested.txt");
 for (const path of [nested, betaNested]) writeFileSync(path, "nested\n");
@@ -107,28 +108,62 @@ describe("repoScopedMetadata", () => {
       ["git -C with a quoted folder", { command: `git -C "${beta}" log` }],
       ["git -C with a relative folder", { command: "git -C '../beta repo' log" }],
       ["a leading cd into a quoted folder", { command: `cd "${beta}" && ls` }],
-      ["a cd ended by a semicolon", { command: `cd '${beta}'; ls` }],
-      ["the last cd of a semicolon chain", { command: `cd "${alpha}"; cd "${beta}" && ls` }],
+      ["a relative cd", { command: 'cd "../beta repo" && ls' }],
+      ["a run of cds", { command: `cd "${alpha}" && cd "${beta}" && git status` }],
+      ["a cd alone", { command: `cd "${beta}"` }],
+      ["a git -C after a cd", { command: `cd "${alpha}" && git -C "${beta}" log` }],
       ["every git -C in order", { command: `git -C "${alpha}" -C "${beta}" log` }],
       ["a relative git -C after another", { command: `git -C "${root}" -C "beta repo" log` }],
       ["a git -c before git -C", { command: `git -c core.x=1 -C "${beta}" log` }],
       ["a git -c after a cd", { command: `cd "${alpha}" && git -c core.x=1 -C "${beta}" log` }],
-      [
-        "a cd after a subshell",
-        { command: `cd "${root}" && (test -d x || mkdir x) && cd "beta repo" && git status` },
-      ],
-      [
-        "a cd outside a subshell that has its own",
-        { command: `cd "${root}" && (cd "alpha repo" && ls) && cd "beta repo"` },
-      ],
-      ["a relative cd", { command: 'cd "../beta repo" && ls' }],
-      ["the last of several cds", { command: `cd "${alpha}" && ls && cd "${beta}" && git status` }],
-      ["a cd after a plain command", { command: `ls -la && cd "${beta}" && git status` }],
-      ["a git -C after a cd", { command: `cd "${alpha}" && git -C "${beta}" log` }],
       ["a Glob pattern with a wildcard", { pattern: `${beta}/**/*.txt` }, "Glob"],
       ["a Glob pattern ending in a partial file name", { pattern: `${beta}/seed*` }, "Glob"],
     ])("attributes %s to the repository it names", (_name, input, tool) => {
       expect(repoScopedMetadata(inSession(), input, alpha, tool)).toMatchObject(inBeta);
+    });
+
+    it.each<[name: string, command: string]>([
+      ["a cd that may not run", `false && cd "${alpha}"; git status`],
+      ["a cd behind a test", `[ -d "${alpha}" ] && cd "${alpha}"; git status`],
+      ["a cd inside braces", `cd "${beta}" && { cd "${alpha}"; git status; }`],
+      ["a cd inside a subshell", `(cd "${alpha}" && ls)`],
+      ["a cd inside an if", `if true; then cd "${alpha}"; fi`],
+      ["a cd inside a loop", `for d in x; do cd "${alpha}"; done`],
+      ["a cd after time", `time cd "${alpha}"`],
+      ["a cd after builtin", `builtin cd "${alpha}"`],
+      ["a cd after command", `command cd "${alpha}"`],
+      ["pushd", `pushd "${alpha}"`],
+      ["pushd after a cd", `cd "${beta}" && pushd "${alpha}"`],
+      ["eval", `eval "cd ${alpha}"`],
+      ["a negated cd", `! cd "${alpha}"`],
+      ["a command before the cd", `echo hi; cd "${alpha}" && ls`],
+      ["a cd ended by a semicolon", `cd "${alpha}"; ls`],
+      ["a cd followed by an or", `cd "${alpha}" || ls`],
+      ["a cd with a redirect", `cd "${alpha}" 2>/dev/null && ls`],
+      ["a cd after another command", `git status && cd "${alpha}"`],
+      ["cd -", `cd "${alpha}" && cd -`],
+      ["a bare cd", `cd "${alpha}" && cd`],
+      ["a cd into a variable", `cd "${alpha}" && cd $HOME/x`],
+      ["a cd into a substitution", `cd "${alpha}" && cd "$(echo ${beta})"`],
+      ["a cd with --", `cd "${alpha}" && cd -- "${beta}"`],
+      ["a cd with an escaped space", `cd "${alpha}" && cd ${beta.replaceAll(" ", "\\ ")}`],
+      ["a cd into nothing", `cd "${alpha}" && cd "${missing}" && ls`],
+      ["a cd into a file", `cd "${alphaSeed}" && ls`],
+      ["a git -C into nothing", `cd "${alpha}" && git -C "${missing}" log`],
+      ["a git -C into a file", `git -C "${alphaSeed}" log`],
+      ["a git -C into a variable", `cd "${alpha}" && git -C $REPO log`],
+      ["a later cd after git -C", `git -C "${alpha}" log && cd "${beta}"`],
+      ["a git first word with an option", `git --no-pager -C "${alpha}" log`],
+    ])("takes the call's own folder when a command has %s", (_name, command) => {
+      expect(repoScopedMetadata(inSession(), { command }, plain)).toEqual(noRepoKeys);
+    });
+
+    it.skipIf(process.platform === "win32")("keeps a backslash inside quotes", () => {
+      const odd = makeRepo("odd\\name", "trunk-odd", "Odd Owner", "git@github.com:acme/odd.git");
+
+      expect(
+        repoScopedMetadata(inSession(), { command: `cd "${odd}" && ls` }, plain),
+      ).toMatchObject({ ls_git_repo: "acme/odd" });
     });
 
     it("resolves a relative git -C against the folder a cd entered", () => {
@@ -137,37 +172,10 @@ describe("repoScopedMetadata", () => {
       expect(repoScopedMetadata(inSession(), { command }, root)).toMatchObject(inBeta);
     });
 
-    it.each<[name: string, command: string]>([
-      ["cd -", `cd "${alpha}" && cd -`],
-      ["a bare cd", `cd "${alpha}" && cd`],
-      ["a cd into a variable", `cd "${alpha}" && cd $HOME/x`],
-      ["a cd into a substitution", `cd "${alpha}" && cd "$(echo ${beta})"`],
-      ["a cd with --", `cd "${alpha}" && cd -- "${beta}"`],
-      ["a cd with an escaped space", `cd "${alpha}" && cd ${beta.replaceAll(" ", "\\ ")}`],
-      ["a later cd after git -C", `git -C "${alpha}" log && cd "${beta}"`],
-      ["a cd into nothing", `cd "${alpha}" && cd "${missing}" && ls`],
-      ["a git -C into nothing", `cd "${alpha}" && git -C "${missing}" log`],
-      ["an or before a cd", `cd "${alpha}" && ls || cd "${beta}"`],
-      ["a leading or", `false || cd "${beta}"`],
-      ["a pipe before a cd", `cd "${alpha}" && ls | head && cd "${beta}"`],
-      ["a variable before a cd", `cd "${alpha}" && echo $HOME && cd "${beta}" && ls`],
-      ["a backtick before a cd", `cd "${alpha}" && echo \`pwd\` && cd "${beta}" && ls`],
-      ["a redirect before a cd", `cd "${alpha}" && echo hi > out.txt && cd "${beta}"`],
-      ["a cd with a redirect", `cd "${alpha}" 2>/dev/null && ls`],
-    ])("takes the call's own folder when a command has %s", (_name, command) => {
-      expect(repoScopedMetadata(inSession(), { command }, plain)).toEqual(noRepoKeys);
-    });
-
     it("does not read another user's home as a folder next to the session's", () => {
       expect(repoScopedMetadata(inSession(), { command: "cd ~tilde-repo && ls" }, root)).toEqual(
         noRepoKeys,
       );
-    });
-
-    it("reads a command's own folder when the cd comes after a plain step", () => {
-      const command = `echo hi; cd "${beta}" && ls`;
-
-      expect(repoScopedMetadata(inSession(), { command }, plain)).toMatchObject(inBeta);
     });
 
     it("reads ~ in a folder the command enters as the person's home", () => {
@@ -295,6 +303,12 @@ describe("turnScopedMetadata", () => {
   const filledFromBeta = { ...noRepository, ...everythingBetaReveals };
 
   type TurnCase = [name: string, base: Row, inputs: unknown[], want: Row];
+
+  it("does not label a turn from the folder a command that names none ran in", () => {
+    const tools = [{ input: { command: "ls" }, cwd: beta }];
+
+    expect(turnScopedMetadata(noRepository, tools, root)).toEqual(noRepository);
+  });
 
   it("reads a Glob pattern by the tool's name", () => {
     const tools = [{ input: { pattern: join(beta, "**") }, name: "Glob" }];
