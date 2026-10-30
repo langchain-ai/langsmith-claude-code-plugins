@@ -571,6 +571,38 @@ describe("traceTurn", () => {
     expect(skillRuns()).toHaveLength(1);
   });
 
+  it.each([
+    ["/Foo", "foo"],
+    ["/plug:foo", "foo"],
+    ["/foo", "plug:foo"],
+  ])("records typed %s and a Skill call for %s once", async (typed, called) => {
+    await traceTurn({
+      turn: skillTurn(
+        `<command-message>${typed.slice(1)}</command-message>\n<command-name>${typed}</command-name>`,
+        true,
+        [skillToolCall("t1", called, { content: `Launching skill: ${called}` })] as never,
+      ),
+      sessionId: "session-123",
+      turnNum: 1,
+    });
+
+    expect(skillRuns()).toHaveLength(1);
+  });
+
+  it("still tags a typed skill when Claude's call for the same skill failed", async () => {
+    await traceTurn({
+      turn: skillTurn(
+        "<command-message>foo</command-message>\n<command-name>/foo</command-name>",
+        true,
+        [skillToolCall("t1", "foo", { content: "Unknown skill: foo", isError: true })] as never,
+      ),
+      sessionId: "session-123",
+      turnNum: 1,
+    });
+
+    expect(skillRuns().map((run) => run.extra.metadata.ls_skill_name)).toEqual(["foo", undefined]);
+  });
+
   it("records a typed skill and a different skill Claude called as two runs", async () => {
     const typed =
       "<command-message>review-pr</command-message>\n<command-name>/review-pr</command-name>";

@@ -25138,8 +25138,8 @@ function groupIntoTurns(messages) {
   let hasStopReasonEndTurn = false;
   let userMessages = [];
   let instructionsPending = false;
+  let instructionsBeforeFirstCall = false;
   let userMessagesBefore = /* @__PURE__ */ new Map();
-  let instructionsBefore = /* @__PURE__ */ new Set();
   function finalizeTurn(forceIncomplete = false) {
     if (!currentUser)
       return;
@@ -25172,7 +25172,7 @@ function groupIntoTurns(messages) {
         endTime: merged.endTime,
         toolCalls,
         userMessagesBefore: userMessagesBefore.get(msgId),
-        instructionsBefore: instructionsBefore.has(msgId) || void 0
+        instructionsBefore: llmCalls.length === 0 ? instructionsBeforeFirstCall : void 0
       });
     }
     turns.push({
@@ -25196,7 +25196,6 @@ function groupIntoTurns(messages) {
         hasStopReasonEndTurn = false;
         userMessages = [];
         userMessagesBefore = /* @__PURE__ */ new Map();
-        instructionsBefore = /* @__PURE__ */ new Set();
         instructionsPending = false;
       } else {
         userMessages.push(msg.message.content);
@@ -25213,9 +25212,8 @@ function groupIntoTurns(messages) {
         if (userMessages.length > 0)
           userMessagesBefore.set(id, userMessages);
         userMessages = [];
-        if (instructionsPending)
-          instructionsBefore.add(id);
-        instructionsPending = false;
+        if (assistantOrder.length === 1)
+          instructionsBeforeFirstCall = instructionsPending;
       }
       assistantChunks.get(id).push(msg);
       if (msg.message.stop_reason === "end_turn") {
@@ -25275,12 +25273,20 @@ function contentText(content) {
 }
 function slashSkillOf(turn) {
   const text = contentText(turn.userContent).trimStart();
-  if (!text.startsWith(SKILL_COMMAND_OPENING) || !turn.llmCalls[0]?.instructionsBefore)
-    return;
-  const [, rawName, rawArgs] = text.matchAll(HARNESS_COMMAND).next().value ?? [];
-  const name = normalizeSkillName(rawName ?? "");
-  const args = rawArgs?.trim();
-  return name && args ? { name, args } : name ? { name } : void 0;
+  if (!text.startsWith(SKILL_COMMAND_OPENING) || !turn.llmCalls[0]?.instructionsBefore) {
+    return void 0;
+  }
+  for (const [, rawName, rawArgs] of text.matchAll(HARNESS_COMMAND)) {
+    const name = normalizeSkillName(rawName);
+    const args = rawArgs?.trim();
+    if (!name)
+      return void 0;
+    return args ? { name, args } : { name };
+  }
+  return void 0;
+}
+function skillKey(name) {
+  return name.toLowerCase().split(":").at(-1) ?? name;
 }
 
 // dist/src/metadata.js
@@ -25551,8 +25557,11 @@ async function traceTurn(options) {
   };
   let lastEndTime = turn.userTimestamp;
   const slashSkill = slashSkillOf(turn);
-  const calledSkills = turn.llmCalls.flatMap((llmCall) => llmCall.toolCalls.map(({ tool_use }) => skillNameFromTool(tool_use.name, tool_use.input)));
-  if (slashSkill && !calledSkills.includes(slashSkill.name)) {
+  const loadedSkillKeys = turn.llmCalls.flatMap((llmCall) => llmCall.toolCalls.flatMap(({ tool_use, result }) => {
+    const name = result?.isError ? void 0 : skillNameFromTool(tool_use.name, tool_use.input);
+    return name ? [skillKey(name)] : [];
+  }));
+  if (slashSkill && !loadedSkillKeys.includes(skillKey(slashSkill.name))) {
     const skillRunId = stableRunId(turn.userTimestamp, sessionId, turnId, "slash-skill");
     const skillInput = {
       skill: slashSkill.name,

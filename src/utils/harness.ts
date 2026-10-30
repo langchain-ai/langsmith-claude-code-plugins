@@ -54,9 +54,18 @@ function contentText(content: Turn["userContent"]): string {
 
 export function slashSkillOf(turn: Turn): SlashSkill | undefined {
   const text = contentText(turn.userContent).trimStart();
-  if (!text.startsWith(SKILL_COMMAND_OPENING) || !turn.llmCalls[0]?.instructionsBefore) return;
-  const [, rawName, rawArgs] = text.matchAll(HARNESS_COMMAND).next().value ?? [];
-  const name = normalizeSkillName(rawName ?? "");
-  const args = rawArgs?.trim();
-  return name && args ? { name, args } : name ? { name } : undefined;
+  if (!text.startsWith(SKILL_COMMAND_OPENING) || !turn.llmCalls[0]?.instructionsBefore) {
+    return undefined;
+  }
+  for (const [, rawName, rawArgs] of text.matchAll(HARNESS_COMMAND)) {
+    const name = normalizeSkillName(rawName);
+    const args = rawArgs?.trim();
+    if (!name) return undefined;
+    return args ? { name, args } : { name };
+  }
+  return undefined;
+}
+
+export function skillKey(name: string): string {
+  return name.toLowerCase().split(":").at(-1) ?? name;
 }

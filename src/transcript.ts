@@ -463,8 +463,8 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
   let hasStopReasonEndTurn = false;
   let userMessages: Turn["userContent"][] = [];
   let instructionsPending = false;
+  let instructionsBeforeFirstCall = false;
   let userMessagesBefore = new Map<string, Turn["userContent"][]>();
-  let instructionsBefore = new Set<string>();
 
   function finalizeTurn(forceIncomplete = false): void {
     if (!currentUser) return;
@@ -511,7 +511,7 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         endTime: merged.endTime,
         toolCalls,
         userMessagesBefore: userMessagesBefore.get(msgId),
-        instructionsBefore: instructionsBefore.has(msgId) || undefined,
+        instructionsBefore: llmCalls.length === 0 ? instructionsBeforeFirstCall : undefined,
       });
     }
 
@@ -545,7 +545,6 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         hasStopReasonEndTurn = false;
         userMessages = [];
         userMessagesBefore = new Map();
-        instructionsBefore = new Set();
         instructionsPending = false;
       } else {
         userMessages.push(msg.message.content);
@@ -560,8 +559,7 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         assistantOrder.push(id);
         if (userMessages.length > 0) userMessagesBefore.set(id, userMessages);
         userMessages = [];
-        if (instructionsPending) instructionsBefore.add(id);
-        instructionsPending = false;
+        if (assistantOrder.length === 1) instructionsBeforeFirstCall = instructionsPending;
       }
       assistantChunks.get(id)!.push(msg);
 

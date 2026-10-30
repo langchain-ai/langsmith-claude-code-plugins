@@ -471,20 +471,60 @@ describe("resolveProvider", () => {
 // ─── groupIntoTurns ─────────────────────────────────────────────────────────
 
 describe("groupIntoTurns", () => {
-  it("flags the first call after a skill body but not after a compaction summary", () => {
+  describe("instructionsBefore", () => {
     const command =
       "<command-message>plain-terms</command-message>\n<command-name>/plain-terms</command-name>";
-    const body = { ...makeUser("Base directory for this skill: /s", T0, "p1"), isMeta: true };
-    const summary = {
-      ...makeUser("Summary of the chat", T0, "p1"),
-      isMeta: true,
-      isCompactSummary: true,
-    };
-    const callsOf = (inserted: UserMessage) =>
-      groupIntoTurns([makeUser(command, T0, "p1"), inserted, makeAssistant("msg_1", "ok")])[0]
-        .llmCalls;
-    expect(callsOf(body)[0].instructionsBefore).toBe(true);
-    expect(callsOf(summary)[0].instructionsBefore).toBeUndefined();
+    const inserted = (text: string, flags: object) => ({
+      ...makeUser(text, T0, "p1"),
+      ...flags,
+    });
+    const flagsOf = (messages: TranscriptMessage[]) =>
+      groupIntoTurns(messages).map((turn) => turn.llmCalls.map((call) => call.instructionsBefore));
+
+    it("is true on the first call after a skill body", () => {
+      const body = inserted("Base directory for this skill: /s", { isMeta: true });
+      expect(flagsOf([makeUser(command, T0, "p1"), body, makeAssistant("m1", "ok")])).toEqual([
+        [true],
+      ]);
+    });
+
+    it("is false after a compaction summary or a message Claude Code did not mark as meta", () => {
+      const summary = inserted("Summary of the chat", { isMeta: true, isCompactSummary: true });
+      const notification = inserted(
+        "<task-notification><task-id>1</task-id></task-notification>",
+        {},
+      );
+      for (const other of [summary, notification]) {
+        expect(flagsOf([makeUser(command, T0, "p1"), other, makeAssistant("m1", "ok")])).toEqual([
+          [false],
+        ]);
+      }
+    });
+
+    it("is false on a call that follows the first one", () => {
+      const body = inserted("Base directory for this skill: /s", { isMeta: true });
+      expect(
+        flagsOf([
+          makeUser("hello", T0, "p1"),
+          makeAssistant("m1", "a"),
+          body,
+          makeAssistant("m2", "b"),
+        ]),
+      ).toEqual([[false, undefined]]);
+    });
+
+    it("does not carry a skill body into the next turn", () => {
+      const body = inserted("Base directory for this skill: /s", { isMeta: true });
+      expect(
+        flagsOf([
+          makeUser(command, T0, "p1"),
+          body,
+          makeAssistant("m1", "ok"),
+          makeUser(command, T1, "p2"),
+          makeAssistant("m2", "ok", { ts: T1 }),
+        ]),
+      ).toEqual([[true], [false]]);
+    });
   });
 
   it("marks a tool result Claude Code flagged as an error", () => {

@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   isCursorPayload,
   isPayloadForHook,
+  skillKey,
   slashSkillOf,
   stripContentMarkup,
   stripHarnessMarkup,
@@ -166,7 +167,30 @@ describe("slashSkillOf", () => {
     ).toBeUndefined();
   });
 
+  it("reads a command with whitespace before it", () => {
+    const turn = turnOf(
+      "\n    <command-message>plain-terms</command-message>\n<command-name>/plain-terms</command-name>",
+      true,
+    );
+    expect(slashSkillOf(turn)).toEqual({ name: "plain-terms" });
+  });
+
+  it("ignores a command named only by a slash", () => {
+    const turn = turnOf("<command-message>x</command-message><command-name>/</command-name>", true);
+    expect(slashSkillOf(turn)).toBeUndefined();
+  });
+
   it("ignores instructions that no slash command started", () => {
     expect(slashSkillOf(turnOf("review this", true))).toBeUndefined();
+  });
+});
+
+describe("skillKey", () => {
+  it.each([
+    ["Foo", "foo"],
+    ["plug:foo", "foo"],
+    ["foo", "foo"],
+  ])("keys %j as %j", (name, key) => {
+    expect(skillKey(name)).toBe(key);
   });
 });
