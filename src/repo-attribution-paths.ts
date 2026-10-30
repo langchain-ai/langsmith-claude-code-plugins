@@ -4,6 +4,7 @@ import { isAbsolute, resolve, sep } from "node:path";
 import { rootFromGitMarker } from "@langchain/plugins-base/git";
 import {
   BASH_CD_STEP,
+  BASH_LEADING_SPACES,
   BASH_QUOTING_CHARS,
   BASH_GUARD_PATTERNS,
   BASH_GIT_CONFIG_FLAG,
@@ -36,15 +37,13 @@ function directoryAt(
 }
 
 function folderArgument(match: RegExpMatchArray): string {
-  return match[3] === undefined
-    ? (match[1] ?? match[2])
-    : match[3].replace(HOME_SHORTHAND, homedir());
+  return match[1].replace(HOME_SHORTHAND, homedir());
 }
 
 function pathFromBashCommand(command: string, callCwd?: string): string | undefined {
   let folder = callCwd !== undefined && isAbsolute(callCwd) ? callCwd : undefined;
   let named = false;
-  let rest = command.replace(/^ +/, "");
+  let rest = command.replace(BASH_LEADING_SPACES, "");
   for (let cd = rest.match(BASH_CD_STEP); cd; cd = rest.match(BASH_CD_STEP)) {
     folder = directoryAt(folderArgument(cd), folder, false);
     if (!folder) return undefined;
@@ -72,8 +71,8 @@ function pathFromBashCommand(command: string, callCwd?: string): string | undefi
 }
 
 function mayPointElsewhere(command: string): boolean {
-  const text = command.replace(BASH_QUOTING_CHARS, "");
-  return BASH_GUARD_PATTERNS.some((pattern) => pattern.test(text));
+  const texts = [command, command.replace(BASH_QUOTING_CHARS, "")];
+  return BASH_GUARD_PATTERNS.some((pattern) => texts.some((text) => pattern.test(text)));
 }
 
 export function commandMayPointElsewhere(toolInput: unknown): boolean {

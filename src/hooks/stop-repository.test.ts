@@ -27,14 +27,9 @@ vi.mock("../logger.js", () => ({
 
 import { closeStoppedTurn } from "./stop.js";
 
-const sandbox = createGitSandbox("ls stop repos ");
-const beta = sandbox.makeRepo(
-  "beta repo",
-  "trunk-beta",
-  "Beta Owner",
-  "git@github.com:acme/beta.git",
-);
-const plain = sandbox.makeDir(sandbox.root, "plain folder");
+const sandbox = createGitSandbox("ls-stop-repos-");
+const beta = sandbox.makeRepo("beta-repo", "trunk-beta", "Beta", "git@github.com:acme/beta.git");
+const plain = sandbox.makeDir(sandbox.root, "plain-folder");
 
 afterAll(() => sandbox.remove());
 beforeEach(() => completeTurnRun.mockClear());
@@ -67,11 +62,12 @@ function transcriptWith(call: Record<string, unknown>, cwd?: string): string {
 async function closingRunMetadata(
   call: Record<string, unknown>,
   lineCwd?: string,
+  hookCwd = plain,
 ): Promise<Record<string, unknown>> {
   const input = {
     session_id: "stop-repos",
     transcript_path: transcriptWith(call, lineCwd),
-    cwd: plain,
+    cwd: hookCwd,
     hook_event_name: "Stop",
     stop_hook_active: false,
     last_assistant_message: "done",
@@ -120,5 +116,13 @@ describe("closeStoppedTurn", () => {
     const shell = { type: "tool_use", id: "t1", name: "Bash", input: { command: "ls" } };
 
     expect(await closingRunMetadata(shell, beta)).toMatchObject({ ls_git_repo: "acme/beta" });
+  });
+
+  it("labels the turn's closing run from the hook's folder when the transcript records none", async () => {
+    const read = { type: "tool_use", id: "t1", name: "Read", input: { file_path: "seed.txt" } };
+
+    expect(await closingRunMetadata(read, undefined, beta)).toMatchObject({
+      ls_git_repo: "acme/beta",
+    });
   });
 });

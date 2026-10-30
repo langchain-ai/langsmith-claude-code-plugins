@@ -957,20 +957,15 @@ describe("traceTurn", () => {
 });
 
 describe("traceTurn repository attribution", () => {
-  const sandbox = createGitSandbox("ls trace turn repos ");
+  const sandbox = createGitSandbox("ls-trace-turn-repos-");
   const alpha = sandbox.makeRepo(
-    "alpha repo",
+    "alpha-repo",
     "trunk-alpha",
-    "Alpha Owner",
+    "Alpha",
     "git@github.com:acme/alpha.git",
   );
-  const beta = sandbox.makeRepo(
-    "beta repo",
-    "trunk-beta",
-    "Beta Owner",
-    "git@github.com:acme/beta.git",
-  );
-  const plain = sandbox.makeDir(sandbox.root, "plain folder");
+  const beta = sandbox.makeRepo("beta-repo", "trunk-beta", "Beta", "git@github.com:acme/beta.git");
+  const plain = sandbox.makeDir(sandbox.root, "plain-folder");
 
   afterAll(() => sandbox.remove());
   beforeEach(() => mockCreateRun.mockClear());
@@ -1014,7 +1009,7 @@ describe("traceTurn repository attribution", () => {
         plain,
         toolCall("t1", "Read", { file_path: join(beta, "seed.txt") }),
         toolCall("t2", "Read", { file_path: join(alpha, "seed.txt") }),
-        toolCall("t3", "Bash", { command: `git -C "${alpha}" log` }),
+        toolCall("t3", "Bash", { command: `git -C ${alpha} log` }),
         toolCall("t4", "Glob", { pattern: join(beta, "**", "*.txt") }),
       ),
     );
@@ -1036,19 +1031,36 @@ describe("traceTurn repository attribution", () => {
     expect(after.ls_git_repo).toBe("acme/beta");
   });
 
-  it("labels the turn from the folder its first call started in", async () => {
-    await traceTools(plain, llmCall(alpha, toolCall("t1", "Bash", { command: "ls" })));
+  const turnRepository = () => created(USER_PROMPT_TURN_NAME).extra.metadata.ls_git_repo;
+  const shell = (id: string) => toolCall(id, "Bash", { command: "ls" });
 
-    expect(created(USER_PROMPT_TURN_NAME).extra.metadata.ls_git_repo).toBe("acme/alpha");
+  it("labels the turn from the folder its first call started in, not its last", async () => {
+    await traceTools(plain, llmCall(alpha, shell("t1")), llmCall(beta, shell("t2")));
+
+    expect(turnRepository()).toBe("acme/alpha");
   });
 
   it("labels a turn from a relative path in the folder its own call ran in", async () => {
     await traceTools(
       plain,
-      llmCall(plain, toolCall("t1", "Bash", { command: "ls" })),
+      llmCall(plain, shell("t1")),
       llmCall(beta, toolCall("t2", "Read", { file_path: "seed.txt" })),
     );
 
-    expect(created(USER_PROMPT_TURN_NAME).extra.metadata.ls_git_repo).toBe("acme/beta");
+    expect(turnRepository()).toBe("acme/beta");
+  });
+
+  it("labels a turn from a Glob by the tool's name", async () => {
+    const glob = toolCall("t1", "Glob", { pattern: join(beta, "**") });
+    await traceTools(plain, llmCall(plain, glob));
+
+    expect(turnRepository()).toBe("acme/beta");
+  });
+
+  it("falls back to the session folder when the transcript records none", async () => {
+    const [onShell] = await traceTools(beta, llmCall(undefined, shell("t1")));
+
+    expect(onShell.ls_git_repo).toBe("acme/beta");
+    expect(turnRepository()).toBe("acme/beta");
   });
 });

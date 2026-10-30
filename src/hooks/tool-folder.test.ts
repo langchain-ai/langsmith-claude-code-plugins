@@ -22,14 +22,9 @@ vi.mock("../logger.js", () => ({
   initLogger: vi.fn(),
 }));
 
-const sandbox = createGitSandbox("ls post tool repos ");
-const beta = sandbox.makeRepo(
-  "beta repo",
-  "trunk-beta",
-  "Beta Owner",
-  "git@github.com:acme/beta.git",
-);
-const plain = sandbox.makeDir(sandbox.root, "plain folder");
+const sandbox = createGitSandbox("ls-post-tool-repos-");
+const beta = sandbox.makeRepo("beta-repo", "trunk-beta", "Beta", "git@github.com:acme/beta.git");
+const plain = sandbox.makeDir(sandbox.root, "plain-folder");
 const stateFilePath = join(sandbox.root, "state.json");
 
 vi.mock("../utils/hook-init.js", () => ({
@@ -102,7 +97,7 @@ describe("PostToolUse", () => {
   });
 
   it("reads the folder a shell command enters", async () => {
-    payload.current = hookInput("Bash", { command: `cd "${beta}" && ls` }, "t1");
+    payload.current = hookInput("Bash", { command: `cd ${beta} && ls` }, "t1");
     await postToolUse();
 
     expect(lastOrigin().path).toBe(beta);
@@ -126,7 +121,7 @@ describe("PostToolUse", () => {
 
   it("names no folder when a command with an unknown folder leaves it", async () => {
     writeState({ t1: beta });
-    payload.current = hookInput("Bash", { command: `cd "${plain}"; git status` }, "t1", plain);
+    payload.current = hookInput("Bash", { command: `cd ${plain}; git status` }, "t1", plain);
     await postToolUse();
 
     expect(lastOrigin().cwd).toBeUndefined();

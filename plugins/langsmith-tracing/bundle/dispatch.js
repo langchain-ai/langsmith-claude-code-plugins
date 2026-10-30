@@ -23664,15 +23664,19 @@ var RUN_PATCH_FIELDS = ["outputs", "end_time", "error"];
 var RUN_SNAPSHOT_FIELDS = [...RUN_CONTEXT_FIELDS, "inputs", ...RUN_PATCH_FIELDS];
 var CURSOR_VERSION_FIELD = "cursor_version";
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
-var SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"$\`]+)"|'([^']+)'|(~(?:\/[^\s;&|()$\`\\"'<>]*)?|[^\s;&|()$\`\\"'<>~-][^\s;&|()$\`\\"'<>]*))`;
-var BASH_CD_STEP = new RegExp(String.raw`^cd +${SHELL_FOLDER_ARGUMENT} *(?:&& *|$)`);
+var SHELL_PLAIN_CHARS = String.raw`[\w./+@%=:,~-]`;
+var SHELL_FOLDER_ARGUMENT = String.raw`(~(?:\/${SHELL_PLAIN_CHARS}*)?|(?![-~])${SHELL_PLAIN_CHARS}+)(?= |$)`;
+var BASH_LEADING_SPACES = /^ +/;
+var BASH_CD_STEP = new RegExp(String.raw`^cd +${SHELL_FOLDER_ARGUMENT} *(?:&& *(?=\S)|$)`);
 var BASH_QUOTING_CHARS = /["'\\]/g;
 var BASH_GUARD_PATTERNS = [
   /(?:^|[^\w%/.-])(?:cd|pushd|popd)(?=$|[^\w-])/,
   /\beval\b/,
   /\benv\b/,
   /\bsource\b/,
-  /(?:^|[;&|({])\s*\.\s/,
+  /(?<![\w./-])\.\s/,
+  /\$["']/,
+  /\{[^{}]*,[^{}]*\}/,
   /\bsh -c\b/,
   /\bbash -c\b/,
   /\bzsh -c\b/,
@@ -23680,13 +23684,14 @@ var BASH_GUARD_PATTERNS = [
   /`/,
   /GIT_DIR/,
   /GIT_WORK_TREE/,
-  /-C /,
+  /(?:^|\s)-C/,
+  /\|&/,
   /--git-dir/,
   /--work-tree/,
   /[\p{Cc}\ufeff]/u
 ];
 var BASH_GIT_WORD = /^git(?= )/;
-var BASH_GIT_CONFIG_FLAG = /^ +-c +(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
+var BASH_GIT_CONFIG_FLAG = new RegExp(String.raw`^ +-c +${SHELL_PLAIN_CHARS}+`);
 var BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^ +-C +${SHELL_FOLDER_ARGUMENT}`);
 var BASH_GIT_OPTION = /^ +-/;
 var HOME_SHORTHAND = /^~(?=\/|$)/;
@@ -24558,12 +24563,12 @@ function directoryAt(path3, from, physical) {
   }
 }
 function folderArgument(match) {
-  return match[3] === void 0 ? match[1] ?? match[2] : match[3].replace(HOME_SHORTHAND, homedir3());
+  return match[1].replace(HOME_SHORTHAND, homedir3());
 }
 function pathFromBashCommand(command, callCwd) {
   let folder = callCwd !== void 0 && isAbsolute5(callCwd) ? callCwd : void 0;
   let named = false;
-  let rest = command.replace(/^ +/, "");
+  let rest = command.replace(BASH_LEADING_SPACES, "");
   for (let cd = rest.match(BASH_CD_STEP); cd; cd = rest.match(BASH_CD_STEP)) {
     folder = directoryAt(folderArgument(cd), folder, false);
     if (!folder)
@@ -24594,8 +24599,8 @@ function pathFromBashCommand(command, callCwd) {
   return named && !mayPointElsewhere(rest) ? folder : void 0;
 }
 function mayPointElsewhere(command) {
-  const text = command.replace(BASH_QUOTING_CHARS, "");
-  return BASH_GUARD_PATTERNS.some((pattern) => pattern.test(text));
+  const texts = [command, command.replace(BASH_QUOTING_CHARS, "")];
+  return BASH_GUARD_PATTERNS.some((pattern) => texts.some((text) => pattern.test(text)));
 }
 function commandMayPointElsewhere(toolInput) {
   const command = toolInput?.command;

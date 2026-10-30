@@ -48,9 +48,13 @@ const CURSOR_VERSION_FIELD = "cursor_version";
 
 const TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"] as const;
 
-const SHELL_FOLDER_ARGUMENT = String.raw`(?:"([^"$\`]+)"|'([^']+)'|(~(?:\/[^\s;&|()$\`\\"'<>]*)?|[^\s;&|()$\`\\"'<>~-][^\s;&|()$\`\\"'<>]*))`;
+const SHELL_PLAIN_CHARS = String.raw`[\w./+@%=:,~-]`;
 
-const BASH_CD_STEP = new RegExp(String.raw`^cd +${SHELL_FOLDER_ARGUMENT} *(?:&& *|$)`);
+const SHELL_FOLDER_ARGUMENT = String.raw`(~(?:\/${SHELL_PLAIN_CHARS}*)?|(?![-~])${SHELL_PLAIN_CHARS}+)(?= |$)`;
+
+const BASH_LEADING_SPACES = /^ +/;
+
+const BASH_CD_STEP = new RegExp(String.raw`^cd +${SHELL_FOLDER_ARGUMENT} *(?:&& *(?=\S)|$)`);
 
 const BASH_QUOTING_CHARS = /["'\\]/g;
 
@@ -59,7 +63,9 @@ const BASH_GUARD_PATTERNS = [
   /\beval\b/,
   /\benv\b/,
   /\bsource\b/,
-  /(?:^|[;&|({])\s*\.\s/,
+  /(?<![\w./-])\.\s/,
+  /\$["']/,
+  /\{[^{}]*,[^{}]*\}/,
   /\bsh -c\b/,
   /\bbash -c\b/,
   /\bzsh -c\b/,
@@ -67,7 +73,8 @@ const BASH_GUARD_PATTERNS = [
   /`/,
   /GIT_DIR/,
   /GIT_WORK_TREE/,
-  /-C /,
+  /(?:^|\s)-C/,
+  /\|&/,
   /--git-dir/,
   /--work-tree/,
   /[\p{Cc}\ufeff]/u,
@@ -75,7 +82,7 @@ const BASH_GUARD_PATTERNS = [
 
 const BASH_GIT_WORD = /^git(?= )/;
 
-const BASH_GIT_CONFIG_FLAG = /^ +-c +(?:"[^"]*"|'[^']*'|[^\s;&|()]+)/;
+const BASH_GIT_CONFIG_FLAG = new RegExp(String.raw`^ +-c +${SHELL_PLAIN_CHARS}+`);
 
 const BASH_GIT_DIRECTORY_FLAG = new RegExp(String.raw`^ +-C +${SHELL_FOLDER_ARGUMENT}`);
 
@@ -237,6 +244,7 @@ export {
   TOOL_PATH_INPUT_KEYS,
   BASH_CD_STEP,
   BASH_QUOTING_CHARS,
+  BASH_LEADING_SPACES,
   BASH_GUARD_PATTERNS,
   BASH_GIT_WORD,
   BASH_GIT_CONFIG_FLAG,
