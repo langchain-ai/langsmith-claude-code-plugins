@@ -25120,7 +25120,7 @@ function findToolResult(toolUseId, toolResults) {
         return {
           content,
           timestamp: msg.timestamp,
-          isError: block.is_error === true ? true : void 0,
+          isError: block.is_error,
           agentId: msg.toolUseResult?.agentId
         };
       }
@@ -25137,7 +25137,9 @@ function groupIntoTurns(messages) {
   let toolResults = [];
   let hasStopReasonEndTurn = false;
   let userMessages = [];
+  let instructionsPending = false;
   let userMessagesBefore = /* @__PURE__ */ new Map();
+  let instructionsBefore = /* @__PURE__ */ new Set();
   function finalizeTurn(forceIncomplete = false) {
     if (!currentUser)
       return;
@@ -25169,7 +25171,8 @@ function groupIntoTurns(messages) {
         startTime: merged.startTime,
         endTime: merged.endTime,
         toolCalls,
-        userMessagesBefore: userMessagesBefore.get(msgId)
+        userMessagesBefore: userMessagesBefore.get(msgId),
+        instructionsBefore: instructionsBefore.has(msgId) || void 0
       });
     }
     turns.push({
@@ -25193,8 +25196,12 @@ function groupIntoTurns(messages) {
         hasStopReasonEndTurn = false;
         userMessages = [];
         userMessagesBefore = /* @__PURE__ */ new Map();
+        instructionsBefore = /* @__PURE__ */ new Set();
+        instructionsPending = false;
       } else {
         userMessages.push(msg.message.content);
+        if (msg.isMeta && !msg.isCompactSummary)
+          instructionsPending = true;
       }
     } else if (isToolResult(msg)) {
       toolResults.push(msg);
@@ -25206,6 +25213,9 @@ function groupIntoTurns(messages) {
         if (userMessages.length > 0)
           userMessagesBefore.set(id, userMessages);
         userMessages = [];
+        if (instructionsPending)
+          instructionsBefore.add(id);
+        instructionsPending = false;
       }
       assistantChunks.get(id).push(msg);
       if (msg.message.stop_reason === "end_turn") {
@@ -25264,14 +25274,13 @@ function contentText(content) {
   return content.map((block) => typeof block.text === "string" ? block.text : "").join("\n");
 }
 function slashSkillOf(turn) {
-  const command = [...contentText(turn.userContent).matchAll(HARNESS_COMMAND)][0];
-  const name = command && normalizeSkillName(command[1]);
-  const isSkillCommand = contentText(turn.userContent).trimStart().startsWith(SKILL_COMMAND_OPENING);
-  const loadedBody = (turn.llmCalls[0]?.userMessagesBefore?.length ?? 0) > 0;
-  if (!name || !isSkillCommand || !loadedBody)
-    return void 0;
-  const args = command[2]?.trim();
-  return args ? { name, args } : { name };
+  const text = contentText(turn.userContent).trimStart();
+  if (!text.startsWith(SKILL_COMMAND_OPENING) || !turn.llmCalls[0]?.instructionsBefore)
+    return;
+  const [, rawName, rawArgs] = text.matchAll(HARNESS_COMMAND).next().value ?? [];
+  const name = normalizeSkillName(rawName ?? "");
+  const args = rawArgs?.trim();
+  return name && args ? { name, args } : name ? { name } : void 0;
 }
 
 // dist/src/metadata.js
@@ -25542,7 +25551,8 @@ async function traceTurn(options) {
   };
   let lastEndTime = turn.userTimestamp;
   const slashSkill = slashSkillOf(turn);
-  if (slashSkill) {
+  const calledSkills = turn.llmCalls.flatMap((llmCall) => llmCall.toolCalls.map(({ tool_use }) => skillNameFromTool(tool_use.name, tool_use.input)));
+  if (slashSkill && !calledSkills.includes(slashSkill.name)) {
     const skillRunId = stableRunId(turn.userTimestamp, sessionId, turnId, "slash-skill");
     const skillInput = {
       skill: slashSkill.name,

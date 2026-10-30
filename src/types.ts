@@ -190,6 +190,20 @@ export interface ToolCall {
   agentId?: string;
 }
 
+/** A tool result matched to its tool call. */
+export interface MatchedToolResult {
+  content: ToolResultContent;
+  timestamp: string;
+  isError?: boolean;
+  agentId?: string;
+}
+
+/** A skill the user started by typing its slash command. */
+export interface SlashSkill {
+  name: string;
+  args?: string;
+}
+
 /** A single LLM response, possibly with tool calls. */
 export interface LLMCall {
   /** Merged content from all streaming chunks. */
@@ -208,6 +222,8 @@ export interface LLMCall {
   toolCalls: ToolCall[];
   /** User-side messages that reached the model after the previous call, such as a skill body. */
   userMessagesBefore?: Turn["userContent"][];
+  /** True when Claude Code loaded instructions, such as a skill body, before this call. */
+  instructionsBefore?: boolean;
   /** True if this LLM call was synthesized (not from the transcript). */
   synthetic?: boolean;
 }

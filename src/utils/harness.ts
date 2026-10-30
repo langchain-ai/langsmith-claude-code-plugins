@@ -7,7 +7,7 @@ import {
   HARNESS_UNWRAPPED_TAG,
   SKILL_COMMAND_OPENING,
 } from "../constants.js";
-import type { HookEventName, HookEventPayload, Turn } from "../types.js";
+import type { HookEventName, HookEventPayload, SlashSkill, Turn } from "../types.js";
 
 export function isCursorPayload(input: unknown): boolean {
   return typeof input === "object" && input !== null && Object.hasOwn(input, CURSOR_VERSION_FIELD);
@@ -52,14 +52,11 @@ function contentText(content: Turn["userContent"]): string {
   return content.map((block) => (typeof block.text === "string" ? block.text : "")).join("\n");
 }
 
-export function slashSkillOf(turn: Turn): { name: string; args?: string } | undefined {
-  const command = [...contentText(turn.userContent).matchAll(HARNESS_COMMAND)][0];
-  const name = command && normalizeSkillName(command[1]);
-  const isSkillCommand = contentText(turn.userContent)
-    .trimStart()
-    .startsWith(SKILL_COMMAND_OPENING);
-  const loadedBody = (turn.llmCalls[0]?.userMessagesBefore?.length ?? 0) > 0;
-  if (!name || !isSkillCommand || !loadedBody) return undefined;
-  const args = command[2]?.trim();
-  return args ? { name, args } : { name };
+export function slashSkillOf(turn: Turn): SlashSkill | undefined {
+  const text = contentText(turn.userContent).trimStart();
+  if (!text.startsWith(SKILL_COMMAND_OPENING) || !turn.llmCalls[0]?.instructionsBefore) return;
+  const [, rawName, rawArgs] = text.matchAll(HARNESS_COMMAND).next().value ?? [];
+  const name = normalizeSkillName(rawName ?? "");
+  const args = rawArgs?.trim();
+  return name && args ? { name, args } : name ? { name } : undefined;
 }

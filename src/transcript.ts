@@ -23,7 +23,7 @@ import type {
   TranscriptRead,
   TurnPrompt,
   ReadAnchor,
-  ToolResultContent,
+  MatchedToolResult,
 } from "./types.js";
 
 // ─── Low-level parsing ─────────────────────────────────────────────────────
@@ -417,9 +417,7 @@ function mergeAdjacentTextBlocks(blocks: ContentBlock[]): ContentBlock[] {
 function findToolResult(
   toolUseId: string,
   toolResults: ToolResultMessage[],
-):
-  | { content: ToolResultContent; timestamp: string; isError?: boolean; agentId?: string }
-  | undefined {
+): MatchedToolResult | undefined {
   for (const msg of toolResults) {
     for (const block of msg.message.content) {
       if (block.type === "tool_result" && block.tool_use_id === toolUseId) {
@@ -431,7 +429,7 @@ function findToolResult(
         return {
           content,
           timestamp: msg.timestamp,
-          isError: block.is_error === true ? true : undefined,
+          isError: block.is_error,
           agentId: msg.toolUseResult?.agentId,
         };
       }
@@ -464,7 +462,9 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
   let toolResults: ToolResultMessage[] = [];
   let hasStopReasonEndTurn = false;
   let userMessages: Turn["userContent"][] = [];
+  let instructionsPending = false;
   let userMessagesBefore = new Map<string, Turn["userContent"][]>();
+  let instructionsBefore = new Set<string>();
 
   function finalizeTurn(forceIncomplete = false): void {
     if (!currentUser) return;
@@ -511,6 +511,7 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         endTime: merged.endTime,
         toolCalls,
         userMessagesBefore: userMessagesBefore.get(msgId),
+        instructionsBefore: instructionsBefore.has(msgId) || undefined,
       });
     }
 
@@ -544,8 +545,11 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         hasStopReasonEndTurn = false;
         userMessages = [];
         userMessagesBefore = new Map();
+        instructionsBefore = new Set();
+        instructionsPending = false;
       } else {
         userMessages.push(msg.message.content);
+        if (msg.isMeta && !msg.isCompactSummary) instructionsPending = true;
       }
     } else if (isToolResult(msg)) {
       toolResults.push(msg);
@@ -556,6 +560,8 @@ export function groupIntoTurns(messages: TranscriptMessage[]): Turn[] {
         assistantOrder.push(id);
         if (userMessages.length > 0) userMessagesBefore.set(id, userMessages);
         userMessages = [];
+        if (instructionsPending) instructionsBefore.add(id);
+        instructionsPending = false;
       }
       assistantChunks.get(id)!.push(msg);
 

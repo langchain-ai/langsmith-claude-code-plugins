@@ -242,7 +242,10 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
   let lastEndTime = turn.userTimestamp;
 
   const slashSkill = slashSkillOf(turn);
-  if (slashSkill) {
+  const calledSkills = turn.llmCalls.flatMap((llmCall) =>
+    llmCall.toolCalls.map(({ tool_use }) => skillNameFromTool(tool_use.name, tool_use.input)),
+  );
+  if (slashSkill && !calledSkills.includes(slashSkill.name)) {
     const skillRunId = stableRunId(turn.userTimestamp, sessionId, turnId, "slash-skill");
     const skillInput = {
       skill: slashSkill.name,

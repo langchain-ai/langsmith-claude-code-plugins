@@ -100,9 +100,7 @@ describe("stripContentMarkup", () => {
 });
 
 describe("slashSkillOf", () => {
-  const SKILL_BODY =
-    "Base directory for this skill: /home/me/.claude/skills/plain-terms\n\n## The rule";
-  const turnOf = (userContent: Turn["userContent"], before: Turn["userContent"][] = []): Turn => ({
+  const turnOf = (userContent: Turn["userContent"], instructionsBefore?: boolean): Turn => ({
     userContent,
     userTimestamp: "2025-01-01T00:00:00Z",
     llmCalls: [
@@ -113,16 +111,16 @@ describe("slashSkillOf", () => {
         startTime: "2025-01-01T00:00:01Z",
         endTime: "2025-01-01T00:00:02Z",
         toolCalls: [],
-        userMessagesBefore: before,
+        instructionsBefore,
       },
     ],
     isComplete: true,
   });
 
-  it("names a skill typed as a slash command once its body reached the model", () => {
+  it("names a skill typed as a slash command once its instructions loaded", () => {
     const turn = turnOf(
       "<command-message>plain-terms</command-message>\n<command-name>/plain-terms</command-name>\n<command-args>shorten this</command-args>",
-      [[{ type: "text", text: SKILL_BODY }]],
+      true,
     );
     expect(slashSkillOf(turn)).toEqual({ name: "plain-terms", args: "shorten this" });
   });
@@ -135,22 +133,15 @@ describe("slashSkillOf", () => {
           text: "<command-message>myplugin:deploy</command-message>\n<command-name>/myplugin:deploy</command-name>",
         },
       ],
-      [SKILL_BODY],
+      true,
     );
     expect(slashSkillOf(turn)).toEqual({ name: "myplugin:deploy" });
   });
 
-  it("names a bundled skill whose body does not open with the base directory", () => {
+  it("names a bundled skill typed with arguments", () => {
     const turn = turnOf(
       "<command-message>code-review</command-message>\n<command-name>/code-review</command-name>\n<command-args>https://github.com/acme/app/pull/1</command-args>",
-      [
-        [
-          {
-            type: "text",
-            text: "Review target: `https://github.com/acme/app/pull/1`\n\nYou are reviewing a pull request.",
-          },
-        ],
-      ],
+      true,
     );
     expect(slashSkillOf(turn)).toEqual({
       name: "code-review",
@@ -158,19 +149,14 @@ describe("slashSkillOf", () => {
     });
   });
 
-  it("ignores a built-in command that loads no skill body", () => {
+  it("ignores a built-in command whose notice Claude Code inserted", () => {
+    const goal =
+      "<command-name>/goal</command-name>\n            <command-message>goal</command-message>\n            <command-args></command-args>";
+    expect(slashSkillOf(turnOf(goal, true))).toBeUndefined();
     expect(slashSkillOf(turnOf("<command-name>/plugin</command-name>"))).toBeUndefined();
-    expect(
-      slashSkillOf(
-        turnOf(
-          "<command-name>/goal</command-name>\n            <command-message>goal</command-message>\n            <command-args></command-args>",
-          [[{ type: "text", text: "A session-scoped Stop hook is now active" }]],
-        ),
-      ),
-    ).toBeUndefined();
   });
 
-  it("ignores a skill command whose body never reached the model", () => {
+  it("ignores a skill command whose instructions never loaded", () => {
     expect(
       slashSkillOf(
         turnOf(
@@ -180,7 +166,7 @@ describe("slashSkillOf", () => {
     ).toBeUndefined();
   });
 
-  it("ignores a skill body that no slash command started", () => {
-    expect(slashSkillOf(turnOf("review this", [SKILL_BODY]))).toBeUndefined();
+  it("ignores instructions that no slash command started", () => {
+    expect(slashSkillOf(turnOf("review this", true))).toBeUndefined();
   });
 });

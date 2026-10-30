@@ -471,6 +471,22 @@ describe("resolveProvider", () => {
 // ─── groupIntoTurns ─────────────────────────────────────────────────────────
 
 describe("groupIntoTurns", () => {
+  it("flags the first call after a skill body but not after a compaction summary", () => {
+    const command =
+      "<command-message>plain-terms</command-message>\n<command-name>/plain-terms</command-name>";
+    const body = { ...makeUser("Base directory for this skill: /s", T0, "p1"), isMeta: true };
+    const summary = {
+      ...makeUser("Summary of the chat", T0, "p1"),
+      isMeta: true,
+      isCompactSummary: true,
+    };
+    const callsOf = (inserted: UserMessage) =>
+      groupIntoTurns([makeUser(command, T0, "p1"), inserted, makeAssistant("msg_1", "ok")])[0]
+        .llmCalls;
+    expect(callsOf(body)[0].instructionsBefore).toBe(true);
+    expect(callsOf(summary)[0].instructionsBefore).toBeUndefined();
+  });
+
   it("marks a tool result Claude Code flagged as an error", () => {
     const failed = makeToolResult("t1", "Unknown skill: nope");
     failed.message.content[0].is_error = true;

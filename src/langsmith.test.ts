@@ -503,10 +503,10 @@ describe("traceTurn", () => {
 
   const skillRuns = () =>
     mockCreateRun.mock.calls.map(([run]) => run).filter((run) => run.name === "Skill");
-  const skillTurn = (userContent: string, before: Turn["userContent"][], toolCalls = []): Turn => ({
+  const skillTurn = (userContent: string, instructionsBefore: boolean, toolCalls = []): Turn => ({
     userContent,
     userTimestamp: "2025-01-01T00:00:00Z",
-    llmCalls: [call([{ type: "text", text: "ok" }], { userMessagesBefore: before, toolCalls })],
+    llmCalls: [call([{ type: "text", text: "ok" }], { instructionsBefore, toolCalls })],
     isComplete: true,
   });
 
@@ -514,7 +514,7 @@ describe("traceTurn", () => {
     await traceTurn({
       turn: skillTurn(
         "<command-message>plain-terms</command-message>\n<command-name>/plain-terms</command-name>\n<command-args>shorten</command-args>",
-        [[{ type: "text", text: "Base directory for this skill: /s/plain-terms\n\nBe plain." }]],
+        true,
       ),
       sessionId: "session-123",
       turnNum: 1,
@@ -531,7 +531,7 @@ describe("traceTurn", () => {
 
   it("records no Skill run for a built-in slash command", async () => {
     await traceTurn({
-      turn: skillTurn("<command-name>/plugin</command-name>", []),
+      turn: skillTurn("<command-name>/plugin</command-name>", false),
       sessionId: "session-123",
       turnNum: 1,
     });
@@ -546,7 +546,7 @@ describe("traceTurn", () => {
 
   it("tags a Skill tool call with its normalized name", async () => {
     await traceTurn({
-      turn: skillTurn("go", [], [
+      turn: skillTurn("go", false, [
         skillToolCall("t1", " /review-pr ", { content: "Launching skill: review-pr" }),
       ] as never),
       sessionId: "session-123",
@@ -557,9 +557,40 @@ describe("traceTurn", () => {
     expect(skillRuns()[0].extra.metadata.ls_skill_name).toBe("review-pr");
   });
 
+  it("records a typed skill once when Claude also called the Skill tool for it", async () => {
+    const typed =
+      "<command-message>review-pr</command-message>\n<command-name>/review-pr</command-name>";
+    await traceTurn({
+      turn: skillTurn(typed, true, [
+        skillToolCall("t1", "review-pr", { content: "Launching skill: review-pr" }),
+      ] as never),
+      sessionId: "session-123",
+      turnNum: 1,
+    });
+
+    expect(skillRuns()).toHaveLength(1);
+  });
+
+  it("records a typed skill and a different skill Claude called as two runs", async () => {
+    const typed =
+      "<command-message>review-pr</command-message>\n<command-name>/review-pr</command-name>";
+    await traceTurn({
+      turn: skillTurn(typed, true, [
+        skillToolCall("t1", "plain-terms", { content: "Launching skill: plain-terms" }),
+      ] as never),
+      sessionId: "session-123",
+      turnNum: 1,
+    });
+
+    expect(skillRuns().map((run) => run.extra.metadata.ls_skill_name)).toEqual([
+      "review-pr",
+      "plain-terms",
+    ]);
+  });
+
   it("does not tag a Skill tool call that failed to load the skill", async () => {
     await traceTurn({
-      turn: skillTurn("go", [], [
+      turn: skillTurn("go", false, [
         skillToolCall("t1", "nonexistent-skill", {
           content: "Unknown skill: nonexistent-skill",
           isError: true,
