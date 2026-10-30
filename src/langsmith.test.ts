@@ -534,6 +534,24 @@ describe("traceTurn", () => {
     ]);
   });
 
+  it("leaves a built-in prompt command or an MCP prompt untagged", async () => {
+    const body = [[{ type: "text", text: "Expanded prompt." }]];
+    for (const name of ["init", "mcp__docs__summarize"]) {
+      mockCreateRun.mockClear();
+      await traceTurn({
+        turn: {
+          userContent: `<command-message>${name}</command-message>\n<command-name>/${name}</command-name>`,
+          userTimestamp: "2025-01-01T00:00:00Z",
+          llmCalls: [call([{ type: "text", text: "Done." }], { userMessagesBefore: body })],
+          isComplete: true,
+        },
+        sessionId: "s",
+        turnNum: 1,
+      });
+      expect(llmRuns()[0].extra.metadata.ls_skill_name).toBeUndefined();
+    }
+  });
+
   it("tags only the first model call of a typed skill's turn", async () => {
     const typed =
       "<command-message>review-pr</command-message>\n<command-name>/review-pr</command-name>";

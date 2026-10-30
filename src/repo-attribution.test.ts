@@ -89,6 +89,13 @@ describe("repoScopedMetadata", () => {
     ["a bare path", { path: betaSeed }, inBeta],
     ["a relative directory", { cwd: "beta repo" }, inBeta, root],
     ["a git -C command", { command: "git -C gamma log -1" }, { ls_git_repo: "acme/gamma" }, root],
+    ["a quoted git -C folder", { command: 'git -C "beta repo" log -1' }, inBeta, root],
+    [
+      "a git -C command with a redirect",
+      { command: "git -C gamma log 2>&1" },
+      { ls_git_repo: "acme/gamma" },
+      root,
+    ],
     ["an absolute glob pattern", { pattern: join(beta, "**", "*.ts") }, inBeta, undefined, "Glob"],
     ["a file nothing has created yet", { file_path: join(alpha, "new", "deep", "x.txt") }, inAlpha],
     ["a file in the git directory", { file_path: join(alpha, ".git", "config") }, inAlpha],

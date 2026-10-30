@@ -1,6 +1,11 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { GIT_DIR_COMMAND, GLOB_CHARACTER, TOOL_PATH_INPUT_KEYS } from "./constants.js";
+import {
+  GIT_DIR_COMMAND,
+  GLOB_CHARACTER,
+  SURROUNDING_QUOTES,
+  TOOL_PATH_INPUT_KEYS,
+} from "./constants.js";
 import type { ToolPathLookup } from "./types.js";
 
 export function toolPathFromInput(
@@ -12,7 +17,10 @@ export function toolPathFromInput(
     return { namedAPath: false };
   }
   const named = toolInput as Record<string, unknown>;
-  const gitDir = typeof named.command === "string" ? GIT_DIR_COMMAND.exec(named.command)?.[1] : "";
+  const gitDir =
+    typeof named.command === "string"
+      ? GIT_DIR_COMMAND.exec(named.command)?.[1]?.replace(SURROUNDING_QUOTES, "")
+      : "";
   const globDir =
     toolName === "Glob" &&
     typeof named.pattern === "string" &&

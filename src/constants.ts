@@ -105,7 +105,11 @@ const HARNESS_UNWRAPPED_TAG =
   /<\/?(bash-input|bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|<\/?pasted_content(\s[^>]*)?>/g;
 const SKILL_COMMAND_OPENING = "<command-message>";
 const SKILL_NAME_LEADING_SLASH = /^\//;
-const GIT_DIR_COMMAND = /^\s*git\s+-C\s+([^\s"'$`\\;&|<>()*?~]+)(?![^]*[;&|\n])/;
+const NON_SKILL_PROMPT_COMMAND =
+  /^(?:mcp__|(?:init|insights|security-review|statusline|team-onboarding)$)/;
+const GIT_DIR_COMMAND =
+  /^\s*git\s+-C\s+("[^"$`\\]*"|'[^']*'|[^\s"'$`\\;&|<>()*?~]+)(?![^]*(?:[;|\n]|(?<!>)&(?!>)))/;
+const SURROUNDING_QUOTES = /^["']|["']$/g;
 const GLOB_CHARACTER = /[*?[{]/;
 const SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
 
@@ -174,7 +178,9 @@ export {
   HARNESS_COMMAND,
   SKILL_COMMAND_OPENING,
   SKILL_NAME_LEADING_SLASH,
+  NON_SKILL_PROMPT_COMMAND,
   GIT_DIR_COMMAND,
+  SURROUNDING_QUOTES,
   GLOB_CHARACTER,
   HARNESS_TASK_NOTIFICATION,
   HARNESS_TASK_NOTIFICATION_KEPT,

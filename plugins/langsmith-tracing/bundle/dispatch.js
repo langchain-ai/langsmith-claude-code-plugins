@@ -23702,7 +23702,9 @@ var HARNESS_TASK_NOTIFICATION_KEPT = /<(summary|result)>([\s\S]*?)<\/\1>/g;
 var HARNESS_UNWRAPPED_TAG = /<\/?(bash-input|bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|<\/?pasted_content(\s[^>]*)?>/g;
 var SKILL_COMMAND_OPENING = "<command-message>";
 var SKILL_NAME_LEADING_SLASH = /^\//;
-var GIT_DIR_COMMAND = /^\s*git\s+-C\s+([^\s"'$`\\;&|<>()*?~]+)(?![^]*[;&|\n])/;
+var NON_SKILL_PROMPT_COMMAND = /^(?:mcp__|(?:init|insights|security-review|statusline|team-onboarding)$)/;
+var GIT_DIR_COMMAND = /^\s*git\s+-C\s+("[^"$`\\]*"|'[^']*'|[^\s"'$`\\;&|<>()*?~]+)(?![^]*(?:[;|\n]|(?<!>)&(?!>)))/;
+var SURROUNDING_QUOTES = /^["']|["']$/g;
 var GLOB_CHARACTER = /[*?[{]/;
 var SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
 var WORKFLOW_TOOL_NAME = "Workflow";
@@ -24524,7 +24526,7 @@ function toolPathFromInput(toolInput, sessionCwd, toolName) {
     return { namedAPath: false };
   }
   const named = toolInput;
-  const gitDir = typeof named.command === "string" ? GIT_DIR_COMMAND.exec(named.command)?.[1] : "";
+  const gitDir = typeof named.command === "string" ? GIT_DIR_COMMAND.exec(named.command)?.[1]?.replace(SURROUNDING_QUOTES, "") : "";
   const globDir = toolName === "Glob" && typeof named.pattern === "string" && isAbsolute5(named.pattern) && named.path === void 0 ? dirname17(`${named.pattern.split(GLOB_CHARACTER)[0]}_`) : "";
   const input = gitDir || globDir && existsSync3(globDir) ? { ...named, path: gitDir || globDir } : named;
   let namedAPath = false;
@@ -25253,7 +25255,8 @@ function stripHarnessMarkup(text) {
 function typedSkillName(content) {
   if (typeof content !== "string" || !content.startsWith(SKILL_COMMAND_OPENING))
     return void 0;
-  return [...content.matchAll(HARNESS_COMMAND)][0]?.[1];
+  const name = [...content.matchAll(HARNESS_COMMAND)][0]?.[1];
+  return name && !NON_SKILL_PROMPT_COMMAND.test(name.trim().replace(SKILL_NAME_LEADING_SLASH, "")) ? name : void 0;
 }
 function stripContentMarkup(content) {
   if (typeof content === "string")
