@@ -19,18 +19,18 @@ import {
 import { endpoints, configDir, loadConfig } from "./config.js";
 import {
   API_URL,
-  AUTH_UNAVAILABLE_LOG,
   CREDENTIAL_SLOT_GUIDANCE,
   EXPIRED_TOKEN_REASON,
   GATEWAY_REFUSED_LOG,
   KEY_HEADER,
   MAX_REQUEST_BYTES,
   NO_LOGIN_REASON,
-  REFRESH_FAILED_REASON,
+  REFRESH_FAILED_LOG,
+  SIGN_IN_FAILED_LOG,
   UNUSABLE_LOGIN_REASON,
   UPSTREAM,
 } from "./proxy-constants.js";
-import { loginGuidance, loginToken, TokenCache } from "./token.js";
+import { loginGuidance, loginToken, SignInFailure, TokenCache } from "./token.js";
 import { control, ensure, gatewayHook, waitForStopped } from "./lifecycle.js";
 import { createConfig } from "./setup.js";
 import {
@@ -833,25 +833,18 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     expect(saved.profiles.test.oauth.access_token).toBe(token);
     expect(saved.profiles.test.oauth.refresh_token).toBe("rotated-1");
   });
-  it.each([
-    ["names LangSmith's answer when the expired login can't be refreshed", 1, true],
-    ["keeps a still-valid token when only the early refresh fails", Date.now() / 1000 + 30, false],
-  ])("%s", async (_name, exp, refused) => {
+  it("logs LangSmith's reply when it refuses a login refresh", async () => {
     const server = http.createServer((req, res) => {
       req.resume();
       res.writeHead(req.method === "POST" ? 400 : 404).end('{"error":"invalid_grant"}');
     });
-    const url = `http://127.0.0.1:${await listen(server)}`;
-    const current = jwt(exp);
     saveLogin(home, {
-      api_url: url,
-      oauth: { access_token: current, refresh_token: "first", expires_at: "2020-01-01T00:00:00Z" },
+      api_url: `http://127.0.0.1:${await listen(server)}`,
+      oauth: { access_token: jwt(1), refresh_token: "first", expires_at: "2020-01-01T00:00:00Z" },
     });
-    if (refused)
-      await expect(loginToken(base)).rejects.toThrow(
-        REFRESH_FAILED_REASON + '400 {"error":"invalid_grant"}',
-      );
-    else expect(await loginToken(base)).toBe(current);
+    const log = vi.fn();
+    await loginToken(base, log);
+    expect(log.mock.calls).toEqual([[REFRESH_FAILED_LOG + '400 {"error":"invalid_grant"}']]);
   });
   it.each([
     ["no login", undefined, NO_LOGIN_REASON],
@@ -860,38 +853,32 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     if (profile !== undefined) saveLogin(home, profile);
     await expect(loginToken(base)).rejects.toThrow(reason);
   });
-  it("logs every sign-in 503, including ones from a remembered failure", async () => {
+  it("logs a failed sign-in when a request reaches the gateway", async () => {
     const log = vi.fn();
     const config = { ...base, useClaudeSubscription: false };
     const token = async () => {
-      throw new Error(NO_LOGIN_REASON);
+      throw new SignInFailure(NO_LOGIN_REASON);
     };
     const proxy = createProxy(config, { token, log });
     config.port = await listen(proxy.server);
-    for (const _attempt of [1, 2]) {
-      const response = await request(config, undefined, { headers: { authorization: undefined } });
-      expect(response.status).toBe(503);
-    }
-    expect(log.mock.calls).toEqual([
-      [AUTH_UNAVAILABLE_LOG + NO_LOGIN_REASON],
-      [AUTH_UNAVAILABLE_LOG + NO_LOGIN_REASON],
-    ]);
+    const response = await request(config, undefined, { headers: { authorization: undefined } });
+    expect(response.status).toBe(503);
+    expect(log).toHaveBeenCalledWith(SIGN_IN_FAILED_LOG + NO_LOGIN_REASON);
   });
-  it("keeps the exact reason sign-in failed and logs a refused token, never the token", async () => {
-    const expired = new TokenCache(async () => jwt(1));
-    await expect(expired.get()).rejects.toThrow();
-    expect(expired.failure).toBe(EXPIRED_TOKEN_REASON);
-    const crashed = new TokenCache(async () => {
-      throw new Error("spawn langsmith ENOENT");
-    });
-    await expect(crashed.get()).rejects.toThrow();
-    expect(crashed.failure).toBe("spawn langsmith ENOENT");
+  it("logs why sign-in failed and when the gateway refused a token, never the token", async () => {
     const log = vi.fn();
+    const expired = jwt(1);
+    await expect(
+      new TokenCache(async () => expired, Date.now, 60_000, log).get(),
+    ).rejects.toThrow();
     const token = jwt();
     const refused = new TokenCache(async () => token, Date.now, 60_000, log);
     await refused.get();
     refused.reject(token);
-    expect(log.mock.calls).toEqual([[GATEWAY_REFUSED_LOG]]);
+    expect(log.mock.calls).toEqual([
+      [SIGN_IN_FAILED_LOG + EXPIRED_TOKEN_REASON],
+      [GATEWAY_REFUSED_LOG],
+    ]);
   });
 });
 describe("shared lifecycle and explicit configuration", () => {

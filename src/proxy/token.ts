@@ -12,14 +12,15 @@ import {
   GATEWAY_REFUSED_LOG,
   LOGIN_CONFIG_PATH,
   LOGIN_TOKEN_TTL_MS,
-  MAX_REFRESH_ERROR_CHARS,
   MAX_TOKEN_BYTES,
   NO_LOGIN_REASON,
-  REFRESH_FAILED_REASON,
+  REFRESH_FAILED_LOG,
   REJECTION_RECHECK_MS,
   RETRY_AFTER_MS,
   SHELL,
+  SIGN_IN_FAILED_LOG,
   TOKEN_COMMAND_REASON,
+  UNREADABLE_TOKEN_REASON,
   UNUSABLE_LOGIN_REASON,
 } from "./proxy-constants.js";
 import type { CredentialState, ProxyConfig } from "./proxy-models.js";
@@ -28,35 +29,28 @@ import type { CredentialState, ProxyConfig } from "./proxy-models.js";
 export function cliEnvironment(): NodeJS.ProcessEnv {
   return { HOME: userHome(), PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
 }
-export async function loginToken(config: ProxyConfig): Promise<string> {
+export class SignInFailure extends Error {}
+
+export async function loginToken(
+  config: ProxyConfig,
+  log: (message: string) => void = () => undefined,
+): Promise<string> {
   const { loadProfileClientConfig } = await import("langsmith/lib/utils/profiles");
   const { profileAuth } = loadProfileClientConfig({
     configPath: join(userHome(), ...LOGIN_CONFIG_PATH),
     profile: config.profile,
   });
-  if (profileAuth === undefined) throw new Error(NO_LOGIN_REASON);
-  let refreshFailure: string | undefined;
-  const recordingFetch: typeof fetch = async (input, init) => {
-    try {
-      const response = await fetch(input, init);
-      if (!response.ok)
-        refreshFailure = `${response.status} ${(await response.clone().text()).slice(0, MAX_REFRESH_ERROR_CHARS)}`;
-      return response;
-    } catch (error) {
-      refreshFailure = String(error);
-      throw error;
-    }
+  if (profileAuth === undefined) throw new SignInFailure(NO_LOGIN_REASON);
+  const loggingFetch: typeof fetch = async (input, init) => {
+    const response = await fetch(input, init);
+    if (init?.method === "POST" && !response.ok)
+      log(`${REFRESH_FAILED_LOG}${response.status} ${await response.clone().text()}`);
+    return response;
   };
-  const token = bearerCredential((await profileAuth.getAuthHeader(recordingFetch))?.value);
-  if (token === undefined || !BEARER_TOKEN.test(token)) throw new Error(UNUSABLE_LOGIN_REASON);
-  if (refreshFailure !== undefined && expiryMs(token) < Date.now() + EXPIRY_SKEW_MS)
-    throw new Error(REFRESH_FAILED_REASON + refreshFailure);
+  const token = bearerCredential((await profileAuth.getAuthHeader(loggingFetch))?.value);
+  if (token === undefined || !BEARER_TOKEN.test(token))
+    throw new SignInFailure(UNUSABLE_LOGIN_REASON);
   return token;
-}
-
-function expiryMs(token: string): number {
-  const exp = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).exp;
-  return typeof exp === "number" && Number.isFinite(exp) ? exp * 1000 : 0;
 }
 
 export function commandToken(
@@ -93,7 +87,7 @@ function spawnToken(
       signal?.removeEventListener("abort", cancel);
       output = "";
       if (token) resolve(token);
-      else reject(new Error(TOKEN_COMMAND_REASON));
+      else reject(new SignInFailure(TOKEN_COMMAND_REASON));
     };
     // Wait for child close after cancellation before releasing the drain lock.
     const cancel = () => {
@@ -128,7 +122,6 @@ export class TokenCache {
   private failedAt?: number;
   private refusedAt?: number;
   private rejectedAt = 0;
-  private lastFailure = "";
   constructor(
     private readonly load: () => Promise<string>,
     private readonly now = Date.now,
@@ -137,9 +130,6 @@ export class TokenCache {
   ) {}
   get loading(): boolean {
     return this.pending !== undefined;
-  }
-  get failure(): string {
-    return this.lastFailure;
   }
   state(): CredentialState {
     const now = this.now();
@@ -164,17 +154,25 @@ export class TokenCache {
     if (this.now() < this.retryAt) return Promise.reject(new Error("LangSmith token unavailable"));
     this.pending = this.load()
       .then((token) => {
-        const expiresAt = expiryMs(token);
-        if (expiresAt < this.now() + EXPIRY_SKEW_MS) throw new Error(EXPIRED_TOKEN_REASON);
+        const exp = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).exp;
+        if (
+          typeof exp !== "number" ||
+          !Number.isFinite(exp) ||
+          exp * 1000 < this.now() + EXPIRY_SKEW_MS
+        )
+          throw new SignInFailure(EXPIRED_TOKEN_REASON);
         this.succeededAt = this.now();
         this.cached = {
           token,
-          until: Math.min(this.now() + this.ttlMs, expiresAt - EXPIRY_MARGIN_MS),
+          until: Math.min(this.now() + this.ttlMs, exp * 1000 - EXPIRY_MARGIN_MS),
         };
         return token;
       })
       .catch((error: unknown) => {
-        this.lastFailure = error instanceof Error ? error.message : String(error);
+        this.log(
+          SIGN_IN_FAILED_LOG +
+            (error instanceof SignInFailure ? error.message : UNREADABLE_TOKEN_REASON),
+        );
         this.cached = undefined;
         this.failedAt = this.now();
         this.retryAt = this.now() + RETRY_AFTER_MS;
