@@ -332,7 +332,6 @@ export interface SessionState {
   last_tool_end_time?: number;
   /** Maps tool_use_id -> wall-clock start time (ms), set by PreToolUse */
   tool_start_times?: Record<string, number>;
-  /** Maps tool_use_id -> the folder the session was in before the tool ran, set by PreToolUse */
   tool_cwds?: Record<string, string>;
   /** Maps agent_id -> parent tool run info for linking subagent traces.
    *  For Agent tools, also stores deferred creation info so the Stop hook
