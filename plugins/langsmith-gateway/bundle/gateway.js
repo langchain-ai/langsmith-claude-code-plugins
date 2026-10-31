@@ -15620,7 +15620,7 @@ function configStatus(home = userHome()) {
 import { appendFileSync, mkdirSync as mkdirSync2, statSync, renameSync as renameSync2 } from "node:fs";
 import { dirname as dirname3 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.5.1_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@0.6.0_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/constants.js
 import { constants as constants2 } from "node:fs";
 var COMMON_BOOLEAN_SETTINGS = {
   enabled: { default: false, restrictive: false },
@@ -15629,25 +15629,26 @@ var COMMON_BOOLEAN_SETTINGS = {
 var COMMON_CONFIG_OPEN_FLAGS = constants2.O_RDONLY | (constants2.O_NONBLOCK ?? 0);
 var MANAGED_CONFIG_OPEN_FLAGS = COMMON_CONFIG_OPEN_FLAGS | (constants2.O_NOFOLLOW ?? 0);
 
-// node_modules/.pnpm/@langchain+plugins-base@0.5.1_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/managed-config.js
+// node_modules/.pnpm/@langchain+plugins-base@0.6.0_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/managed-config.js
 import { closeSync as closeSync2, fstatSync as fstatSync2, lstatSync as lstatSync3, openSync as openSync2, readFileSync as readFileSync3 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname as dirname2, join as join3 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.5.1_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/utils/account-home.js
+// node_modules/.pnpm/@langchain+plugins-base@0.6.0_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/utils/account-home.js
 import { execFileSync } from "node:child_process";
 import { readFileSync as readFileSync2 } from "node:fs";
 import { userInfo as userInfo2 } from "node:os";
 import { isAbsolute as isAbsolute2 } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.5.1_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/managed-lock.js
+// node_modules/.pnpm/@langchain+plugins-base@0.6.0_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/managed-lock.js
 import { isDeepStrictEqual } from "node:util";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.5.1_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/config-files.js
+// node_modules/.pnpm/@langchain+plugins-base@0.6.0_langsmith@0.11.4/node_modules/@langchain/plugins-base/dist/settings/config-files.js
 import { closeSync as closeSync3, fstatSync as fstatSync3, lstatSync as lstatSync4, openSync as openSync3, readFileSync as readFileSync4 } from "node:fs";
 import { join as join4 } from "node:path";
 
 // dist/src/constants.js
+var HELD_TOOL_RUN_MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 var RUN_CONTEXT_FIELDS = [
   "id",
   "name",
@@ -15659,11 +15660,13 @@ var RUN_CONTEXT_FIELDS = [
 ];
 var RUN_PATCH_FIELDS = ["outputs", "end_time", "error"];
 var RUN_SNAPSHOT_FIELDS = [...RUN_CONTEXT_FIELDS, "inputs", ...RUN_PATCH_FIELDS];
+var HOOK_PATCH_FIELDS = ["inputs", ...RUN_PATCH_FIELDS];
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 var BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
   defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
-  strict_auth: { env: "CC_LANGSMITH_STRICT_AUTH", restrictive: false }
+  strict_auth: { env: "CC_LANGSMITH_STRICT_AUTH", restrictive: false },
+  capture_hook_outputs: { env: "CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS", restrictive: false }
 };
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
