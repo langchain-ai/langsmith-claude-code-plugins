@@ -4,6 +4,7 @@ import {
   CONTROL,
   CREDENTIAL_STATE_KEYS,
   DNS_LABEL,
+  LEGACY_CONFIG_KEYS,
   MAX_HOSTNAME_LENGTH,
   MAX_IDENTITY_TOKEN_COMMAND,
   MAX_IDENTITY_TOKEN_TTL_MS,
@@ -80,9 +81,6 @@ export const isWorkspaceId = (value: unknown): value is string =>
 export const isProfile = (value: unknown): boolean =>
   typeof value === "string" && PROFILE_NAME.test(value);
 
-export const isCliPath = (value: unknown): boolean =>
-  typeof value === "string" && isAbsolute(value);
-
 export const isPort = (value: unknown): boolean =>
   Number.isInteger(value) && (value as number) >= MIN_PORT && (value as number) <= MAX_PORT;
 
@@ -103,7 +101,7 @@ export const isSettingsTargets = (value: unknown): boolean =>
   value.every((target) => isSettingsTarget(target));
 
 export const onlyKnownKeys = (value: object): boolean =>
-  Object.keys(value).every((key) => CONFIG_KEYS.includes(key));
+  Object.keys(value).every((key) => CONFIG_KEYS.includes(key) || LEGACY_CONFIG_KEYS.includes(key));
 
 export const isCredentialState = (value: unknown): value is CredentialState =>
   !!value &&
@@ -116,7 +114,6 @@ export const isCredentialState = (value: unknown): value is CredentialState =>
 export const isSavedConfig = (c: ProxyConfig): boolean =>
   typeof c.enabled === "boolean" &&
   typeof c.useClaudeSubscription === "boolean" &&
-  (c.identityTokenCommand === undefined ? isCliPath(c.cli) : absent(c.cli, isCliPath)) &&
   absent(c.profile, isProfile) &&
   isPort(c.port) &&
   isSecret(c.secret) &&

@@ -168,7 +168,6 @@ export async function invoke(
   expect(tree(root)).toEqual(before);
   for (const secret of [
     config.secret,
-    config.cli,
     "synthetic-header",
     "synthetic-before-base",
     "synthetic-native",
@@ -197,7 +196,6 @@ beforeEach(() => {
   config = {
     enabled: true,
     useClaudeSubscription: false,
-    cli: "/never-run-synthetic-cli",
     profile: "preview",
     port: 52507,
     secret: "a".repeat(64),

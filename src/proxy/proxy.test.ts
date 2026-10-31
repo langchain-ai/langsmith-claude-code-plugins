@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import http from "node:http";
 import * as childProcess from "node:child_process";
 import { handleGatewayInput } from "./commands.js";
@@ -6,6 +6,7 @@ import { connect } from "node:net";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { mkdirSync, readFileSync, writeFileSync, chmodSync, statSync } from "node:fs";
+import * as os from "node:os";
 import { join } from "node:path";
 import {
   createProxy,
@@ -19,11 +20,17 @@ import { endpoints, configDir, loadConfig } from "./config.js";
 import {
   API_URL,
   CREDENTIAL_SLOT_GUIDANCE,
+  EXPIRED_TOKEN_REASON,
+  GATEWAY_REFUSED_LOG,
   KEY_HEADER,
   MAX_REQUEST_BYTES,
+  NO_LOGIN_REASON,
+  REFRESH_FAILED_LOG,
+  SIGN_IN_FAILED_LOG,
+  UNUSABLE_LOGIN_REASON,
   UPSTREAM,
 } from "./proxy-constants.js";
-import { cliToken, loginGuidance, TokenCache } from "./token.js";
+import { loginGuidance, loginToken, SignInFailure, TokenCache } from "./token.js";
 import { control, ensure, gatewayHook, waitForStopped } from "./lifecycle.js";
 import { createConfig } from "./setup.js";
 import {
@@ -34,13 +41,24 @@ import {
   nativeAuthorization,
   provisionGlobal,
   request,
+  saveLogin,
   temporary,
+  tokenServer,
 } from "./fixtures/proxy-sandbox.js";
 import { cleanup, listen } from "./fixtures/server-sandbox.js";
 
 vi.mock("node:child_process", async (original) => ({
   ...(await original<typeof import("node:child_process")>()),
 }));
+vi.mock("node:os", async (original) => ({
+  ...(await original<typeof import("node:os")>()),
+  userInfo: vi.fn(),
+}));
+let home: string;
+beforeEach(() => {
+  home = temporary();
+  vi.mocked(os.userInfo).mockReturnValue({ homedir: home } as ReturnType<typeof os.userInfo>);
+});
 
 describe("raw Bearer parsing", () => {
   it("rejects whitespace, controls, comma ambiguity and unsafe header characters without normalization", () => {
@@ -803,47 +821,64 @@ describe("tokens (only fake executables; no credentials or gateway traffic)", ()
     expect(await cache.get()).toBe(second);
     expect(load).toHaveBeenCalledTimes(2);
   });
-  it("pins executable/arguments and sanitizes environment and stdout", async () => {
-    const dir = temporary(),
-      cli = join(dir, "fake-cli"),
-      args = join(dir, "args.json"),
-      token = jwt();
-    writeFileSync(
-      cli,
-      `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(args)},JSON.stringify({args:process.argv.slice(2),env:process.env}));process.stdout.write(${JSON.stringify(token + "\n")});`,
-      { mode: 0o700 },
-    );
-    const urls = { apiUrl: "https://api.preview.test", gatewayUrl: "https://gateway.preview.test" };
-    expect(await cliToken({ ...base, cli, ...urls })).toBe(token);
-    const captured = JSON.parse(readFileSync(args, "utf8"));
-    expect(captured.args).toEqual([
-      "--profile",
-      "test",
-      "--api-url",
-      urls.apiUrl,
-      "--format=pretty",
-      "auth",
-      "token",
-    ]);
-    expect(captured.env.ANTHROPIC_CUSTOM_HEADERS).toBeUndefined();
-    expect(captured.env.LANGSMITH_API_KEY).toBeUndefined();
-    expect(captured.env.NODE_OPTIONS).toBeUndefined();
+  it("refreshes an expired login and saves the rotated refresh token", async () => {
+    const server = await tokenServer();
+    saveLogin(home, {
+      api_url: server.url,
+      oauth: { access_token: jwt(1), refresh_token: "first", expires_at: "2020-01-01T00:00:00Z" },
+    });
+    const token = await loginToken(base);
+    expect(server.refreshes).toEqual(["first"]);
+    const saved = JSON.parse(readFileSync(join(home, ".langsmith", "config.json"), "utf8"));
+    expect(saved.profiles.test.oauth.access_token).toBe(token);
+    expect(saved.profiles.test.oauth.refresh_token).toBe("rotated-1");
   });
-  it("hard kills a hung CLI and hides stderr/nonzero output", async () => {
-    const cli = join(temporary(), "fake-cli");
-    writeFileSync(
-      cli,
-      `#!${process.execPath}\nprocess.stderr.write('private-secret');setInterval(()=>{},1000);`,
-      { mode: 0o700 },
-    );
-    const start = Date.now();
-    await expect(cliToken({ ...base, cli }, 100)).rejects.toThrow(/^LangSmith token unavailable$/);
-    expect(Date.now() - start).toBeLessThan(2000);
-    writeFileSync(
-      cli,
-      `#!${process.execPath}\nprocess.stdout.write('private-secret');process.exit(1);`,
-    );
-    await expect(cliToken({ ...base, cli })).rejects.toThrow(/^LangSmith token unavailable$/);
+  it("logs LangSmith's reply when it refuses a login refresh", async () => {
+    const server = http.createServer((req, res) => {
+      req.resume();
+      res.writeHead(req.method === "POST" ? 400 : 404).end('{"error":"invalid_grant"}');
+    });
+    saveLogin(home, {
+      api_url: `http://127.0.0.1:${await listen(server)}`,
+      oauth: { access_token: jwt(1), refresh_token: "first", expires_at: "2020-01-01T00:00:00Z" },
+    });
+    const log = vi.fn();
+    await loginToken(base, log);
+    expect(log.mock.calls).toEqual([[REFRESH_FAILED_LOG + '400 {"error":"invalid_grant"}']]);
+  });
+  it.each([
+    ["no login", undefined, NO_LOGIN_REASON],
+    ["a malformed token", { oauth: { access_token: "not-a-jwt" } }, UNUSABLE_LOGIN_REASON],
+  ])("refuses %s rather than forwarding it", async (_name, profile, reason) => {
+    if (profile !== undefined) saveLogin(home, profile);
+    await expect(loginToken(base)).rejects.toThrow(reason);
+  });
+  it("logs a failed sign-in when a request reaches the gateway", async () => {
+    const log = vi.fn();
+    const config = { ...base, useClaudeSubscription: false };
+    const token = async () => {
+      throw new SignInFailure(NO_LOGIN_REASON);
+    };
+    const proxy = createProxy(config, { token, log });
+    config.port = await listen(proxy.server);
+    const response = await request(config, undefined, { headers: { authorization: undefined } });
+    expect(response.status).toBe(503);
+    expect(log).toHaveBeenCalledWith(SIGN_IN_FAILED_LOG + NO_LOGIN_REASON);
+  });
+  it("logs why sign-in failed and when the gateway refused a token, never the token", async () => {
+    const log = vi.fn();
+    const expired = jwt(1);
+    await expect(
+      new TokenCache(async () => expired, Date.now, 60_000, log).get(),
+    ).rejects.toThrow();
+    const token = jwt();
+    const refused = new TokenCache(async () => token, Date.now, 60_000, log);
+    await refused.get();
+    refused.reject(token);
+    expect(log.mock.calls).toEqual([
+      [SIGN_IN_FAILED_LOG + EXPIRED_TOKEN_REASON],
+      [GATEWAY_REFUSED_LOG],
+    ]);
   });
 });
 describe("shared lifecycle and explicit configuration", () => {
@@ -1077,7 +1112,7 @@ describe("shared lifecycle and explicit configuration", () => {
         .update(
           JSON.stringify([
             3,
-            config.cli,
+            "/unused/langsmith",
             config.profile,
             config.port,
             config.secret,
@@ -1251,14 +1286,14 @@ describe("shared lifecycle and explicit configuration", () => {
   });
   it("internal config creation produces private explicit config without overwriting or exposing secrets", () => {
     const home = temporary();
-    createConfig(process.execPath, "test", 19991, home);
+    createConfig("test", 19991, home);
     const path = join(configDir(home), "config.json"),
       config = loadConfig(home)!;
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(config.secret).toHaveLength(64);
     expect(config.useClaudeSubscription).toBe(false);
     expect(JSON.parse(readFileSync(path, "utf8")).useClaudeSubscription).toBe(false);
-    expect(() => createConfig(process.execPath, "test", 19991, home)).toThrow();
+    expect(() => createConfig("test", 19991, home)).toThrow();
     chmodSync(path, 0o644);
     expect(() => loadConfig(home)).toThrow("Unsafe proxy configuration");
   });
@@ -1271,6 +1306,16 @@ describe("shared lifecycle and explicit configuration", () => {
       { mode: 0o600 },
     );
     expect(() => loadConfig(home)).toThrow("Invalid proxy configuration");
+  });
+  it("still loads a config saved with the old CLI path", () => {
+    const home = temporary();
+    mkdirSync(configDir(home), { recursive: true, mode: 0o700 });
+    writeFileSync(
+      join(configDir(home), "config.json"),
+      JSON.stringify({ ...base, cli: "/usr/local/bin/langsmith" }),
+      { mode: 0o600 },
+    );
+    expect(loadConfig(home)?.profile).toBe(base.profile);
   });
 });
 
@@ -1359,36 +1404,24 @@ it("validates the private boolean and fingerprints the mode", () => {
   expect(identity({ ...base, useClaudeSubscription: false })).not.toBe(identity(base));
 });
 
-it("cancels an in-flight fake credential child on daemon drain before releasing its port", async () => {
-  const home = temporary();
-  const marker = join(home, "started"),
-    cli = join(home, "cli");
-  writeFileSync(
-    cli,
-    `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)}, String(process.pid)); setInterval(() => {}, 1000);`,
-    { mode: 0o700 },
-  );
-  const config = { ...base, cli, useClaudeSubscription: false };
+it("keeps its port on daemon drain until an in-flight login refresh finishes", async () => {
+  const server = await tokenServer(1500);
+  saveLogin(home, {
+    api_url: server.url,
+    oauth: { access_token: jwt(1), refresh_token: "first", expires_at: "2020-01-01T00:00:00Z" },
+  });
+  const config = { ...base, useClaudeSubscription: false };
   const proxy = createProxy(config);
   config.port = await listen(proxy.server);
   const response = request(config, undefined, { headers: { authorization: undefined } });
   const deadline = Date.now() + 3000;
-  while (
-    !(() => {
-      try {
-        return readFileSync(marker, "utf8");
-      } catch {
-        return false;
-      }
-    })()
-  ) {
-    if (Date.now() > deadline) throw new Error("Fake CLI did not start");
+  while (server.refreshes.length === 0) {
+    if (Date.now() > deadline) throw new Error("Refresh did not start");
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  const pid = Number(readFileSync(marker, "utf8"));
   const closed = once(proxy.server, "close");
   proxy.drain();
-  expect((await response).status).toBe(503);
+  await response;
   await closed;
-  expect(() => process.kill(pid, 0)).toThrow();
+  expect(server.answered).toHaveLength(1);
 });

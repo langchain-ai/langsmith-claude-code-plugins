@@ -18,7 +18,6 @@ export const unexpiredToken = (suffix: string) =>
 export const base: ProxyConfig = {
   enabled: true,
   useClaudeSubscription: false,
-  cli: "/unused/langsmith",
   port: 19991,
   secret: "a".repeat(64),
 };
@@ -100,7 +99,7 @@ export function savedConfig(extra: Record<string, unknown>) {
   chmodSync(join(dir, ".claude"), 0o700);
   chmodSync(directory, 0o700);
   const path = join(directory, "config.json");
-  writeFileSync(path, JSON.stringify({ ...base, cli: "/bin/sh", ...extra }), { mode: 0o600 });
+  writeFileSync(path, JSON.stringify({ ...base, ...extra }), { mode: 0o600 });
   chmodSync(path, 0o600);
   return dir;
 }
@@ -112,7 +111,6 @@ export async function existingInstall(extra: Record<string, unknown> = {}) {
   const port = await listen(health);
   config = {
     ...base,
-    cli: "/bin/sh",
     port,
     identityTokenCommand: SAVED_COMMAND,
     workspaceId: WORKSPACE,

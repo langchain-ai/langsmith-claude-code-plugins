@@ -7,7 +7,6 @@ export interface CredentialIdentity {
 export interface ProxyConfig extends CredentialIdentity {
   enabled: boolean;
   useClaudeSubscription: boolean;
-  cli?: string;
   // Omission delegates to the CLI’s persisted current/default profile.
   profile?: string;
   port: number;
@@ -20,7 +19,6 @@ export interface ProxyConfig extends CredentialIdentity {
 export interface SetupOptions extends CredentialIdentity {
   scope: "global" | "project";
   useClaudeSubscription: boolean;
-  cli?: string;
   profile?: string;
   port?: number;
   apiUrl?: string;
