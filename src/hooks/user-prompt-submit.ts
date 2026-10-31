@@ -34,7 +34,12 @@ import {
   advanceToolTracingProgress,
   furtherRead,
 } from "../state.js";
-import { getTranscriptEndLine, readRuntimeVersion } from "../transcript.js";
+import {
+  getTranscriptEndLine,
+  isHumanMessage,
+  readRuntimeVersion,
+  readTranscript,
+} from "../transcript.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook, stripHarnessMarkup } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
@@ -43,6 +48,7 @@ import {
   LS_INTEGRATION,
   NOTICE_KINDS,
   MUTE_LOCKED_REPLY,
+  OWN_PROMPT_LINE_MAX_AGE_MS,
   USER_PROMPT_TURN_NAME,
 } from "../constants.js";
 import { engineStorageRoot, writerOptions } from "../engine-writer.js";
@@ -60,8 +66,21 @@ import type {
   Config,
   InterruptedClosingInput,
   QueuedClosing,
+  Turn,
   UserPromptSubmitHookInput,
 } from "../types.js";
+
+function readStartBeforeOwnPrompt(filePath: string, promptText: string): number {
+  const { messages, lastLine } = readTranscript(filePath);
+  if (!messages.some((m) => m.type === "user")) return -1;
+  const prompt = messages.filter(isHumanMessage).at(-1);
+  const replied = messages.map((m) => m.type === "assistant").lastIndexOf(true);
+  const content = (prompt?.message.content ?? "") as Turn["userContent"];
+  const text = typeof content === "string" ? content : content.map((b) => b.text ?? "").join("");
+  const age = Date.now() - Date.parse(prompt?.timestamp ?? "");
+  const own = text === promptText && age <= OWN_PROMPT_LINE_MAX_AGE_MS;
+  return lastLine - (own ? messages.length - 1 - replied : 0);
+}
 
 export async function main(): Promise<void> {
   const hookStartTime = Date.now();
@@ -186,7 +205,9 @@ export async function main(): Promise<void> {
     const endLine = getTranscriptEndLine(transcriptPath);
     if (endLine > 0) {
       debug(`Fresh state but transcript has ${endLine + 1} lines — skipping to end`);
-      interruptedLastLine = endLine;
+      interruptedLastLine = config.captureHookOutputs
+        ? readStartBeforeOwnPrompt(transcriptPath, input.prompt)
+        : endLine;
     }
   }
 
@@ -358,6 +379,7 @@ export async function main(): Promise<void> {
         task_run_map: preservedTaskRunMap,
         traced_tool_use_ids: [],
         tool_start_times: {},
+        closed_turn_hooks: undefined,
         pending_subagent_traces: [],
         open_turns: preservedOpenTurns,
         notification_done_agents: ss.notification_done_agents,
@@ -412,6 +434,7 @@ export async function closeInterruptedPrompt(
       error: input.error,
       cutAt: closing.cut_at,
       nextPromptHash: input.next_prompt_hash,
+      captureHookOutputs: config.captureHookOutputs,
     });
     await atomicUpdateState(config.stateFilePath, (s) => {
       const ss = getSessionState(s, input.session_id);

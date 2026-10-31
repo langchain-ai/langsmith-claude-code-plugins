@@ -12,7 +12,9 @@ import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { error, debug } from "../logger.js";
 import { captureRun, initTracing } from "../tracing-engine.js";
 import { queueClosing } from "../closing-queue.js";
-import { initHook } from "../utils/hook-init.js";
+import { flushHeldToolRuns, turnHooks, withTurnHooks } from "../langsmith.js";
+import { readTranscript, turnPrompt } from "../transcript.js";
+import { expandHome, initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 
@@ -51,10 +53,25 @@ export async function closeFailedTurn(
   initTracing(config, input.cwd, input.session_id);
 
   const errorMessage = input.error_details ? `${input.error}: ${input.error_details}` : input.error;
+  const read = config.captureHookOutputs
+    ? readTranscript(
+        expandHome(input.transcript_path)!,
+        sessionState.last_line,
+        undefined,
+        turnPrompt(sessionState),
+        sessionState,
+      )
+    : { messages: [] };
+  await flushHeldToolRuns(
+    config,
+    input.session_id,
+    sessionState.current_turn_run_id,
+    read.messages,
+  );
 
   try {
     await captureRun(
-      {
+      await withTurnHooks(turnHooks(sessionState, read), {
         name: USER_PROMPT_TURN_NAME,
         run_type: "chain",
         id: sessionState.current_turn_run_id!,
@@ -72,7 +89,7 @@ export async function closeFailedTurn(
           approvalPolicy: sessionState.approval_policy,
           agentType: "root",
         }),
-      },
+      }),
       resolveTurnTracingMode(
         config,
         input.session_id,

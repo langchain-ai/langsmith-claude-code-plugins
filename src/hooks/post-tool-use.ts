@@ -14,6 +14,8 @@ import {
   atomicUpdateState,
   getSessionState,
   advanceToolTracingProgress,
+  saveHeldRun,
+  takeHeldRun,
 } from "../state.js";
 import { expandHome, initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
@@ -24,7 +26,7 @@ import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
 import { captureToolRun, initTracing } from "../tracing-engine.js";
 import { stableRunId } from "../utils/ids/run-id.js";
-import type { PostToolUseHookInput } from "../types.js";
+import type { ClaudeRun, PostToolUseHookInput, ToolOrigin, TracingMode } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: PostToolUseHookInput = await readStdin();
@@ -92,6 +94,13 @@ export async function main(): Promise<void> {
     : undefined;
 
   const origin = toolOrigin(input.tool_input, input.cwd);
+  let held = false;
+  const heldKey = [config.stateFilePath, input.session_id, input.tool_use_id] as const;
+  const hold = async (run: ClaudeRun, mode: TracingMode, _parent: string, from: ToolOrigin) => {
+    const content = mode === "full" ? run : { ...run, inputs: {}, outputs: {} };
+    saveHeldRun({ run: content, tracing: mode, origin: from }, ...heldKey);
+    held = true;
+  };
 
   if (agentId) {
     // Agent tool: defer LangSmith run creation to the Stop hook, which will
@@ -132,7 +141,7 @@ export async function main(): Promise<void> {
     );
   } else {
     initTracing(config, input.cwd, input.session_id);
-    await captureToolRun(
+    await (config.captureHookOutputs ? hold : captureToolRun)(
       {
         id: toolRunId,
         name: input.tool_name,
@@ -160,10 +169,13 @@ export async function main(): Promise<void> {
       origin,
     );
   }
+  let kept = false;
 
   // Save state atomically so concurrent PostToolUse hooks don't clobber each other.
   await atomicUpdateState(config.stateFilePath, (freshState) => {
     const freshSession = getSessionState(freshState, input.session_id);
+    const closings = Object.values(freshSession.queued_closings ?? {}).map((c) => c.session);
+    kept = held && [freshSession, ...closings].some((s) => s.current_turn_run_id === parentRunId);
 
     // Both the Agent and Workflow tools launch work that outlives this turn's
     // Stop. Register either the same way — under its launching turn in open_turns
@@ -207,6 +219,7 @@ export async function main(): Promise<void> {
           run_id: toolRunId,
           dotted_order: toolDottedOrder,
           deferred,
+          ...(config.captureHookOutputs ? { tool_use_id: input.tool_use_id } : {}),
           ...(workflow
             ? { workflow_run_id: workflow.runId, is_workflow: true, subagent_done: true }
             : {}),
@@ -235,6 +248,9 @@ export async function main(): Promise<void> {
               "post",
             )),
         last_tool_end_time: toolEndTime,
+        ...(kept
+          ? { held_tool_runs: { ...freshSession.held_tool_runs, [input.tool_use_id]: parentRunId } }
+          : {}),
         ...backgroundUpdate,
         // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this
         // tool call from the transcript. A deferred Agent tool is skipped there
@@ -249,4 +265,5 @@ export async function main(): Promise<void> {
       },
     };
   });
+  if (held && !kept) takeHeldRun(...heldKey);
 }

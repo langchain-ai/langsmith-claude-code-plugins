@@ -11,6 +11,7 @@ import {
   stripModelDateSuffix,
   resolveProvider,
   groupIntoTurns,
+  groupPromptTurns,
 } from "./transcript.js";
 import { hashPrompt } from "./utils/ids/prompt-hash.js";
 import type {
@@ -18,6 +19,7 @@ import type {
   ToolResultMessage,
   AssistantMessage,
   TranscriptMessage,
+  Turn,
 } from "./types.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -153,6 +155,7 @@ describe("readTranscript", () => {
       makeAssistant("msg_3", "c"),
     ]);
     expect(readTranscript(path, -1, undefined, { promptAt: T0 }).lastLine).toBe(3);
+    expect(readTranscript(path, -1, undefined, { promptAt: T0 }).promptId).toBe("p1");
 
     const late = writeJsonl("late.jsonl", [
       makeUser("Earlier"),
@@ -285,6 +288,12 @@ describe("readTranscript", () => {
     expect(messages).toHaveLength(0);
   });
 });
+
+function makeHook(hookEvent: string, text: string, toolUseID: string, attachment = {}) {
+  const hook = { type: "hook_additional_context", content: [text], hookEvent, hookName: hookEvent };
+  const entry = { type: "attachment", attachment: { ...hook, toolUseID, ...attachment } };
+  return { ...entry, timestamp: T0, uuid: toolUseID } as TranscriptMessage;
+}
 
 // ─── getTranscriptEndLine ──────────────────────────────────────────────────
 
@@ -733,5 +742,60 @@ describe("groupIntoTurns", () => {
     ];
     const turns = groupIntoTurns(messages);
     expect(turns[0].userTimestamp).toBe("2025-06-15T12:30:00.500Z");
+  });
+  it("puts tool hook output on its tool and every other hook on its turn", () => {
+    const lines = [
+      makeAssistant("msg_0", "Earlier", { toolUses: [{ id: "t0", name: "Bash", input: {} }] }),
+      makeHook("PreToolUse", "early", "t9"),
+      makeHook("Stop", "previous turn", "Stop"),
+      makeHook("SessionStart", "on main", "SessionStart"),
+      makeUser("Q1", T0, "p1"),
+      makeHook("UserPromptSubmit", "", "hook-a", { content: ["run lint", "", "check types"] }),
+      makeHook("UserPromptSubmit", "", "hook-4", { content: "lone text" }),
+      makeHook("", "nameless", "hook-5", { hookEvent: undefined, hookName: undefined }),
+      { type: "attachment" } as TranscriptMessage,
+      makeHook("UserPromptSubmit", "user only", "hook-1", { type: "hook_system_message" }),
+      makeAssistant("msg_1", "Reading", {
+        toolUses: [
+          { id: "tool_1", name: "Bash", input: {} },
+          { id: "tool_2", name: "Read", input: {} },
+        ],
+      }),
+      makeToolResult("tool_1", "ok"),
+      makeToolResult("tool_2", "data"),
+      makeHook("", "tests pass", "tool_1", { hookEvent: undefined, hookName: "PostToolUse:Bash" }),
+      makeHook("PostToolBatch", "batch done", "tool_1"),
+      makeHook("PostToolUseFailure", "read failed", "tool_2"),
+      makeHook("PostToolUse", "plugin", "tool_1-context"),
+      makeHook("SessionStart", "compacted", "SessionStart"),
+      makeAssistant("msg_2", "Done", { stop_reason: "end_turn" }),
+      makeUser("Q2", T1, "p2"),
+      makeHook("UserPromptSubmit", "again", "hook-2"),
+      makeHook("PostToolUse", "late", "tool_1"),
+      makeHook("PostToolUse", "", "", {
+        type: "async_hook_response",
+        response: { hookSpecificOutput: { additionalContext: "async" } },
+      }),
+      makeAssistant("msg_3", "A2", { stop_reason: "end_turn" }),
+      makeUser("cancelled", T1, "p3"),
+      makeHook("UserPromptSubmit", "cancelled", "hook-3"),
+      makeUser("<command-name>/compact</command-name>", T1, "c1"),
+      makeHook("SessionStart", "compacted again", "SessionStart"),
+      makeUser("Q4", T1, "p4"),
+      makeAssistant("msg_4", "A4", { stop_reason: "end_turn" }),
+    ];
+    const turns = groupPromptTurns(lines);
+    const named = (hooks: Turn["hooks"]) => hooks?.map((h) => `${h.name} ${h.output}`).join(", ");
+    expect(turns.map((turn) => named(turn.hooks))).toEqual([
+      "SessionStart on main, UserPromptSubmit run lint, UserPromptSubmit check types, UserPromptSubmit lone text, PostToolBatch batch done, SessionStart compacted",
+      "UserPromptSubmit again, PostToolUse late, PostToolUse async",
+      "UserPromptSubmit cancelled",
+      undefined,
+      "SessionStart compacted again",
+    ]);
+    expect(turns[0].llmCalls[0].toolCalls.map((tool) => named(tool.hooks))).toEqual([
+      "PostToolUse tests pass, PostToolUse plugin",
+      "PostToolUseFailure read failed",
+    ]);
   });
 });

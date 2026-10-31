@@ -22,7 +22,11 @@ import {
   pruneOldSessions,
   advanceToolTracingProgress,
   furtherRead,
+  saveHeldRun,
+  pruneHeldRuns,
 } from "./state.js";
+import { ENGINE_STORAGE_DIR_NAME, HELD_TOOL_RUN_PREFIX } from "./constants.js";
+import type { HeldToolRun } from "./types.js";
 import type { TracingState } from "./types.js";
 
 const warn = vi.hoisted(() => vi.fn());
@@ -494,6 +498,18 @@ describe("pruneOldSessions", () => {
     };
     const result = pruneOldSessions(state, now);
     expect(result).toHaveProperty("active");
+  });
+
+  it("removes held tool runs older than six hours", () => {
+    const statePath = join(tmpDir, "state.json");
+    const held = { run: { id: "r" }, tracing: "full", origin: "main" } as unknown as HeldToolRun;
+    saveHeldRun(held, statePath, "s", "t");
+    const folder = join(tmpDir, ENGINE_STORAGE_DIR_NAME);
+    writeFileSync(join(folder, "other.json"), "{}", { flag: "wx", mode: 0o600 });
+    pruneHeldRuns(statePath, Date.now() + 5 * 60 * 60 * 1000);
+    expect(readdirSync(folder).sort()).toEqual([`${HELD_TOOL_RUN_PREFIX}s-t.json`, "other.json"]);
+    pruneHeldRuns(statePath, Date.now() + 7 * 60 * 60 * 1000);
+    expect(readdirSync(folder)).toEqual(["other.json"]);
   });
 });
 

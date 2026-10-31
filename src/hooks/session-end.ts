@@ -17,7 +17,7 @@ import {
   completeTurnRun,
   turnIdentityFromOpenTurn,
 } from "../langsmith.js";
-import { loadState, atomicUpdateState, getSessionState, furtherRead } from "../state.js";
+import { loadState, atomicUpdateState, getSessionState, furtherRead, dropHeld } from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { initTracing } from "../tracing-engine.js";
 import { queueClosing } from "../closing-queue.js";
@@ -42,6 +42,11 @@ export async function main(): Promise<void> {
   debug(`SessionEnd hook: session=${input.session_id}, reason=${input.reason}`);
 
   const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
+  if (sessionState.closed_turn_hooks)
+    await atomicUpdateState(config.stateFilePath, (s) => ({
+      ...s,
+      [input.session_id]: { ...s[input.session_id], closed_turn_hooks: undefined },
+    }));
   if (hasOpenWork(sessionState)) {
     await queueClosing(config, "session-end", input, { transcriptCut: true });
     return;
@@ -52,7 +57,12 @@ export async function main(): Promise<void> {
     if (!ss) return s;
     return {
       ...s,
-      [input.session_id]: { ...ss, tool_tracing_modes: {}, tool_tracing_progress: {} },
+      [input.session_id]: {
+        ...ss,
+        ...dropHeld(config.stateFilePath, input.session_id, ss),
+        tool_tracing_modes: {},
+        tool_tracing_progress: {},
+      },
     };
   });
 }
@@ -114,6 +124,7 @@ export async function closeEndedSession(
         runtimeVersion,
         approvalPolicy: sessionState.approval_policy,
         cutAt: closing.cut_at,
+        captureHookOutputs: config.captureHookOutputs,
       });
       position = res.position;
       turnsTraced = res.turnsTraced;
@@ -185,6 +196,7 @@ export async function closeEndedSession(
           runtimeVersion,
           turn: entry,
           error: "Session ended before turn completed",
+          captureHookOutputs: config.captureHookOutputs,
         });
         debug(`Closed interrupted deferred turn ${turnRunId} on session end`);
       }
@@ -215,6 +227,7 @@ export async function closeEndedSession(
       [input.session_id]: {
         ...ss,
         ...counted,
+        ...dropHeld(config.stateFilePath, input.session_id, ss),
         current_turn_tracing: undefined,
         current_turn_run_id: undefined,
         current_trace_id: undefined,

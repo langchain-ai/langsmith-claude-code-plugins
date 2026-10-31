@@ -5,9 +5,15 @@
  * the shared tracing engine, which uploads and retries them in the background.
  */
 
+import { hookOutputs, type HookOutput } from "@langchain/plugins-base/tracing";
 import { resolveTurnTracingMode } from "./tracing-mode.js";
 import type {
+  ClaudeRun,
+  HeldRunSettings,
+  HookDirection,
+  TranscriptMessage,
   Turn,
+  TranscriptRead,
   ContentBlock,
   Usage,
   OpenTurn,
@@ -23,14 +29,22 @@ import type {
 import {
   readTranscript,
   groupIntoTurns,
+  groupPromptTurns,
   resolveProvider,
   completedToolUseIds,
   turnToolInputs,
   turnPrompt,
+  hookPlacement,
+  windowHooks,
 } from "./transcript.js";
-import { loadState, getSessionState } from "./state.js";
+import { loadState, getSessionState, atomicUpdateState, takeHeldRun } from "./state.js";
 import * as logger from "./logger.js";
-import { ASSISTANT_RUN_NAME, SERVER_TOOL_RESULT_TYPE, USER_PROMPT_TURN_NAME } from "./constants.js";
+import {
+  ASSISTANT_RUN_NAME,
+  SERVER_TOOL_RESULT_TYPE,
+  SESSION_START_HOOK,
+  USER_PROMPT_TURN_NAME,
+} from "./constants.js";
 import { stripContentMarkup } from "./utils/harness.js";
 import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import {
@@ -38,10 +52,21 @@ import {
   sessionScopedMetadata,
   turnScopedMetadata,
 } from "./repo-attribution.js";
-import { captureRun, turnFiller } from "./tracing-engine.js";
+import { captureRun, captureToolRun, postedInputs, turnFiller } from "./tracing-engine.js";
 import { stableRunId } from "./utils/ids/run-id.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+export const hooksFiring = (hooks: HookOutput[] | undefined, direction: HookDirection) =>
+  (hooks ?? []).filter((hook) => hookPlacement(hook.name).direction === direction);
+
+export function withHooks<T extends object>(
+  content: T,
+  hooks: HookOutput[] | undefined,
+  direction: HookDirection,
+): T {
+  return { ...content, ...hookOutputs(hooksFiring(hooks, direction)) };
+}
 
 /**
  * Generate dotted order segment for a run.
@@ -179,7 +204,9 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     tracing = "full",
     toolTracingModes,
     hookCwd,
+    captureHookOutputs,
   } = options;
+  const captured = (hooks?: HookOutput[]) => (captureHookOutputs ? hooks : undefined);
 
   const sessionCwd = typeof customMetadata?.cwd === "string" ? customMetadata.cwd : undefined;
   const modelRunBase = sessionScopedMetadata(customMetadata, hookCwd ?? sessionCwd);
@@ -287,8 +314,12 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
           id: toolRunId,
           name: toolCall.tool_use.name,
           run_type: "tool",
-          inputs: { input: toolCall.tool_use.input },
-          outputs: { output: toolCall.result?.content ?? "No result" },
+          inputs: withHooks({ input: toolCall.tool_use.input }, captured(toolCall.hooks), "input"),
+          outputs: withHooks(
+            { output: toolCall.result?.content ?? "No result" },
+            captured(toolCall.hooks),
+            "output",
+          ),
           start_time: toolStartTime,
           end_time: toolEndTime,
           parent_run_id: turnRunId,
@@ -393,10 +424,14 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
         trace_id: traceId,
         dotted_order: parentDottedOrder,
         name: USER_PROMPT_TURN_NAME,
-        inputs: { messages: [{ role: "user", content: userContent }] },
+        inputs: withHooks(
+          { messages: [{ role: "user", content: userContent }] },
+          captured(turn.hooks),
+          "input",
+        ),
         start_time: turn.userTimestamp,
         end_time: lastEndTime,
-        outputs: { messages: turnOutputs },
+        outputs: withHooks({ messages: turnOutputs }, captured(turn.hooks), "output"),
         error: error,
         metadata: codingAgentMetadata({
           sessionId,
@@ -435,7 +470,7 @@ async function patchTurnRun(
   eventKey: string = id.runId,
 ): Promise<void> {
   await captureRun(
-    {
+    await withTurnHooks(id.hooks, {
       name: USER_PROMPT_TURN_NAME,
       run_type: "chain",
       id: id.runId,
@@ -462,7 +497,7 @@ async function patchTurnRun(
         approvalPolicy: id.approvalPolicy,
         agentType: "root",
       }),
-    },
+    }),
     id.tracing,
     id.runId,
     "patch",
@@ -488,7 +523,81 @@ export function turnIdentityFromOpenTurn(
     turnNumber: turn.turn_number,
     runtimeVersion: turn.runtime_version,
     approvalPolicy: turn.approval_policy,
+    hooks: turn.hooks,
   };
+}
+
+export async function withTurnHooks(
+  hooks: HookOutput[] | undefined,
+  run: ClaudeRun,
+): Promise<ClaudeRun> {
+  const posted = hooksFiring(hooks, "input").length > 0 ? await postedInputs(run.id) : undefined;
+  const outputs = run.outputs ?? (hooksFiring(hooks, "output").length > 0 ? {} : undefined);
+  return {
+    ...run,
+    ...(posted ? { inputs: withHooks(posted, hooks, "input") } : {}),
+    ...(outputs ? { outputs: withHooks(outputs, hooks, "output") } : {}),
+  };
+}
+
+export function withTaskRunHooks(
+  taskRunMap: Record<string, TaskRunEntry>,
+  turns: Turn[],
+): Record<string, TaskRunEntry> {
+  const tools = turns.flatMap((turn) => turn.llmCalls.flatMap((call) => call.toolCalls));
+  return Object.fromEntries(
+    Object.entries(taskRunMap).map(([id, entry]) => {
+      const hooks = tools.find((tool) => tool.tool_use.id === entry.tool_use_id)?.hooks;
+      return [id, hooks && entry.tracing === "full" ? { ...entry, hooks } : entry];
+    }),
+  );
+}
+
+export async function flushHeldToolRuns(
+  { stateFilePath, captureHookOutputs }: HeldRunSettings,
+  sessionId: string,
+  turnRunId: string | undefined,
+  messages: TranscriptMessage[],
+): Promise<void> {
+  const refs = Object.entries(
+    getSessionState(loadState(stateFilePath), sessionId).held_tool_runs ?? {},
+  ).filter(([, turn]) => turn === turnRunId);
+  if (refs.length === 0) return;
+  for (const [id] of refs) {
+    const held = takeHeldRun(stateFilePath, sessionId, id);
+    if (!held) continue;
+    const hooks = captureHookOutputs ? windowHooks(messages, id) : [];
+    const inputs = withHooks(held.run.inputs ?? {}, hooks, "input");
+    const outputs = withHooks(held.run.outputs ?? {}, hooks, "output");
+    const run = { ...held.run, inputs, outputs };
+    await captureToolRun(run, held.tracing, run.parent_run_id!, held.origin).catch((err) =>
+      logger.error(`Failed to trace held tool ${id}: ${err}`),
+    );
+  }
+  await atomicUpdateState(stateFilePath, (state) => {
+    const session = getSessionState(state, sessionId);
+    const runs = { ...session.held_tool_runs };
+    for (const [id] of refs) delete runs[id];
+    return { ...state, [sessionId]: { ...session, held_tool_runs: runs } };
+  });
+}
+
+export function turnHooks(
+  session: SessionState,
+  { messages, promptId }: Pick<TranscriptRead, "messages" | "promptId">,
+): HookOutput[] | undefined {
+  const turns = groupPromptTurns(messages);
+  const start = Date.parse(session.current_turn_start ?? "");
+  const index = promptId
+    ? turns.findIndex((turn) => turn.promptId === promptId)
+    : turns.reduce((found, turn, i) => (Date.parse(turn.userTimestamp) <= start ? i : found), -1);
+  const own = index < 0 ? [] : turns.slice(index);
+  const replied = own.some((turn) => turn.llmCalls.length > 0);
+  const hooks =
+    turns.length === 0
+      ? windowHooks(messages)
+      : own.flatMap((t) => t.hooks ?? []).filter((h) => replied || h.name !== SESSION_START_HOOK);
+  return hooks.length > 0 ? hooks : undefined;
 }
 
 /**
@@ -513,6 +622,7 @@ export async function completeTurnRun(options: {
   runtimeVersion?: string;
   approvalPolicy?: string;
   eventKey?: string;
+  hooks?: HookOutput[];
 }): Promise<void> {
   await patchTurnRun(
     options,
@@ -559,6 +669,7 @@ export async function closeInterruptedTurn(options: {
   error?: string;
   cutAt?: string;
   nextPromptHash?: string;
+  captureHookOutputs?: boolean;
 }): Promise<{ position: ReadPosition; turnsTraced: number; consumedToolUseIds?: string[] }> {
   const {
     sessionId,
@@ -598,6 +709,7 @@ export async function closeInterruptedTurn(options: {
   let position: ReadPosition = sessionState;
   let turnsTraced = 0;
   let consumedToolUseIds: string[] = [];
+  let read: Pick<TranscriptRead, "messages" | "promptId"> = { messages: [] };
   let taskRunMap = sessionState.task_run_map ?? {};
   // Parent turn markers to propagate onto subagent runs.
   let turnId: string | undefined;
@@ -606,13 +718,14 @@ export async function closeInterruptedTurn(options: {
   // Trace LLM calls from the transcript if we have a path.
   if (transcriptPath) {
     try {
-      const { messages, lastLine, anchor } = readTranscript(
+      const { messages, lastLine, anchor, promptId } = readTranscript(
         transcriptPath,
         sessionState.last_line,
         options.cutAt,
         { ...turnPrompt(sessionState), nextPromptHash: options.nextPromptHash },
         sessionState,
       );
+      read = { messages, promptId };
       if (messages.length > 0) {
         const turns = groupIntoTurns(messages);
         if (turns.length > 0) {
@@ -631,6 +744,7 @@ export async function closeInterruptedTurn(options: {
             customMetadata,
             runtimeVersion,
             approvalPolicy,
+            captureHookOutputs: options.captureHookOutputs,
           });
           position = { last_line: lastLine, ...anchor };
           turnsTraced = 1;
@@ -661,11 +775,14 @@ export async function closeInterruptedTurn(options: {
         runtimeVersion,
         turnId,
         turnNumber,
+        captureHookOutputs: options.captureHookOutputs,
       });
     } catch (err) {
       logger.error(`Failed to trace pending subagents on interrupt: ${err}`);
     }
   }
+
+  await flushHeldToolRuns(options, sessionId, sessionState.current_turn_run_id, read.messages);
 
   // Close the parent turn run with the error message.
   await closeTurnRun(
@@ -673,6 +790,7 @@ export async function closeInterruptedTurn(options: {
       sessionId,
       customMetadata,
       tracing,
+      hooks: options.captureHookOutputs ? turnHooks(sessionState, read) : undefined,
       runId: sessionState.current_turn_run_id!,
       traceId: sessionState.current_trace_id,
       dottedOrder: sessionState.current_dotted_order,
@@ -714,6 +832,7 @@ export async function tracePendingSubagents(options: {
    *  {@link closeAgentToolRun}) once that follow-up is done. Used for async
    *  (background) subagents, which always emit a task-notification afterward. */
   keepAgentToolRunOpen?: boolean;
+  captureHookOutputs?: boolean;
 }): Promise<string[]> {
   const {
     sessionId,
@@ -793,8 +912,8 @@ export async function tracePendingSubagents(options: {
             id: parentToolRunId,
             name: "Agent",
             run_type: "tool",
-            inputs: { input: deferred.inputs ?? {} },
-            outputs: { output: deferred.outputs ?? {} },
+            inputs: withHooks({ input: deferred.inputs ?? {} }, taskRunInfo.hooks, "input"),
+            outputs: withHooks({ output: deferred.outputs ?? {} }, taskRunInfo.hooks, "output"),
             start_time: subagentStartTime,
             // Leave open for async agents — the task-notification turn nests under
             // this run, so it can't be closed until that turn completes.
@@ -847,6 +966,7 @@ export async function tracePendingSubagents(options: {
           turnId,
           turnNumber,
           rootRunId,
+          captureHookOutputs: options.captureHookOutputs,
         });
       }
     } catch (err) {
@@ -883,6 +1003,7 @@ async function traceSubagentChain(opts: {
   turnId?: string;
   turnNumber?: number;
   rootRunId?: string;
+  captureHookOutputs?: boolean;
 }): Promise<void> {
   const filledForTheTurn = await turnFiller(opts.rootRunId);
   const subagentChainId = stableRunId(opts.startTime, opts.parentRunId, opts.subagentId);
@@ -930,6 +1051,7 @@ async function traceSubagentChain(opts: {
       runtimeVersion: opts.runtimeVersion,
       agentType: "subagent",
       rootRunId: opts.rootRunId,
+      captureHookOutputs: opts.captureHookOutputs,
     });
   }
 
@@ -958,6 +1080,7 @@ export async function traceWorkflowStage(opts: {
   runtimeVersion?: string;
   turnId?: string;
   turnNumber?: number;
+  captureHookOutputs?: boolean;
 }): Promise<void> {
   if (!opts.parentTraceId) {
     logger.warn(`Cannot trace workflow stage ${opts.stageAgentId}: no parent trace ID`);
@@ -995,6 +1118,7 @@ export async function traceWorkflowStage(opts: {
     runtimeVersion: opts.runtimeVersion,
     turnId: opts.turnId,
     turnNumber: opts.turnNumber,
+    captureHookOutputs: opts.captureHookOutputs,
   });
 }
 
@@ -1039,8 +1163,8 @@ export async function closeAgentToolRun(options: {
       id: options.taskRunInfo.run_id,
       name: runName,
       run_type: "tool",
-      inputs: { input: deferred.inputs ?? {} },
-      outputs: { output: deferred.outputs ?? {} },
+      inputs: withHooks({ input: deferred.inputs ?? {} }, options.taskRunInfo.hooks, "input"),
+      outputs: withHooks({ output: deferred.outputs ?? {} }, options.taskRunInfo.hooks, "output"),
       start_time: deferred.start_time as string,
       end_time: new Date().toISOString(),
       parent_run_id: deferred.parent_run_id as string,

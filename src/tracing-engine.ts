@@ -1,7 +1,7 @@
 import { buildCodingAgentMetadata } from "@langchain/plugins-base/metadata";
 import type { CodingAgentMetadataOptions } from "@langchain/plugins-base/metadata";
 import { settledTurnMetadata } from "@langchain/plugins-base/tracing/settlement";
-import { TRACING_NOT_STARTED_MESSAGE } from "./constants.js";
+import { LS_INTEGRATION, POST_EVENT_PREFIX, TRACING_NOT_STARTED_MESSAGE } from "./constants.js";
 import type { ReconstructionJobInput } from "@langchain/plugins-base/tracing/reconstruction";
 import { captureInto, saveOrWarn } from "./engine-capture.js";
 import { openSession } from "./engine-session.js";
@@ -11,6 +11,7 @@ import type {
   ClaudeRun,
   ClaudeTracingSession,
   Config,
+  PostedRunPayload,
   RunOperation,
   ToolOrigin,
   TracingMode,
@@ -27,6 +28,17 @@ function started(): ClaudeTracingSession {
 
 export function initTracing(config: Config, cwd: string, sessionId: string): void {
   active = openSession(config, cwd, sessionId);
+}
+
+export async function postedInputs(runId: string): Promise<Record<string, unknown> | undefined> {
+  const { store, sessionId, fingerprint } = started();
+  const post = (await store.enumerateTurn(LS_INTEGRATION, sessionId, runId)).find(
+    ({ record }) =>
+      record.destinationFingerprint === fingerprint &&
+      record.eventId === `${POST_EVENT_PREFIX}${runId}`,
+  );
+  const payload = post?.record.normalizedPayload as PostedRunPayload | undefined;
+  return payload?.privacyMode === "full" ? payload.run.inputs : undefined;
 }
 
 export async function captureRun(

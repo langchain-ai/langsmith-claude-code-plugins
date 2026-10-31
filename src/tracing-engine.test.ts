@@ -126,6 +126,22 @@ describe("the shared engine adapter", () => {
 
     expect(filesUnder(join(root, "langsmith_engine")).join("\n")).not.toContain(PRIVATE);
   });
+
+  it("reads back only a full turn's posted inputs", async () => {
+    launchesFail();
+    const { captureRun, initTracing, postedInputs } = await import("./tracing-engine.js");
+    initTracing(config, root, "s1");
+    const [full, muted] = [run(stableRunId(0, "full")), run(stableRunId(0, "muted"))];
+
+    await captureRun({ ...full, outputs: { output: "closed" } }, "full", full.id, "patch");
+    await captureRun(full);
+    await captureRun(muted, "metadata");
+
+    expect(await postedInputs(full.id)).toEqual({ input: PRIVATE });
+    expect(await postedInputs(muted.id)).toBeUndefined();
+    initTracing({ ...config, apiKey: "lsv2_pt_other_key" }, root, "s1");
+    expect(await postedInputs(full.id)).toBeUndefined();
+  });
 });
 
 describe("the uploader", () => {

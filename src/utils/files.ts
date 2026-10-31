@@ -1,5 +1,17 @@
-import { lstatSync, readdirSync, readFileSync, rmdirSync, unlinkSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmdirSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import type { Stats } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { dirname } from "node:path";
+import { PRIVATE_FILE_MODE, PRIVATE_FOLDER_MODE, TEMP_FILE_SUFFIX } from "../constants.js";
 
 export function listDirectory(path: string): string[] {
   try {
@@ -49,4 +61,11 @@ export function readJson(text: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+export function publishFile(path: string, text: string): void {
+  mkdirSync(dirname(path), { recursive: true, mode: PRIVATE_FOLDER_MODE });
+  const temp = `${path}.${randomUUID()}${TEMP_FILE_SUFFIX}`;
+  writeFileSync(temp, text, { flag: "wx", mode: PRIVATE_FILE_MODE });
+  renameSync(temp, path);
 }

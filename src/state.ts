@@ -3,10 +3,25 @@
  * transcript so the Stop hook only processes new messages.
  */
 
+import { join } from "node:path";
 import { createStateStore, pruneStateEntries } from "@langchain/plugins-base/storage";
-import { SESSION_MAX_AGE_MS } from "./constants.js";
+import {
+  HELD_TOOL_RUN_MAX_AGE_MS,
+  HELD_TOOL_RUN_PREFIX,
+  SESSION_MAX_AGE_MS,
+  UNSAFE_FILE_NAME_CHARS,
+} from "./constants.js";
+import { engineStorageRoot } from "./engine-writer.js";
 import { warn } from "./logger.js";
-import type { TracingState, SessionState, ReadPosition } from "./types.js";
+import {
+  entryInfo,
+  listDirectory,
+  publishFile,
+  readJson,
+  readText,
+  removeFile,
+} from "./utils/files.js";
+import type { TracingState, SessionState, ReadPosition, HeldToolRun, HeldRunKey } from "./types.js";
 
 type SessionStore = ReturnType<typeof createStateStore<SessionState>>;
 
@@ -130,4 +145,33 @@ export function updateSessionState(
         currentTurnRunId !== undefined ? currentTurnRunId : existingSession.current_turn_run_id,
     },
   };
+}
+
+const heldRunPath = (...[stateFilePath, sessionId, toolUseId]: HeldRunKey) =>
+  join(
+    engineStorageRoot(stateFilePath),
+    `${HELD_TOOL_RUN_PREFIX}${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`,
+  );
+
+export const saveHeldRun = (held: HeldToolRun, ...key: HeldRunKey) =>
+  publishFile(heldRunPath(...key), JSON.stringify(held));
+
+export function takeHeldRun(...key: HeldRunKey): HeldToolRun | undefined {
+  const held = readJson(readText(heldRunPath(...key))) as HeldToolRun | undefined;
+  removeFile(heldRunPath(...key));
+  return held;
+}
+
+export function pruneHeldRuns(stateFilePath: string, now: number = Date.now()): void {
+  const folder = engineStorageRoot(stateFilePath);
+  for (const name of listDirectory(folder).filter((n) => n.startsWith(HELD_TOOL_RUN_PREFIX))) {
+    const modified = entryInfo(join(folder, name))?.mtimeMs ?? now;
+    if (now - modified > HELD_TOOL_RUN_MAX_AGE_MS) removeFile(join(folder, name));
+  }
+}
+
+export function dropHeld(stateFilePath: string, sessionId: string, session: SessionState) {
+  for (const id of Object.keys(session.held_tool_runs ?? {}))
+    takeHeldRun(stateFilePath, sessionId, id);
+  return { held_tool_runs: undefined };
 }

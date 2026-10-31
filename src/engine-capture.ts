@@ -18,6 +18,8 @@ import {
   RUN_EVENT_PREFIXES,
   RUN_PATCH_FIELDS,
   RUN_SNAPSHOT_FIELDS,
+  HOOK_OUTPUTS_KEY,
+  HOOK_PATCH_FIELDS,
 } from "./constants.js";
 import { warn } from "./logger.js";
 import type {
@@ -119,6 +121,8 @@ export function runSubmission(
   const pick = (fields: readonly string[]): Record<string, unknown> =>
     Object.fromEntries(fields.filter((key) => key in data).map((key) => [key, data[key as never]]));
   const status = data.error !== undefined ? "error" : data.end_time ? "completed" : "running";
+  const patchFields =
+    HOOK_OUTPUTS_KEY in (data.inputs ?? {}) ? HOOK_PATCH_FIELDS : RUN_PATCH_FIELDS;
   const base = { integration: LS_INTEGRATION, privacyMode: mode, metadata: data.metadata };
   return operation === "post"
     ? {
@@ -132,8 +136,8 @@ export function runSubmission(
         run: pick(RUN_CONTEXT_FIELDS) as unknown as PreparedRunPatchSubmission["run"],
         privacyContext: { status },
         patch: {
-          fields: RUN_PATCH_FIELDS.filter((key) => key in data),
-          values: pick(RUN_PATCH_FIELDS),
+          fields: patchFields.filter((key) => key in data),
+          values: pick(patchFields),
         },
       };
 }

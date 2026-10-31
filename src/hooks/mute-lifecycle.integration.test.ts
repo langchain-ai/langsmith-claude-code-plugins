@@ -1,18 +1,21 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UploadLogin } from "@langchain/plugins-base/auth";
 import type {
   Config,
+  HeldToolRun,
+  HookEntry,
   HookEventName,
+  SessionState,
   TracingMode,
   TracingState,
   TranscriptMessage,
 } from "../types.js";
 import { tracingPolicyPath } from "../tracing-policy.js";
-import { STOP_FLUSH_WAIT_MS } from "../constants.js";
+import { ENGINE_STORAGE_DIR_NAME, STOP_FLUSH_WAIT_MS } from "../constants.js";
 
 // Exercise the real hooks, grouping, run builders, background registration and
 // finalization. Only I/O/SDK transport is replaced; privacy projection is real.
@@ -32,6 +35,9 @@ const h = vi.hoisted(() => ({
   parentDottedOrder: undefined as string | undefined,
   readAt: 0,
   endLine: -1,
+  readPromptId: undefined as string | undefined,
+  stateFilePath: "",
+  captureHooks: false,
   managedProblem: undefined as string | undefined,
   login: undefined as UploadLogin | undefined,
   profile: undefined as string | undefined,
@@ -112,6 +118,10 @@ vi.mock("../tracing-engine.js", async () => {
   };
   return {
     initTracing: () => {},
+    postedInputs: async (id: string) => {
+      const post = h.operations.find((op) => op.action === "post" && op.config.id === id)?.config;
+      return post?.extra.metadata.ls_tracing_mode === "metadata" ? undefined : post?.inputs;
+    },
     settledFromTurn: async (base: unknown) => base,
     turnFiller: async () => (metadata: unknown) => metadata,
     captureRun,
@@ -148,6 +158,7 @@ vi.mock("../utils/hook-init.js", () => ({
           replicas: h.replicas,
           mutedLocked: h.mutedLocked,
           strictAuth: h.strictAuth,
+          captureHookOutputs: h.captureHooks,
         },
   expandHome: (path: string) => path,
 }));
@@ -192,6 +203,12 @@ vi.mock("../state.js", async (original) => {
       // Match persistence: no symbols/functions or shared references survive.
       h.state = JSON.parse(JSON.stringify(update(structuredClone(h.state))));
     },
+    saveHeldRun: (held: HeldToolRun, _: string, ...rest: [string, string]) =>
+      state.saveHeldRun(held, h.stateFilePath, ...rest),
+    takeHeldRun: (_: string, ...rest: [string, string]) =>
+      state.takeHeldRun(h.stateFilePath, ...rest),
+    dropHeld: (_: string, ...rest: [string, SessionState]) =>
+      state.dropHeld(h.stateFilePath, ...rest),
   };
 });
 vi.mock("../transcript.js", async (original) => ({
@@ -199,14 +216,36 @@ vi.mock("../transcript.js", async (original) => ({
   readTranscript: (path: string, afterLine = -1) => {
     h.readAt = performance.now();
     if (h.endLine >= 0 && afterLine >= h.endLine) return { messages: [], lastLine: afterLine };
-    return { messages: path.includes("agent-") ? h.agentMessages : h.messages, lastLine: 10 };
+    const messages = path.includes("agent-") ? h.agentMessages : h.messages;
+    return { messages, lastLine: h.endLine >= 0 ? h.endLine : 10, promptId: h.readPromptId };
   },
   getTranscriptEndLine: () => h.endLine,
   readRuntimeVersion: () => "test-runtime",
 }));
 
+h.stateFilePath = join(mkdtempSync(join(tmpdir(), "held-runs-")), "state.json");
+const heldDir = join(h.stateFilePath, "..", ENGINE_STORAGE_DIR_NAME);
+const heldFiles = () => readdirSync(heldDir).map((n) => readFileSync(join(heldDir, n), "utf8"));
+afterAll(() => rmSync(join(h.stateFilePath, ".."), { recursive: true, force: true }));
 const now = "2026-07-01T00:00:00.000Z";
+const earlier = "2026-06-30T23:59:59.000Z";
+const later = "2026-07-01T00:00:01.000Z";
 const privateText = "PRIVATE_MARKER";
+const pasted = { role: "user", content: [{ type: "image" }, { type: "text", text: privateText }] };
+const hookEntry = (hookEvent: string, toolUseID: string) => {
+  const attachment = { type: "hook_additional_context", content: [`${hookEvent}-hook`] };
+  return { type: "attachment", attachment: { ...attachment, hookEvent, toolUseID } } as HookEntry;
+};
+const hookOf = (name: string) => ({ name, output: `${name}-hook` });
+const promptHook = hookOf("UserPromptSubmit");
+const toolHook = hookOf("PostToolUse");
+const preToolHook = hookOf("PreToolUse");
+const stopHook = hookOf("Stop");
+const bashTurn = (event = "PostToolUse") =>
+  transcript({ id: "tool", name: "Bash" }).concat(hookEntry(event, "tool"));
+const postedRun = (name: string) => h.operations.find((op) => op.config.name === name)!.config;
+const closedRun = (name: string) =>
+  h.operations.find((op) => op.action === "patch" && op.config.name === name)?.config;
 function transcript(
   tool?: { id: string; name: string; agentId?: string },
   prompt = privateText,
@@ -254,7 +293,8 @@ function transcript(
       : []),
   ];
 }
-function reset(mode: TracingMode) {
+function reset(mode: TracingMode, captureHooks = false) {
+  h.captureHooks = captureHooks;
   h.state = {};
   h.policy = mode;
   h.defaultMuted = false;
@@ -266,6 +306,7 @@ function reset(mode: TracingMode) {
   h.beforePost = undefined;
   h.parentDottedOrder = undefined;
   h.endLine = -1;
+  h.readPromptId = undefined;
   h.managedProblem = undefined;
   h.login = undefined;
   h.profile = undefined;
@@ -780,13 +821,16 @@ describe("closing hooks hand their work to the uploader", () => {
   );
 
   it("a background subagent that finishes before its notification turn reaches the uploader still closes", async () => {
-    reset("full");
+    reset("full", true);
     await hook("prompt");
     const launch = h.state.session.current_turn_run_id;
     const input = { tool_use_id: "task", tool_name: "Task" };
     await hook("pre", input);
+    const [user, ...rest] = transcript({ id: "task", name: "Task", agentId: "bg" });
+    h.messages = [user, hookEntry("UserPromptSubmit", "hook-1"), ...rest];
+    h.messages.push(hookEntry("PreToolUse", "task"), hookEntry("PostToolUse", "task"));
+    h.messages.push(hookEntry("Stop", "Stop"));
     await hook("post", { ...input, tool_response: { agentId: "bg", status: "async_launched" } });
-    h.messages = transcript({ id: "task", name: "Task", agentId: "bg" });
     await hook("stop");
     await hook(
       "agent",
@@ -808,7 +852,10 @@ describe("closing hooks hand their work to the uploader", () => {
 
     expect(h.state.session.task_run_map).toEqual({});
     expect(h.state.session.open_turns).toEqual({});
-    expect(patched(launch)).toBeDefined();
+    expect(patched(launch)?.config.inputs.hooks).toEqual([promptHook]);
+    expect(patched(launch)?.config.outputs.hooks).toEqual([stopHook]);
+    expect(closedRun("Agent")?.outputs.hooks).toEqual([toolHook]);
+    expect(closedRun("Agent")?.inputs.hooks).toEqual([preToolHook]);
     expect(h.errors).toEqual([]);
   });
 
@@ -974,6 +1021,260 @@ describe("tool privacy snapshot reclamation", () => {
     expect(h.state.session.tool_tracing_modes).toEqual({ pending: "metadata" });
     expect(h.state.session.tool_tracing_progress).toEqual({});
     expect(h.errors).toEqual([]);
+  });
+
+  it.each([
+    [[hookEntry("SessionStart", "SessionStart"), hookEntry("Setup", "Setup")], -1, false],
+    [transcript(), 1, false],
+    [
+      [hookEntry("SessionStart", "SessionStart"), { ...transcript()[0], message: pasted }],
+      -1,
+      false,
+    ],
+    [[...transcript(), hookEntry("SessionStart", "SessionStart"), transcript()[0]], 1, false],
+    [[...transcript(), transcript(undefined, "[Request interrupted by user]")[0]], 2, false],
+    [[...transcript(), { ...transcript()[0], timestamp: "2026-06-30T23:59:54.000Z" }], 2, false],
+    [[...transcript(), hookEntry("SessionStart", "SessionStart"), transcript()[0]], 3, true],
+  ])("starts a new session's read before its own prompt only (%#)", async (lines, line, off) => {
+    reset("full", !off);
+    h.endLine = lines.length - 1;
+    h.messages = lines as TranscriptMessage[];
+    await hook("prompt", {}, { closings: false });
+    expect(h.state.session.last_line).toBe(line);
+  });
+
+  it.each(["stop", "failure"])("uploads like main when capture is off at %s", async (ending) => {
+    const run = async (hooks: string[]) => {
+      reset("full");
+      const read = transcript({ id: "other", name: "Read" }).slice(1);
+      h.messages = h.agentMessages = [...transcript({ id: "tool", name: "Bash" }), ...read];
+      h.messages.push(...hooks.flatMap((e) => [hookEntry(e, "tool"), hookEntry(e, "other")]));
+      await hook("prompt");
+      await hook("post");
+      await hook("agent", { agent_id: "a", agent_type: "E", agent_transcript_path: "/agent-a" });
+      await hook("post", { tool_use_id: "task", tool_response: { agentId: "a" } });
+      h.readAt = 0;
+      await hook(ending, { error: "rate_limit" });
+      return JSON.stringify([h.operations, h.state]);
+    };
+    const plain = await run([]);
+    expect(plain).not.toMatch(/"tool_use_id":"task"|held_tool_runs|"hooks"/);
+    const first = h.operations.slice(0, 2).map((op) => `${op.action} ${op.config.name}`);
+    expect(first).toEqual(["post Claude Code Turn", "post Bash"]);
+    const events = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"];
+    expect(await run(events)).toBe(plain);
+    expect(h.readAt === 0).toBe(ending === "failure");
+  });
+
+  it("posts a tool once when its turn closes as it ends", async () => {
+    reset("full", true);
+    h.messages = bashTurn();
+    await hook("prompt");
+    h.beforePost = async () => {
+      h.beforePost = undefined;
+      await hook("stop");
+    };
+    await hook("post");
+    await uploader();
+    const bash = h.operations.filter((op) => op.config.name === "Bash").map((op) => op.config);
+    expect([bash.map((run) => run.outputs.hooks), h.state.session.held_tool_runs ?? {}]).toEqual([
+      [[toolHook]],
+      {},
+    ]);
+  });
+
+  it("leaves a next turn's held tool to that turn's close", async () => {
+    reset("full", true);
+    const [first, second] = [transcript(), bashTurn()];
+    h.messages = first;
+    await hook("prompt");
+    await hook("stop", {}, { closings: false });
+    await hook("prompt", {}, { closings: false });
+    h.messages = second;
+    await hook("post", {}, { closings: false });
+    h.messages = first;
+    await uploader();
+    h.messages = second;
+    await hook("stop");
+    expect(postedRun("Bash").outputs.hooks).toEqual([toolHook]);
+  });
+
+  it.each(["full", "metadata"] as const)("posts a held %s tool as main does live", async (mode) => {
+    const bash = async (capture: boolean) => {
+      reset(mode, capture);
+      vi.setSystemTime(Date.parse(now));
+      const [, assistant, result] = transcript({ id: "tool", name: "Bash" });
+      h.messages = [assistant, result, hookEntry("PostToolUse", "tool")];
+      await hook("prompt");
+      await hook("pre");
+      vi.setSystemTime(Date.parse(now) + 1000);
+      await hook("post", { tool_response: { stdout: "TOOL_OUTPUT" } });
+      const onDisk = [JSON.stringify(h.state), heldFiles().join()].map((t) =>
+        /TOOL_OUTPUT/.test(t),
+      );
+      if (capture) expect(onDisk).toEqual([false, mode === "full"]);
+      vi.setSystemTime(Date.parse(now) + 2000);
+      await hook("stop");
+      return h.operations.filter((op) => op.config.name === "Bash").map((op) => op.config);
+    };
+    const [live] = await bash(false);
+    const [held] = await bash(true);
+    expect([h.state.session.held_tool_runs, heldFiles()]).toEqual([{}, []]);
+    const hooks = mode === "full" ? { hooks: [toolHook] } : {};
+    expect(held).toEqual({ ...live, outputs: { ...live.outputs, ...hooks } });
+  });
+
+  it("hooks a tool traced from the transcript when the next prompt closes its turn", async () => {
+    reset("full", true);
+    h.messages = bashTurn("PostToolUseFailure");
+    await hook("prompt");
+    await hook("prompt");
+    expect(postedRun("Bash").outputs.hooks).toEqual([hookOf("PostToolUseFailure")]);
+  });
+
+  async function hookedTurn(ending: string, before = async () => {}) {
+    reset("full", true);
+    const [user, assistant, result] = transcript({ id: "tool", name: "Bash" }, "hooked prompt");
+    const start = hookEntry("SessionStart", "SessionStart");
+    h.messages = [start, user, hookEntry("UserPromptSubmit", "hook-1"), hookEntry("Custom", "c")];
+    const [pre, post, denied] = ["PreToolUse", "PostToolUse", "PermissionDenied"].map((e) =>
+      hookEntry(e, "tool"),
+    );
+    h.messages.push(assistant, pre, result, post, denied, hookEntry("Stop", "Stop"));
+    await hook("prompt", { prompt: "hooked prompt" });
+    await hook("post");
+    await before();
+    await hook(ending, { error: "rate_limit" });
+  }
+
+  it.each(["failure", "prompt"])("hooks a tool and its turn at %s", async (ending) => {
+    await hookedTurn(ending);
+    const bash = h.operations.filter((op) => op.config.name === "Bash").map((op) => op.config);
+    const denied = hookOf("PermissionDenied");
+    expect(bash).toEqual([
+      expect.objectContaining({
+        end_time: expect.any(String),
+        inputs: { input: { content: privateText }, hooks: [preToolHook] },
+        outputs: { output: { content: privateText }, hooks: [toolHook, denied] },
+      }),
+    ]);
+    const llm = h.operations.filter((op) => op.config.name === "Claude");
+    expect(JSON.stringify(llm)).not.toContain("-hook");
+    expect(closedRun("Claude Code Turn")!.inputs).toEqual({
+      ...postedRun("Claude Code Turn").inputs,
+      hooks: [hookOf("SessionStart"), promptHook, hookOf("Custom")],
+    });
+    expect(closedRun("Claude Code Turn")!.outputs.hooks).toEqual([stopHook]);
+  });
+
+  it("keeps the first close's hooks when Claude continues the closed turn", async () => {
+    reset("full", true);
+    const [user, assistant] = transcript();
+    const batch = hookEntry("PostToolBatch", "PostToolBatch");
+    h.messages = [user, hookEntry("UserPromptSubmit", "hook-1"), assistant, batch];
+    await hook("prompt");
+    await hook("stop");
+    h.messages = [hookEntry("Stop", "Stop"), hookEntry("PostToolUse", "tool"), assistant];
+    await hook("stop", { stop_hook_active: true });
+    const last = h.operations.filter((op) => op.action === "patch").at(-1)!.config;
+    const batchHook = hookOf("PostToolBatch");
+    expect([last.inputs.hooks, last.outputs.hooks]).toEqual([[promptHook], [batchHook, stopHook]]);
+  });
+
+  it("reads a workflow stage's hooks", async () => {
+    reset("full", true);
+    await hook("prompt");
+    const response = { status: "async_launched", taskId: "t", runId: "wf_x" };
+    h.messages = transcript({ id: "tool", name: "Workflow" });
+    await hook("post", { tool_name: "Workflow", tool_response: response });
+    h.agentMessages = [...transcript({ id: "i", name: "Read" }), hookEntry("PostToolUse", "i")];
+    const path = "/workflows/wf_x/agent-s";
+    await hook("agent", { agent_type: "workflow-subagent", agent_transcript_path: path });
+    expect(postedRun("Read").outputs.hooks).toEqual([toolHook]);
+  });
+
+  it("keeps a muted background launch's hook text out of state", async () => {
+    reset("metadata", true);
+    const [user, ...rest] = transcript({ id: "task", name: "Task", agentId: "bg" });
+    h.messages = [user, hookEntry("UserPromptSubmit", "hook-1"), ...rest];
+    h.messages.push(hookEntry("PostToolUse", "task"), hookEntry("Stop", "Stop"));
+    await hook("prompt");
+    const response = { agentId: "bg", status: "async_launched" };
+    await hook("post", { tool_use_id: "task", tool_name: "Task", tool_response: response });
+    await hook("stop");
+    expect(Object.keys(h.state.session.open_turns!)).toHaveLength(1);
+    expect(JSON.stringify(h.state)).not.toContain("-hook");
+  });
+
+  it.each(["prompt", "end"])("forgets a closed turn's hooks at %s", async (next) => {
+    await hookedTurn("stop");
+    expect(h.state.session.closed_turn_hooks).toBeDefined();
+    await hook(next);
+    expect(h.state.session.closed_turn_hooks).toBeUndefined();
+  });
+
+  it("uploads a held tool without hooks once capture is off", async () => {
+    await hookedTurn("stop", async () => void (h.captureHooks = false));
+    expect(postedRun("Bash").outputs).toEqual({ output: { content: privateText } });
+  });
+
+  it("removes a session's leftover held tools at SessionEnd", async () => {
+    reset("full", true);
+    h.messages = bashTurn();
+    await hook("prompt");
+    await hook("post");
+    h.state.session.held_tool_runs = { tool: "a turn that already closed" };
+    await hook("stop");
+    await hook("end");
+    expect([h.state.session.held_tool_runs, heldFiles()]).toEqual([undefined, []]);
+  });
+
+  it("leaves the turn's inputs alone when its saved post is missing", async () => {
+    await hookedTurn("stop", async () => {
+      h.operations = h.operations.filter((op) => op.config.name !== "Claude Code Turn");
+    });
+    expect(closedRun("Claude Code Turn")).not.toHaveProperty("inputs");
+  });
+
+  it("gives a prompt cancelled before any reply its own prompt hooks", async () => {
+    reset("full", true);
+    await hook("prompt");
+    const [user] = transcript();
+    const start = hookEntry("SessionStart", "SessionStart");
+    h.messages = [{ ...user, timestamp: earlier }, start, user, hookEntry("UserPromptSubmit", "")];
+    await hook("prompt");
+    expect(closedRun("Claude Code Turn")!.inputs.hooks).toEqual([promptHook]);
+  });
+
+  it("closes a slash command after an unanswered prompt with its own hooks", async () => {
+    reset("full", true);
+    await hook("prompt", { prompt: "/foo x" });
+    const [user] = transcript();
+    const image = { ...user, timestamp: earlier, message: { role: "user", content: [] } };
+    const unanswered = [image, hookEntry("UserPromptExpansion", "hook-0")];
+    const own = { ...user, message: { role: "user", content: "<command-name>/foo" } };
+    const command = { ...user, timestamp: later, message: { role: "user", content: "/cost" } };
+    const prompt = hookEntry("UserPromptSubmit", "hook-1");
+    h.messages = [...unanswered, own, prompt, command] as TranscriptMessage[];
+    await hook("prompt", { prompt: "next" });
+    expect(closedRun("Claude Code Turn")!.inputs.hooks).toEqual([promptHook]);
+  });
+
+  it.each(["prompt", "failure"])("closes a queued prompt by id at %s", async (ending) => {
+    reset("full", true);
+    await hook("prompt");
+    const [user] = transcript();
+    const earlierTurn = { ...user, timestamp: earlier, promptId: "u" };
+    const own = { ...user, timestamp: later, promptId: "o" };
+    const note = { ...user, timestamp: later, message: { role: "user", content: "note" } };
+    const [expansion, prompt, stop] = ["UserPromptExpansion", "UserPromptSubmit", "Stop"].map((e) =>
+      hookEntry(e, e),
+    );
+    h.messages = [earlierTurn, expansion, own, prompt, note, stop] as TranscriptMessage[];
+    h.readPromptId = "o";
+    await hook(ending, { prompt: "next" });
+    expect(closedRun("Claude Code Turn")!.inputs.hooks).toEqual([promptHook]);
+    expect(closedRun("Claude Code Turn")!.outputs.hooks).toEqual([stopHook]);
   });
 
   it("keeps both maps when all traces fail and the cursor stays put", async () => {
@@ -1578,7 +1879,7 @@ describe("privacy propagation without lifecycle changes", () => {
   });
 
   it("keeps an owned full launch full while policy is muted, including synchronous subagents", async () => {
-    reset("full");
+    reset("full", true);
     await hook("prompt");
     h.policy = "metadata";
     await hook("pre", { tool_use_id: "task", tool_name: "Task" });
@@ -1588,14 +1889,19 @@ describe("privacy propagation without lifecycle changes", () => {
       agent_type: "Explore",
       agent_transcript_path: "/agent-sync",
     });
+    h.messages = transcript({ id: "task", name: "Task", agentId: "sync-agent" });
+    h.messages.push(hookEntry("PreToolUse", "task"), hookEntry("PostToolUse", "task"));
+    h.agentMessages = [...transcript({ id: "i", name: "Read" }), hookEntry("PreToolUse", "i")];
     await hook("post", {
       tool_use_id: "task",
       tool_name: "Task",
       tool_response: { agentId: "sync-agent", content: privateText },
     });
-    h.messages = transcript({ id: "task", name: "Task", agentId: "sync-agent" });
     await hook("stop");
     expect(h.errors).toEqual([]);
+    const agent = postedRun("Agent");
+    expect([agent.inputs.hooks, agent.outputs.hooks]).toEqual([[preToolHook], [toolHook]]);
+    expect(postedRun("Read").inputs.hooks).toEqual([preToolHook]);
     expect(
       h.operations.filter((op) => op.config.extra?.metadata?.ls_tracing_mode === "metadata"),
     ).toEqual([]);

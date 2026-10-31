@@ -102,6 +102,7 @@ export async function handleWorkflowSubagentStop(opts: {
   stateFilePath: string;
   defaultMuted?: boolean;
   customMetadata?: Record<string, unknown>;
+  captureHookOutputs?: boolean;
 }): Promise<void> {
   const runId = workflowRunIdFromPath(opts.agentTranscriptPath);
   if (!runId) {
@@ -143,6 +144,7 @@ export async function handleWorkflowSubagentStop(opts: {
       runtimeVersion: launchingTurn?.runtime_version ?? ss.runtime_version,
       turnId: launchingTurn?.turn_id,
       turnNumber: launchingTurn?.turn_number ?? ss.current_turn_number,
+      captureHookOutputs: opts.captureHookOutputs,
     });
     debug(`Traced workflow stage ${opts.agentId} under Workflow run ${entry.run_id}`);
   } catch (err) {
