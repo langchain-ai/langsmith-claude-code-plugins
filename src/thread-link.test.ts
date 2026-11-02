@@ -281,6 +281,14 @@ describe("thread links", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("tells a user without project access to ask an admin, without retries", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("PRIVATE_DETAILS", { status: 403 }));
+    expect(await describeThreadLinks(config, "session")).toBe(
+      "example: You don't have access to this project so we're unable to generate a valid link. Please follow up with a LangSmith admin to update your access.\nSession ID: session",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("cancels a stalled lookup and returns without retries", async () => {
     // Shorten the SDK's real request abort signal, not the command's control flow.
     const timeout = AbortSignal.timeout.bind(AbortSignal);

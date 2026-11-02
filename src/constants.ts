@@ -144,6 +144,9 @@ const LOOKUP_TIMEOUT_MS = 4_000;
 const AGENT_ADDRESS_KIND = "AGENT";
 const AGENT_ADDRESS_ENVIRONMENT = "PRODUCTION";
 const WORKSPACE_ID_VARIABLE = "LANGSMITH_WORKSPACE_ID";
+const LOOKUP_FORBIDDEN_STATUS = 403;
+const NO_PROJECT_ACCESS_REPLY =
+  "You don't have access to this project so we're unable to generate a valid link. Please follow up with a LangSmith admin to update your access.";
 
 /** Larger transcripts are streamed instead of read whole. */
 const TASK_NOTIFICATION_OPENING = "<task-notification>";
@@ -219,6 +222,8 @@ export {
   AGENT_ADDRESS_KIND,
   AGENT_ADDRESS_ENVIRONMENT,
   WORKSPACE_ID_VARIABLE,
+  LOOKUP_FORBIDDEN_STATUS,
+  NO_PROJECT_ACCESS_REPLY,
   MAX_FULL_READ_BYTES,
   TASK_NOTIFICATION_OPENING,
   HARNESS_DROPPED_ELEMENT,
