@@ -4,7 +4,7 @@ import {
   type UploadLogin,
 } from "@langchain/plugins-base/auth";
 import { Client } from "langsmith";
-import type { Config, SdkClientKey } from "./types.js";
+import type { Config, LookupErrorBody, SdkClientKey } from "./types.js";
 import {
   AGENT_ADDRESS_ENVIRONMENT,
   AGENT_ADDRESS_KIND,
@@ -28,7 +28,8 @@ function terminalLink(url: string): string {
 async function deniesProjectAccess(response: Response): Promise<boolean> {
   if (response.status !== LOOKUP_FORBIDDEN_STATUS) return false;
   try {
-    return (await response.json())?.error !== MISSING_WORKSPACE_ERROR;
+    const body = (await response.json()) as LookupErrorBody | null;
+    return body?.error !== MISSING_WORKSPACE_ERROR;
   } catch {
     return true;
   }

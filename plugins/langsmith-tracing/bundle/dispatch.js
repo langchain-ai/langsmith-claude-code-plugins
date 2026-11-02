@@ -27400,7 +27400,8 @@ async function deniesProjectAccess(response) {
   if (response.status !== LOOKUP_FORBIDDEN_STATUS)
     return false;
   try {
-    return (await response.json())?.error !== MISSING_WORKSPACE_ERROR;
+    const body = await response.json();
+    return body?.error !== MISSING_WORKSPACE_ERROR;
   } catch {
     return true;
   }
