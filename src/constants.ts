@@ -145,7 +145,6 @@ const AGENT_ADDRESS_KIND = "AGENT";
 const AGENT_ADDRESS_ENVIRONMENT = "PRODUCTION";
 const WORKSPACE_ID_VARIABLE = "LANGSMITH_WORKSPACE_ID";
 const LOOKUP_FORBIDDEN_STATUS = 403;
-const MISSING_WORKSPACE_ERROR = "org_scoped_key_requires_workspace";
 const NO_PROJECT_ACCESS_REPLY =
   "You don't have access to this project so we're unable to generate a valid link. Please follow up with a LangSmith admin to update your access.";
 
@@ -224,7 +223,6 @@ export {
   AGENT_ADDRESS_ENVIRONMENT,
   WORKSPACE_ID_VARIABLE,
   LOOKUP_FORBIDDEN_STATUS,
-  MISSING_WORKSPACE_ERROR,
   NO_PROJECT_ACCESS_REPLY,
   MAX_FULL_READ_BYTES,
   TASK_NOTIFICATION_OPENING,

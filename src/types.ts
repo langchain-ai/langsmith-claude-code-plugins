@@ -694,10 +694,6 @@ export interface SdkClientKey {
   apiKey?: string;
 }
 
-export interface LookupErrorBody {
-  error?: string;
-}
-
 export interface LegacyQueueEntry {
   tracing: TracingMode;
   origin: string;

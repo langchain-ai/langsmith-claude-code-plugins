@@ -4,13 +4,12 @@ import {
   type UploadLogin,
 } from "@langchain/plugins-base/auth";
 import { Client } from "langsmith";
-import type { Config, LookupErrorBody, SdkClientKey } from "./types.js";
+import type { Config, SdkClientKey } from "./types.js";
 import {
   AGENT_ADDRESS_ENVIRONMENT,
   AGENT_ADDRESS_KIND,
   LOOKUP_FORBIDDEN_STATUS,
   LOOKUP_TIMEOUT_MS,
-  MISSING_WORKSPACE_ERROR,
   NO_PROJECT_ACCESS_REPLY,
   WORKSPACE_ID_VARIABLE,
 } from "./constants.js";
@@ -25,23 +24,13 @@ function terminalLink(url: string): string {
   return `${OSC8}${url}${BEL}${url}${OSC8}${BEL}`;
 }
 
-async function deniesProjectAccess(response: Response): Promise<boolean> {
-  if (response.status !== LOOKUP_FORBIDDEN_STATUS) return false;
-  try {
-    const body = (await response.json()) as LookupErrorBody | null;
-    return body?.error !== MISSING_WORKSPACE_ERROR;
-  } catch {
-    return true;
-  }
-}
-
 function lookupOptions(apiUrl: string, onDenied: () => void) {
   return {
     apiUrl,
     timeout_ms: LOOKUP_TIMEOUT_MS,
     fetchImplementation: async (...request: Parameters<typeof fetch>) => {
       const response = await fetch(...request);
-      if (await deniesProjectAccess(response.clone())) onDenied();
+      if (response.status === LOOKUP_FORBIDDEN_STATUS) onDenied();
       return response;
     },
     callerOptions: {

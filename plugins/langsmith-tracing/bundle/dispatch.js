@@ -24221,7 +24221,6 @@ var AGENT_ADDRESS_KIND = "AGENT";
 var AGENT_ADDRESS_ENVIRONMENT = "PRODUCTION";
 var WORKSPACE_ID_VARIABLE = "LANGSMITH_WORKSPACE_ID";
 var LOOKUP_FORBIDDEN_STATUS = 403;
-var MISSING_WORKSPACE_ERROR = "org_scoped_key_requires_workspace";
 var NO_PROJECT_ACCESS_REPLY = "You don't have access to this project so we're unable to generate a valid link. Please follow up with a LangSmith admin to update your access.";
 var TASK_NOTIFICATION_OPENING = "<task-notification>";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
@@ -27396,23 +27395,13 @@ function terminalLink(url) {
   const BEL = "\x07";
   return `${OSC8}${url}${BEL}${url}${OSC8}${BEL}`;
 }
-async function deniesProjectAccess(response) {
-  if (response.status !== LOOKUP_FORBIDDEN_STATUS)
-    return false;
-  try {
-    const body = await response.json();
-    return body?.error !== MISSING_WORKSPACE_ERROR;
-  } catch {
-    return true;
-  }
-}
 function lookupOptions(apiUrl, onDenied) {
   return {
     apiUrl,
     timeout_ms: LOOKUP_TIMEOUT_MS,
     fetchImplementation: async (...request) => {
       const response = await fetch(...request);
-      if (await deniesProjectAccess(response.clone()))
+      if (response.status === LOOKUP_FORBIDDEN_STATUS)
         onDenied();
       return response;
     },
