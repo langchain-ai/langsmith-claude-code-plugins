@@ -24221,6 +24221,7 @@ var AGENT_ADDRESS_KIND = "AGENT";
 var AGENT_ADDRESS_ENVIRONMENT = "PRODUCTION";
 var WORKSPACE_ID_VARIABLE = "LANGSMITH_WORKSPACE_ID";
 var LOOKUP_FORBIDDEN_STATUS = 403;
+var MISSING_WORKSPACE_ERROR = "org_scoped_key_requires_workspace";
 var NO_PROJECT_ACCESS_REPLY = "You don't have access to this project so we're unable to generate a valid link. Please follow up with a LangSmith admin to update your access.";
 var TASK_NOTIFICATION_OPENING = "<task-notification>";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
@@ -27395,13 +27396,23 @@ function terminalLink(url) {
   const BEL = "\x07";
   return `${OSC8}${url}${BEL}${url}${OSC8}${BEL}`;
 }
-function lookupOptions(apiUrl, onStatus) {
+async function deniesProjectAccess(response) {
+  if (response.status !== LOOKUP_FORBIDDEN_STATUS)
+    return false;
+  try {
+    return (await response.json())?.error !== MISSING_WORKSPACE_ERROR;
+  } catch {
+    return true;
+  }
+}
+function lookupOptions(apiUrl, onDenied) {
   return {
     apiUrl,
     timeout_ms: LOOKUP_TIMEOUT_MS,
     fetchImplementation: async (...request) => {
       const response = await fetch(...request);
-      onStatus(response.status);
+      if (await deniesProjectAccess(response.clone()))
+        onDenied();
       return response;
     },
     callerOptions: {
@@ -27412,17 +27423,17 @@ function lookupOptions(apiUrl, onStatus) {
     }
   };
 }
-function keyClient(apiKey, apiUrl, onStatus, workspaceId) {
+function keyClient(apiKey, apiUrl, onDenied, workspaceId) {
   const fallback = sdkSetting(process.env[WORKSPACE_ID_VARIABLE]) ?? "";
   return new Client({
-    ...lookupOptions(apiUrl, onStatus),
+    ...lookupOptions(apiUrl, onDenied),
     apiKey,
     workspaceId: workspaceId ?? fallback
   });
 }
-function loginClient(login, apiUrl, onStatus, workspaceId) {
+function loginClient(login, apiUrl, onDenied, workspaceId) {
   return new Client({
-    ...lookupOptions(apiUrl, onStatus),
+    ...lookupOptions(apiUrl, onDenied),
     profile: login.profile,
     profileConfigPath: login.configPath,
     preferProfileAuth: true,
@@ -27446,13 +27457,13 @@ async function describeThreadLinks(config, sessionId) {
     const otherServer = destination.apiUrl !== void 0 && refusedLoginReplicas([{ apiUrl: destination.apiUrl }], config.apiBaseUrl) !== void 0;
     if (!keyed && (otherServer || !config.login))
       return missingKey;
-    let lastStatus;
-    const onStatus = (status) => {
-      lastStatus = status;
+    let denied = false;
+    const onDenied = () => {
+      denied = true;
     };
     try {
       const apiUrl = destination.apiUrl ?? config.apiBaseUrl;
-      const client = keyed ? keyClient(apiKey, apiUrl, onStatus, destination.workspaceId) : loginClient(config.login, apiUrl, onStatus, destination.workspaceId);
+      const client = keyed ? keyClient(apiKey, apiUrl, onDenied, destination.workspaceId) : loginClient(config.login, apiUrl, onDenied, destination.workspaceId);
       if (keyed && !client.apiKey)
         return missingKey;
       const agentId = destination.projectName === void 0 ? config.agentId : void 0;
@@ -27468,7 +27479,7 @@ async function describeThreadLinks(config, sessionId) {
       url.pathname = `${url.pathname.replace(/\/$/, "")}/${path3.map(encodeURIComponent).join("/")}`;
       return { resolved: true, line: `${projectName}: ${terminalLink(url.href)}` };
     } catch {
-      if (lastStatus === LOOKUP_FORBIDDEN_STATUS) {
+      if (denied) {
         return { resolved: false, line: `${projectName}: ${NO_PROJECT_ACCESS_REPLY}` };
       }
       return {

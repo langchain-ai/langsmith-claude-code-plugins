@@ -289,6 +289,15 @@ describe("thread links", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the retry message when an org-wide key is missing its workspace", async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ error: "org_scoped_key_requires_workspace" }, { status: 403 }),
+    );
+    expect(await describeThreadLinks(config, "session")).toBe(
+      "example: Could not resolve the thread link. Check access and connectivity, then retry.\nSession ID: session",
+    );
+  });
+
   it("cancels a stalled lookup and returns without retries", async () => {
     // Shorten the SDK's real request abort signal, not the command's control flow.
     const timeout = AbortSignal.timeout.bind(AbortSignal);
