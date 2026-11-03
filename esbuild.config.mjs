@@ -52,6 +52,9 @@ await build({
   format: "esm",
   outfile: "plugins/langsmith-gateway/bundle/gateway.js",
   external: ["node:*"],
+  define: {
+    __LS_INTEGRATION_VERSION__: JSON.stringify(pkg.version),
+  },
 });
 chmodSync("plugins/langsmith-gateway/bundle/gateway.js", 0o755);
 console.log("Bundled experimental gateway into plugins/langsmith-gateway/bundle/");

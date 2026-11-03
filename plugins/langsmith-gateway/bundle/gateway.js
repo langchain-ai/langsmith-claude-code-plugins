@@ -16074,7 +16074,7 @@ import { connect } from "node:net";
 import { spawn as spawn2 } from "node:child_process";
 
 // dist/src/integration-version.js
-var LS_INTEGRATION_VERSION = typeof __LS_INTEGRATION_VERSION__ !== "undefined" ? __LS_INTEGRATION_VERSION__ : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var LS_INTEGRATION_VERSION = true ? "0.6.2" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 function builtAsBinary() {
   return typeof LS_COMPILED_BINARY !== "undefined";
 }
