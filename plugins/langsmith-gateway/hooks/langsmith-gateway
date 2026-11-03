@@ -69,6 +69,13 @@ download_is_running() {
   return 1
 }
 
+other_version_build() {
+  [ -n "$build" ] || return 0
+  for other in "$builds/${name%"$VERSION"}"*; do
+    if [ -x "$other" ]; then echo "$other" && return 0; fi
+  done
+}
+
 delete_unused_builds() {
   find "$builds" -type f -name "$EXECUTABLE-darwin-*" ! -name "$name*" -mtime +"$DELETE_UNUSED_BUILDS_AFTER_DAYS" -exec rm -f {} + 2>/dev/null || :
 }
@@ -153,6 +160,7 @@ if [ -n "${CLAUDE_PLUGIN_DATA:-}" ] && [ -n "$name" ]; then
 fi
 
 start_download_if_needed
+if ! build_is_ready; then build="$(other_version_build)"; fi
 
 if ! build_is_ready || ! stdin_is_open || ! save_the_event; then
   run_with_node "$@"

@@ -191,6 +191,9 @@ describe("the gateway launcher", { timeout: TEST_TIMEOUT_MS }, () => {
   it("stays on Node and downloads nothing off a Mac", async () => {
     const dir = sandbox();
     expect(run(dir, { FAKE_SYSTEM: "Linux" }).stdout.trim()).toBe(`node ${EVENT.length} bytes`);
+    const withoutDataFolder = run(dir, { FAKE_SYSTEM: "Linux", CLAUDE_PLUGIN_DATA: "" });
+    expect(withoutDataFolder.stdout.trim()).toBe(`node ${EVENT.length} bytes`);
+    expect(withoutDataFolder.stderr).toBe("");
     await after(500);
     expect(requested(dir)).toEqual([]);
   });
@@ -234,6 +237,14 @@ describe("the gateway launcher", { timeout: TEST_TIMEOUT_MS }, () => {
     await after(500);
     expect(existsSync(running)).toBe(true);
     expect(runnable(dir)).toBe(true);
+  });
+
+  it("runs the previous version's build while this version's downloads", async () => {
+    const dir = sandbox();
+    place(dir, `${executableName}-darwin-arm64-0.0.1`);
+    expect(run(dir, { CURL_DELAY: "2" }).stdout.trim()).toBe(`build ${EVENT.length} bytes`);
+    expect(runnable(dir)).toBe(false);
+    await downloadFinished(dir);
   });
 
   it("deletes an older version's build only once nothing has fetched it for a week", async () => {
