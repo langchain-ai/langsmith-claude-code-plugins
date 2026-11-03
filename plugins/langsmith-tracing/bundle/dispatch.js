@@ -24220,6 +24220,8 @@ var LOOKUP_TIMEOUT_MS = 4e3;
 var AGENT_ADDRESS_KIND = "AGENT";
 var AGENT_ADDRESS_ENVIRONMENT = "PRODUCTION";
 var WORKSPACE_ID_VARIABLE = "LANGSMITH_WORKSPACE_ID";
+var LOOKUP_FORBIDDEN_STATUS = 403;
+var NO_PROJECT_ACCESS_REPLY = "You don't have access to this project so we're unable to generate a valid link. Please follow up with a LangSmith admin to update your access.";
 var TASK_NOTIFICATION_OPENING = "<task-notification>";
 var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 var HARNESS_DROPPED_ELEMENT = /<(system-reminder|local-command-caveat|command-message|ide_opened_file|ide_selection)>[\s\S]*?<\/\1>/g;
@@ -27393,10 +27395,16 @@ function terminalLink(url) {
   const BEL = "\x07";
   return `${OSC8}${url}${BEL}${url}${OSC8}${BEL}`;
 }
-function lookupOptions(apiUrl) {
+function lookupOptions(apiUrl, onDenied) {
   return {
     apiUrl,
     timeout_ms: LOOKUP_TIMEOUT_MS,
+    fetchImplementation: async (...request) => {
+      const response = await fetch(...request);
+      if (response.status === LOOKUP_FORBIDDEN_STATUS)
+        onDenied();
+      return response;
+    },
     callerOptions: {
       // The SDK ignores maxRetries on reads. Throwing here is what stops the retries.
       onFailedResponseHook: async () => {
@@ -27405,13 +27413,17 @@ function lookupOptions(apiUrl) {
     }
   };
 }
-function keyClient(apiKey, apiUrl, workspaceId) {
+function keyClient(apiKey, apiUrl, onDenied, workspaceId) {
   const fallback = sdkSetting(process.env[WORKSPACE_ID_VARIABLE]) ?? "";
-  return new Client({ ...lookupOptions(apiUrl), apiKey, workspaceId: workspaceId ?? fallback });
-}
-function loginClient(login, apiUrl, workspaceId) {
   return new Client({
-    ...lookupOptions(apiUrl),
+    ...lookupOptions(apiUrl, onDenied),
+    apiKey,
+    workspaceId: workspaceId ?? fallback
+  });
+}
+function loginClient(login, apiUrl, onDenied, workspaceId) {
+  return new Client({
+    ...lookupOptions(apiUrl, onDenied),
     profile: login.profile,
     profileConfigPath: login.configPath,
     preferProfileAuth: true,
@@ -27435,9 +27447,13 @@ async function describeThreadLinks(config, sessionId) {
     const otherServer = destination.apiUrl !== void 0 && refusedLoginReplicas([{ apiUrl: destination.apiUrl }], config.apiBaseUrl) !== void 0;
     if (!keyed && (otherServer || !config.login))
       return missingKey;
+    let denied = false;
+    const onDenied = () => {
+      denied = true;
+    };
     try {
       const apiUrl = destination.apiUrl ?? config.apiBaseUrl;
-      const client = keyed ? keyClient(apiKey, apiUrl, destination.workspaceId) : loginClient(config.login, apiUrl, destination.workspaceId);
+      const client = keyed ? keyClient(apiKey, apiUrl, onDenied, destination.workspaceId) : loginClient(config.login, apiUrl, onDenied, destination.workspaceId);
       if (keyed && !client.apiKey)
         return missingKey;
       const agentId = destination.projectName === void 0 ? config.agentId : void 0;
@@ -27453,6 +27469,9 @@ async function describeThreadLinks(config, sessionId) {
       url.pathname = `${url.pathname.replace(/\/$/, "")}/${path3.map(encodeURIComponent).join("/")}`;
       return { resolved: true, line: `${projectName}: ${terminalLink(url.href)}` };
     } catch {
+      if (denied) {
+        return { resolved: false, line: `${projectName}: ${NO_PROJECT_ACCESS_REPLY}` };
+      }
       return {
         resolved: false,
         line: `${projectName}: Could not resolve the thread link. Check access and connectivity, then retry.`

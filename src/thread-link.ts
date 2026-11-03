@@ -8,7 +8,9 @@ import type { Config, SdkClientKey } from "./types.js";
 import {
   AGENT_ADDRESS_ENVIRONMENT,
   AGENT_ADDRESS_KIND,
+  LOOKUP_FORBIDDEN_STATUS,
   LOOKUP_TIMEOUT_MS,
+  NO_PROJECT_ACCESS_REPLY,
   WORKSPACE_ID_VARIABLE,
 } from "./constants.js";
 
@@ -22,10 +24,15 @@ function terminalLink(url: string): string {
   return `${OSC8}${url}${BEL}${url}${OSC8}${BEL}`;
 }
 
-function lookupOptions(apiUrl: string) {
+function lookupOptions(apiUrl: string, onDenied: () => void) {
   return {
     apiUrl,
     timeout_ms: LOOKUP_TIMEOUT_MS,
+    fetchImplementation: async (...request: Parameters<typeof fetch>) => {
+      const response = await fetch(...request);
+      if (response.status === LOOKUP_FORBIDDEN_STATUS) onDenied();
+      return response;
+    },
     callerOptions: {
       // The SDK ignores maxRetries on reads. Throwing here is what stops the retries.
       onFailedResponseHook: async () => {
@@ -35,14 +42,28 @@ function lookupOptions(apiUrl: string) {
   };
 }
 
-function keyClient(apiKey: string | undefined, apiUrl: string, workspaceId?: string): Client {
+function keyClient(
+  apiKey: string | undefined,
+  apiUrl: string,
+  onDenied: () => void,
+  workspaceId?: string,
+): Client {
   const fallback = sdkSetting(process.env[WORKSPACE_ID_VARIABLE]) ?? "";
-  return new Client({ ...lookupOptions(apiUrl), apiKey, workspaceId: workspaceId ?? fallback });
+  return new Client({
+    ...lookupOptions(apiUrl, onDenied),
+    apiKey,
+    workspaceId: workspaceId ?? fallback,
+  });
 }
 
-function loginClient(login: UploadLogin, apiUrl: string, workspaceId?: string): Client {
+function loginClient(
+  login: UploadLogin,
+  apiUrl: string,
+  onDenied: () => void,
+  workspaceId?: string,
+): Client {
   return new Client({
-    ...lookupOptions(apiUrl),
+    ...lookupOptions(apiUrl, onDenied),
     profile: login.profile,
     profileConfigPath: login.configPath,
     preferProfileAuth: true,
@@ -79,11 +100,15 @@ export async function describeThreadLinks(config: Config, sessionId: string): Pr
         refusedLoginReplicas([{ apiUrl: destination.apiUrl }], config.apiBaseUrl) !== undefined;
       if (!keyed && (otherServer || !config.login)) return missingKey;
 
+      let denied = false;
+      const onDenied = () => {
+        denied = true;
+      };
       try {
         const apiUrl = destination.apiUrl ?? config.apiBaseUrl;
         const client = keyed
-          ? keyClient(apiKey, apiUrl, destination.workspaceId)
-          : loginClient(config.login!, apiUrl, destination.workspaceId);
+          ? keyClient(apiKey, apiUrl, onDenied, destination.workspaceId)
+          : loginClient(config.login!, apiUrl, onDenied, destination.workspaceId);
         if (keyed && !(client as unknown as SdkClientKey).apiKey) return missingKey;
         const agentId = destination.projectName === undefined ? config.agentId : undefined;
         const project = await client.readProject(
@@ -105,6 +130,9 @@ export async function describeThreadLinks(config: Config, sessionId: string): Pr
         return { resolved: true, line: `${projectName}: ${terminalLink(url.href)}` };
       } catch {
         // Drop the error: SDK messages can carry request details the user should not see.
+        if (denied) {
+          return { resolved: false, line: `${projectName}: ${NO_PROJECT_ACCESS_REPLY}` };
+        }
         return {
           resolved: false,
           line: `${projectName}: Could not resolve the thread link. Check access and connectivity, then retry.`,
