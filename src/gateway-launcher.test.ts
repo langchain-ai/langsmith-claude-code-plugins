@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   chmodSync,
   cpSync,
@@ -36,7 +35,7 @@ type Hooks = Record<string, { hooks: { command: string }[] }[]>;
 
 const STAND_IN = readFileSync(standIn, "utf8");
 
-function sandbox({ checksum = undefined as string | undefined } = {}) {
+function sandbox() {
   const dir = mkdtempSync(join(tmpdir(), "langsmith-gateway-launcher-"));
   for (const folder of ["hooks", "bundle", "machine", "release", "data"]) {
     mkdirSync(join(dir, folder));
@@ -45,8 +44,6 @@ function sandbox({ checksum = undefined as string | undefined } = {}) {
   cpSync(standIn, join(dir, "bundle/gateway.js"));
   for (const tool of FAKE_TOOLS) cpSync(standIn, join(dir, "machine", tool));
   cpSync(standIn, join(dir, "release", asset));
-  const digest = checksum ?? createHash("sha256").update(STAND_IN).digest("hex");
-  writeFileSync(join(dir, "release", `${asset}.sha256`), `${digest}  ${asset}\n`);
   return dir;
 }
 
@@ -120,29 +117,31 @@ describe("the gateway launcher", { timeout: TEST_TIMEOUT_MS }, () => {
     }
   });
 
-  it("lets Node answer while it downloads this version's build and its checksum", async () => {
+  it("lets Node answer while it downloads this version's build", async () => {
     const dir = sandbox();
     const result = run(dir);
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout.trim()).toBe(`node ${EVENT.length} bytes`);
     await downloadFinished(dir);
-    expect(requested(dir)).toEqual([`${RELEASE_URL}/${asset}`, `${RELEASE_URL}/${asset}.sha256`]);
+    expect(requested(dir)).toEqual([`${RELEASE_URL}/${asset}`]);
     expect(readFileSync(installed(dir), "utf8")).toBe(STAND_IN);
     expect(run(dir).stdout.trim()).toBe(`build ${EVENT.length} bytes`);
   });
 
-  it("holds back a download whose checksum does not match for six hours, then tries again", async () => {
-    const dir = sandbox({ checksum: "0".repeat(64) });
-    expect(run(dir).stdout.trim()).toBe(`node ${EVENT.length} bytes`);
+  it("holds back a download not signed by our Apple team for six hours, then tries again", async () => {
+    const dir = sandbox();
+    const unsigned = { CODESIGN_RESULT: "3" };
+    expect(run(dir, unsigned).stdout.trim()).toBe(`node ${EVENT.length} bytes`);
     await eventually(() => existsSync(installed(dir)) && partials(dir).length === 0);
     expect(runnable(dir)).toBe(false);
-    run(dir);
+    expect(readFileSync(join(dir, "codesign.log"), "utf8")).toContain(`-R=${TEAM_REQUIREMENT}`);
+    run(dir, unsigned);
     await after(500);
-    expect(requested(dir)).toHaveLength(2);
+    expect(requested(dir)).toHaveLength(1);
 
     age(installed(dir), 7 * 60);
-    run(dir);
-    await eventually(() => requested(dir).length === 4);
+    run(dir, unsigned);
+    await eventually(() => requested(dir).length === 2);
   });
 
   it("retries a download that never finished on the very next hook", async () => {
@@ -187,14 +186,6 @@ describe("the gateway launcher", { timeout: TEST_TIMEOUT_MS }, () => {
     run(dir);
     await downloadFinished(dir);
     expect(readFileSync(installed(dir), "utf8")).toBe(STAND_IN);
-  });
-
-  it("installs only a download signed by our Apple team", async () => {
-    const dir = sandbox();
-    run(dir, { CODESIGN_RESULT: "3" });
-    await eventually(() => existsSync(installed(dir)) && partials(dir).length === 0);
-    expect(runnable(dir)).toBe(false);
-    expect(readFileSync(join(dir, "codesign.log"), "utf8")).toContain(`-R=${TEAM_REQUIREMENT}`);
   });
 
   it("stays on Node and downloads nothing off a Mac", async () => {

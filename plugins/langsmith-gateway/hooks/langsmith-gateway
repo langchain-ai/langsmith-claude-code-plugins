@@ -73,10 +73,6 @@ delete_unused_builds() {
   find "$builds" -type f -name "$EXECUTABLE-darwin-*" ! -name "$name*" -mtime +"$DELETE_UNUSED_BUILDS_AFTER_DAYS" -exec rm -f {} + 2>/dev/null || :
 }
 
-checksum_matches() {
-  [ "$(shasum -a 256 "$1" | cut -d' ' -f1)" = "$2" ]
-}
-
 signed_by_our_team() {
   codesign --verify --strict -R="anchor apple generic and certificate leaf[subject.OU] = \"$APPLE_TEAM_ID\"" "$1" 2>/dev/null
 }
@@ -85,14 +81,12 @@ download_build() {
   unfinished="$build.partial.$(this_process_id)"
   release="https://github.com/$REPOSITORY/releases/download/$VERSION"
 
-  if ! curl -fsSL --proto '=https' --max-time 300 -o "$unfinished" "$release/$name" ||
-    ! expected="$(curl -fsSL --proto '=https' --max-time 30 "$release/$name.sha256" | cut -d' ' -f1)" ||
-    [ -z "$expected" ]; then
+  if ! curl -fsSL --proto '=https' --max-time 300 -o "$unfinished" "$release/$name"; then
     rm -f "$unfinished" || :
     return 0
   fi
 
-  if checksum_matches "$unfinished" "$expected" && signed_by_our_team "$unfinished" && chmod +x "$unfinished"; then
+  if signed_by_our_team "$unfinished" && chmod +x "$unfinished"; then
     delete_unused_builds
     mv -f "$unfinished" "$build" || :
     delete_abandoned_downloads
