@@ -1,0 +1,173 @@
+#!/bin/sh
+set -eu
+
+VERSION="0.6.2"
+REPOSITORY="langchain-ai/langsmith-claude-code-plugins"
+EXECUTABLE="langsmith-claude-code-gateway"
+APPLE_TEAM_ID="H253X88X9F"
+RETRY_REJECTED_BUILD_AFTER_MINUTES="360"
+DELETE_UNUSED_BUILDS_AFTER_DAYS="7"
+
+plugin_folder() {
+  if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+    echo "$CLAUDE_PLUGIN_ROOT"
+  else
+    CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd
+  fi
+}
+
+build_name_for_this_mac() {
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64) echo "$EXECUTABLE-darwin-arm64-$VERSION" ;;
+    Darwin-x86_64) echo "$EXECUTABLE-darwin-x64-$VERSION" ;;
+    *) echo "" ;;
+  esac
+}
+
+run_with_node() {
+  exec node "$plugin/bundle/gateway.js" "$@"
+}
+
+warn() {
+  ( printf '%s\n' "langsmith gateway: $1" >&2 ) || :
+}
+
+build_is_ready() {
+  [ -n "$build" ] && [ -x "$build" ]
+}
+
+build_was_rejected_recently() {
+  [ -f "$build" ] && [ -n "$(find "$build" -prune -mmin -"$RETRY_REJECTED_BUILD_AFTER_MINUTES" 2>/dev/null)" ]
+}
+
+mark_build_as_rejected() {
+  rm -f "$build" || :
+  : > "$build" 2>/dev/null || :
+}
+
+process_is_alive() {
+  kill -0 "$1" 2>/dev/null
+}
+
+this_process_id() {
+  exec sh -c 'echo "$PPID"'
+}
+
+delete_abandoned_downloads() {
+  for unfinished in "$build".partial.*; do
+    [ -e "$unfinished" ] || continue
+    if ! process_is_alive "${unfinished##*.partial.}"; then
+      rm -f "$unfinished" || :
+    fi
+  done
+}
+
+download_is_running() {
+  for unfinished in "$build".partial.*; do
+    if [ -e "$unfinished" ]; then return 0; fi
+  done
+  return 1
+}
+
+delete_unused_builds() {
+  find "$builds" -type f -name "$EXECUTABLE-darwin-*" ! -name "$name*" -mtime +"$DELETE_UNUSED_BUILDS_AFTER_DAYS" -exec rm -f {} + 2>/dev/null || :
+}
+
+checksum_matches() {
+  [ "$(shasum -a 256 "$1" | cut -d' ' -f1)" = "$2" ]
+}
+
+signed_by_our_team() {
+  codesign --verify --strict -R="anchor apple generic and certificate leaf[subject.OU] = \"$APPLE_TEAM_ID\"" "$1" 2>/dev/null
+}
+
+download_build() {
+  unfinished="$build.partial.$(this_process_id)"
+  release="https://github.com/$REPOSITORY/releases/download/$VERSION"
+
+  if ! curl -fsSL --proto '=https' --max-time 300 -o "$unfinished" "$release/$name" ||
+    ! expected="$(curl -fsSL --proto '=https' --max-time 30 "$release/$name.sha256" | cut -d' ' -f1)" ||
+    [ -z "$expected" ]; then
+    rm -f "$unfinished" || :
+    return 0
+  fi
+
+  if checksum_matches "$unfinished" "$expected" && signed_by_our_team "$unfinished" && chmod +x "$unfinished"; then
+    delete_unused_builds
+    mv -f "$unfinished" "$build" || :
+    delete_abandoned_downloads
+  else
+    mark_build_as_rejected
+  fi
+  rm -f "$unfinished" || :
+}
+
+start_download_if_needed() {
+  if [ -z "$build" ] || build_is_ready || build_was_rejected_recently; then return 0; fi
+  mkdir -p "$builds" 2>/dev/null || return 0
+  delete_abandoned_downloads
+  if download_is_running; then return 0; fi
+  ( download_build ) </dev/null >/dev/null 2>&1 &
+}
+
+stdin_is_open() {
+  ( exec 4<&0 ) 2>/dev/null
+}
+
+child=""
+stop_child_and_delete_event() {
+  if [ -n "$child" ]; then kill "$child" 2>/dev/null || :; fi
+  rm -f "$event" || :
+}
+
+save_the_event() {
+  event="$(mktemp "${TMPDIR:-/tmp}/langsmith-event.XXXXXX" 2>/dev/null)" || return 1
+  trap stop_child_and_delete_event EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 131' QUIT
+  trap 'exit 143' TERM
+  exec 4<&0
+  cat <&4 > "$event" &
+  child=$!
+  wait "$child"
+  child=""
+  exec 4<&-
+}
+
+run_the_build() {
+  "$build" "$@" < "$event" &
+  child=$!
+  code=0
+  wait "$child" || code=$?
+  child=""
+  [ "$code" -eq 0 ]
+}
+
+hand_the_saved_event_to_node() {
+  exec 3< "$event"
+  rm -f "$event" || :
+  exec node "$plugin/bundle/gateway.js" "$@" <&3
+}
+
+plugin="$(plugin_folder)"
+name="$(build_name_for_this_mac)"
+builds="${CLAUDE_PLUGIN_DATA:-}/bin"
+build=""
+if [ -n "${CLAUDE_PLUGIN_DATA:-}" ] && [ -n "$name" ]; then
+  build="$builds/$name"
+fi
+
+start_download_if_needed
+
+if ! build_is_ready || ! stdin_is_open || ! save_the_event; then
+  run_with_node "$@"
+fi
+
+if run_the_build "$@"; then
+  exit 0
+fi
+
+warn "downloaded build did not run ($build exited $code); handing the event to node"
+mark_build_as_rejected
+hand_the_saved_event_to_node "$@"

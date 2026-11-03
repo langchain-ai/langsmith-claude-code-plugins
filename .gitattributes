@@ -3,3 +3,5 @@ plugins/langsmith-gateway/bundle/** linguist-generated=true
 pnpm-lock.yaml linguist-generated=true
 plugins/langsmith-tracing/binary/langsmith-claude-code-tracing-* binary linguist-generated=true
 plugins/langsmith-tracing/hooks/langsmith-tracing text eol=lf
+plugins/langsmith-gateway/hooks/langsmith-gateway text eol=lf
+src/fixtures/gateway-launcher.cjs text eol=lf

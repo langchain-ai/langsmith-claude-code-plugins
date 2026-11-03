@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/gateway.js\"",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-gateway\"\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/gateway.js\"",
             "timeout": 20
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/gateway.js\"",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-gateway\"\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/gateway.js\"",
             "timeout": 60
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bundle/gateway.js\"",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-gateway\"\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/gateway.js\"",
             "timeout": 60
           }
         ]

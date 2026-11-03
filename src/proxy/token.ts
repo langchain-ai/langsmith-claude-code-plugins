@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { loadProfileClientConfig } from "langsmith/lib/utils/profiles";
 import { endpoints, userHome } from "./config.js";
 import { bearerCredential } from "./header-slots.js";
 import {
@@ -35,7 +36,6 @@ export async function loginToken(
   config: ProxyConfig,
   log: (message: string) => void = () => undefined,
 ): Promise<string> {
-  const { loadProfileClientConfig } = await import("langsmith/lib/utils/profiles");
   const { profileAuth } = loadProfileClientConfig({
     configPath: join(userHome(), ...LOGIN_CONFIG_PATH),
     profile: config.profile,

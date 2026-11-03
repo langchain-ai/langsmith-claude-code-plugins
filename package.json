@@ -12,6 +12,7 @@
     "format": "oxfmt --write",
     "test": "vitest run",
     "test:binary": "vitest run src/hooks/dispatch.binary.test.ts",
+    "test:gateway-binary": "vitest run src/hooks/gateway.binary.test.ts",
     "test:hooks": "vitest run src/hook-command.test.ts",
     "test:paths": "vitest run src/repo-attribution.test.ts",
     "test:picker": "vitest run src/binary-picker.test.ts",
