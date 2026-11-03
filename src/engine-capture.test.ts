@@ -42,6 +42,36 @@ describe("captureInput", () => {
     expect(input.submission).toMatchObject({ operation: "post", run: { inputs: { input: "ls" } } });
   });
 
+  it("adds renderable code and language while preserving shell arguments and hook outputs", () => {
+    const original = run({
+      inputs: { input: { command: "python3 -c 'print(1)'", timeout: 10 }, hooks: [] },
+    });
+    const submission = captureInput(original, "full", "turn", "post", "s1", false).submission;
+    expect(submission).toMatchObject({
+      metadata: { base: { ls_code_input_language: "python" } },
+      run: { inputs: { ...original.inputs, code: "print(1)" } },
+    });
+    expect(original.inputs).not.toHaveProperty("code");
+  });
+
+  it("does not infer code for non-shell tools or metadata-only tracing", () => {
+    for (const [name, mode] of [
+      ["Read", "full"],
+      ["Bash", "metadata"],
+    ] as const) {
+      const submission = captureInput(
+        run({ name, inputs: { input: { command: "node -e '1'" } } }),
+        mode,
+        "turn",
+        "post",
+        "s1",
+        false,
+      ).submission;
+      expect(submission.metadata?.base ?? {}).not.toHaveProperty("ls_code_input_language");
+      expect(submission.run).not.toHaveProperty("inputs.code");
+    }
+  });
+
   it("records a patch's end state and waits for the post it follows", () => {
     const closing = run({ end_time: "2026-01-01T00:00:01.000Z", outputs: { output: "a" } });
     const input = captureInput(closing, "full", "turn", "patch", "s1", true);

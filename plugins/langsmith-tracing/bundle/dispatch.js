@@ -24308,6 +24308,112 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+// dist/src/code-input.js
+import { basename as basename4 } from "node:path";
+function shellWords(command) {
+  const words = [];
+  let word = "";
+  let quote = "";
+  let started2 = false;
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i];
+    if (char === "\\" && quote !== "'") {
+      const next = command[++i];
+      if (next === void 0)
+        return;
+      if (next === "\n")
+        continue;
+      word += quote === '"' && !'$`"\\'.includes(next) ? `\\${next}` : next;
+      started2 = true;
+    } else if (quote) {
+      if (char === quote)
+        quote = "";
+      else {
+        if (quote === '"' && "$`".includes(char))
+          return;
+        word += char;
+      }
+    } else if (char === "'" || char === '"') {
+      quote = char;
+      started2 = true;
+    } else if (/\s/.test(char)) {
+      if (char === "\n" && (started2 || words.length > 0))
+        return;
+      if (started2)
+        words.push(word);
+      word = "";
+      started2 = false;
+    } else {
+      if (";&|<>()$`#*?[]{}~".includes(char))
+        return;
+      word += char;
+      started2 = true;
+    }
+  }
+  if (quote)
+    return;
+  if (started2)
+    words.push(word);
+  return words;
+}
+function inlineCode(words, depth) {
+  if (depth > 4)
+    return;
+  while (/^[A-Za-z_][A-Za-z_0-9]*=/.test(words[0] ?? ""))
+    words = words.slice(1);
+  const executable = basename4(words[0] ?? "");
+  if (executable === "env" || executable === "command") {
+    const offset = words[1] === "--" ? 2 : 1;
+    return inlineCode(words.slice(offset), depth + 1);
+  }
+  if (executable === "uv" && words[1] === "run") {
+    return inlineCode(words.slice(words[2] === "--" ? 3 : 2), depth + 1);
+  }
+  const python = /^python(?:\d+(?:\.\d+)*)?$/.test(executable);
+  const node = /^(?:node|nodejs)$/.test(executable);
+  const shell = /^(?:bash|sh|zsh|dash)$/.test(executable);
+  if (!python && !node && !shell)
+    return;
+  for (let i = 1; i < words.length; i++) {
+    const flag = words[i];
+    if (flag === "--" || !flag.startsWith("-"))
+      return;
+    if (python && flag === "-c") {
+      return words[i + 1] === void 0 ? void 0 : { language: "python", code: words[i + 1] };
+    }
+    if (node && (flag === "-e" || flag === "--eval" || flag === "-p" || flag === "--print")) {
+      return words[i + 1] === void 0 ? void 0 : { language: "javascript", code: words[i + 1] };
+    }
+    if (node && /^(?:--eval|--print)=/.test(flag)) {
+      return { language: "javascript", code: flag.slice(flag.indexOf("=") + 1) };
+    }
+    if (node && /^-[ep].+/.test(flag))
+      return { language: "javascript", code: flag.slice(2) };
+    if (shell && /^-[a-z]*c[a-z]*$/.test(flag)) {
+      const commandIndex = words[i + 1] === "--" ? i + 2 : i + 1;
+      const command = words[commandIndex];
+      if (command === void 0 || words.length !== commandIndex + 1)
+        return;
+      return detectShellCode(command, depth + 1);
+    }
+    if (python && /^-[BIuOqEsSvb]+$/.test(flag))
+      continue;
+    if (node && (flag.startsWith("--input-type=") || flag === "--no-warnings"))
+      continue;
+    if (node && flag === "--input-type") {
+      i++;
+      continue;
+    }
+    if (shell && /^-[lxeu]+$/.test(flag))
+      continue;
+    return;
+  }
+}
+function detectShellCode(command, depth = 0) {
+  const words = shellWords(command);
+  return (words && inlineCode(words, depth)) ?? { language: "shell", code: command };
+}
+
 // dist/src/engine-capture.js
 async function saveOrWarn(runId, save, savedDespite) {
   try {
@@ -24361,6 +24467,16 @@ function postScope(sessionId, turnId, runId) {
 }
 function runSubmission(run, mode, operation) {
   const data = cloneJson(run);
+  const input = data.inputs?.input;
+  const command = input && typeof input === "object" && "command" in input ? input.command : void 0;
+  if (mode === "full" && data.run_type === "tool" && data.name === "Bash" && typeof command === "string") {
+    const { language, code } = detectShellCode(command);
+    data.inputs = { ...data.inputs, code };
+    data.metadata = {
+      ...data.metadata,
+      base: { ...data.metadata?.base, ls_code_input_language: language }
+    };
+  }
   const pick = (fields) => Object.fromEntries(fields.filter((key) => key in data).map((key) => [key, data[key]]));
   const status = data.error !== void 0 ? "error" : data.end_time ? "completed" : "running";
   const patchFields = HOOK_OUTPUTS_KEY2 in (data.inputs ?? {}) ? HOOK_PATCH_FIELDS : RUN_PATCH_FIELDS;
@@ -28029,7 +28145,7 @@ async function runQueuedClosings(workerConfig, sessionId) {
 
 // dist/src/legacy-import.js
 import { createHmac } from "node:crypto";
-import { basename as basename4, dirname as dirname20, join as join28 } from "node:path";
+import { basename as basename5, dirname as dirname20, join as join28 } from "node:path";
 function legacyRuns(config) {
   const origin = legacyOrigin(config);
   const root = dirname20(config.stateFilePath);
@@ -28116,7 +28232,7 @@ function legacyOptions(metadata, sessionId, runType) {
 function legacyFiles(root, pattern) {
   if (!entryInfo(root)?.isDirectory())
     return [];
-  return listDirectory(root).filter((sessionId) => entryInfo(join28(root, sessionId))?.isDirectory()).flatMap((sessionId) => listDirectory(join28(root, sessionId)).map((name) => [sessionId, join28(root, sessionId, name)]).filter(([, file]) => pattern.test(basename4(file)) && entryInfo(file)?.isFile()));
+  return listDirectory(root).filter((sessionId) => entryInfo(join28(root, sessionId))?.isDirectory()).flatMap((sessionId) => listDirectory(join28(root, sessionId)).map((name) => [sessionId, join28(root, sessionId, name)]).filter(([, file]) => pattern.test(basename5(file)) && entryInfo(file)?.isFile()));
 }
 function readTurnRecord(path3) {
   const record = {
