@@ -224,6 +224,18 @@ describe("the gateway launcher", { timeout: TEST_TIMEOUT_MS }, () => {
     expect(existsSync(killed)).toBe(false);
   });
 
+  it("leaves a download that is still running alone when another one finishes", async () => {
+    const dir = sandbox();
+    run(dir, { CURL_DELAY: "2" });
+    await eventually(() => partials(dir).length === 1);
+    const running = `${installed(dir)}.partial.${process.pid}`;
+    writeFileSync(running, "another download in progress");
+    await eventually(() => runnable(dir));
+    await after(500);
+    expect(existsSync(running)).toBe(true);
+    expect(runnable(dir)).toBe(true);
+  });
+
   it("deletes an older version's build only once nothing has fetched it for a week", async () => {
     const dir = sandbox();
     const unused = `${executableName}-darwin-arm64-0.0.1`;

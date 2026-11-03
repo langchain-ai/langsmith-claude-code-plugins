@@ -54,17 +54,17 @@ this_process_id() {
 }
 
 delete_abandoned_downloads() {
-  for unfinished in "$build".partial.*; do
-    [ -e "$unfinished" ] || continue
-    if ! process_is_alive "${unfinished##*.partial.}"; then
-      rm -f "$unfinished" || :
+  for leftover in "$build".partial.*; do
+    [ -e "$leftover" ] || continue
+    if ! process_is_alive "${leftover##*.partial.}"; then
+      rm -f "$leftover" || :
     fi
   done
 }
 
 download_is_running() {
-  for unfinished in "$build".partial.*; do
-    if [ -e "$unfinished" ]; then return 0; fi
+  for leftover in "$build".partial.*; do
+    if [ -e "$leftover" ]; then return 0; fi
   done
   return 1
 }
