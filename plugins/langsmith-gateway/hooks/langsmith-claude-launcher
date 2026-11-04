@@ -1,0 +1,196 @@
+#!/bin/sh
+set -eu
+
+VERSION="0.6.2"
+EXECUTABLE="langsmith-claude"
+APPLE_TEAM_ID="H253X88X9F"
+RETRY_REFUSED_BUILD_AFTER_MINUTES="360"
+ABANDON_UNPACK_AFTER_MINUTES="10"
+WAIT_FOR_OTHER_UNPACK_SECONDS="5"
+PLUGIN="gateway"
+NODE_ENTRY="bundle/gateway.js"
+
+plugin_folder() {
+  if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+    echo "$CLAUDE_PLUGIN_ROOT"
+  else
+    CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd
+  fi
+}
+
+run_with_node() {
+  exec node "$plugin/$NODE_ENTRY" --plugin "$PLUGIN" "$@"
+}
+
+warn() {
+  ( printf '%s\n' "langsmith $PLUGIN: $1" >&2 ) || :
+}
+
+build_is_ready() {
+  [ -n "$build" ] && [ -x "$build" ]
+}
+
+build_was_rejected() {
+  [ -f "$build" ] && [ ! -x "$build" ] && refusal_still_stands
+}
+
+refusal_still_stands() {
+  [ -n "$(find "$build" -prune -mmin -"$RETRY_REFUSED_BUILD_AFTER_MINUTES" 2>/dev/null)" ] &&
+    [ -z "$(find -H "$packed" -prune -newer "$build" 2>/dev/null)" ]
+}
+
+mark_build_as_rejected() {
+  rm -f "$build" || :
+  : > "$build" 2>/dev/null || :
+}
+
+process_is_alive() {
+  kill -0 "$1" 2>/dev/null
+}
+
+this_process_id() {
+  exec sh -c 'echo "$PPID"'
+}
+
+delete_abandoned_unpacks() {
+  for leftover in "$build".partial.*; do
+    [ -e "$leftover" ] || continue
+    if ! process_is_alive "${leftover##*.partial.}"; then
+      rm -f "$leftover" || :
+    fi
+  done
+}
+
+claim_unpack() {
+  ln -s "$1" "$claim" 2>/dev/null
+}
+
+release_abandoned_claim() {
+  holder="$(readlink "$claim" 2>/dev/null)" || return 0
+  if ! process_is_alive "$holder" || claim_is_too_old; then rm -f "$claim" || :; fi
+}
+
+claim_is_too_old() {
+  [ -n "$(find "$claim" -prune -mmin +"$ABANDON_UNPACK_AFTER_MINUTES" 2>/dev/null)" ]
+}
+
+unpack_is_running() {
+  [ -L "$claim" ]
+}
+
+delete_other_versions() {
+  for other in "$builds/$EXECUTABLE"-[0-9]*; do
+    case "$other" in
+      "$build") ;;
+      *.partial.*) if ! process_is_alive "${other##*.partial.}"; then rm -f "$other" || :; fi ;;
+      *) rm -f "$other" || : ;;
+    esac
+  done
+}
+
+signed_by_our_team() {
+  codesign --verify --strict -R="anchor apple generic and certificate leaf[subject.OU] = \"$APPLE_TEAM_ID\"" "$1" 2>/dev/null
+}
+
+reports_this_version() {
+  [ "$("$1" --version 2>/dev/null)" = "$VERSION" ]
+}
+
+unpack_build() {
+  unpacker="$(this_process_id)"
+  claim_unpack "$unpacker" || return 1
+  unfinished="$build.partial.$unpacker"
+
+  if tar -xJOf "$packed" "$EXECUTABLE" > "$unfinished" 2>/dev/null; then
+    if chmod +x "$unfinished" && signed_by_our_team "$unfinished" && reports_this_version "$unfinished"; then
+      mv -f "$unfinished" "$build" || :
+      delete_other_versions
+    else
+      mark_build_as_rejected
+    fi
+  fi
+  rm -f "$unfinished" "$claim" || :
+}
+
+wait_for_other_unpack() {
+  waited=0
+  while unpack_is_running && [ "$waited" -lt "$WAIT_FOR_OTHER_UNPACK_SECONDS" ]; do
+    sleep 1
+    waited=$((waited + 1))
+  done
+}
+
+unpack_if_needed() {
+  if [ -z "$build" ] || [ ! -f "$packed" ] || build_is_ready || build_was_rejected; then return 0; fi
+  release_abandoned_claim
+  delete_abandoned_unpacks
+  if ! ( unpack_build ) </dev/null >/dev/null 2>&1; then
+    wait_for_other_unpack
+  fi
+}
+
+stdin_is_open() {
+  ( exec 4<&0 ) 2>/dev/null
+}
+
+child=""
+stop_child_and_delete_event() {
+  if [ -n "$child" ]; then kill "$child" 2>/dev/null || :; fi
+  rm -f "$event" || :
+}
+
+save_the_event() {
+  event="$(mktemp "${TMPDIR:-/tmp}/langsmith-event.XXXXXX" 2>/dev/null)" || return 1
+  trap stop_child_and_delete_event EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 131' QUIT
+  trap 'exit 143' TERM
+  exec 4<&0
+  cat <&4 > "$event" &
+  child=$!
+  wait "$child"
+  child=""
+  exec 4<&-
+}
+
+run_the_build() {
+  "$build" --plugin "$PLUGIN" "$@" < "$event" &
+  child=$!
+  code=0
+  wait "$child" || code=$?
+  child=""
+  [ "$code" -eq 0 ]
+}
+
+hand_the_saved_event_to_node() {
+  exec 3< "$event"
+  rm -f "$event" || :
+  exec node "$plugin/$NODE_ENTRY" --plugin "$PLUGIN" "$@" <&3
+}
+
+plugin="$(plugin_folder)"
+builds="$plugin/binary"
+packed="$builds/$EXECUTABLE.tar.xz"
+build=""
+if [ "$(uname -s)" = "Darwin" ]; then
+  build="$builds/$EXECUTABLE-$VERSION"
+fi
+claim="$build.unpacking"
+
+unpack_if_needed
+if build_was_rejected; then
+  warn "this version's build was refused, so this hook runs on node"
+fi
+
+if ! build_is_ready || ! stdin_is_open || ! save_the_event; then
+  run_with_node "$@"
+fi
+
+if run_the_build "$@"; then
+  exit 0
+fi
+
+warn "build did not run ($build exited $code); handing the event to node"
+mark_build_as_rejected
+hand_the_saved_event_to_node "$@"

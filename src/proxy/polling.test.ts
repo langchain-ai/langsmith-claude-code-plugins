@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { loadConfig } from "./config.js";
 import type { ProxyConfig } from "./proxy-models.js";
+import { runGateway } from "./run-gateway.js";
 import { createProxy } from "./server.js";
 
 vi.mock("./config.js", async (original) => ({
@@ -36,12 +37,10 @@ it.each(["apiUrl", "gatewayUrl", "useClaudeSubscription", "disabled", "invalid"]
       typeof createProxy
     >);
     vi.mocked(loadConfig).mockReturnValue(config);
-    const argv = process.argv;
     vi.spyOn(process, "on").mockReturnValue(process);
     vi.useFakeTimers();
     try {
-      process.argv = [process.execPath, "/fake/gateway.js", "daemon"];
-      await import("../hooks/gateway.js");
+      await runGateway(["daemon"]);
       expect(server.listen).toHaveBeenCalledExactlyOnceWith({
         host: "127.0.0.1",
         port: config.port,
@@ -67,7 +66,6 @@ it.each(["apiUrl", "gatewayUrl", "useClaudeSubscription", "disabled", "invalid"]
       await vi.advanceTimersByTimeAsync(5000);
       expect(drain).toHaveBeenCalledTimes(1);
     } finally {
-      process.argv = argv;
       server.emit("close");
     }
   },

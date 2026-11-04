@@ -102,10 +102,8 @@ There is no publish step. The marketplace entries point at folders in this repos
 to `main` is what ships the plugin** and the next `/plugin marketplace update` on any client picks
 it up.
 
-Two things are therefore load-bearing on every merge. Both bundles have to be fresh and committed
-since CI enforces it, and the tracing version has to be the same in `package.json` and
-`plugins/langsmith-tracing/.claude-plugin/plugin.json` since a test compares them. Rebuild after a
-version bump so the version injected into the bundle matches the manifest.
+Both bundles have to be fresh and committed on every merge since CI enforces it.
 
-The gateway version is independent and lives only in
-`plugins/langsmith-gateway/.claude-plugin/plugin.json`.
+The root `package.json` version names the build and the binary, while each plugin's
+`.claude-plugin/plugin.json` version decides when clients update, so bump a plugin's version only
+when you want it to go out.

@@ -7,3 +7,9 @@ export const LS_INTEGRATION_VERSION: string | undefined =
   typeof __LS_INTEGRATION_VERSION__ !== "undefined"
     ? __LS_INTEGRATION_VERSION__
     : process.env.CC_LANGSMITH_INTEGRATION_VERSION || undefined;
+
+declare const LS_COMPILED_BINARY: string | undefined;
+
+export function builtAsBinary(): boolean {
+  return typeof LS_COMPILED_BINARY !== "undefined";
+}

@@ -1,16 +1,15 @@
-#!/usr/bin/env node
 import { fileURLToPath } from "node:url";
-import { ConfigError, loadConfig } from "../proxy/config.js";
+import { ConfigError, loadConfig } from "./config.js";
 import { initLogger, warn } from "../logger.js";
-import { createProxy, identity } from "../proxy/server.js";
-import { COMMAND_GUIDANCE } from "../proxy/proxy-constants.js";
-import { SetupError } from "../proxy/options.js";
-import { handleGatewayInput } from "../proxy/commands.js";
+import { createProxy, identity } from "./server.js";
+import { COMMAND_GUIDANCE } from "./proxy-constants.js";
+import { SetupError } from "./options.js";
+import { handleGatewayInput } from "./commands.js";
 import { readStdin } from "../utils/stdin.js";
 
 const entry = fileURLToPath(import.meta.url);
-async function main(): Promise<void> {
-  const [command, ...args] = process.argv.slice(2);
+async function main(argv: string[]): Promise<void> {
+  const [command, ...args] = argv;
   if (command !== undefined && (command !== "daemon" || args.length !== 0))
     throw new SetupError(COMMAND_GUIDANCE);
   if (command === undefined) {
@@ -42,13 +41,15 @@ async function main(): Promise<void> {
     server.listen({ host: "127.0.0.1", port: config.port, exclusive: true });
   }
 }
-void main().catch((error) => {
-  process.stderr.write(
-    error instanceof SetupError || error instanceof ConfigError
-      ? error.message + "\n"
-      : "Experimental LangSmith proxy unavailable; check private config, settings permissions/symlinks, and local port conflicts. No sensitive error details are printed. " +
-          COMMAND_GUIDANCE +
-          "\n",
-  );
-  if (process.argv.length > 2) process.exitCode = 1;
-});
+export function runGateway(argv: string[]): Promise<void> {
+  return main(argv).catch((error) => {
+    process.stderr.write(
+      error instanceof SetupError || error instanceof ConfigError
+        ? error.message + "\n"
+        : "Experimental LangSmith proxy unavailable; check private config, settings permissions/symlinks, and local port conflicts. No sensitive error details are printed. " +
+            COMMAND_GUIDANCE +
+            "\n",
+    );
+    if (argv.length > 0) process.exitCode = 1;
+  });
+}

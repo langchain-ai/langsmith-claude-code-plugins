@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { chmodSync, readFileSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 
 // Read the plugin version at BUILD TIME and inject it as a global constant.
 // The plugin's package.json carries no version, so we cannot read it at runtime and
@@ -46,7 +46,7 @@ console.log("Bundled the tracing hook dispatcher into plugins/langsmith-tracing/
 // A separate installable plugin; all runtime code is bundled within its root.
 // Its package.json supplies ESM mode on Node 20 without the tracing package.
 await build({
-  entryPoints: ["dist/src/hooks/gateway.js"],
+  entryPoints: ["dist/src/hooks/langsmith-claude.js"],
   bundle: true,
   platform: "node",
   format: "esm",
@@ -55,3 +55,9 @@ await build({
 });
 chmodSync("plugins/langsmith-gateway/bundle/gateway.js", 0o755);
 console.log("Bundled experimental gateway into plugins/langsmith-gateway/bundle/");
+
+const launcher = "plugins/langsmith-gateway/hooks/langsmith-claude-launcher";
+writeFileSync(
+  launcher,
+  readFileSync(launcher, "utf-8").replace(/^VERSION=".*"$/m, `VERSION="${pkg.version}"`),
+);

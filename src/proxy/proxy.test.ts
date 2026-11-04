@@ -1026,7 +1026,7 @@ describe("shared lifecycle and explicit configuration", () => {
           );
           expect(spawn).toHaveBeenCalledExactlyOnceWith(
             process.execPath,
-            ["/fake/gateway.js", "daemon"],
+            ["/fake/gateway.js", "--plugin", "gateway", "daemon"],
             expect.objectContaining({ detached: true, stdio: "ignore" }),
           );
           expect(unref).toHaveBeenCalledOnce();

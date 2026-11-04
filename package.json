@@ -12,6 +12,7 @@
     "format": "oxfmt --write",
     "test": "vitest run",
     "test:binary": "vitest run src/hooks/dispatch.binary.test.ts",
+    "test:bundle-binary": "vitest run src/hooks/langsmith-claude.binary.test.ts",
     "test:hooks": "vitest run src/hook-command.test.ts",
     "test:paths": "vitest run src/repo-attribution.test.ts",
     "test:picker": "vitest run src/binary-picker.test.ts",
@@ -27,7 +28,7 @@
     "langsmith": "0.11.6"
   },
   "devDependencies": {
-    "@langchain/plugins-base": "0.6.0",
+    "@langchain/plugins-base": "0.6.1",
     "@types/node": "^26.6.5",
     "esbuild": "^0.28.1",
     "oxfmt": "^0.72.0",
