@@ -146,7 +146,7 @@ export async function invoke(
   const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const child = execFile(
       process.execPath,
-      ["--require", preload, join(root, "plugin/bundle/gateway.js")],
+      ["--require", preload, join(root, "plugin/bundle/gateway.js"), "--plugin", "gateway"],
       {
         cwd: root,
         env: { HOME: "/not-real-home", PATH: "", ...env },

@@ -44,7 +44,8 @@ function hookBundles(pluginRoot: string): string[] {
         const entry = match![1] ?? match![2];
         // The dispatcher runs whichever event it is given, so a mislabelled
         // argument would quietly run the wrong hook.
-        if (entry !== "bundle/gateway.js") expect(match![3], hook.command).toBe(` ${event}`);
+        if (entry !== "hooks/langsmith-claude-launcher")
+          expect(match![3], hook.command).toBe(` ${event}`);
         const path = resolve(pluginRoot, entry);
         expect(path.startsWith(resolve(pluginRoot) + sep)).toBe(true);
         expect(existsSync(path), path).toBe(true);
@@ -130,7 +131,19 @@ describe("separate marketplace packages", () => {
         expect(Object.keys(json(join(pluginRoot, "hooks/hooks.json")).hooks).sort()).toEqual(
           [...events].sort(),
         );
-        expect(hookBundles(pluginRoot)).toEqual(events.map(() => "bundle/gateway.js"));
+        expect(hookBundles(pluginRoot)).toEqual(
+          events.map(() => "hooks/langsmith-claude-launcher"),
+        );
+        for (const groups of Object.values(
+          json(join(pluginRoot, "hooks/hooks.json")).hooks as Hooks,
+        )) {
+          expect(groups[0]!.hooks[0]!.command.split("\n")[1]).toBe(
+            'node "${CLAUDE_PLUGIN_ROOT}/bundle/gateway.js" --plugin gateway',
+          );
+        }
+        expect(readFileSync(join(pluginRoot, "hooks/langsmith-claude-launcher"), "utf8")).toContain(
+          `VERSION="${json(join(root, "package.json")).version}"`,
+        );
       }
     }
   });
@@ -262,7 +275,14 @@ require("node:module").syncBuiltinESMExports();
         const invoke = (args: string[], prompt?: string) =>
           spawnSync(
             process.execPath,
-            ["--require", guard, join(installed, "bundle/gateway.js"), ...args],
+            [
+              "--require",
+              guard,
+              join(installed, "bundle/gateway.js"),
+              "--plugin",
+              "gateway",
+              ...args,
+            ],
             {
               cwd: sandbox,
               env: { HOME: "/must-not-use-env-home", PATH: "", CLAUDE_PLUGIN_ROOT: installed },
@@ -389,7 +409,7 @@ require("node:module").syncBuiltinESMExports();
         new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
           const child = execFile(
             process.execPath,
-            ["--require", guard, join(installed, "bundle/gateway.js")],
+            ["--require", guard, join(installed, "bundle/gateway.js"), "--plugin", "gateway"],
             {
               cwd: sandbox,
               env: { HOME: "/must-not-use-env-home", PATH: "" },
@@ -535,7 +555,14 @@ require("node:module").syncBuiltinESMExports();
       for (const hook_event_name of [...events, "daemon"]) {
         const result = spawnSync(
           process.execPath,
-          ["--require", guard, artifact, ...(hook_event_name === "daemon" ? ["daemon"] : [])],
+          [
+            "--require",
+            guard,
+            artifact,
+            "--plugin",
+            "gateway",
+            ...(hook_event_name === "daemon" ? ["daemon"] : []),
+          ],
           {
             cwd: sandbox,
             env: { HOME: home, PATH: "", CLAUDE_PLUGIN_ROOT: installed },
@@ -561,13 +588,17 @@ require("node:module").syncBuiltinESMExports();
       });
       const malformedInput = JSON.stringify({ prompt: "private-malformed-input" }) + "invalid";
       for (const input of [largeInput, malformedInput]) {
-        const result = spawnSync(process.execPath, ["--require", guard, artifact], {
-          cwd: sandbox,
-          env: { HOME: "/must-not-use-env-home", PATH: "" },
-          input,
-          encoding: "utf8",
-          timeout: 5000,
-        });
+        const result = spawnSync(
+          process.execPath,
+          ["--require", guard, artifact, "--plugin", "gateway"],
+          {
+            cwd: sandbox,
+            env: { HOME: "/must-not-use-env-home", PATH: "" },
+            input,
+            encoding: "utf8",
+            timeout: 5000,
+          },
+        );
         expect(result.error).toBeUndefined();
         expect(result.status).toBe(0);
         expect(result.stdout).toBe("");
@@ -583,7 +614,7 @@ require("node:module").syncBuiltinESMExports();
       const delayed = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
         const child = execFile(
           process.execPath,
-          ["--require", guard, artifact],
+          ["--require", guard, artifact, "--plugin", "gateway"],
           {
             cwd: sandbox,
             env: { HOME: "/must-not-use-env-home", PATH: "" },
@@ -617,7 +648,14 @@ require("node:module").syncBuiltinESMExports();
           const command = ["status", "setup", "disable"].includes(mode);
           const result = spawnSync(
             process.execPath,
-            ["--require", guard, artifact, ...(mode === "daemon" ? ["daemon"] : [])],
+            [
+              "--require",
+              guard,
+              artifact,
+              "--plugin",
+              "gateway",
+              ...(mode === "daemon" ? ["daemon"] : []),
+            ],
             {
               cwd: sandbox,
               env: { HOME: "/untrusted", PATH: "" },

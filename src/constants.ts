@@ -112,6 +112,10 @@ const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 /** Argument that runs the background uploader instead of a hook handler. */
 const ENGINE_WORKER_ARG = "--engine-worker";
 
+const PLUGIN_FLAG = "--plugin";
+const GATEWAY_PLUGIN = "gateway";
+const BUNDLE_USAGE = `Usage: langsmith-claude ${PLUGIN_FLAG} ${GATEWAY_PLUGIN} [arguments]\n`;
+
 const STATE_FILE_DEFAULT = [".claude", "state", "langsmith_state.json"];
 
 const GH_LOGIN_MARKER_FILE = "langsmith_gh_login.json";
@@ -280,4 +284,7 @@ export {
   GH_LOGIN_MARKER_FILE,
   SESSION_MAX_AGE_MS,
   ENGINE_WORKER_ARG,
+  PLUGIN_FLAG,
+  GATEWAY_PLUGIN,
+  BUNDLE_USAGE,
 };

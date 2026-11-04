@@ -2,6 +2,7 @@
 node_modules/
 dist/
 bin/
+plugins/*/binary/langsmith-claude-[0-9]*
 *.bun-build
 # bundle/ is checked in so the plugin works without a build step
 
