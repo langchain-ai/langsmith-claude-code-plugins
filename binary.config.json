@@ -5,7 +5,6 @@
     "entryPoint": "src/hooks/dispatch.ts",
     "outputDirectory": "bin",
     "versionFile": "package.json",
-    "matchingVersionFiles": ["plugins/langsmith-tracing/.claude-plugin/plugin.json"],
     "minify": false,
     "defines": {
       "__LS_BINARY_HOOKS__": "plugins/langsmith-tracing/hooks/hooks.binary.json"

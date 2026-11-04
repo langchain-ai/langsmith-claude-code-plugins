@@ -119,7 +119,6 @@ describe("separate marketplace packages", () => {
       const manifest = json(join(pluginRoot, ".claude-plugin/plugin.json"));
       expect(manifest.name).toBe(entry.name);
       if (entry.name === "langsmith-tracing") {
-        expect(manifest.version).toBe(json(join(root, "package.json")).version);
         expect(hookBundles(pluginRoot)).toEqual(
           Array(HOOK_EVENT_NAMES.length).fill("hooks/langsmith-tracing"),
         );
