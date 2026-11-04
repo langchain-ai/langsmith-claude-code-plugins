@@ -17,12 +17,13 @@ import { waitFor } from "./wait-for.js";
 
 export const root = fileURLToPath(new URL("../../", import.meta.url));
 export const gatewayPlugin = join(root, "plugins/langsmith-gateway");
+export const tracingPlugin = join(root, "plugins/langsmith-tracing");
 const launcher = join(gatewayPlugin, "hooks/langsmith-claude-launcher");
 const standIn = join(root, "src/fixtures/launcher-stand-in.cjs");
 export const { executableName } = JSON.parse(
   readFileSync(join(root, "langsmith-claude.binary.config.json"), "utf8"),
 );
-const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+export const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 export const build = `${executableName}-${version}`;
 export const EVENT = JSON.stringify({ hook_event_name: "SessionStart", session_id: "launcher" });
 export const STAND_IN = readFileSync(standIn, "utf8");

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" UserPromptSubmit\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" UserPromptSubmit",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-claude-launcher\" UserPromptSubmit\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" --plugin tracing UserPromptSubmit",
             "timeout": 30
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" PreToolUse\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PreToolUse",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-claude-launcher\" PreToolUse\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" --plugin tracing PreToolUse",
             "timeout": 10
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" PostToolUse\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PostToolUse",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-claude-launcher\" PostToolUse\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" --plugin tracing PostToolUse",
             "timeout": 30,
             "async": true
           }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" Stop\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" Stop",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-claude-launcher\" Stop\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" --plugin tracing Stop",
             "timeout": 120
           }
         ]
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" StopFailure\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" StopFailure",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-claude-launcher\" StopFailure\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" --plugin tracing StopFailure",
             "timeout": 30
           }
         ]
@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" SubagentStop\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" SubagentStop",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-claude-launcher\" SubagentStop\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" --plugin tracing SubagentStop",
             "timeout": 60,
             "async": true
           }
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" PreCompact\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PreCompact",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-claude-launcher\" PreCompact\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" --plugin tracing PreCompact",
             "timeout": 10
           }
         ]
@@ -85,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" PostCompact\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PostCompact",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-claude-launcher\" PostCompact\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" --plugin tracing PostCompact",
             "timeout": 30,
             "async": true
           }
@@ -97,7 +97,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" SessionEnd\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" SessionEnd",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-claude-launcher\" SessionEnd\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" --plugin tracing SessionEnd",
             "timeout": 10
           }
         ]

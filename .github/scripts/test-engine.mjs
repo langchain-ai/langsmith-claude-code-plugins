@@ -23,7 +23,12 @@ Object.assign(env, {
 if (process.platform === "darwin") {
   const built = spawnSync(
     process.execPath,
-    ["node_modules/@langchain/plugins-base/dist/cli.js", "build"],
+    [
+      "node_modules/@langchain/plugins-base/dist/cli.js",
+      "build",
+      "--config",
+      "langsmith-claude.binary.config.json",
+    ],
     { env, stdio: "inherit" },
   );
   if (built.error) throw built.error;

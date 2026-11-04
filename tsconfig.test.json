@@ -10,8 +10,7 @@
     ]
   },
   "include": [
-    "src/**/*",
-    "binary.config.json"
+    "src/**/*"
   ],
   "exclude": [
     "node_modules",
