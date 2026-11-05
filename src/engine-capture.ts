@@ -30,6 +30,7 @@ import type {
   TracingMode,
 } from "./types.js";
 import { cloneJson } from "./utils/clone.js";
+import { detectShellCode } from "./code-input.js";
 
 export async function saveOrWarn(
   runId: string,
@@ -118,6 +119,22 @@ export function runSubmission(
   operation: RunOperation,
 ): PreparedRunSubmission {
   const data = cloneJson(run);
+  const input = data.inputs?.input;
+  const command =
+    input && typeof input === "object" && "command" in input ? input.command : undefined;
+  if (
+    mode === "full" &&
+    data.run_type === "tool" &&
+    data.name === "Bash" &&
+    typeof command === "string"
+  ) {
+    const { language, code } = detectShellCode(command);
+    data.inputs = { ...data.inputs, code };
+    data.metadata = {
+      ...data.metadata,
+      base: { ...data.metadata?.base, ls_code_input_language: language },
+    };
+  }
   const pick = (fields: readonly string[]): Record<string, unknown> =>
     Object.fromEntries(fields.filter((key) => key in data).map((key) => [key, data[key as never]]));
   const status = data.error !== undefined ? "error" : data.end_time ? "completed" : "running";
