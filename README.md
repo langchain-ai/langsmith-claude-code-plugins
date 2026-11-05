@@ -42,6 +42,8 @@ The plugin only trusts the file when:
 - No other user can write to either
 - Neither is a symlink
 
+Set `workspace_id` as well when your users sign in with the LangSmith CLI. Each user's sign-in may default to a different workspace, so setting it here keeps everyone's traces in one place. API keys ignore this setting so use one scoped to a workspace.
+
 If the file is broken or fails these checks then tracing stops and Claude Code explains why. See [the settings guide](https://github.com/langchain-ai/langsmith-plugin-binary/blob/main/docs/settings.md) to set it up.
 
 ## Authenticate
@@ -62,6 +64,8 @@ If more than one credential is set the plugin uses the first one it finds:
 2. Your `langsmith auth login` sign-in
 3. A generic `LANGSMITH_API_KEY` in your shell
 
+A CLI sign-in acts as you so your workspace role needs permission to write traces. You may get a 403 if you switched from a tracing API key (`lsv2_tr_...`) to the CLI sign-in since tracing keys can always write traces whatever your role is. If that happens ask your admin to give you a role that can write traces such as Workspace Editor and check that no [ABAC deny policy](https://docs.langchain.com/langsmith/abac) on the project blocks it.
+
 When your sign-in expires or your key is rejected the plugin stops uploading but still lets your prompts through. Turns from that gap never upload their content, and Claude Code shows a reminder in the chat at most every 2 minutes until you fix it. Use `notice_cooldown` to change that interval or set it to `off` to hide the reminders.
 
 ### Strict auth
@@ -72,19 +76,19 @@ Strict auth refuses every prompt until your sign-in or key works again, even if 
 
 ## Turn on tracing
 
-Tracing is off until you switch it on in `~/.claude/langsmith.json`, unless your admin already turned it on with a [managed file](#lock-settings-with-a-managed-file). Send traces to an agent with `agent_id`:
+Tracing is off until you switch it on in `~/.claude/langsmith.json`, unless your admin already turned it on with a [managed file](#lock-settings-with-a-managed-file). In an [agent-based workspace](https://docs.langchain.com/langsmith/migrate-to-agent-based-workspaces), send traces to an agent with `agent_id`:
 
 ```json
 { "enabled": true, "agent_id": "shared-claude" }
 ```
 
-Or send them to a project with `project`:
+In a project-based workspace, use the legacy `project` setting instead:
 
 ```json
 { "enabled": true, "project": "shared-claude" }
 ```
 
-Use either one, and `agent_id` wins if you set both. With neither set traces go to the `claude-code` project. Send a message and look for it in LangSmith.
+With neither set traces go to the `claude-code` project. Send a message and look for it in LangSmith.
 
 A project can override these settings in `<project>/.claude/langsmith.json` and any setting in your shell beats the files. [Advanced configuration](./ADVANCED.md) lists every location.
 
@@ -115,6 +119,7 @@ Set `defaultMuted` to `true` to mute every conversation by default. A conversati
 
 - **No runs at all.** Check that the plugin is installed and enabled in `/plugin` and that tracing is on. A `TRACE_TO_LANGSMITH` in your shell overrides your config files.
 - **Tracing is paused.** Your sign-in expired or your key was rejected. Run `langsmith auth login` again or replace the key and tracing resumes from the next prompt.
+- **Tracing is paused after a 403.** Your sign-in or API key might not have access to the agent, project or workspace. Look through `~/.claude/state/langsmith_engine/worker.log` and `~/.claude/state/hook.log` for the details.
 - **Runs in the wrong project.** Check `project` in your config file and `CC_LANGSMITH_PROJECT` in your shell.
 - **Still stuck.** Set `CC_LANGSMITH_DEBUG=true` and check `~/.claude/state/hook.log`. The background uploader logs to `~/.claude/state/langsmith_engine/worker.log`.
 
@@ -128,22 +133,22 @@ Secrets are stripped before upload unless you turn `redact` off. This covers API
 
 Each setting has a config file key and an environment variable. The environment variable wins when both are set.
 
-| Config key           | Environment variable           | Default                           | What it does                            |
-| -------------------- | ------------------------------ | --------------------------------- | --------------------------------------- |
-| `enabled`            | `TRACE_TO_LANGSMITH`           | `false`                           | Whether to trace at all                 |
-| `api_key`            | `CC_LANGSMITH_API_KEY`         | none                              | Your LangSmith key                      |
-| `project`            | `CC_LANGSMITH_PROJECT`         | `claude-code`                     | Where runs land                         |
-| `agent_id`           | `LANGSMITH_AGENT_ID`           | none                              | Agent to trace to, instead of project   |
-| `api_url`            | `LANGSMITH_ENDPOINT`           | `https://api.smith.langchain.com` | Which server to send to                 |
-| `defaultMuted`       | `CC_LANGSMITH_DEFAULT_MUTED`   | `false`                           | Leave content out unless told otherwise |
-| `redact`             | `CC_LANGSMITH_REDACT`          | `true`                            | Strip secrets before upload             |
-| `redact_extra_rules` | `CC_LANGSMITH_REDACT_EXTRA`    | none                              | Extra patterns to strip                 |
-| `metadata`           | `CC_LANGSMITH_METADATA`        | none                              | Custom fields on every run              |
-| `replicas`           | `CC_LANGSMITH_RUNS_ENDPOINTS`  | none                              | Send the same trace somewhere else too  |
-| `strict_auth`        | `CC_LANGSMITH_STRICT_AUTH`     | `false`                           | Refuse prompts until you sign in again  |
-| `notice_cooldown`    | `CC_LANGSMITH_NOTICE_COOLDOWN` | `2`                               | Minutes between reminders, or `off`     |
-| `profile`            | none                           | the CLI's current one             | Which CLI login to use                  |
-| `workspace_id`       | none                           | the login's own                   | Workspace for a login's traces          |
+| Config key             | Environment variable           | Default                           | What it does                                                                                                                                                                        |
+| ---------------------- | ------------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`              | `TRACE_TO_LANGSMITH`           | `false`                           | Whether to trace at all                                                                                                                                                             |
+| `api_key`              | `CC_LANGSMITH_API_KEY`         | none                              | Your LangSmith key                                                                                                                                                                  |
+| `agent_id`             | `LANGSMITH_AGENT_ID`           | none                              | Agent to trace to, instead of project                                                                                                                                               |
+| `project` (deprecated) | `CC_LANGSMITH_PROJECT`         | `claude-code`                     | Project the traces go to. Use `agent_id` unless your workspace is [project-based](https://docs.langchain.com/langsmith/migrate-to-agent-based-workspaces#check-which-one-you-have). |
+| `api_url`              | `LANGSMITH_ENDPOINT`           | `https://api.smith.langchain.com` | Which server to send to                                                                                                                                                             |
+| `defaultMuted`         | `CC_LANGSMITH_DEFAULT_MUTED`   | `false`                           | Leave content out unless told otherwise                                                                                                                                             |
+| `redact`               | `CC_LANGSMITH_REDACT`          | `true`                            | Strip secrets before upload                                                                                                                                                         |
+| `redact_extra_rules`   | `CC_LANGSMITH_REDACT_EXTRA`    | none                              | Extra patterns to strip                                                                                                                                                             |
+| `metadata`             | `CC_LANGSMITH_METADATA`        | none                              | Custom fields on every run                                                                                                                                                          |
+| `replicas`             | `CC_LANGSMITH_RUNS_ENDPOINTS`  | none                              | Send the same trace somewhere else too                                                                                                                                              |
+| `strict_auth`          | `CC_LANGSMITH_STRICT_AUTH`     | `false`                           | Refuse prompts until you sign in again                                                                                                                                              |
+| `notice_cooldown`      | `CC_LANGSMITH_NOTICE_COOLDOWN` | `2`                               | Minutes between reminders, or `off`                                                                                                                                                 |
+| `profile`              | none                           | the CLI's current one             | Which CLI login to use                                                                                                                                                              |
+| `workspace_id`         | none                           | the login's own                   | Workspace for a login's traces                                                                                                                                                      |
 
 `profile` is personal so the managed file can't lock it. `LANGSMITH_PROFILE` and `LANGSMITH_WORKSPACE_ID` are only used when no `profile` or `workspace_id` is set in a settings file.
 
