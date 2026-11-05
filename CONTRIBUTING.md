@@ -17,8 +17,8 @@ pnpm build
 
 The plugin is a set of Claude Code lifecycle hooks that read the session's JSONL transcript and emit
 [LangSmith](https://smith.langchain.com) runs. All nine events are wired in
-`plugins/langsmith-tracing/hooks/hooks.json` to the same bundled entry point and `dispatch.js` runs
-whichever handler its argument names.
+`plugins/langsmith-tracing/hooks/hooks.json` to the same launcher, which runs whichever handler its
+argument names.
 
 Inside `src/` the handlers live in `hooks/` with `registry.ts` mapping each event to one of them.
 `transcript.ts` turns the JSONL into turns and `langsmith.ts` builds the run tree and submits it.
@@ -76,20 +76,16 @@ gateway. Smoke-test against a scratch LangSmith project whenever you change hook
 
 ## Standalone binary
 
-`pnpm build:binary` uses Bun to compile the hook dispatcher into one macOS executable that carries
+`pnpm build:binary` uses Bun to compile both plugins into one macOS executable that carries
 its own JavaScript runtime, which is why it traces on a machine with no Node installed. The build,
 the signing and the release all come from
 [langsmith-plugin-binary](https://github.com/langchain-ai/langsmith-plugin-binary) and everything it
-needs to know about this plugin lives in `binary.config.json`, so go to that repository rather than
-this one for how any of it works.
-
-The binary gets its hooks compiled in from `plugins/langsmith-tracing/hooks/hooks.binary.json`,
-which mirrors `hooks/hooks.json` beside it and changes only the command, so a test fails if you add
-an event to one and not the other.
+needs to know about these plugins lives in `langsmith-claude.binary.config.json`, so go to that
+repository rather than this one for how any of it works.
 
 Publishing is manual and a tag on its own attaches nothing. Run the Build Binary workflow from the
-Actions tab against a release tag and it attaches an arm64 and an x64 build to that tag's release
-as a draft.
+Actions tab against a release tag and it attaches one compressed build for both Mac chips to that
+tag's release as a draft.
 
 ## Pull requests
 

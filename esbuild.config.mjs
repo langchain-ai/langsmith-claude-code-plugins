@@ -6,36 +6,19 @@ import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 // esbuild `define` substitutes the literal into the bundle instead.
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"));
 
-// esbuild keeps every key of an imported JSON file, so drop the build and signing
-// sections here rather than ship them to users who only need the two names.
-const runtimeBinaryConfig = {
-  name: "runtime-binary-config",
-  setup(bundler) {
-    bundler.onLoad({ filter: /binary\.config\.json$/ }, ({ path }) => {
-      const runtime = JSON.parse(readFileSync(path, "utf-8"));
-      for (const section of ["build", "sign"]) delete runtime[section];
-      return { loader: "json", contents: JSON.stringify(runtime) };
-    });
-  },
-};
-
 await build({
   // One entry bundles the LangSmith SDK once rather than once per hook.
-  entryPoints: ["dist/src/hooks/dispatch.js"],
+  entryPoints: ["dist/src/hooks/langsmith-claude.js"],
   bundle: true,
   platform: "node",
   format: "esm",
-  outdir: "plugins/langsmith-tracing/bundle",
+  outfile: "plugins/langsmith-tracing/bundle/dispatch.js",
   // Mark node builtins as external (they're available at runtime)
   external: ["node:*"],
-  plugins: [runtimeBinaryConfig],
   define: {
     // Build-time injection of the plugin (integration) version. Consumed by
     // constants.ts via `typeof __LS_INTEGRATION_VERSION__`.
     __LS_INTEGRATION_VERSION__: JSON.stringify(pkg.version),
-    __LS_BINARY_HOOKS__: JSON.stringify(
-      readFileSync(new URL("./plugins/langsmith-tracing/hooks/hooks.binary.json", import.meta.url), "utf-8"),
-    ),
   },
 });
 
@@ -56,8 +39,10 @@ await build({
 chmodSync("plugins/langsmith-gateway/bundle/gateway.js", 0o755);
 console.log("Bundled experimental gateway into plugins/langsmith-gateway/bundle/");
 
-const launcher = "plugins/langsmith-gateway/hooks/langsmith-claude-launcher";
-writeFileSync(
-  launcher,
-  readFileSync(launcher, "utf-8").replace(/^VERSION=".*"$/m, `VERSION="${pkg.version}"`),
-);
+for (const plugin of ["langsmith-gateway", "langsmith-tracing"]) {
+  const launcher = `plugins/${plugin}/hooks/langsmith-claude-launcher`;
+  writeFileSync(
+    launcher,
+    readFileSync(launcher, "utf-8").replace(/^VERSION=".*"$/m, `VERSION="${pkg.version}"`),
+  );
+}

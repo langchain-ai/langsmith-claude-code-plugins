@@ -13,12 +13,11 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { binary } from "./binary-target.js";
+import { build } from "./fixtures/launcher-sandbox.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const onWindows = process.platform === "win32";
 const SHELL_TIMEOUT_MS = 60_000;
-const executable = binary.target.executableName;
 
 type Hooks = Record<string, { hooks: { command: string }[] }[]>;
 const hooks: Hooks = JSON.parse(
@@ -30,19 +29,19 @@ function sandbox(builds: string[]): string {
   const dir = mkdtempSync(join(tmpdir(), "langsmith hooks "));
   for (const folder of ["hooks", "binary", "bundle", "machine"]) mkdirSync(join(dir, folder));
   cpSync(
-    join(root, "plugins/langsmith-tracing/hooks/langsmith-tracing"),
-    join(dir, "hooks/langsmith-tracing"),
+    join(root, "plugins/langsmith-tracing/hooks/langsmith-claude-launcher"),
+    join(dir, "hooks/langsmith-claude-launcher"),
   );
-  chmodSync(join(dir, "hooks/langsmith-tracing"), 0o755);
-  writeFileSync(join(dir, "bundle/dispatch.js"), 'console.log("node " + process.argv[2]);\n');
+  chmodSync(join(dir, "hooks/langsmith-claude-launcher"), 0o755);
   writeFileSync(
-    join(dir, "machine/uname"),
-    '#!/bin/sh\ncase "$1" in -m) echo arm64 ;; *) echo Darwin ;; esac\n',
+    join(dir, "bundle/dispatch.js"),
+    'console.log("node " + process.argv.slice(2).join(" "));\n',
   );
+  writeFileSync(join(dir, "machine/uname"), "#!/bin/sh\necho Darwin\n");
   chmodSync(join(dir, "machine/uname"), 0o755);
-  for (const build of builds) {
-    const path = join(dir, "binary", `${executable}-${build}`);
-    writeFileSync(path, `#!/bin/sh\necho "${build} $1"\n`);
+  for (const name of builds) {
+    const path = join(dir, "binary", name);
+    writeFileSync(path, '#!/bin/sh\necho "build $*"\n');
     chmodSync(path, 0o755);
   }
   return dir;
@@ -83,8 +82,12 @@ it("gives every hook a starter line and a Node line carrying the same event", ()
       for (const hook of group.hooks) {
         const [starter, fallback, ...extra] = hook.command.split("\n");
         expect(extra, hook.command).toEqual([]);
-        expect(starter).toBe(`exec "\${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing" ${event}`);
-        expect(fallback).toBe(`node "\${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js" ${event}`);
+        expect(starter).toBe(
+          `exec "\${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-claude-launcher" ${event}`,
+        );
+        expect(fallback).toBe(
+          `node "\${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js" --plugin tracing ${event}`,
+        );
       }
     }
   }
@@ -93,7 +96,7 @@ it("gives every hook a starter line and a Node line carrying the same event", ()
 it.runIf(onWindows)(
   "reaches Node through PowerShell, which cannot start the starter",
   () => {
-    inSandbox([], (dir) => expect(shell(dir)).toBe("node SessionEnd"));
+    inSandbox([], (dir) => expect(shell(dir)).toBe("node --plugin tracing SessionEnd"));
   },
   SHELL_TIMEOUT_MS,
 );
@@ -101,8 +104,8 @@ it.runIf(onWindows)(
 it.runIf(!onWindows)(
   "runs the carried build through a POSIX shell, and Node when none is carried",
   () => {
-    inSandbox(["darwin-arm64"], (dir) => expect(shell(dir)).toBe("darwin-arm64 SessionEnd"));
-    inSandbox([], (dir) => expect(shell(dir)).toBe("node SessionEnd"));
+    inSandbox([build], (dir) => expect(shell(dir)).toBe("build --plugin tracing SessionEnd"));
+    inSandbox([], (dir) => expect(shell(dir)).toBe("node --plugin tracing SessionEnd"));
   },
   SHELL_TIMEOUT_MS,
 );

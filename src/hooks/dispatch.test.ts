@@ -5,15 +5,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { binary } from "../binary-target.js";
-import { HOOK_EVENT_NAMES } from "../constants.js";
+import { HOOK_EVENT_NAMES, PLUGIN_FLAG, TRACING_PLUGIN } from "../constants.js";
 import cursorHooks from "../fixtures/cursor-hooks.json" with { type: "json" };
 import { noManagedConfigEnv } from "../fixtures/no-managed-config-env.js";
 
-const EXECUTABLE_NAME = binary.target.executableName;
-
 const root = new URL("../../", import.meta.url);
 const bundle = fileURLToPath(new URL("plugins/langsmith-tracing/bundle/dispatch.js", root));
+const tracing = [bundle, PLUGIN_FLAG, TRACING_PLUGIN];
 const { version } = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
 
 let home: string;
@@ -22,7 +20,7 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 // Claude Code runs the bundle, not the source, so drive the built artifact.
 function dispatch(args: string[], prompt = "ordinary prompt", cwd = home, filler = "") {
-  return spawnSync(process.execPath, [bundle, ...args], {
+  return spawnSync(process.execPath, [...tracing, ...args], {
     cwd,
     env: {
       HOME: home,
@@ -68,7 +66,7 @@ describe("bundle/dispatch.js", () => {
   );
 
   function dispatchPayload(event: string, payload: unknown, env: Record<string, string>) {
-    return spawnSync(process.execPath, [bundle, event], {
+    return spawnSync(process.execPath, [...tracing, event], {
       cwd: home,
       env: {
         HOME: home,
@@ -130,7 +128,7 @@ describe("bundle/dispatch.js", () => {
   });
 
   it("leaves stderr silent when git runs outside a repository", () => {
-    const result = spawnSync(process.execPath, [bundle, "UserPromptSubmit"], {
+    const result = spawnSync(process.execPath, [...tracing, "UserPromptSubmit"], {
       cwd: home,
       env: {
         HOME: home,
@@ -163,7 +161,7 @@ describe("bundle/dispatch.js", () => {
   });
 
   it("logs and still exits 0 when a handler cannot read its input", () => {
-    const result = spawnSync(process.execPath, [bundle, "PostToolUse"], {
+    const result = spawnSync(process.execPath, [...tracing, "PostToolUse"], {
       cwd: home,
       env: { HOME: home, PATH: "", STATE_FILE: join(home, "state.json"), ...noManagedConfigEnv() },
       input: "not json",
@@ -196,7 +194,7 @@ describe("bundle/dispatch.js", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("Usage:");
-    expect(result.stdout).toContain(`${EXECUTABLE_NAME} <HookEventName>`);
+    expect(result.stdout).toContain("langsmith-claude --plugin tracing <HookEventName>");
     expect(result.stdout).toContain("--help, -h");
     expect(result.stdout).toContain("--version, -v");
     expect(existsSync(logDir())).toBe(false);

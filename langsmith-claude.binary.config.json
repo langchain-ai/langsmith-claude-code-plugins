@@ -6,7 +6,11 @@
     "outputDirectory": "bin",
     "versionFile": "package.json",
     "minify": false,
-    "stampedVersionFiles": ["plugins/langsmith-gateway/hooks/langsmith-claude-launcher"]
+    "stampedVersionFiles": [
+      "plugins/langsmith-gateway/hooks/langsmith-claude-launcher",
+      "plugins/langsmith-tracing/hooks/langsmith-claude-launcher",
+      "plugins/langsmith-tracing/bundle/dispatch.js"
+    ]
   },
   "sign": {
     "entitlements": "macos-entitlements.plist"

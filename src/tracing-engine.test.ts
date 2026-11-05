@@ -117,6 +117,23 @@ describe("the shared engine adapter", () => {
     expect(existsSync(join(root, "langsmith_engine", "worker.log"))).toBe(true);
   });
 
+  it("starts the uploader as the tracing plugin of the shared entry", async () => {
+    launchesFail();
+    const { captureRun, initTracing } = await import("./tracing-engine.js");
+    initTracing(config, root, "s1");
+
+    await captureRun(run(stableRunId("2026-01-01T00:00:00.000Z", "s1", "relaunch")));
+
+    const [, args] = spawned.mock.calls[0];
+    expect(args.slice(args.indexOf("--plugin"))).toEqual([
+      "--plugin",
+      "tracing",
+      "--engine-worker",
+      root,
+      "s1",
+    ]);
+  });
+
   it("saves a muted run without its content", async () => {
     launchesFail();
     const { captureRun, initTracing } = await import("./tracing-engine.js");

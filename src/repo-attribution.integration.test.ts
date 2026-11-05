@@ -7,7 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { createGitSandbox } from "./fixtures/git-sandbox.js";
 import { noManagedConfigEnv } from "./fixtures/no-managed-config-env.js";
 import { waitFor } from "./fixtures/wait-for.js";
-import { USER_PROMPT_TURN_NAME } from "./constants.js";
+import { PLUGIN_FLAG, TRACING_PLUGIN, USER_PROMPT_TURN_NAME } from "./constants.js";
 
 // Claude Code runs the built bundle, so drive that, one real process per hook.
 const bundle = fileURLToPath(
@@ -60,7 +60,7 @@ async function hook(
   home?: string,
   extraEnv?: Record<string, string>,
 ): Promise<string> {
-  const child = spawn(process.execPath, [bundle, event], {
+  const child = spawn(process.execPath, [bundle, PLUGIN_FLAG, TRACING_PLUGIN, event], {
     cwd: String(payload.cwd ?? alpha),
     env: {
       ...sandbox.env,

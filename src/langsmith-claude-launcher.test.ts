@@ -35,6 +35,7 @@ import {
   sandbox,
   settles,
   STAND_IN,
+  tracingPlugin,
   unpackFinished,
   unpacks,
   unpackSettled,
@@ -44,12 +45,30 @@ const TEAM_REQUIREMENT = 'anchor apple generic and certificate leaf[subject.OU] 
 const TEST_TIMEOUT_MS = 30_000;
 
 describe("the shared launcher", { timeout: TEST_TIMEOUT_MS }, () => {
-  it("reaches the packed build through a link, so the repository keeps one copy", () => {
-    const link = join(gatewayPlugin, "binary", `${executableName}.tar.xz`);
-    expect(lstatSync(link).isSymbolicLink()).toBe(true);
-    expect(join(realpathSync(join(link, "..")), readlinkSync(link))).toBe(
-      join(realpathSync(root), "shared", `${executableName}.tar.xz`),
+  it.each(["langsmith-gateway", "langsmith-tracing"])(
+    "reaches the packed build through a link from %s, so the repository keeps one copy",
+    (plugin) => {
+      const link = join(root, "plugins", plugin, "binary", `${executableName}.tar.xz`);
+      expect(lstatSync(link).isSymbolicLink()).toBe(true);
+      expect(join(realpathSync(join(link, "..")), readlinkSync(link))).toBe(
+        join(realpathSync(root), "shared", `${executableName}.tar.xz`),
+      );
+    },
+  );
+
+  it("gives tracing the gateway's launcher with only its plugin and Node entry changed", () => {
+    const launcher = (plugin: string) =>
+      readFileSync(join(plugin, "hooks/langsmith-claude-launcher"), "utf8").split("\n");
+    const gateway = launcher(gatewayPlugin);
+    const tracing = launcher(tracingPlugin);
+    const changed = gateway.flatMap((line, index) =>
+      line === tracing[index] ? [] : [[line, tracing[index]]],
     );
+    expect(tracing).toHaveLength(gateway.length);
+    expect(changed).toEqual([
+      ['PLUGIN="gateway"', 'PLUGIN="tracing"'],
+      ['NODE_ENTRY="bundle/gateway.js"', 'NODE_ENTRY="bundle/dispatch.js"'],
+    ]);
   });
 
   it("unpacks this version's build on the first hook, then runs it as the gateway", () => {
@@ -194,13 +213,13 @@ describe("the shared launcher", { timeout: TEST_TIMEOUT_MS }, () => {
     const dir = sandbox();
     const older = `${executableName}-0.0.1`;
     const running = `${older}.partial.${process.pid}`;
-    const tracing = "langsmith-claude-code-tracing-darwin-arm64";
+    const unrelated = `${executableName}-unrelated`;
     place(dir, older);
-    place(dir, tracing);
+    place(dir, unrelated);
     writeFileSync(join(dir, "binary", running), "");
     writeFileSync(join(dir, "binary", `${older}.partial.${deadProcess()}`), "");
     run(dir);
-    const settled = [`${executableName}.tar.xz`, build, running, tracing].toSorted().join(" ");
+    const settled = [`${executableName}.tar.xz`, build, running, unrelated].toSorted().join(" ");
     expect(
       await settles(() => readdirSync(join(dir, "binary")).toSorted().join(" ") === settled),
     ).toBe(true);

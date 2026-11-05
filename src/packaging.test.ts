@@ -32,20 +32,15 @@ type Hooks = Record<string, { hooks: { type: string; command: string }[] }[]>;
 
 function hookBundles(pluginRoot: string): string[] {
   const hooks: Hooks = json(join(pluginRoot, "hooks/hooks.json")).hooks;
-  return Object.entries(hooks).flatMap(([event, groups]) =>
+  return Object.values(hooks).flatMap((groups) =>
     groups.flatMap((group) =>
       group.hooks.map((hook) => {
         expect(hook.type).toBe("command");
-        const match =
-          /^(?:node "\$\{CLAUDE_PLUGIN_ROOT\}\/(bundle\/[^" ]+\.js)"|exec "\$\{CLAUDE_PLUGIN_ROOT\}\/(hooks\/[^" ]+)")( \S+)?$/.exec(
-            hook.command.split("\n")[0],
-          );
+        const match = /^exec "\$\{CLAUDE_PLUGIN_ROOT\}\/(hooks\/[^" ]+)"(?: \S+)?$/.exec(
+          hook.command.split("\n")[0],
+        );
         expect(match, hook.command).not.toBeNull();
-        const entry = match![1] ?? match![2];
-        // The dispatcher runs whichever event it is given, so a mislabelled
-        // argument would quietly run the wrong hook.
-        if (entry !== "hooks/langsmith-claude-launcher")
-          expect(match![3], hook.command).toBe(` ${event}`);
+        const entry = match![1];
         const path = resolve(pluginRoot, entry);
         expect(path.startsWith(resolve(pluginRoot) + sep)).toBe(true);
         expect(existsSync(path), path).toBe(true);
@@ -81,27 +76,6 @@ describe("the caller workflow", () => {
   });
 });
 
-describe("the standalone binary manifest", () => {
-  it("mirrors the Node manifest and changes only the command", () => {
-    const node: Hooks = json(join(root, "plugins/langsmith-tracing/hooks/hooks.json")).hooks;
-    const compiled: Hooks = json(
-      join(root, "plugins/langsmith-tracing/hooks/hooks.binary.json"),
-    ).hooks;
-    expect(Object.keys(compiled)).toEqual(Object.keys(node));
-    for (const [event, groups] of Object.entries(node)) {
-      expect(compiled[event]).toEqual(
-        groups.map((group) => ({
-          ...group,
-          hooks: group.hooks.map((hook) => ({
-            ...hook,
-            command: `"\${HOME}/.langsmith/langsmith-claude-code-tracing" ${event}`,
-          })),
-        })),
-      );
-    }
-  });
-});
-
 describe("separate marketplace packages", () => {
   it("resolves marketplace sources to matching independent manifests and local hook bundles", () => {
     const entries = json(join(root, ".claude-plugin/marketplace.json")).plugins;
@@ -120,7 +94,7 @@ describe("separate marketplace packages", () => {
       expect(manifest.name).toBe(entry.name);
       if (entry.name === "langsmith-tracing") {
         expect(hookBundles(pluginRoot)).toEqual(
-          Array(HOOK_EVENT_NAMES.length).fill("hooks/langsmith-tracing"),
+          Array(HOOK_EVENT_NAMES.length).fill("hooks/langsmith-claude-launcher"),
         );
         expect(existsSync(join(pluginRoot, "bundle/gateway.js"))).toBe(false);
       } else {
@@ -154,7 +128,13 @@ describe("separate marketplace packages", () => {
       cpSync(join(root, "plugins/langsmith-tracing"), installed, { recursive: true });
       const result = spawnSync(
         process.execPath,
-        ["--no-experimental-detect-module", join(installed, "bundle/dispatch.js"), "--version"],
+        [
+          "--no-experimental-detect-module",
+          join(installed, "bundle/dispatch.js"),
+          "--plugin",
+          "tracing",
+          "--version",
+        ],
         { encoding: "utf8" },
       );
       expect(result.stderr).toBe("");

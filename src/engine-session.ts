@@ -5,7 +5,9 @@ import { loadConfig } from "./config.js";
 import {
   ENGINE_WORKER_ARG,
   LS_INTEGRATION,
+  PLUGIN_FLAG,
   RECOVERY_REPORT_PROBLEM_STATUSES,
+  TRACING_PLUGIN,
 } from "./constants.js";
 import { engineStorageRoot, writerOptions } from "./engine-writer.js";
 import { settleToolRuns } from "./engine-tool-settlement.js";
@@ -26,7 +28,10 @@ export function openSession(
     sessionId,
     writer,
     currentWriter: () => writerOptions(loadConfig({ cwd })),
-    scheduleWake: (id) => launchDetachedWorker([ENGINE_WORKER_ARG, cwd, id], { storageRoot }),
+    scheduleWake: (id) =>
+      launchDetachedWorker([PLUGIN_FLAG, TRACING_PLUGIN, ENGINE_WORKER_ARG, cwd, id], {
+        storageRoot,
+      }),
     reconstruct,
     onRecoveryReport: (report) => {
       if (RECOVERY_REPORT_PROBLEM_STATUSES.includes(report.status)) {
