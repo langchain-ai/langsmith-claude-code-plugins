@@ -26386,7 +26386,7 @@ function buildUsageMetadata(usage) {
   };
 }
 async function traceTurn(options) {
-  const { turn, sessionId, turnNum, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, agentType = "root", tracing = "full", toolTracingModes, hookCwd, captureHookOutputs } = options;
+  const { turn, sessionId, turnNum, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, agentType = "root", tracing = "full", toolTracingModes, hookCwd, captureHookOutputs, uploadFromCall = 0 } = options;
   const captured = (hooks) => captureHookOutputs ? hooks : void 0;
   const sessionCwd = typeof customMetadata?.cwd === "string" ? customMetadata.cwd : void 0;
   const modelRunBase = sessionScopedMetadata(customMetadata, hookCwd ?? sessionCwd);
@@ -26437,7 +26437,7 @@ async function traceTurn(options) {
         lastEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
         continue;
       }
-      if (!toolCall.agentId && tracedToolUseIds?.has(toolCall.tool_use.id)) {
+      if (llmIndex < uploadFromCall || tracedToolUseIds?.has(toolCall.tool_use.id)) {
         lastEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
         continue;
       }
@@ -26502,19 +26502,21 @@ async function traceTurn(options) {
         ...llmCall.synthetic ? { synthetic: true } : {}
       }
     }));
-    await captureRun({
-      id: assistantRunId,
-      name: ASSISTANT_RUN_NAME,
-      run_type: "llm",
-      inputs: assistantInputs,
-      outputs: { messages: outputMessages },
-      start_time: llmCall.startTime,
-      end_time: assistantEndTime,
-      parent_run_id: turnRunId,
-      trace_id: traceId,
-      dotted_order: assistantDottedOrder,
-      metadata: assistantMetadata
-    }, tracing, recordRunId ?? assistantRunId);
+    if (llmIndex >= uploadFromCall) {
+      await captureRun({
+        id: assistantRunId,
+        name: ASSISTANT_RUN_NAME,
+        run_type: "llm",
+        inputs: assistantInputs,
+        outputs: { messages: outputMessages },
+        start_time: llmCall.startTime,
+        end_time: assistantEndTime,
+        parent_run_id: turnRunId,
+        trace_id: traceId,
+        dotted_order: assistantDottedOrder,
+        metadata: assistantMetadata
+      }, tracing, recordRunId ?? assistantRunId);
+    }
     accumulatedMessages.push(...outputMessages);
     for (const tc of llmCall.toolCalls) {
       accumulatedMessages.push({
@@ -26634,6 +26636,11 @@ async function flushHeldToolRuns({ stateFilePath, captureHookOutputs }, sessionI
       delete runs[id];
     return { ...state, [sessionId]: { ...session, held_tool_runs: runs } };
   });
+}
+async function currentTurnMetadata(base, sessionState) {
+  const notifiedBy = sessionState.current_notification_agent_id;
+  const notifiedFrom = notifiedBy ? sessionState.task_run_map?.[notifiedBy]?.deferred?.parent_run_id : void 0;
+  return settledFromTurn(base, notifiedFrom);
 }
 function turnHooks(session, { messages, promptId }) {
   const turns = groupPromptTurns(messages);
@@ -27172,9 +27179,7 @@ async function closeStoppedTurn(_id, closing, config) {
     return;
   }
   log(`Found ${messages.length} new messages`);
-  const notifiedBy = sessionState.current_notification_agent_id;
-  const notifiedFrom = notifiedBy ? sessionState.task_run_map?.[notifiedBy]?.deferred?.parent_run_id : void 0;
-  const sessionMetadata = await settledFromTurn(config.customMetadata, notifiedFrom);
+  const sessionMetadata = await currentTurnMetadata(config.customMetadata, sessionState);
   const continuedRunId = input.stop_hook_active && !sessionState.current_turn_run_id && sessionState.current_dotted_order ? parseDottedOrder(sessionState.current_dotted_order).runId : void 0;
   const turns = groupIntoTurns(messages);
   const currentTracing = resolveTurnTracingMode(config, input.session_id, continuedRunId ? sessionState.closed_turn_tracing : sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
@@ -28662,6 +28667,7 @@ async function main7() {
     error("No current_turn_run_id or trace_id in state - UserPromptSubmit hook may not have run");
     return;
   }
+  initTracing(config, input.cwd, input.session_id);
   const startTime = sessionState.tool_start_times?.[input.tool_use_id] ?? Date.now();
   const toolRunId = stableRunId(startTime, input.session_id, input.tool_use_id);
   const toolEndTime = Date.now();
@@ -28683,7 +28689,6 @@ async function main7() {
     debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
   } else if (workflow) {
     debug(`Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`);
-    initTracing(config, input.cwd, input.session_id);
     await captureToolRun2({
       id: toolRunId,
       name: "Workflow",
@@ -28705,7 +28710,6 @@ async function main7() {
       })
     }, tracing, parentRunId, origin);
   } else {
-    initTracing(config, input.cwd, input.session_id);
     await (config.captureHookOutputs ? hold : captureToolRun2)({
       id: toolRunId,
       name: input.tool_name,
@@ -28792,6 +28796,41 @@ async function main7() {
   });
   if (held && !kept)
     takeHeldRun(...heldKey);
+  try {
+    await traceFinishedModelCalls(config, input, sessionState);
+  } catch (err) {
+    error(`Failed to upload finished model calls: ${err}`);
+  }
+}
+async function traceFinishedModelCalls(config, input, sessionState) {
+  const transcriptPath = expandHome(input.transcript_path);
+  const turnRunId = sessionState.current_turn_run_id;
+  const toolStart = sessionState.tool_start_times?.[input.tool_use_id];
+  if (!transcriptPath || !turnRunId || toolStart === void 0)
+    return;
+  const { messages } = readTranscript(transcriptPath, sessionState.last_line, void 0, turnPrompt(sessionState, sessionState.read_turn_run_id === turnRunId), sessionState);
+  const turns = groupIntoTurns(messages);
+  const turn = turns.length === 1 ? turns[0] : void 0;
+  const finished = turn?.llmCalls.slice(0, -1) ?? [];
+  if (!turn || finished.length === 0)
+    return;
+  const toolCalls = finished.flatMap((llmCall) => llmCall.toolCalls);
+  await traceTurn({
+    tracing: resolveTurnTracingMode(config, input.session_id, sessionState.current_turn_tracing, sessionState.open_turns?.[turnRunId]?.tracing),
+    turn: { ...turn, llmCalls: finished },
+    sessionId: input.session_id,
+    turnNum: sessionState.turn_count + 1,
+    customMetadata: await currentTurnMetadata(config.customMetadata, sessionState),
+    hookCwd: input.cwd,
+    runtimeVersion: sessionState.runtime_version ?? readRuntimeVersion(transcriptPath),
+    approvalPolicy: sessionState.approval_policy ?? input.permission_mode,
+    parentRunId: turnRunId,
+    tracedToolUseIds: new Set(toolCalls.map((toolCall) => toolCall.tool_use.id)),
+    traceId: sessionState.current_trace_id,
+    parentDottedOrder: sessionState.current_dotted_order,
+    captureHookOutputs: config.captureHookOutputs,
+    uploadFromCall: finished.length - 1
+  });
 }
 
 // dist/src/hooks/pre-compact.js
