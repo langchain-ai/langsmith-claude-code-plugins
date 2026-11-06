@@ -1,6 +1,9 @@
 import {
+  closeSync,
   lstatSync,
   mkdirSync,
+  openSync,
+  readSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -11,7 +14,12 @@ import {
 import type { Stats } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
-import { PRIVATE_FILE_MODE, PRIVATE_FOLDER_MODE, TEMP_FILE_SUFFIX } from "../constants.js";
+import {
+  FIRST_LINE_CHUNK_BYTES,
+  PRIVATE_FILE_MODE,
+  PRIVATE_FOLDER_MODE,
+  TEMP_FILE_SUFFIX,
+} from "../constants.js";
 
 export function listDirectory(path: string): string[] {
   try {
@@ -52,6 +60,26 @@ export function readText(path: string): string {
     return readFileSync(path, "utf-8");
   } catch {
     return "";
+  }
+}
+
+export function readFirstLine(path: string): string {
+  let fd: number;
+  try {
+    fd = openSync(path, "r");
+  } catch {
+    return "";
+  }
+  try {
+    const chunk = Buffer.alloc(FIRST_LINE_CHUNK_BYTES);
+    let text = "";
+    let read: number;
+    while (!text.includes("\n") && (read = readSync(fd, chunk, 0, chunk.length, null)) > 0) {
+      text += chunk.toString("utf-8", 0, read);
+    }
+    return text.split("\n")[0];
+  } finally {
+    closeSync(fd);
   }
 }
 

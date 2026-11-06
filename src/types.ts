@@ -378,6 +378,7 @@ export interface SessionState {
   >;
   /** tool_use_ids of regular tools already traced by PostToolUse (prevents double-tracing in traceTurn) */
   traced_tool_use_ids?: string[];
+  opened_subagents?: Record<string, OpenedSubagent>;
   /** Wall-clock time (ms) when the last PreCompact hook fired */
   compaction_start_time?: number;
   /** Pending subagent traces to process (set by SubagentStop, processed by Stop).
@@ -564,6 +565,54 @@ export interface PendingSubagent {
   agent_type: string;
   agent_transcript_path: string;
   session_id: string;
+}
+
+export interface AgentToolRunOptions {
+  subagent: PendingSubagent;
+  taskRunInfo: TaskRunEntry;
+  sessionId: string;
+  customMetadata?: Record<string, unknown>;
+  runtimeVersion?: string;
+  turnId?: string;
+  turnNumber?: number;
+  filledForTheTurn: (metadata: CodingAgentMetadataOptions) => CodingAgentMetadataOptions;
+}
+
+export interface SubagentChainRunOptions {
+  sessionId: string;
+  parentRunId: string;
+  parentDottedOrder: string;
+  parentTraceId: string;
+  subagentId: string;
+  subagentType: string;
+  chainName: string;
+  startTime: string;
+  customMetadata?: Record<string, unknown>;
+  runtimeVersion?: string;
+  turnId?: string;
+  turnNumber?: number;
+}
+
+export interface OpenedSubagent {
+  agent_id: string;
+  agent_type: string;
+  task: TaskRunEntry;
+}
+
+export interface OpenedSubagentsClose {
+  stateFilePath: string;
+  sessionId: string;
+  turnRunId: string | undefined;
+  handledAgentIds: Set<string>;
+  customMetadata?: Record<string, unknown>;
+  runtimeVersion?: string;
+  turnId?: string;
+  turnNumber?: number;
+}
+
+export interface RunningSubagentOptions extends Omit<AgentToolRunOptions, "filledForTheTurn"> {
+  turns: Turn[];
+  captureHookOutputs?: boolean;
 }
 
 export interface TaskRunEntry {
