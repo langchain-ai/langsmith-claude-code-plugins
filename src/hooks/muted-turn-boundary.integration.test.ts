@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({ inputs: [] as Record<string, unknown>[] }));
@@ -25,6 +25,7 @@ const HOOKS = {
   PreToolUse: "./pre-tool-use.js",
   PostToolUse: "./post-tool-use.js",
   Stop: "./stop.js",
+  SubagentStop: "./subagent-stop.js",
   PreCompact: "./pre-compact.js",
   PostCompact: "./post-compact.js",
 } as const;
@@ -44,8 +45,14 @@ beforeAll(async () => {
     let raw = "";
     request.on("data", (chunk) => (raw += chunk));
     request.on("end", () => {
-      if (raw) uploads.push(JSON.parse(raw));
+      const body = raw ? JSON.parse(raw) : undefined;
       response.setHeader("content-type", "application/json");
+      if (body?.patch?.some((run: { end_time?: string }) => !run.end_time)) {
+        response.statusCode = 422;
+        response.end("{}");
+        return;
+      }
+      if (body) uploads.push(body);
       response.end("{}");
     });
   });
@@ -233,7 +240,9 @@ it("saves a blocking Stop hook's retried reply for a turn still waiting on a bac
   const { atomicUpdateState, loadState } = await import("../state.js");
   const stateFile = process.env.STATE_FILE!;
   const { parseDottedOrder } = await import("../langsmith.js");
-  const { runId: turnRunId } = parseDottedOrder(loadState(stateFile)[SESSION]!.current_dotted_order!);
+  const { runId: turnRunId } = parseDottedOrder(
+    loadState(stateFile)[SESSION]!.current_dotted_order!,
+  );
   await atomicUpdateState(stateFile, (state) => {
     const waiting = {
       run_id: turnRunId,
@@ -527,6 +536,253 @@ it("waits to upload a turn's model calls until the turn before it is closed", as
 
   expect(sent).toContain("FIRST_ANSWER");
   expect(sent).not.toContain("PUBLIC_FIRST");
+});
+
+const SUBAGENT = { agent_id: "agentsub1", agent_type: "general-purpose" };
+const TASK = { prompt: "SUB_PROMPT", subagent_type: "general-purpose" };
+
+function subagentFile(): string {
+  return join(dirname(transcript), SESSION, "subagents", `agent-${SUBAGENT.agent_id}.jsonl`);
+}
+
+function subagentLine(entry: Record<string, unknown>): void {
+  mkdirSync(dirname(subagentFile()), { recursive: true });
+  const timestamp = new Date().toISOString();
+  const line = { sessionId: SESSION, agentId: SUBAGENT.agent_id, timestamp, uuid: randomUUID() };
+  appendFileSync(subagentFile(), `${JSON.stringify({ ...line, ...entry })}\n`);
+}
+
+function subagentReply(content: unknown[], stopReason: string): void {
+  const usage = { input_tokens: 10, output_tokens: 5 };
+  const id = `msg_${++messageCount}`;
+  const message = { id, role: "assistant", model: "claude-sonnet-4-5", content, usage };
+  subagentLine({ type: "assistant", message: { ...message, stop_reason: stopReason } });
+}
+
+async function launchSubagent(
+  id = "toolu_task",
+  input: Record<string, unknown> = TASK,
+): Promise<void> {
+  assistant([{ type: "tool_use", id, name: "Task", input }], "tool_use", "A");
+  await hook("PreToolUse", { tool_name: "Task", tool_input: input, tool_use_id: id });
+  mkdirSync(dirname(subagentFile()), { recursive: true });
+  const metadata = { agentType: SUBAGENT.agent_type, toolUseId: id };
+  writeFileSync(subagentFile().replace(/\.jsonl$/, ".meta.json"), JSON.stringify(metadata));
+}
+
+async function subagentWorks(text: string): Promise<void> {
+  subagentLine({ type: "user", message: { role: "user", content: "SUB_PROMPT" } });
+  for (const [id, name] of [
+    ["toolu_sub_bash", "Bash"],
+    ["toolu_sub_read", "Read"],
+  ]) {
+    subagentReply(
+      [
+        { type: "text", text: `${text}_${name}` },
+        { type: "tool_use", id, name, input: {} },
+      ],
+      "tool_use",
+    );
+    const tool = { ...SUBAGENT, tool_name: name, tool_input: {}, tool_use_id: id };
+    await hook("PreToolUse", tool);
+    const result = { type: "tool_result", tool_use_id: id, content: `${text}_${name}_OUT` };
+    subagentLine({ type: "user", message: { role: "user", content: [result] } });
+    await hook("PostToolUse", { ...tool, tool_response: {} });
+  }
+}
+
+async function launchBackgroundSubagentAndEndTurn(): Promise<void> {
+  await launchSubagent();
+  const result = { type: "tool_result", tool_use_id: "toolu_task", content: "launched" };
+  line({
+    type: "user",
+    promptId: "A",
+    toolUseResult: { agentId: SUBAGENT.agent_id, isAsync: true },
+    message: { role: "user", content: [result] },
+  });
+  await hook("PostToolUse", {
+    tool_name: "Task",
+    tool_input: TASK,
+    tool_use_id: "toolu_task",
+    tool_response: { agentId: SUBAGENT.agent_id, isAsync: true },
+  });
+  assistant([{ type: "text", text: "PUBLIC_ANSWER" }], "end_turn", "A");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_ANSWER" });
+  await drain();
+}
+
+async function finishSubagentAndTurn(): Promise<void> {
+  subagentReply([{ type: "text", text: "SUB_DONE" }], "end_turn");
+  await hook("SubagentStop", {
+    ...SUBAGENT,
+    agent_transcript_path: subagentFile(),
+    stop_hook_active: false,
+  });
+  const result = { type: "tool_result", tool_use_id: "toolu_task", content: "SUB_DONE" };
+  line({
+    type: "user",
+    promptId: "A",
+    toolUseResult: { agentId: SUBAGENT.agent_id },
+    message: { role: "user", content: [result] },
+  });
+  await hook("PostToolUse", {
+    tool_name: "Task",
+    tool_input: TASK,
+    tool_use_id: "toolu_task",
+    tool_response: { agentId: SUBAGENT.agent_id },
+  });
+  assistant([{ type: "text", text: "PUBLIC_ANSWER" }], "end_turn", "A");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_ANSWER" });
+}
+
+describe("a running subagent", () => {
+  it("uploads a synchronous subagent's finished steps before it stops", async () => {
+    await prompt("PUBLIC_PROMPT", "A");
+    await launchSubagent();
+    await subagentWorks("PUBLIC");
+
+    const sent = await sentRuns();
+    const names = sent.map((run) => run.name);
+    const llmOutputs = JSON.stringify(sent.filter((run) => run.run_type === "llm"));
+
+    const chain = sent.filter((run) => run.name === "general-purpose Subagent");
+
+    expect(names).toEqual(expect.arrayContaining(["Agent", "general-purpose Subagent", "Bash"]));
+    expect(sent.filter((run) => run.id === chain[0]?.id)).toHaveLength(1);
+    expect(llmOutputs).toContain("PUBLIC_Bash");
+    expect(llmOutputs).not.toContain("PUBLIC_Read");
+  });
+
+  it("closes the subagent runs it opened early once the turn ends", async () => {
+    await prompt("PUBLIC_PROMPT", "A");
+    await launchSubagent();
+    await subagentWorks("PUBLIC");
+    await finishSubagentAndTurn();
+
+    const sent = await sentRuns();
+    const ended = (name: string) => {
+      const id = sent.find((run) => run.name === name)?.id;
+      return sent.some((run) => run.id === id && run.end_time);
+    };
+
+    expect(ended("Agent")).toBe(true);
+    expect(ended("general-purpose Subagent")).toBe(true);
+    expect(JSON.stringify(sent)).toContain("SUB_DONE");
+  });
+
+  it("uploads a background subagent's finished steps before it stops", async () => {
+    await prompt("PUBLIC_PROMPT", "A");
+    await launchBackgroundSubagentAndEndTurn();
+    await subagentWorks("PUBLIC");
+
+    const sent = await sentRuns();
+
+    expect(sent.map((run) => run.name)).toContain("general-purpose Subagent");
+    expect(JSON.stringify(sent.filter((run) => run.run_type === "llm"))).toContain("PUBLIC_Bash");
+  });
+
+  it("closes a background subagent's runs once its notification turn ends", async () => {
+    await prompt("PUBLIC_PROMPT", "A");
+    await launchBackgroundSubagentAndEndTurn();
+    await subagentWorks("PUBLIC");
+    subagentReply([{ type: "text", text: "SUB_DONE" }], "end_turn");
+    await hook("SubagentStop", {
+      ...SUBAGENT,
+      agent_transcript_path: subagentFile(),
+      stop_hook_active: false,
+    });
+    await drain();
+    const done = `<task-notification>\n<task-id>${SUBAGENT.agent_id}</task-id>\n<status>completed</status>\n</task-notification>`;
+    await prompt(done);
+    assistant([{ type: "text", text: "PUBLIC_NOTED" }], "end_turn");
+    await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_NOTED" });
+
+    const sent = await sentRuns();
+    const agent = sent.find((run) => run.name === "Agent")?.id;
+
+    expect(sent.some((run) => run.id === agent && run.end_time && run.outputs)).toBe(true);
+  });
+
+  it("closes a killed background subagent's runs it opened early", async () => {
+    await prompt("PUBLIC_PROMPT", "A");
+    await launchBackgroundSubagentAndEndTurn();
+    await subagentWorks("PUBLIC");
+    const killed = `<task-notification>\n<task-id>${SUBAGENT.agent_id}</task-id>\n<status>killed</status>\n</task-notification>`;
+    await prompt(killed);
+    assistant([{ type: "text", text: "PUBLIC_NOTED" }], "end_turn");
+    await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_NOTED" });
+
+    const sent = await sentRuns();
+    const ended = (name: string) => {
+      const id = sent.find((run) => run.name === name)?.id;
+      return sent.some((run) => run.id === id && run.end_time);
+    };
+
+    expect(ended("Agent")).toBe(true);
+    expect(ended("general-purpose Subagent")).toBe(true);
+  });
+
+  it("links a running subagent to the launch Claude Code saved for it", async () => {
+    await prompt("PUBLIC_PROMPT", "A");
+    await launchSubagent("toolu_task");
+    await launchSubagent("toolu_task_twin", { ...TASK, description: "TWIN_LAUNCH" });
+    await subagentWorks("PUBLIC");
+
+    const agent = (await sentRuns()).find((run) => run.name === "Agent");
+
+    expect(JSON.stringify(agent?.inputs)).toContain("TWIN_LAUNCH");
+  });
+
+  it("leaves a running subagent alone when Claude Code saved no launch for it", async () => {
+    await prompt("PUBLIC_PROMPT", "A");
+    await launchSubagent();
+    writeFileSync(subagentFile().replace(/\.jsonl$/, ".meta.json"), "{}");
+    await subagentWorks("PUBLIC");
+
+    const sent = await sentRuns();
+
+    expect(sent.map((run) => run.name)).not.toContain("Agent");
+  });
+
+  it("leaves a nested subagent alone since its launch is not in the main turn", async () => {
+    await prompt("PUBLIC_PROMPT", "A");
+    await launchSubagent();
+    subagentLine({ type: "user", message: { role: "user", content: "SUB_PROMPT" } });
+    const nestedUse = { type: "tool_use", id: "toolu_nested", name: "Task", input: TASK };
+    subagentReply([nestedUse], "tool_use");
+    const nested = {
+      ...SUBAGENT,
+      tool_name: "Task",
+      tool_input: TASK,
+      tool_use_id: "toolu_nested",
+    };
+    await hook("PreToolUse", nested);
+    const outer = SUBAGENT.agent_id;
+    SUBAGENT.agent_id = "agentnested";
+    try {
+      const metadata = { agentType: SUBAGENT.agent_type, toolUseId: "toolu_nested" };
+      writeFileSync(subagentFile().replace(/\.jsonl$/, ".meta.json"), JSON.stringify(metadata));
+      await subagentWorks("PUBLIC");
+    } finally {
+      SUBAGENT.agent_id = outer;
+    }
+
+    const sent = await sentRuns();
+
+    expect(sent.map((run) => run.name)).not.toContain("Agent");
+  });
+
+  it("uploads a muted turn's running subagent without its content", async () => {
+    await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+    await prompt("SECRET_PROMPT", "A");
+    await launchSubagent();
+    await subagentWorks("SECRET");
+
+    const sent = await sentRuns();
+
+    expect(sent.map((run) => run.name)).toContain("general-purpose Subagent");
+    expect(JSON.stringify(sent)).not.toContain("SECRET");
+  });
 });
 
 it("uploads the next turn after the transcript loses lines it already read", async () => {

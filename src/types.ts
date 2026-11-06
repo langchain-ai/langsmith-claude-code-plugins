@@ -575,6 +575,41 @@ export interface PendingSubagent {
   session_id: string;
 }
 
+export interface AgentToolRunOptions {
+  subagent: PendingSubagent;
+  taskRunInfo: TaskRunEntry;
+  sessionId: string;
+  customMetadata?: Record<string, unknown>;
+  runtimeVersion?: string;
+  turnId?: string;
+  turnNumber?: number;
+  filledForTheTurn: (metadata: CodingAgentMetadataOptions) => CodingAgentMetadataOptions;
+}
+
+export interface SubagentChainRunOptions {
+  sessionId: string;
+  parentRunId: string;
+  parentDottedOrder: string;
+  parentTraceId: string;
+  subagentId: string;
+  subagentType: string;
+  chainName: string;
+  startTime: string;
+  customMetadata?: Record<string, unknown>;
+  runtimeVersion?: string;
+  turnId?: string;
+  turnNumber?: number;
+}
+
+export interface SubagentMetadata {
+  toolUseId?: unknown;
+}
+
+export interface RunningSubagentOptions extends Omit<AgentToolRunOptions, "filledForTheTurn"> {
+  turns: Turn[];
+  captureHookOutputs?: boolean;
+}
+
 export interface TaskRunEntry {
   tracing?: TracingMode;
   run_id: string;
