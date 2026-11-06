@@ -25998,6 +25998,9 @@ async function postedInputs(runId) {
 async function captureRun(run, mode = "full", rootRunId = run.id, operation = "post", eventKey = run.id) {
   await captureInto(started(), run, mode, rootRunId, operation, eventKey);
 }
+async function operationFor(runId, rootRunId = runId) {
+  return await posted(started(), rootRunId, runId) ? "patch" : "post";
+}
 async function captureToolRun2(run, mode, rootRunId, origin) {
   await captureToolRun(started(), run, mode, rootRunId, origin);
 }
@@ -26114,6 +26117,19 @@ function buildUsageMetadata(usage) {
     }
   };
 }
+function modelCallRunId(turn, turnRunId, index) {
+  return stableRunId(turn.llmCalls[index].startTime, turnRunId, turn.promptId, index);
+}
+async function firstUnpostedCall(turn, turnRunId, rootRunId, callCount) {
+  let first = callCount;
+  while (first > 0) {
+    const runId = modelCallRunId(turn, turnRunId, first - 1);
+    if (await operationFor(runId, rootRunId) === "patch")
+      break;
+    first--;
+  }
+  return first;
+}
 async function traceTurn(options) {
   const { turn, sessionId, turnNum, parentRunId, existingTaskRunMap, tracedToolUseIds, traceId: providedTraceId, parentDottedOrder: providedParentDottedOrder, customMetadata, runtimeVersion, approvalPolicy, agentType = "root", tracing = "full", toolTracingModes, hookCwd, captureHookOutputs, uploadFromCall = 0 } = options;
   const captured = (hooks) => captureHookOutputs ? hooks : void 0;
@@ -26156,7 +26172,7 @@ async function traceTurn(options) {
     }
     const outputMessages = assistantMessages(llmCall.content);
     const assistantInputs = { messages: [...accumulatedMessages] };
-    const assistantRunId = stableRunId(llmCall.startTime, turnRunId, turnId, llmIndex);
+    const assistantRunId = modelCallRunId(turn, turnRunId, llmIndex);
     const assistantDottedOrderSegment = generateDottedOrderSegment(llmCall.startTime, assistantRunId);
     const assistantDottedOrder = `${parentDottedOrder}.${assistantDottedOrderSegment}`;
     for (const toolCall of llmCall.toolCalls) {
@@ -28474,7 +28490,7 @@ async function traceFinishedModelCalls(config, input, sessionState) {
     traceId: sessionState.current_trace_id,
     parentDottedOrder: sessionState.current_dotted_order,
     captureHookOutputs: config.captureHookOutputs,
-    uploadFromCall: finished.length - 1
+    uploadFromCall: await firstUnpostedCall(turn, turnRunId, turnRunId, finished.length)
   });
 }
 
