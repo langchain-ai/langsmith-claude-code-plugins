@@ -24236,6 +24236,12 @@ var HARNESS_UNWRAPPED_TAG = /<\/?(bash-input|bash-stdout|bash-stderr|local-comma
 var SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
 var WORKFLOW_TOOL_NAME = "Workflow";
 var WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
+var AGENT_TOOL_NAMES = ["Task", "Agent"];
+var SUBAGENTS_DIR_NAME = "subagents";
+var SUBAGENT_FILE_PREFIX = "agent-";
+var TRANSCRIPT_FILE_EXTENSION = ".jsonl";
+var DEFAULT_SUBAGENT_TYPE = "Agent";
+var FIRST_LINE_CHUNK_BYTES = 64 * 1024;
 var KILLED_NOTIFICATION_STATUS = "killed";
 var QUEUE_DIR_NAME = "langsmith_queue";
 var QUEUE_ORIGIN_LENGTH = 12;
@@ -25165,7 +25171,7 @@ async function settleToolRuns(job) {
 import { join as join27 } from "node:path";
 
 // dist/src/utils/files.js
-import { lstatSync as lstatSync4, mkdirSync as mkdirSync8, readdirSync as readdirSync2, readFileSync as readFileSync14, renameSync as renameSync7, rmdirSync as rmdirSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync5 } from "node:fs";
+import { closeSync as closeSync5, lstatSync as lstatSync4, mkdirSync as mkdirSync8, openSync as openSync5, readSync, readdirSync as readdirSync2, readFileSync as readFileSync14, renameSync as renameSync7, rmdirSync as rmdirSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync5 } from "node:fs";
 import { randomUUID as randomUUID8 } from "node:crypto";
 import { dirname as dirname18 } from "node:path";
 function listDirectory(path3) {
@@ -25204,6 +25210,25 @@ function readText(path3) {
     return readFileSync14(path3, "utf-8");
   } catch {
     return "";
+  }
+}
+function readFirstLine(path3) {
+  let fd;
+  try {
+    fd = openSync5(path3, "r");
+  } catch {
+    return "";
+  }
+  try {
+    const chunk = Buffer.alloc(FIRST_LINE_CHUNK_BYTES);
+    let text = "";
+    let read;
+    while (!text.includes("\n") && (read = readSync(fd, chunk, 0, chunk.length, null)) > 0) {
+      text += chunk.toString("utf-8", 0, read);
+    }
+    return text.split("\n")[0];
+  } finally {
+    closeSync5(fd);
   }
 }
 function readJson(text) {
@@ -25374,8 +25399,9 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync15, statSync as statSync8, fstatSync as fstatSync3, openSync as openSync5, readSync, closeSync as closeSync5 } from "node:fs";
+import { readFileSync as readFileSync15, statSync as statSync8, fstatSync as fstatSync3, openSync as openSync6, readSync as readSync2, closeSync as closeSync6 } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
+import { dirname as dirname20, join as join28 } from "node:path";
 
 // dist/src/utils/ids/prompt-hash.js
 import { createHash as createHash8 } from "node:crypto";
@@ -25481,7 +25507,7 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
     }
     return finish({ messages, lastLine, laterPrompt });
   }
-  const fd = openSync5(filePath, "r");
+  const fd = openSync6(filePath, "r");
   try {
     const chunkSize = 2 * 1024 * 1024;
     const buf = Buffer.alloc(chunkSize);
@@ -25493,7 +25519,7 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
     let pos = 0;
     let cut = false;
     const decoder = new StringDecoder("utf-8");
-    while (!cut && (bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
+    while (!cut && (bytesRead = readSync2(fd, buf, 0, chunkSize, pos)) > 0) {
       const chunk = partial + decoder.write(buf.subarray(0, bytesRead));
       partial = "";
       const lines = chunk.split("\n");
@@ -25525,7 +25551,7 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
     }
     return finish({ messages, lastLine, laterPrompt });
   } finally {
-    closeSync5(fd);
+    closeSync6(fd);
   }
 }
 function getTranscriptEndLine(filePath) {
@@ -25538,7 +25564,7 @@ function getTranscriptEndLine(filePath) {
       const lines = raw.split("\n").filter((l) => l.trim() !== "");
       return lines.length > 0 ? lines.length - 1 : -1;
     }
-    const fd = openSync5(filePath, "r");
+    const fd = openSync6(filePath, "r");
     try {
       const chunkSize = 1024 * 1024;
       const buf = Buffer.alloc(chunkSize);
@@ -25546,7 +25572,7 @@ function getTranscriptEndLine(filePath) {
       let bytesRead;
       let pos = 0;
       let partial = "";
-      while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
+      while ((bytesRead = readSync2(fd, buf, 0, chunkSize, pos)) > 0) {
         const chunk = partial + buf.toString("utf-8", 0, bytesRead);
         partial = "";
         const lines = chunk.split("\n");
@@ -25561,7 +25587,7 @@ function getTranscriptEndLine(filePath) {
         lineCount++;
       return lineCount > 0 ? lineCount - 1 : -1;
     } finally {
-      closeSync5(fd);
+      closeSync6(fd);
     }
   } catch {
     return -1;
@@ -25570,7 +25596,7 @@ function getTranscriptEndLine(filePath) {
 function readRuntimeVersion(filePath) {
   let fd;
   try {
-    fd = openSync5(filePath, "r");
+    fd = openSync6(filePath, "r");
     const size = fstatSync3(fd).size;
     if (size === 0)
       return void 0;
@@ -25578,7 +25604,7 @@ function readRuntimeVersion(filePath) {
     const start = Math.max(0, size - window2);
     const len = size - start;
     const buf = Buffer.alloc(len);
-    readSync(fd, buf, 0, len, start);
+    readSync2(fd, buf, 0, len, start);
     const text = buf.toString("utf-8");
     const lines = text.split("\n").filter((l) => l.trim() !== "");
     for (let i = lines.length - 1; i >= 0; i--) {
@@ -25593,7 +25619,7 @@ function readRuntimeVersion(filePath) {
   } catch {
   } finally {
     if (fd !== void 0)
-      closeSync5(fd);
+      closeSync6(fd);
   }
   return void 0;
 }
@@ -25829,6 +25855,19 @@ function groupTurns(messages, keepUnanswered) {
   }
   finalizeTurn(true);
   return turns;
+}
+function subagentTranscriptPath(transcriptPath, sessionId, agentId) {
+  const fileName = `${SUBAGENT_FILE_PREFIX}${agentId}${TRANSCRIPT_FILE_EXTENSION}`;
+  return join28(dirname20(transcriptPath), sessionId, SUBAGENTS_DIR_NAME, fileName);
+}
+function findAgentLaunch(messages, prompt) {
+  const launches = messages.filter(isAssistantMessage).flatMap((message) => message.message.content).filter((block) => block.type === "tool_use" && AGENT_TOOL_NAMES.includes(block.name) && block.input.prompt === prompt);
+  return launches.length === 1 ? launches[0] : void 0;
+}
+function promptStartsSeveralSubagents(transcriptPath, sessionId, prompt) {
+  const folder = join28(dirname20(transcriptPath), sessionId, SUBAGENTS_DIR_NAME);
+  const starts = listDirectory(folder).filter((name) => name.startsWith(SUBAGENT_FILE_PREFIX)).map((name) => readJson(readFirstLine(join28(folder, name)))).filter((message) => message?.type === "user" && message.message.content === prompt);
+  return starts.length > 1;
 }
 
 // dist/src/tracing-mode.js
@@ -26508,7 +26547,7 @@ async function tracePendingSubagents(options) {
       const tracing = taskRunInfo.tracing ?? options.tracing ?? "full";
       const parentToolRunId = taskRunInfo.run_id;
       const agentToolDottedOrder = taskRunInfo.dotted_order;
-      const toolName = subagent.agent_type || "Agent";
+      const toolName = subagent.agent_type || DEFAULT_SUBAGENT_TYPE;
       const deferred = taskRunInfo.deferred;
       const rootRunId = deferred?.parent_run_id ?? parentTraceId;
       const filledForTheTurn = await turnFiller(rootRunId);
@@ -26522,41 +26561,19 @@ async function tracePendingSubagents(options) {
       const lastSubagentActivity = subagentTurns.reduce((max, t) => t.llmCalls.reduce((m, c) => c.endTime > m ? c.endTime : m, max), "");
       const deferredEnd = deferred?.end_time ?? "";
       const subagentEndTime = (lastSubagentActivity > deferredEnd ? lastSubagentActivity : deferredEnd) || (/* @__PURE__ */ new Date()).toISOString();
-      if (deferred) {
+      const operation = deferred ? await operationFor(parentToolRunId) : void 0;
+      if (deferred && (!keepAgentToolRunOpen || operation === "post")) {
+        const run = agentToolRun({ ...options, subagent, taskRunInfo, filledForTheTurn });
         await captureRun({
-          id: parentToolRunId,
-          name: "Agent",
-          run_type: "tool",
-          inputs: withHooks({ input: deferred.inputs ?? {} }, taskRunInfo.hooks, "input"),
+          ...run,
           outputs: withHooks({ output: deferred.outputs ?? {} }, taskRunInfo.hooks, "output"),
-          start_time: subagentStartTime,
           // Leave open for async agents — the task-notification turn nests under
           // this run, so it can't be closed until that turn completes.
-          end_time: keepAgentToolRunOpen ? void 0 : subagentEndTime,
-          parent_run_id: deferred.parent_run_id,
-          trace_id: deferred.trace_id,
-          dotted_order: agentToolDottedOrder,
-          metadata: filledForTheTurn(codingAgentMetadata({
-            sessionId,
-            base: customMetadata,
-            runtimeVersion,
-            turnId,
-            turnNumber,
-            agentType: "root",
-            // run_type "tool" (run name "Agent", native tool "Task").
-            toolName: "Task",
-            runName: "Agent",
-            runSpecific: {
-              agent_type: toolName,
-              // DEPRECATED compat alias.
-              agent_id: subagent.agent_id
-              // DEPRECATED compat alias.
-            }
-          }))
-        }, tracing);
-        if (keepAgentToolRunOpen)
-          openedAgentRunIds.push(subagent.agent_id);
+          end_time: keepAgentToolRunOpen ? void 0 : subagentEndTime
+        }, tracing, parentToolRunId, operation);
       }
+      if (deferred && keepAgentToolRunOpen)
+        openedAgentRunIds.push(subagent.agent_id);
       if (subagentTurns.length > 0) {
         await traceSubagentChain({
           tracing,
@@ -26586,22 +26603,80 @@ async function tracePendingSubagents(options) {
   }
   return openedAgentRunIds;
 }
-async function traceSubagentChain(opts) {
-  const filledForTheTurn = await turnFiller(opts.rootRunId);
-  const subagentChainId = stableRunId(opts.startTime, opts.parentRunId, opts.subagentId);
-  const subagentChainDottedOrder = `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, subagentChainId)}`;
-  await captureRun({
-    id: subagentChainId,
+function agentToolRun(options) {
+  const { subagent, taskRunInfo } = options;
+  const deferred = taskRunInfo.deferred ?? {};
+  return {
+    id: taskRunInfo.run_id,
+    name: "Agent",
+    run_type: "tool",
+    inputs: withHooks({ input: deferred.inputs ?? {} }, taskRunInfo.hooks, "input"),
+    start_time: deferred.start_time ?? (/* @__PURE__ */ new Date()).toISOString(),
+    parent_run_id: deferred.parent_run_id,
+    trace_id: deferred.trace_id,
+    dotted_order: taskRunInfo.dotted_order,
+    metadata: options.filledForTheTurn(codingAgentMetadata({
+      sessionId: options.sessionId,
+      base: options.customMetadata,
+      runtimeVersion: options.runtimeVersion,
+      turnId: options.turnId,
+      turnNumber: options.turnNumber,
+      agentType: "root",
+      // run_type "tool" (run name "Agent", native tool "Task").
+      toolName: "Task",
+      runName: "Agent",
+      runSpecific: {
+        agent_type: subagent.agent_type || DEFAULT_SUBAGENT_TYPE,
+        // DEPRECATED compat alias.
+        agent_id: subagent.agent_id
+        // DEPRECATED compat alias.
+      }
+    }))
+  };
+}
+async function traceRunningSubagent(options) {
+  const { subagent, taskRunInfo } = options;
+  const deferred = taskRunInfo.deferred ?? {};
+  const rootRunId = deferred.parent_run_id;
+  const run = agentToolRun({ ...options, filledForTheTurn: await turnFiller(rootRunId) });
+  await captureRun(run, taskRunInfo.tracing, run.id);
+  const { turns } = options;
+  if (turns.length === 0)
+    return;
+  const finished = turns.map((turn, index) => index < turns.length - 1 ? turn : { ...turn, llmCalls: turn.llmCalls.slice(0, -1) });
+  const subagentType = subagent.agent_type || DEFAULT_SUBAGENT_TYPE;
+  await traceSubagentChain({
+    tracing: taskRunInfo.tracing,
+    sessionId: options.sessionId,
+    parentRunId: run.id,
+    parentDottedOrder: taskRunInfo.dotted_order,
+    parentTraceId: deferred.trace_id,
+    subagentId: subagent.agent_id,
+    subagentType,
+    chainName: `${subagentType} Subagent`,
+    subagentTurns: finished,
+    uploadFromCall: (finished.at(-1)?.llmCalls.length ?? 0) - 1,
+    startTime: run.start_time,
+    inputs: deferred.inputs,
+    customMetadata: options.customMetadata,
+    runtimeVersion: options.runtimeVersion,
+    turnId: options.turnId,
+    turnNumber: options.turnNumber,
+    rootRunId,
+    captureHookOutputs: options.captureHookOutputs
+  });
+}
+function subagentChainRun(opts) {
+  const id = stableRunId(opts.startTime, opts.parentRunId, opts.subagentId);
+  return {
+    id,
     name: opts.chainName,
     run_type: "chain",
-    inputs: opts.inputs ?? {},
-    outputs: { output: opts.outputs },
     start_time: opts.startTime,
-    end_time: opts.endTime,
     parent_run_id: opts.parentRunId,
     trace_id: opts.parentTraceId,
-    dotted_order: subagentChainDottedOrder,
-    metadata: filledForTheTurn(codingAgentMetadata({
+    dotted_order: `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, id)}`,
+    metadata: codingAgentMetadata({
       sessionId: opts.sessionId,
       base: opts.customMetadata,
       runtimeVersion: opts.runtimeVersion,
@@ -26612,23 +26687,38 @@ async function traceSubagentChain(opts) {
       // → ls_subagent_id (+ agent_id alias).
       subagentType: opts.subagentType
       // → ls_subagent_type (+ agent_type alias).
-    }))
-  }, opts.tracing);
+    })
+  };
+}
+async function traceSubagentChain(opts) {
+  const filledForTheTurn = await turnFiller(opts.rootRunId);
+  const chain = subagentChainRun(opts);
+  const operation = await operationFor(chain.id);
+  if (opts.endTime !== void 0 || operation === "post") {
+    await captureRun({
+      ...chain,
+      inputs: opts.inputs ?? {},
+      outputs: { output: opts.outputs },
+      end_time: opts.endTime,
+      metadata: filledForTheTurn(chain.metadata)
+    }, opts.tracing, chain.id, operation);
+  }
   for (let i = 0; i < opts.subagentTurns.length; i++) {
     await traceTurn({
       tracing: opts.tracing,
       turn: opts.subagentTurns[i],
       sessionId: opts.sessionId,
       turnNum: i + 1,
-      parentRunId: subagentChainId,
+      parentRunId: chain.id,
       existingTaskRunMap: void 0,
       traceId: opts.parentTraceId,
-      parentDottedOrder: subagentChainDottedOrder,
+      parentDottedOrder: chain.dotted_order,
       customMetadata: opts.customMetadata,
       runtimeVersion: opts.runtimeVersion,
       agentType: "subagent",
       rootRunId: opts.rootRunId,
-      captureHookOutputs: opts.captureHookOutputs
+      captureHookOutputs: opts.captureHookOutputs,
+      uploadFromCall: i === opts.subagentTurns.length - 1 ? opts.uploadFromCall : void 0
     });
   }
   log(`Traced subagent ${opts.subagentType} (${opts.subagentId}): ${opts.subagentTurns.length} turn(s)`);
@@ -26699,7 +26789,28 @@ async function closeAgentToolRun(options) {
         // DEPRECATED compat alias.
       }
     })
-  }, options.taskRunInfo.tracing ?? options.tracing, options.taskRunInfo.run_id, options.wasOpen ? "patch" : "post");
+  }, options.taskRunInfo.tracing ?? options.tracing, options.taskRunInfo.run_id, options.wasOpen ? "patch" : await operationFor(options.taskRunInfo.run_id));
+  const chain = subagentChainRun({
+    sessionId: options.sessionId,
+    parentRunId: options.taskRunInfo.run_id,
+    parentDottedOrder: options.taskRunInfo.dotted_order,
+    parentTraceId: deferred.trace_id,
+    subagentId: options.agentId,
+    subagentType: agentTypeAlias,
+    chainName: `${agentTypeAlias} Subagent`,
+    startTime: deferred.start_time,
+    customMetadata: options.customMetadata,
+    runtimeVersion: options.runtimeVersion,
+    turnId: options.turnId,
+    turnNumber: options.turnNumber
+  });
+  if (!isWorkflow && !options.wasOpen && await operationFor(chain.id) === "patch") {
+    await captureRun({
+      ...chain,
+      end_time: (/* @__PURE__ */ new Date()).toISOString(),
+      ...options.error ? { error: options.error } : {}
+    }, options.taskRunInfo.tracing ?? options.tracing, chain.id, "patch");
+  }
 }
 
 // dist/src/utils/replicas.js
@@ -27625,14 +27736,14 @@ async function main4() {
   let parentRunId;
   let dottedOrder;
   const notifAgentId = Object.keys(sessionState.task_run_map ?? {}).find((id) => input.prompt.includes(id));
-  const agentToolRun = notifAgentId ? sessionState.task_run_map?.[notifAgentId] : void 0;
-  const notificationAgentId = agentToolRun ? notifAgentId : void 0;
+  const agentToolRun2 = notifAgentId ? sessionState.task_run_map?.[notifAgentId] : void 0;
+  const notificationAgentId = agentToolRun2 ? notifAgentId : void 0;
   const notificationStatus = notificationAgentId ? /<status>([^<]+)<\/status>/.exec(input.prompt)?.[1] : void 0;
   const notificationInterrupted = notificationStatus?.toLowerCase() === KILLED_NOTIFICATION_STATUS;
-  if (agentToolRun) {
-    traceId = parseDottedOrder(agentToolRun.dotted_order).traceId;
-    parentRunId = agentToolRun.run_id;
-    dottedOrder = `${agentToolRun.dotted_order}.${segment}`;
+  if (agentToolRun2) {
+    traceId = parseDottedOrder(agentToolRun2.dotted_order).traceId;
+    parentRunId = agentToolRun2.run_id;
+    dottedOrder = `${agentToolRun2.dotted_order}.${segment}`;
     debug(`Task-notification for agent ${notifAgentId}, nesting turn under Agent run ${parentRunId}`);
   } else if (config.parentDottedOrder) {
     const parsed = parseDottedOrder(config.parentDottedOrder);
@@ -27645,7 +27756,7 @@ async function main4() {
     parentRunId = void 0;
     dottedOrder = segment;
   }
-  const launchingTurnId = agentToolRun?.deferred?.parent_run_id;
+  const launchingTurnId = agentToolRun2?.deferred?.parent_run_id;
   const inherited = await settledFromTurn(config.customMetadata, launchingTurnId);
   await captureRun({
     id: runId,
@@ -28073,13 +28184,13 @@ async function runQueuedClosings(workerConfig, sessionId) {
 
 // dist/src/legacy-import.js
 import { createHmac } from "node:crypto";
-import { basename as basename4, dirname as dirname20, join as join28 } from "node:path";
+import { basename as basename4, dirname as dirname21, join as join29 } from "node:path";
 function legacyRuns(config) {
   const origin = legacyOrigin(config);
-  const root = dirname20(config.stateFilePath);
+  const root = dirname21(config.stateFilePath);
   const scan = { runs: [], settled: [], unreadable: [] };
   const { runs } = scan;
-  for (const [sessionId, file] of legacyFiles(join28(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
+  for (const [sessionId, file] of legacyFiles(join29(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
     const entry = readJson(readText(file));
     if (!entry?.run)
       scan.unreadable.push(file);
@@ -28096,7 +28207,7 @@ function legacyRuns(config) {
       run: { ...run, metadata: legacyOptions(base ?? {}, sessionId, "tool") }
     });
   }
-  for (const [sessionId, file] of legacyFiles(join28(root, TURN_RECORD_DIR_NAME), LEGACY_TURN_FILE)) {
+  for (const [sessionId, file] of legacyFiles(join29(root, TURN_RECORD_DIR_NAME), LEGACY_TURN_FILE)) {
     const record = readTurnRecord(file);
     if (!record.root || !record.closed || record.origin !== origin)
       continue;
@@ -28160,7 +28271,7 @@ function legacyOptions(metadata, sessionId, runType) {
 function legacyFiles(root, pattern) {
   if (!entryInfo(root)?.isDirectory())
     return [];
-  return listDirectory(root).filter((sessionId) => entryInfo(join28(root, sessionId))?.isDirectory()).flatMap((sessionId) => listDirectory(join28(root, sessionId)).map((name) => [sessionId, join28(root, sessionId, name)]).filter(([, file]) => pattern.test(basename4(file)) && entryInfo(file)?.isFile()));
+  return listDirectory(root).filter((sessionId) => entryInfo(join29(root, sessionId))?.isDirectory()).flatMap((sessionId) => listDirectory(join29(root, sessionId)).map((name) => [sessionId, join29(root, sessionId, name)]).filter(([, file]) => pattern.test(basename4(file)) && entryInfo(file)?.isFile()));
 }
 function readTurnRecord(path3) {
   const record = {
@@ -28194,7 +28305,7 @@ function readTurnRecord(path3) {
 }
 
 // dist/src/legacy-sweep.js
-import { join as join29, dirname as dirname21 } from "node:path";
+import { join as join30, dirname as dirname22 } from "node:path";
 function idleMs(info, now) {
   return info ? now - info.mtimeMs : 0;
 }
@@ -28209,7 +28320,7 @@ function mayAgeOut(name, path3, removable) {
 }
 function sweepSession(path3, removable, now) {
   const aged = listDirectory(path3).filter((name) => {
-    const entry = join29(path3, name);
+    const entry = join30(path3, name);
     return mayAgeOut(name, entry, removable) && removeIfOld(entry, now);
   }).length;
   if (aged > 0 || idleMs(entryInfo(path3), now) >= LEGACY_EMPTY_FOLDER_IDLE_MS) {
@@ -28222,7 +28333,7 @@ function sweepFolder(path3, removable, now) {
     return 0;
   let aged = 0;
   for (const name of listDirectory(path3)) {
-    const entry = join29(path3, name);
+    const entry = join30(path3, name);
     if (entryInfo(entry)?.isDirectory())
       aged += sweepSession(entry, removable, now);
     else if (LEGACY_FLUSH_LOCK_FILE.test(name))
@@ -28232,8 +28343,8 @@ function sweepFolder(path3, removable, now) {
   return aged;
 }
 function sweepLegacyLeftovers(stateFilePath, removable, now = Date.now()) {
-  const root = dirname21(stateFilePath);
-  return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join29(root, folder), removable, now), 0);
+  const root = dirname22(stateFilePath);
+  return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join30(root, folder), removable, now), 0);
 }
 
 // dist/src/engine-legacy.js
@@ -28313,13 +28424,16 @@ async function main7() {
   if (!config)
     return;
   if (input.agent_id) {
-    debug("Skipping PostToolUse for subagent tool \u2014 Stop hook handles tracing");
+    try {
+      await traceSubagentSoFar(config, input, input.agent_id);
+    } catch (err) {
+      error(`Failed to upload the subagent's finished steps: ${err}`);
+    }
     return;
   }
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
-  const turnTracing = resolveTurnTracingMode(config, input.session_id, sessionState.tool_tracing_modes?.[input.tool_use_id], sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
-  const tracing = toolTracingMode(config, input.session_id, sessionState, expandHome(input.transcript_path), input.tool_use_id, turnTracing);
+  const tracing = toolCallTracing(config, input, sessionState, input.tool_use_id);
   const parentRunId = sessionState.current_turn_run_id;
   const traceId = sessionState.current_trace_id;
   const parentDottedOrder = sessionState.current_dotted_order;
@@ -28491,6 +28605,78 @@ async function traceFinishedModelCalls(config, input, sessionState) {
     parentDottedOrder: sessionState.current_dotted_order,
     captureHookOutputs: config.captureHookOutputs,
     uploadFromCall: await firstUnpostedCall(turn, turnRunId, turnRunId, finished.length)
+  });
+}
+function toolCallTracing(config, input, sessionState, toolUseId) {
+  const turnTracing = resolveTurnTracingMode(config, input.session_id, sessionState.tool_tracing_modes?.[toolUseId], sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
+  return toolTracingMode(config, input.session_id, sessionState, expandHome(input.transcript_path), toolUseId, turnTracing);
+}
+async function traceSubagentSoFar(config, input, agentId) {
+  const transcriptPath = expandHome(input.transcript_path);
+  if (!transcriptPath || input.agent_type === WORKFLOW_SUBAGENT_TYPE)
+    return;
+  const subagent = {
+    agent_id: agentId,
+    agent_type: input.agent_type ?? "",
+    agent_transcript_path: subagentTranscriptPath(transcriptPath, input.session_id, agentId),
+    session_id: input.session_id
+  };
+  const turns = groupIntoTurns(readTranscript(subagent.agent_transcript_path, -1).messages);
+  const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
+  const turnRunId = sessionState.current_turn_run_id;
+  const readCurrentTurn = () => readTranscript(transcriptPath, sessionState.last_line, void 0, turnPrompt(sessionState, sessionState.read_turn_run_id === turnRunId), sessionState).messages;
+  const recordedLaunch = sessionState.task_run_map?.[agentId];
+  initTracing(config, input.cwd, input.session_id);
+  if (recordedLaunch) {
+    const launchedBy = recordedLaunch.deferred?.parent_run_id;
+    const launchingTurn = launchedBy ? sessionState.open_turns?.[launchedBy] : void 0;
+    const currentTurnId = launchedBy === turnRunId ? groupIntoTurns(readCurrentTurn()).at(-1)?.promptId : void 0;
+    await traceRunningSubagent({
+      subagent,
+      taskRunInfo: recordedLaunch,
+      turns,
+      sessionId: input.session_id,
+      customMetadata: config.customMetadata,
+      runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
+      turnId: launchingTurn?.turn_id ?? currentTurnId,
+      turnNumber: launchingTurn?.turn_number ?? sessionState.current_turn_number,
+      captureHookOutputs: config.captureHookOutputs
+    });
+    return;
+  }
+  const messages = readCurrentTurn();
+  const launch = findAgentLaunch(messages, turns[0]?.userContent);
+  const startTime = launch ? sessionState.tool_start_times?.[launch.id] : void 0;
+  const traceId = sessionState.current_trace_id;
+  const parentDottedOrder = sessionState.current_dotted_order;
+  if (!launch || startTime === void 0)
+    return;
+  if (promptStartsSeveralSubagents(transcriptPath, input.session_id, turns[0].userContent))
+    return;
+  if (!turnRunId || !traceId || !parentDottedOrder)
+    return;
+  const tracing = toolCallTracing(config, input, sessionState, launch.id);
+  const runId = stableRunId(startTime, input.session_id, launch.id);
+  await traceRunningSubagent({
+    subagent,
+    taskRunInfo: {
+      tracing,
+      run_id: runId,
+      dotted_order: `${parentDottedOrder}.${generateDottedOrderSegment(startTime, runId)}`,
+      deferred: {
+        trace_id: traceId,
+        parent_run_id: turnRunId,
+        start_time: new Date(startTime).toISOString(),
+        ...tracing === "full" ? { inputs: launch.input } : {}
+      }
+    },
+    turns,
+    sessionId: input.session_id,
+    customMetadata: await currentTurnMetadata(config.customMetadata, sessionState),
+    runtimeVersion: sessionState.runtime_version ?? readRuntimeVersion(transcriptPath),
+    turnId: groupIntoTurns(messages).at(-1)?.promptId,
+    turnNumber: sessionState.current_turn_number,
+    captureHookOutputs: config.captureHookOutputs
   });
 }
 

@@ -6,7 +6,9 @@
 import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import type { HookOutput } from "@langchain/plugins-base/tracing";
+import { dirname, join } from "node:path";
 import {
+  AGENT_TOOL_NAMES,
   ASYNC_HOOK_ATTACHMENT,
   HOOK_CONTEXT_ATTACHMENT,
   HOOK_ENTRY_TYPE,
@@ -14,10 +16,13 @@ import {
   MAX_FULL_READ_BYTES,
   PLUGIN_CONTEXT_SUFFIX,
   SESSION_START_HOOK,
+  SUBAGENT_FILE_PREFIX,
+  SUBAGENTS_DIR_NAME,
   TASK_NOTIFICATION_OPENING,
+  TRANSCRIPT_FILE_EXTENSION,
   TURN_INPUT_HOOK,
 } from "./constants.js";
-import { readJson } from "./utils/files.js";
+import { listDirectory, readFirstLine, readJson } from "./utils/files.js";
 import { hashPrompt } from "./utils/ids/prompt-hash.js";
 import type {
   TranscriptMessage,
@@ -636,4 +641,42 @@ function groupTurns(messages: TranscriptMessage[], keepUnanswered: boolean): Tur
   finalizeTurn(true);
 
   return turns;
+}
+
+export function subagentTranscriptPath(
+  transcriptPath: string,
+  sessionId: string,
+  agentId: string,
+): string {
+  const fileName = `${SUBAGENT_FILE_PREFIX}${agentId}${TRANSCRIPT_FILE_EXTENSION}`;
+  return join(dirname(transcriptPath), sessionId, SUBAGENTS_DIR_NAME, fileName);
+}
+
+export function findAgentLaunch(
+  messages: TranscriptMessage[],
+  prompt: Turn["userContent"] | undefined,
+): ToolUseBlock | undefined {
+  const launches = messages
+    .filter(isAssistantMessage)
+    .flatMap((message) => message.message.content)
+    .filter(
+      (block): block is ToolUseBlock =>
+        block.type === "tool_use" &&
+        AGENT_TOOL_NAMES.includes(block.name) &&
+        block.input.prompt === prompt,
+    );
+  return launches.length === 1 ? launches[0] : undefined;
+}
+
+export function promptStartsSeveralSubagents(
+  transcriptPath: string,
+  sessionId: string,
+  prompt: Turn["userContent"],
+): boolean {
+  const folder = join(dirname(transcriptPath), sessionId, SUBAGENTS_DIR_NAME);
+  const starts = listDirectory(folder)
+    .filter((name) => name.startsWith(SUBAGENT_FILE_PREFIX))
+    .map((name) => readJson(readFirstLine(join(folder, name))) as TranscriptMessage | undefined)
+    .filter((message) => message?.type === "user" && message.message.content === prompt);
+  return starts.length > 1;
 }
