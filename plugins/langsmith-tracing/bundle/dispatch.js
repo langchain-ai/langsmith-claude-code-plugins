@@ -24233,6 +24233,12 @@ var HARNESS_COMMAND = /<command-name>([\s\S]*?)<\/command-name>\s*(?:<command-ar
 var HARNESS_TASK_NOTIFICATION = /^(?:\s*<task-notification>\s*<task-id>(?:(?!<\/task-notification>)[\s\S])*<\/task-notification>)+\s*$/;
 var HARNESS_TASK_NOTIFICATION_KEPT = /<(summary|result)>([\s\S]*?)<\/\1>/g;
 var HARNESS_UNWRAPPED_TAG = /<\/?(bash-input|bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|<\/?pasted_content(\s[^>]*)?>/g;
+var SKILL_COMMAND_OPENING = "<command-message>";
+var SKILL_NAME_LEADING_SLASH = /^\//;
+var NON_SKILL_PROMPT_COMMAND = /^(?:mcp__|(?:init|insights|security-review|statusline|team-onboarding)$)/;
+var GIT_DIR_COMMAND = /^\s*git\s+-C\s+("[^"$`\\]*"|'[^']*'|[^\s"'$`\\;&|<>()*?~]+)(?![^]*(?:[;|\n]|(?<!>)&(?!>)))/;
+var SURROUNDING_QUOTES = /^["']|["']$/g;
+var GLOB_CHARACTER = /[*?[{]/;
 var SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
 var WORKFLOW_TOOL_NAME = "Workflow";
 var WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
@@ -24399,7 +24405,7 @@ function attributionReady(metadata) {
 }
 
 // dist/src/repo-attribution.js
-import { dirname as dirname17, join as join26 } from "node:path";
+import { dirname as dirname18, join as join26 } from "node:path";
 
 // node_modules/.pnpm/@langchain+plugins-base@0.6.1_langsmith@0.11.6/node_modules/@langchain/plugins-base/dist/git/attribution.js
 import { isAbsolute as isAbsolute4 } from "node:path";
@@ -25058,12 +25064,28 @@ function loadConfig(options) {
 
 // dist/src/repo-attribution-paths.js
 import { existsSync as existsSync3 } from "node:fs";
-import { isAbsolute as isAbsolute5, resolve as resolve15 } from "node:path";
-function toolPathFromInput(toolInput, sessionCwd) {
+import { dirname as dirname17, isAbsolute as isAbsolute5, resolve as resolve15 } from "node:path";
+function gitCommandFolder(command) {
+  if (typeof command !== "string")
+    return void 0;
+  return GIT_DIR_COMMAND.exec(command)?.[1]?.replace(SURROUNDING_QUOTES, "");
+}
+function globFolder(input, toolName) {
+  const { pattern, path: path3 } = input;
+  if (toolName !== "Glob" || typeof pattern !== "string" || !isAbsolute5(pattern))
+    return void 0;
+  if (path3 !== void 0)
+    return void 0;
+  const folder = dirname17(`${pattern.split(GLOB_CHARACTER)[0]}_`);
+  return existsSync3(folder) ? folder : void 0;
+}
+function toolPathFromInput(toolInput, sessionCwd, toolName) {
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
     return { namedAPath: false };
   }
-  const input = toolInput;
+  const named = toolInput;
+  const folder = gitCommandFolder(named.command) || globFolder(named, toolName);
+  const input = folder ? { ...named, path: folder } : named;
   let namedAPath = false;
   for (const key of TOOL_PATH_INPUT_KEYS) {
     const value = input[key];
@@ -25085,7 +25107,7 @@ function toolPathFromInput(toolInput, sessionCwd) {
 var attributor;
 function repositoryAttributor() {
   attributor ??= createRepositoryAttributor({
-    githubLoginMarkerPath: join26(dirname17(resolveStateFilePath()), GH_LOGIN_MARKER_FILE)
+    githubLoginMarkerPath: join26(dirname18(resolveStateFilePath()), GH_LOGIN_MARKER_FILE)
   });
   return attributor;
 }
@@ -25104,14 +25126,14 @@ function withPinsOf(base, scoped) {
   }
   return scoped;
 }
-function toolOrigin(toolInput, sessionCwd) {
-  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd) };
+function toolOrigin(toolInput, sessionCwd, toolName) {
+  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd, toolName) };
 }
 function sessionScopedMetadata(base, sessionCwd) {
   return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, []));
 }
-function repoScopedMetadata(base, toolInput, sessionCwd) {
-  return repositoryAttributor().toolMetadata(withoutUnpinnedRepositoryKeys(base), toolOrigin(toolInput, sessionCwd));
+function repoScopedMetadata(base, toolInput, sessionCwd, toolName) {
+  return repositoryAttributor().toolMetadata(withoutUnpinnedRepositoryKeys(base), toolOrigin(toolInput, sessionCwd, toolName));
 }
 function settledRepositoryMetadata(base, origin) {
   return repositoryAttributor().toolMetadata(base, origin);
@@ -25167,7 +25189,7 @@ import { join as join27 } from "node:path";
 // dist/src/utils/files.js
 import { lstatSync as lstatSync4, mkdirSync as mkdirSync8, readdirSync as readdirSync2, readFileSync as readFileSync14, renameSync as renameSync7, rmdirSync as rmdirSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync5 } from "node:fs";
 import { randomUUID as randomUUID8 } from "node:crypto";
-import { dirname as dirname18 } from "node:path";
+import { dirname as dirname19 } from "node:path";
 function listDirectory(path3) {
   try {
     return readdirSync2(path3).sort();
@@ -25214,7 +25236,7 @@ function readJson(text) {
   }
 }
 function publishFile(path3, text) {
-  mkdirSync8(dirname18(path3), { recursive: true, mode: PRIVATE_FOLDER_MODE });
+  mkdirSync8(dirname19(path3), { recursive: true, mode: PRIVATE_FOLDER_MODE });
   const temp = `${path3}.${randomUUID8()}${TEMP_FILE_SUFFIX}`;
   writeFileSync5(temp, text, { flag: "wx", mode: PRIVATE_FILE_MODE });
   renameSync7(temp, path3);
@@ -25319,7 +25341,7 @@ import { randomUUID as randomUUID10 } from "node:crypto";
 
 // dist/src/tracing-policy.js
 import { mkdir as mkdir6 } from "node:fs/promises";
-import { dirname as dirname19 } from "node:path";
+import { dirname as dirname20 } from "node:path";
 
 // dist/src/utils/records.js
 function isRecord(value) {
@@ -25367,7 +25389,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     throw new Error("A nonempty session ID and a full/metadata tracing mode are required");
   }
   const path3 = tracingPolicyPath(stateFilePath);
-  await mkdir6(dirname19(path3), { recursive: true });
+  await mkdir6(dirname20(path3), { recursive: true });
   return updatePolicyFile(path3, POLICY_FILE, (policy) => {
     policy.threads = { ...policy.threads, [sessionId]: mode };
   });
@@ -25676,6 +25698,7 @@ function mergeAssistantChunks(chunks) {
     // SSE usage is cumulative; last chunk has final totals.
     effort: chunks.find((c) => c.effort)?.effort,
     // Only some chunks carry effort; take the first.
+    cwd: first.cwd,
     startTime: first.timestamp,
     endTime: last.timestamp
   };
@@ -25707,6 +25730,7 @@ function findToolResult(toolUseId, toolResults) {
         return {
           content,
           timestamp: msg.timestamp,
+          isError: block.is_error,
           agentId: msg.toolUseResult?.agentId
         };
       }
@@ -25752,7 +25776,7 @@ function groupTurns(messages, keepUnanswered) {
         const result = findToolResult(tu.id, toolResults);
         return {
           tool_use: tu,
-          result: result ? { content: result.content, timestamp: result.timestamp } : void 0,
+          result: result ? { content: result.content, timestamp: result.timestamp, isError: result.isError } : void 0,
           agentId: result?.agentId,
           hooks: hooksByTool.get(tu.id)
         };
@@ -25762,6 +25786,7 @@ function groupTurns(messages, keepUnanswered) {
         model: merged.model,
         usage: merged.usage,
         effort: merged.effort,
+        cwd: merged.cwd,
         startTime: merged.startTime,
         endTime: merged.endTime,
         toolCalls,
@@ -25858,6 +25883,12 @@ function isPayloadForHook(input, event) {
 function stripHarnessMarkup(text) {
   return text.replace(HARNESS_DROPPED_ELEMENT, "").replace(HARNESS_COMMAND, (_, name, args = "") => `${name.trim()} ${args.trim()}`.trim()).replace(HARNESS_TASK_NOTIFICATION, (block) => [...block.matchAll(HARNESS_TASK_NOTIFICATION_KEPT)].map((m) => m[2].trim()).join("\n\n")).replace(HARNESS_UNWRAPPED_TAG, "").trim();
 }
+function typedSkillName(content) {
+  if (typeof content !== "string" || !content.startsWith(SKILL_COMMAND_OPENING))
+    return void 0;
+  const name = [...content.matchAll(HARNESS_COMMAND)][0]?.[1]?.trim().replace(SKILL_NAME_LEADING_SLASH, "");
+  return name && !NON_SKILL_PROMPT_COMMAND.test(name) ? name : void 0;
+}
 function stripContentMarkup(content) {
   if (typeof content === "string")
     return stripHarnessMarkup(content) || void 0;
@@ -25892,7 +25923,7 @@ function skillNameFromTool(toolName, toolInput) {
   if (toolName !== "Skill")
     return void 0;
   const skill = toolInput?.skill;
-  return typeof skill === "string" ? skill : void 0;
+  return typeof skill === "string" ? skill.trim().replace(SKILL_NAME_LEADING_SLASH, "") || void 0 : void 0;
 }
 
 // dist/src/engine-session.js
@@ -26188,14 +26219,14 @@ async function traceTurn(options) {
         dotted_order: toolDottedOrder,
         metadata: codingAgentMetadata({
           sessionId,
-          base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, sessionCwd),
+          base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, llmCall.cwd ?? sessionCwd, toolCall.tool_use.name),
           turnId,
           turnNumber: turnNum,
           runtimeVersion,
           agentType,
           toolName: toolCall.tool_use.name,
           runName: toolCall.tool_use.name,
-          skillName: skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input)
+          skillName: toolCall.result?.isError ? void 0 : skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input)
         })
       }, toolMode);
       if (toolCall.agentId) {
@@ -26217,6 +26248,7 @@ async function traceTurn(options) {
       runtimeVersion,
       agentType,
       modelName: llmCall.model,
+      skillName: llmIndex === 0 && llmCall.userMessagesBefore?.length ? typedSkillName(turn.userContent) : void 0,
       usageMetadata: buildUsageMetadata(llmCall.usage),
       runSpecific: {
         ls_provider: resolveProvider(llmCall.model),
@@ -28052,10 +28084,10 @@ async function runQueuedClosings(workerConfig, sessionId) {
 
 // dist/src/legacy-import.js
 import { createHmac } from "node:crypto";
-import { basename as basename4, dirname as dirname20, join as join28 } from "node:path";
+import { basename as basename4, dirname as dirname21, join as join28 } from "node:path";
 function legacyRuns(config) {
   const origin = legacyOrigin(config);
-  const root = dirname20(config.stateFilePath);
+  const root = dirname21(config.stateFilePath);
   const scan = { runs: [], settled: [], unreadable: [] };
   const { runs } = scan;
   for (const [sessionId, file] of legacyFiles(join28(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
@@ -28173,7 +28205,7 @@ function readTurnRecord(path3) {
 }
 
 // dist/src/legacy-sweep.js
-import { join as join29, dirname as dirname21 } from "node:path";
+import { join as join29, dirname as dirname22 } from "node:path";
 function idleMs(info, now) {
   return info ? now - info.mtimeMs : 0;
 }
@@ -28211,7 +28243,7 @@ function sweepFolder(path3, removable, now) {
   return aged;
 }
 function sweepLegacyLeftovers(stateFilePath, removable, now = Date.now()) {
-  const root = dirname21(stateFilePath);
+  const root = dirname22(stateFilePath);
   return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join29(root, folder), removable, now), 0);
 }
 
@@ -28315,7 +28347,7 @@ async function main7() {
   const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
   const agentId = input.tool_response.agentId;
   const workflow = !agentId ? detectWorkflowLaunch(input.tool_name, input.tool_response) : void 0;
-  const origin = toolOrigin(input.tool_input, input.cwd);
+  const origin = toolOrigin(input.tool_input, input.cwd, input.tool_name);
   let held = false;
   const heldKey = [config.stateFilePath, input.session_id, input.tool_use_id];
   const hold = async (run, mode, _parent, from) => {

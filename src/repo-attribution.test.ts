@@ -19,6 +19,7 @@ const { git, makeDir, makeRepo, root } = sandbox;
 
 const alpha = makeRepo("alpha repo", "trunk-alpha", "Alpha Owner", "git@github.com:acme/alpha.git");
 const beta = makeRepo("beta repo", "trunk-beta", "Beta Owner", "https://gitlab.com/acme/beta.git");
+makeRepo("gamma", "trunk-gamma", "Gamma Owner", "git@github.com:acme/gamma.git");
 const plain = makeDir(root, "plain folder");
 const nested = join(makeDir(alpha, "sub dir"), "nested.txt");
 const betaNested = join(makeDir(beta, "sub dir"), "nested.txt");
@@ -62,7 +63,13 @@ const everythingBetaReveals = {
 };
 
 type Row = Record<string, unknown>;
-type Case = [name: string, input: Record<string, string>, want: Row, cwd?: string];
+type Case = [
+  name: string,
+  input: Record<string, string>,
+  want: Row,
+  cwd?: string,
+  toolName?: string,
+];
 
 afterAll(() => sandbox.remove());
 
@@ -81,6 +88,15 @@ describe("repoScopedMetadata", () => {
     ["a notebook path", { notebook_path: betaSeed }, inBeta],
     ["a bare path", { path: betaSeed }, inBeta],
     ["a relative directory", { cwd: "beta repo" }, inBeta, root],
+    ["a git -C command", { command: "git -C gamma log -1" }, { ls_git_repo: "acme/gamma" }, root],
+    ["a quoted git -C folder", { command: 'git -C "beta repo" log -1' }, inBeta, root],
+    [
+      "a git -C command with a redirect",
+      { command: "git -C gamma log 2>&1" },
+      { ls_git_repo: "acme/gamma" },
+      root,
+    ],
+    ["an absolute glob pattern", { pattern: join(beta, "**", "*.ts") }, inBeta, undefined, "Glob"],
     ["a file nothing has created yet", { file_path: join(alpha, "new", "deep", "x.txt") }, inAlpha],
     ["a file in the git directory", { file_path: join(alpha, ".git", "config") }, inAlpha],
     [
@@ -88,8 +104,8 @@ describe("repoScopedMetadata", () => {
       { file_path: join(worktree, "seed.txt") },
       { ls_git_repo: "acme/alpha", ls_git_branch: "side-branch" },
     ],
-  ])("attributes %s", (_name, input, want, cwd) => {
-    expect(repoScopedMetadata(session, input, cwd)).toMatchObject(want);
+  ])("attributes %s", (_name, input, want, cwd, toolName) => {
+    expect(repoScopedMetadata(session, input, cwd, toolName)).toMatchObject(want);
   });
 
   it("keeps the session repository's author on a tool naming a path nothing sits at", () => {
@@ -98,6 +114,20 @@ describe("repoScopedMetadata", () => {
     expect(repoScopedMetadata(base, { path: "notion/page/abc123" }, alpha)).toMatchObject({
       ls_attribution_identifier: "Alpha Owner",
     });
+  });
+
+  it("keeps the session repository on a Grep whose regex looks like an absolute path", () => {
+    const base = sessionScopedMetadata(noRepository, alpha);
+
+    expect(repoScopedMetadata(base, { pattern: "/etc/hosts" }, alpha, "Grep")).toMatchObject(
+      inAlpha,
+    );
+  });
+
+  it("keeps a chained git -C command with the folder it ran in", () => {
+    const chained = { command: "git -C gamma status && ls" };
+
+    expect(repoScopedMetadata(noRepository, chained, root)).not.toHaveProperty("ls_git_repo");
   });
 
   it("attributes a shell command to the repository it ran in", () => {

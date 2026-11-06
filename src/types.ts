@@ -85,6 +85,7 @@ export interface ToolResultBlock {
   type: "tool_result";
   tool_use_id: string;
   content: ToolResultContent;
+  is_error?: boolean;
 }
 
 /** Text, or blocks such as images and documents a tool returned. */
@@ -173,6 +174,7 @@ export interface AssistantMessage {
   uuid?: string;
   promptId?: string;
   effort?: string;
+  cwd?: string;
 }
 
 export interface HookEntry {
@@ -199,6 +201,7 @@ export interface ToolCall {
   result?: {
     content: ToolResultContent;
     timestamp: string;
+    isError?: boolean;
   };
   /** If this was a Task tool, the agent ID for subagent tracing. */
   agentId?: string;
@@ -219,6 +222,7 @@ export interface LLMCall {
   endTime: string;
   /** Reasoning effort the call ran at, when the transcript records one. */
   effort?: string;
+  cwd?: string;
   /** Tool calls made in this response. */
   toolCalls: ToolCall[];
   /** User-side messages that reached the model after the previous call, such as a skill body. */
