@@ -633,6 +633,20 @@ describe("closing hooks hand their work to the uploader", () => {
     output.mockRestore();
   });
 
+  it("still shows a notice when the turn fails to start", async () => {
+    reset("full");
+    h.login = { configPath: "/login/config.json", profile: "work" };
+    h.loginNotice = "Tracing is paused";
+    h.parentDottedOrder = 1 as never;
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", {}, { closings: false });
+    expect(output.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+      { systemMessage: "Tracing is paused" },
+    ]);
+    expect(h.errors).toHaveLength(1);
+    output.mockRestore();
+  });
+
   it("checks the login notice for the configured profile", async () => {
     reset("full");
     h.profile = "other";
@@ -788,6 +802,18 @@ describe("closing hooks hand their work to the uploader", () => {
     legacyParent();
     await hook("pre");
     expect(h.state.session.tool_tracing_modes?.tool).toBe("metadata");
+  });
+
+  it.each([
+    { locked: false, mode: "full" },
+    { locked: true, mode: "metadata" },
+  ])("keeps a mute command's own turn $mode when the lock is $locked", async ({ locked, mode }) => {
+    reset("full");
+    h.mutedLocked = locked;
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hook("prompt", { prompt: "/langsmith-tracing:mute" });
+    output.mockRestore();
+    expect(h.state.session.current_turn_tracing).toBe(mode);
   });
 
   it("an interrupted turn is counted at once and later closed with the session's repository", async () => {
@@ -1507,7 +1533,7 @@ describe("privacy propagation without lifecycle changes", () => {
 
   it.each(
     (["full", "metadata"] as const).flatMap((mode) =>
-      ["command", "config"].map((source) => ({ mode, source })),
+      ["preference", "config"].map((source) => ({ mode, source })),
     ),
   )("$source changes affect only the next turn from $mode", async ({ mode, source }) => {
     reset(mode);
@@ -1524,19 +1550,10 @@ describe("privacy propagation without lifecycle changes", () => {
       tool_response: { agentId: "background", content: privateText },
     });
     const before = structuredClone(h.state);
-    const posts = h.operations.length;
     if (source === "config") {
       h.defaultMuted = next === "metadata";
     } else {
-      const output = vi.spyOn(console, "log").mockImplementation(() => {});
-      await hook("prompt", { prompt: `/langsmith-tracing:${mode === "full" ? "mute" : "unmute"}` });
-      expect(h.state).toEqual(before);
-      expect(h.operations).toHaveLength(posts);
-      expect(output).toHaveBeenCalledWith(
-        expect.stringContaining("for the next turn; the current turn is unchanged"),
-      );
-      output.mockRestore();
-      expect(h.policy).toBe(next);
+      h.policy = next;
     }
     await hook("pre");
     expect(h.state.session.tool_tracing_modes?.tool).toBe(mode);

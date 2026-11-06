@@ -1,11 +1,12 @@
 import { RunTree } from "langsmith";
+import { readLoginNotice, refusedLoginReplicas, sdkSetting } from "@langchain/plugins-base/auth";
 import type {
   LangSmithUploadReplicaConfig,
   LangSmithUploadWriterOptions,
 } from "@langchain/plugins-base/tracing/upload";
 import { dirname, join } from "node:path";
 import { ENGINE_STORAGE_DIR_NAME, SDK_REPLICA_PROBE } from "./constants.js";
-import type { Config } from "./types.js";
+import type { Config, UploadNotices } from "./types.js";
 import { cloneJson } from "./utils/clone.js";
 
 export function writerOptions(config: Config): LangSmithUploadWriterOptions {
@@ -50,4 +51,18 @@ export function writerReplica(
     ? { projectName: replica[0], updates: replica[1] }
     : (replica as LangSmithUploadReplicaConfig);
   return cloneJson(source);
+}
+
+export function readUploadNotices(config: Config): UploadNotices {
+  const apiKey = sdkSetting(config.apiKey);
+  const loginNotice = readLoginNotice(
+    engineStorageRoot(config.stateFilePath),
+    process.env,
+    config.login || apiKey === undefined ? undefined : { apiKey, apiUrl: config.apiBaseUrl },
+    config.profile,
+  );
+  const credentialNotice = config.login
+    ? refusedLoginReplicas(writerOptions(config).replicas, config.apiBaseUrl)
+    : undefined;
+  return { loginNotice, credentialNotice };
 }
