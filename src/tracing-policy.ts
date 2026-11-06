@@ -44,14 +44,6 @@ export function getThreadTracingMode(
   }
 }
 
-/** Exact, argument-free commands only; ordinary prompts are never interpreted. */
-export function parseTracingCommand(prompt: string): "mute" | "unmute" | "trace" | undefined {
-  if (prompt === "/langsmith-tracing:mute") return "mute";
-  if (prompt === "/langsmith-tracing:unmute") return "unmute";
-  if (prompt === "/langsmith-tracing:trace") return "trace";
-  return undefined;
-}
-
 export async function setThreadTracingMode(
   stateFilePath: string,
   sessionId: string,

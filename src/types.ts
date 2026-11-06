@@ -13,7 +13,12 @@ import type { PluginSession } from "@langchain/plugins-base/plugin";
 import type { LifecycleCaptureInput } from "@langchain/plugins-base/tracing/lifecycle";
 import type { RecordedRun, TurnRecord } from "@langchain/plugins-base/tracing/settlement";
 import type { HookOutput } from "@langchain/plugins-base/tracing";
-import type { BOOLEAN_SETTINGS, HOOK_EVENT_NAMES, PINNED_REPOSITORY_KEYS } from "./constants.js";
+import type {
+  BOOLEAN_SETTINGS,
+  HOOK_EVENT_NAMES,
+  PINNED_REPOSITORY_KEYS,
+  TRACING_COMMAND_ENTRIES,
+} from "./constants.js";
 
 export type TracingMode = "full" | "metadata";
 
@@ -656,6 +661,13 @@ export interface UserPromptSubmitHookInput {
   prompt: string;
   agent_id?: string;
   agent_type?: string;
+}
+
+export type TracingCommand = (typeof TRACING_COMMAND_ENTRIES)[number]["name"];
+
+export interface UploadNotices {
+  loginNotice?: string;
+  credentialNotice?: string;
 }
 
 export interface Config {

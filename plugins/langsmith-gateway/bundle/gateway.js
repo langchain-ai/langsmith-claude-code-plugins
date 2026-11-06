@@ -198,11 +198,11 @@ var require_p_finally = __commonJS({
       onFinally = onFinally || (() => {
       });
       return promise.then(
-        (val) => new Promise((resolve3) => {
-          resolve3(onFinally());
+        (val) => new Promise((resolve4) => {
+          resolve4(onFinally());
         }).then(() => val),
-        (err) => new Promise((resolve3) => {
-          resolve3(onFinally());
+        (err) => new Promise((resolve4) => {
+          resolve4(onFinally());
         }).then(() => {
           throw err;
         })
@@ -222,18 +222,18 @@ var require_p_timeout = __commonJS({
         this.name = "TimeoutError";
       }
     };
-    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve3, reject) => {
+    var pTimeout = (promise, milliseconds, fallback) => new Promise((resolve4, reject) => {
       if (typeof milliseconds !== "number" || milliseconds < 0) {
         throw new TypeError("Expected `milliseconds` to be a positive number");
       }
       if (milliseconds === Infinity) {
-        resolve3(promise);
+        resolve4(promise);
         return;
       }
       const timer = setTimeout(() => {
         if (typeof fallback === "function") {
           try {
-            resolve3(fallback());
+            resolve4(fallback());
           } catch (error) {
             reject(error);
           }
@@ -248,7 +248,7 @@ var require_p_timeout = __commonJS({
       }, milliseconds);
       pFinally(
         // eslint-disable-next-line promise/prefer-await-to-then
-        promise.then(resolve3, reject),
+        promise.then(resolve4, reject),
         () => {
           clearTimeout(timer);
         }
@@ -466,7 +466,7 @@ var require_dist = __commonJS({
       Adds a sync or async task to the queue. Always returns a promise.
       */
       async add(fn, options = {}) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve4, reject) => {
           const run = async () => {
             this._pendingCount++;
             this._intervalCount++;
@@ -477,7 +477,7 @@ var require_dist = __commonJS({
                 }
                 return void 0;
               });
-              resolve3(await operation);
+              resolve4(await operation);
             } catch (error) {
               reject(error);
             }
@@ -528,11 +528,11 @@ var require_dist = __commonJS({
         if (this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve3) => {
+        return new Promise((resolve4) => {
           const existingResolve = this._resolveEmpty;
           this._resolveEmpty = () => {
             existingResolve();
-            resolve3();
+            resolve4();
           };
         });
       }
@@ -545,11 +545,11 @@ var require_dist = __commonJS({
         if (this._pendingCount === 0 && this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve3) => {
+        return new Promise((resolve4) => {
           const existingResolve = this._resolveIdle;
           this._resolveIdle = () => {
             existingResolve();
-            resolve3();
+            resolve4();
           };
         });
       }
@@ -593,7 +593,7 @@ var require_dist = __commonJS({
   }
 });
 
-// node_modules/.pnpm/@langchain+plugins-base@0.6.1_langsmith@0.11.6/node_modules/@langchain/plugins-base/dist/settings/constants.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_a0d1472e7f6a2c3bec1bcee5592e6f09/node_modules/@langchain/plugins-base/dist/settings/constants.js
 import { constants } from "node:fs";
 var COMMON_BOOLEAN_SETTINGS = {
   enabled: { default: false, restrictive: false },
@@ -602,23 +602,28 @@ var COMMON_BOOLEAN_SETTINGS = {
 var COMMON_CONFIG_OPEN_FLAGS = constants.O_RDONLY | (constants.O_NONBLOCK ?? 0);
 var MANAGED_CONFIG_OPEN_FLAGS = COMMON_CONFIG_OPEN_FLAGS | (constants.O_NOFOLLOW ?? 0);
 
-// node_modules/.pnpm/@langchain+plugins-base@0.6.1_langsmith@0.11.6/node_modules/@langchain/plugins-base/dist/settings/managed-config.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_a0d1472e7f6a2c3bec1bcee5592e6f09/node_modules/@langchain/plugins-base/dist/settings/managed-config.js
 import { closeSync, fstatSync, lstatSync, openSync, readFileSync as readFileSync2 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.6.1_langsmith@0.11.6/node_modules/@langchain/plugins-base/dist/settings/utils/account-home.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_a0d1472e7f6a2c3bec1bcee5592e6f09/node_modules/@langchain/plugins-base/dist/settings/utils/account-home.js
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { isAbsolute } from "node:path";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.6.1_langsmith@0.11.6/node_modules/@langchain/plugins-base/dist/settings/managed-lock.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_a0d1472e7f6a2c3bec1bcee5592e6f09/node_modules/@langchain/plugins-base/dist/settings/managed-lock.js
 import { isDeepStrictEqual } from "node:util";
 
-// node_modules/.pnpm/@langchain+plugins-base@0.6.1_langsmith@0.11.6/node_modules/@langchain/plugins-base/dist/settings/config-files.js
+// node_modules/.pnpm/@langchain+plugins-base@htt_a0d1472e7f6a2c3bec1bcee5592e6f09/node_modules/@langchain/plugins-base/dist/settings/config-files.js
 import { closeSync as closeSync2, fstatSync as fstatSync2, lstatSync as lstatSync2, openSync as openSync2, readFileSync as readFileSync3 } from "node:fs";
 import { join as join2 } from "node:path";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_a0d1472e7f6a2c3bec1bcee5592e6f09/node_modules/@langchain/plugins-base/dist/settings/setup.js
+import { closeSync as closeSync3, fsyncSync, mkdirSync, openSync as openSync3, readFileSync as readFileSync4, readlinkSync, realpathSync, renameSync, rmSync, writeSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { dirname as dirname2, join as join3, resolve } from "node:path";
 
 // dist/src/constants.js
 var HELD_TOOL_RUN_MAX_AGE_MS = 6 * 60 * 60 * 1e3;
@@ -639,6 +644,14 @@ var PLUGIN_FLAG = "--plugin";
 var GATEWAY_PLUGIN = "gateway";
 var BUNDLE_USAGE = `Usage: langsmith-claude ${PLUGIN_FLAG} ${GATEWAY_PLUGIN} [arguments]
 `;
+var TRACING_COMMAND_PREFIX = "/langsmith-tracing:";
+var TRACING_COMMAND_ENTRIES = [
+  { name: "mute", takesArguments: false },
+  { name: "unmute", takesArguments: false },
+  { name: "trace", takesArguments: false },
+  { name: "setup", takesArguments: true }
+];
+var TRACING_COMMANDS = TRACING_COMMAND_ENTRIES.map((entry2) => ({ ...entry2, text: `${TRACING_COMMAND_PREFIX}${entry2.name}` }));
 var BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
   defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
@@ -667,17 +680,17 @@ import { fileURLToPath } from "node:url";
 
 // dist/src/proxy/config.js
 import { lstatSync as lstatSync4 } from "node:fs";
-import { join as join4 } from "node:path";
+import { join as join5 } from "node:path";
 import { userInfo as userInfo2 } from "node:os";
 
 // dist/src/proxy/files.js
-import { constants as constants2, closeSync as closeSync3, fstatSync as fstatSync3, fsyncSync, lstatSync as lstatSync3, linkSync, mkdirSync, openSync as openSync3, readFileSync as readFileSync4, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname as dirname2, join as join3 } from "node:path";
+import { constants as constants2, closeSync as closeSync4, fstatSync as fstatSync3, fsyncSync as fsyncSync2, lstatSync as lstatSync3, linkSync, mkdirSync as mkdirSync2, openSync as openSync4, readFileSync as readFileSync5, renameSync as renameSync2, unlinkSync, writeFileSync } from "node:fs";
+import { dirname as dirname3, join as join4 } from "node:path";
 import { randomBytes } from "node:crypto";
 function directory(path3, create = false, privateMode = false) {
   if (create) {
     try {
-      mkdirSync(path3, { mode: 448 });
+      mkdirSync2(path3, { mode: 448 });
     } catch (e) {
       if (e.code !== "EEXIST")
         throw e;
@@ -689,12 +702,12 @@ function directory(path3, create = false, privateMode = false) {
 }
 function directories(home, create = false) {
   directory(home);
-  directory(join3(home, ".claude"), create);
+  directory(join4(home, ".claude"), create);
 }
 function snapshot(path3, privateMode = false) {
   let fd;
   try {
-    fd = openSync3(path3, constants2.O_RDONLY | constants2.O_NOFOLLOW | constants2.O_NONBLOCK);
+    fd = openSync4(path3, constants2.O_RDONLY | constants2.O_NOFOLLOW | constants2.O_NONBLOCK);
   } catch (e) {
     if (e.code === "ENOENT")
       return;
@@ -705,14 +718,14 @@ function snapshot(path3, privateMode = false) {
     if (!s.isFile() || s.nlink !== 1 || s.uid !== process.getuid?.() || s.mode & (privateMode ? 63 : 18) || s.size > 1024 * 1024)
       throw new Error("Unsafe settings file");
     return {
-      text: readFileSync4(fd, "utf8"),
+      text: readFileSync5(fd, "utf8"),
       ino: s.ino,
       dev: s.dev,
       mtime: s.mtimeMs,
       mode: s.mode
     };
   } finally {
-    closeSync3(fd);
+    closeSync4(fd);
   }
 }
 function unchanged(path3, prior, privateMode = false) {
@@ -720,26 +733,26 @@ function unchanged(path3, prior, privateMode = false) {
     throw new Error("Settings changed concurrently; retry");
 }
 function atomic(path3, text2, prior) {
-  const temp = join3(dirname2(path3), `.gateway-${randomBytes(16).toString("hex")}.tmp`);
-  const fd = openSync3(temp, constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 384);
+  const temp = join4(dirname3(path3), `.gateway-${randomBytes(16).toString("hex")}.tmp`);
+  const fd = openSync4(temp, constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 384);
   try {
     try {
       writeFileSync(fd, text2);
-      fsyncSync(fd);
+      fsyncSync2(fd);
     } finally {
-      closeSync3(fd);
+      closeSync4(fd);
     }
     unchanged(path3, prior);
     if (prior === void 0) {
       linkSync(temp, path3);
       unlinkSync(temp);
     } else
-      renameSync(temp, path3);
-    const dir = openSync3(dirname2(path3), constants2.O_RDONLY);
+      renameSync2(temp, path3);
+    const dir = openSync4(dirname3(path3), constants2.O_RDONLY);
     try {
-      fsyncSync(dir);
+      fsyncSync2(dir);
     } finally {
-      closeSync3(dir);
+      closeSync4(dir);
     }
   } finally {
     try {
@@ -960,7 +973,7 @@ var isSavedConfig = (c) => typeof c.enabled === "boolean" && typeof c.useClaudeS
 var ConfigError = class extends Error {
 };
 var userHome = () => userInfo2().homedir;
-var configDir = (home = userHome()) => join4(home, ".claude", "langsmith-proxy");
+var configDir = (home = userHome()) => join5(home, ".claude", "langsmith-proxy");
 function httpsOrigin(value) {
   if (!wellFormedOrigin(value))
     throw new Error(ORIGIN_SHAPE_GUIDANCE);
@@ -987,7 +1000,7 @@ function loadConfig(home = userHome(), includeDisabled = false) {
   try {
     directories(home);
     privatePath(configDir(home), true);
-    saved = snapshot(join4(configDir(home), "config.json"), true);
+    saved = snapshot(join5(configDir(home), "config.json"), true);
   } catch (e) {
     if (e.code === "ENOENT")
       return;
@@ -1019,18 +1032,18 @@ function configStatus(home = userHome()) {
 }
 
 // dist/src/logger.js
-import { appendFileSync, mkdirSync as mkdirSync2, statSync, renameSync as renameSync2 } from "node:fs";
-import { dirname as dirname3 } from "node:path";
+import { appendFileSync, mkdirSync as mkdirSync3, statSync, renameSync as renameSync3 } from "node:fs";
+import { dirname as dirname4 } from "node:path";
 var LOG_FILE = process.env.CC_LANGSMITH_LOG_FILE ?? `${process.env.HOME ?? ""}/.claude/state/hook.log`;
 var debugEnabled = false;
 function initLogger(debug) {
   debugEnabled = debug;
-  mkdirSync2(dirname3(LOG_FILE), { recursive: true });
+  mkdirSync3(dirname4(LOG_FILE), { recursive: true });
 }
 function rotateIfNeeded() {
   try {
     if (statSync(LOG_FILE).size >= MAX_LOG_BYTES) {
-      renameSync2(LOG_FILE, `${LOG_FILE}.1`);
+      renameSync3(LOG_FILE, `${LOG_FILE}.1`);
     }
   } catch {
   }
@@ -1071,7 +1084,7 @@ function bearerCredential(value) {
 
 // dist/src/proxy/token.js
 import { spawn } from "node:child_process";
-import { join as join6 } from "node:path";
+import { join as join7 } from "node:path";
 
 // node_modules/.pnpm/langsmith@0.11.6/node_modules/langsmith/lib/address.mjs
 var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -2063,7 +2076,7 @@ async function onAttemptFailure({ error, attemptNumber, retriesConsumed, startTi
   const delayTime = calculateDelay(retriesConsumed, options);
   const finalDelay = Math.min(delayTime, remainingTime);
   if (finalDelay > 0) {
-    await new Promise((resolve3, reject) => {
+    await new Promise((resolve4, reject) => {
       const onAbort = () => {
         clearTimeout(timeoutToken);
         options.signal?.removeEventListener("abort", onAbort);
@@ -2071,7 +2084,7 @@ async function onAttemptFailure({ error, attemptNumber, retriesConsumed, startTi
       };
       const timeoutToken = setTimeout(() => {
         options.signal?.removeEventListener("abort", onAbort);
-        resolve3();
+        resolve4();
       }, finalDelay);
       if (options.unref) {
         timeoutToken.unref?.();
@@ -2499,7 +2512,7 @@ var safeJSON = (text2) => {
 };
 
 // node_modules/.pnpm/langsmith@0.11.6/node_modules/langsmith/internal/utils/sleep.mjs
-var sleep = (ms) => new Promise((resolve3) => setTimeout(resolve3, ms));
+var sleep = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
 
 // node_modules/.pnpm/langsmith@0.11.6/node_modules/langsmith/version.mjs
 var VERSION = "0.11.6";
@@ -3590,8 +3603,8 @@ async function defaultParseResponse(client, props) {
 var _APIPromise_client;
 var APIPromise = class _APIPromise extends Promise {
   constructor(client, responsePromise, parseResponse = defaultParseResponse) {
-    super((resolve3) => {
-      resolve3(null);
+    super((resolve4) => {
+      resolve4(null);
     });
     Object.defineProperty(this, "responsePromise", {
       enumerable: true,
@@ -7016,7 +7029,7 @@ import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 import { homedir as homedir2 } from "node:os";
-import { randomUUID } from "node:crypto";
+import { randomUUID as randomUUID2 } from "node:crypto";
 function resolveConfigPath(filePath) {
   const expanded = filePath === "~" || filePath.startsWith("~/") || filePath.startsWith("~\\") ? nodePath.join(homedir2(), filePath.slice(1)) : filePath;
   const absolute = nodePath.resolve(expanded);
@@ -7030,7 +7043,7 @@ async function mkdir2(dir) {
   await nodeFsPromises.mkdir(dir, { recursive: true });
 }
 async function writeFileAtomic(filePath, content) {
-  const tempPath = `${filePath}.${randomUUID()}.tmp`;
+  const tempPath = `${filePath}.${randomUUID2()}.tmp`;
   const file = await nodeFsPromises.open(tempPath, "wx", 384);
   try {
     try {
@@ -7053,19 +7066,19 @@ async function stat2(filePath) {
 function existsSync2(p) {
   return nodeFs.existsSync(p);
 }
-function mkdirSync4(dir) {
+function mkdirSync5(dir) {
   nodeFs.mkdirSync(dir, { recursive: true });
 }
 function writeFileSync3(filePath, content) {
   nodeFs.writeFileSync(filePath, content);
 }
-function renameSync4(oldPath, newPath) {
+function renameSync5(oldPath, newPath) {
   nodeFs.renameSync(oldPath, newPath);
 }
 function unlinkSync3(filePath) {
   nodeFs.unlinkSync(filePath);
 }
-function readFileSync6(filePath) {
+function readFileSync7(filePath) {
   return nodeFs.readFileSync(filePath, "utf-8");
 }
 async function mkdirExclusive(dir) {
@@ -7252,12 +7265,12 @@ var PromptCache = class {
     }
     const dir = path2.dirname(filePath);
     if (!existsSync2(dir)) {
-      mkdirSync4(dir);
+      mkdirSync5(dir);
     }
     const tempPath = `${filePath}.tmp`;
     try {
       writeFileSync3(tempPath, JSON.stringify({ entries }, null, 2));
-      renameSync4(tempPath, filePath);
+      renameSync5(tempPath, filePath);
     } catch (e) {
       if (existsSync2(tempPath)) {
         unlinkSync3(tempPath);
@@ -7278,7 +7291,7 @@ var PromptCache = class {
     }
     let entries;
     try {
-      const content = readFileSync6(filePath);
+      const content = readFileSync7(filePath);
       const data = JSON.parse(content);
       entries = data.entries ?? null;
     } catch {
@@ -7886,8 +7899,8 @@ var SerializeWorker = class {
     if (!ok)
       return null;
     const id = this.nextId++;
-    return new Promise((resolve3, reject) => {
-      this.pending.set(id, { resolve: resolve3, reject });
+    return new Promise((resolve4, reject) => {
+      this.pending.set(id, { resolve: resolve4, reject });
       try {
         this.worker.postMessage({ id, op: "serialize", payload });
       } catch (e) {
@@ -8058,7 +8071,7 @@ var handle429 = async (response) => {
   if (response?.status === 429) {
     const retryAfter = parseInt(response.headers.get("retry-after") ?? "10", 10) * 1e3;
     if (retryAfter > 0) {
-      await new Promise((resolve3) => setTimeout(resolve3, retryAfter));
+      await new Promise((resolve4) => setTimeout(resolve4, retryAfter));
       return true;
     }
   }
@@ -8157,8 +8170,8 @@ var AutoBatchQueue = class {
   }
   push(item) {
     let itemPromiseResolve;
-    const itemPromise = new Promise((resolve3) => {
-      itemPromiseResolve = resolve3;
+    const itemPromise = new Promise((resolve4) => {
+      itemPromiseResolve = resolve4;
     });
     const size = estimateSerializedSize(item.item).size;
     if (this.sizeBytes + size > this.maxSizeBytes && this.sizeBytes > 0) {
@@ -9561,8 +9574,8 @@ var Client = class _Client {
   /** Gzip an operation into its destination's buffer. Resolves once sent. */
   _enqueueCompressed(queuedSize, item) {
     let onSent;
-    const sent = new Promise((resolve3) => {
-      onSent = resolve3;
+    const sent = new Promise((resolve4) => {
+      onSent = resolve4;
     });
     const isDefault = item.apiKey === this.apiKey && item.apiUrl === this.apiUrl && item.workspaceId === this.workspaceId;
     const key = isDefault ? "default" : `${item.apiUrl ?? this.apiUrl}|${item.apiKey ?? this.apiKey}|${item.workspaceId ?? this.workspaceId ?? ""}`;
@@ -13473,7 +13486,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
       console.warn("[WARNING]: When tracing in manual flush mode, you must call `await client.flush()` manually to submit trace batches.");
       return Promise.resolve();
     }
-    await new Promise((resolve3) => setTimeout(resolve3, 1));
+    await new Promise((resolve4) => setTimeout(resolve4, 1));
     while (this._pendingDrains.size > 0) {
       await Promise.all([...this._pendingDrains]);
     }
@@ -14836,14 +14849,14 @@ var OAUTH_REFRESH_LOCK_STALE_AFTER_MS = 15e3;
 var LOCK_STALE_AFTER_MS = OAUTH_REFRESH_LOCK_STALE_AFTER_MS;
 var LOCK_METADATA_FILE = "created_at";
 function sleep2(ms) {
-  return new Promise((resolve3) => setTimeout(resolve3, ms));
+  return new Promise((resolve4) => setTimeout(resolve4, ms));
 }
 function isEEXIST(err) {
   return typeof err === "object" && err !== null && err.code === "EEXIST";
 }
 function lockMetadataLines(lockDir) {
   try {
-    return readFileSync6(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
+    return readFileSync7(path2.join(lockDir, LOCK_METADATA_FILE)).split("\n");
   } catch {
     return void 0;
   }
@@ -14957,7 +14970,7 @@ function loadProfileState(selection = {}) {
     return void 0;
   }
   try {
-    const config = JSON.parse(readFileSync6(configPath));
+    const config = JSON.parse(readFileSync7(configPath));
     const profileName = resolveProfileName(config, selection.profile);
     const profile = profileName ? config.profiles?.[profileName] : void 0;
     if (!profileName || !profile) {
@@ -15227,7 +15240,7 @@ var ProfileAuth = class {
   }
   reloadProfile() {
     try {
-      const config = JSON.parse(readFileSync6(this.state.configPath));
+      const config = JSON.parse(readFileSync7(this.state.configPath));
       const profile = config.profiles?.[this.state.profileName];
       if (!profile) {
         return void 0;
@@ -15354,7 +15367,7 @@ var SignInFailure = class extends Error {
 };
 async function loginToken(config, log = () => void 0) {
   const { profileAuth } = loadProfileClientConfig({
-    configPath: join6(userHome(), ...LOGIN_CONFIG_PATH),
+    configPath: join7(userHome(), ...LOGIN_CONFIG_PATH),
     profile: config.profile
   });
   if (profileAuth === void 0)
@@ -15383,7 +15396,7 @@ function commandToken(command, timeoutMs = CREDENTIAL_TIMEOUT_MS, signal) {
   return spawnToken(SHELL, ["-c", command], timeoutMs, signal);
 }
 function spawnToken(command, args, timeoutMs, signal) {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve4, reject) => {
     if (signal?.aborted) {
       reject(new Error("LangSmith token unavailable"));
       return;
@@ -15404,7 +15417,7 @@ function spawnToken(command, args, timeoutMs, signal) {
       signal?.removeEventListener("abort", cancel);
       output = "";
       if (token)
-        resolve3(token);
+        resolve4(token);
       else
         reject(new SignInFailure(TOKEN_COMMAND_REASON));
     };
@@ -15590,7 +15603,7 @@ function callerWorkspace(req) {
   return values[0];
 }
 function readBody(req) {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve4, reject) => {
     const chunks = [];
     let size = 0;
     const cleanup = () => {
@@ -15614,7 +15627,7 @@ function readBody(req) {
     };
     const done = () => {
       cleanup();
-      resolve3(Buffer.concat(chunks, size));
+      resolve4(Buffer.concat(chunks, size));
     };
     req.on("data", data);
     req.on("end", done);
@@ -16039,12 +16052,12 @@ function parseGatewayCommand(prompt) {
 }
 
 // dist/src/proxy/settings.js
-import { mkdirSync as mkdirSync6, rmdirSync } from "node:fs";
-import { dirname as dirname5, join as join9 } from "node:path";
+import { mkdirSync as mkdirSync7, rmdirSync } from "node:fs";
+import { dirname as dirname6, join as join10 } from "node:path";
 
 // dist/src/proxy/setup.js
-import { mkdirSync as mkdirSync5 } from "node:fs";
-import { join as join7 } from "node:path";
+import { mkdirSync as mkdirSync6 } from "node:fs";
+import { join as join8 } from "node:path";
 import { randomBytes as randomBytes2 } from "node:crypto";
 function createConfig(profile, port, home = userHome(), urls = {}, useClaudeSubscription = false, credentials = {}) {
   const valid = typeof useClaudeSubscription === "boolean" && absent2(profile, isProfile) && isPort(port) && absent2(credentials.identityTokenCommand, isIdentityTokenCommand) && absent2(credentials.identityTokenTtlMs, isIdentityTokenTtlMs) && absent2(credentials.workspaceId, isWorkspaceId);
@@ -16054,7 +16067,7 @@ function createConfig(profile, port, home = userHome(), urls = {}, useClaudeSubs
   directories(home, true);
   const dir = configDir(home);
   try {
-    mkdirSync5(dir, { mode: 448 });
+    mkdirSync6(dir, { mode: 448 });
   } catch (e) {
     if (e.code !== "EEXIST")
       throw e;
@@ -16069,7 +16082,7 @@ function createConfig(profile, port, home = userHome(), urls = {}, useClaudeSubs
     port,
     secret: randomBytes2(32).toString("hex")
   };
-  const path3 = join7(dir, "config.json");
+  const path3 = join8(dir, "config.json");
   if (snapshot(path3, true))
     throw new Error("Proxy config already exists");
   atomic(path3, jsonText(config), void 0);
@@ -16080,7 +16093,7 @@ import http2 from "node:http";
 import { connect } from "node:net";
 import { spawn as spawn2 } from "node:child_process";
 function control(config, method, path3, timeoutMs = 500) {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve4, reject) => {
     const req = http2.request({
       hostname: "127.0.0.1",
       port: config.port,
@@ -16097,7 +16110,7 @@ function control(config, method, path3, timeoutMs = 500) {
           req.destroy();
       });
       res.on("error", () => reject(new Error("Local proxy unavailable")));
-      res.on("end", () => res.statusCode === 200 || res.statusCode === 204 ? resolve3(data) : reject(new Error("Local proxy unavailable")));
+      res.on("end", () => res.statusCode === 200 || res.statusCode === 204 ? resolve4(data) : reject(new Error("Local proxy unavailable")));
     });
     const timer = setTimeout(() => req.destroy(new Error("Local proxy unavailable")), timeoutMs);
     req.on("close", () => clearTimeout(timer));
@@ -16130,7 +16143,7 @@ async function ensure(config, entry2) {
   do {
     if (await healthy(config))
       return;
-    await new Promise((resolve3) => setTimeout(resolve3, 100));
+    await new Promise((resolve4) => setTimeout(resolve4, 100));
   } while (Date.now() < deadline);
   throw new Error("Local proxy unavailable");
 }
@@ -16150,11 +16163,11 @@ async function gatewayHook(event, session, entry2, home = userHome()) {
 async function waitForStopped(config, timeoutMs = 36e3) {
   const deadline = Date.now() + timeoutMs;
   do {
-    const stopped = await new Promise((resolve3) => {
+    const stopped = await new Promise((resolve4) => {
       const socket = connect({ host: "127.0.0.1", port: config.port });
       const finish = (free) => {
         socket.destroy();
-        resolve3(free);
+        resolve4(free);
       };
       socket.once("connect", () => finish(false));
       socket.once("error", (error) => finish(error.code === "ECONNREFUSED"));
@@ -16162,30 +16175,30 @@ async function waitForStopped(config, timeoutMs = 36e3) {
     });
     if (stopped)
       return;
-    await new Promise((resolve3) => setTimeout(resolve3, 100));
+    await new Promise((resolve4) => setTimeout(resolve4, 100));
   } while (Date.now() < deadline);
   throw new Error("Old proxy still draining or local port occupied");
 }
 
 // dist/src/proxy/scopes.js
-import { realpathSync as realpathSync2 } from "node:fs";
-import { dirname as dirname4, join as join8, resolve as resolve2 } from "node:path";
+import { realpathSync as realpathSync3 } from "node:fs";
+import { dirname as dirname5, join as join9, resolve as resolve3 } from "node:path";
 function targetPaths(home, scope, cwd) {
   if (scope === "global")
     return {
-      settings: join8(home, ".claude/settings.json"),
-      config: join8(configDir(home), "config.json")
+      settings: join9(home, ".claude/settings.json"),
+      config: join9(configDir(home), "config.json")
     };
   if (!cwd || !cwd.startsWith("/"))
     throw new SetupError("Project scope requires an absolute hook cwd.");
-  const root = realpathSync2(cwd);
-  if (resolve2(cwd) !== root)
+  const root = realpathSync3(cwd);
+  if (resolve3(cwd) !== root)
     throw new SetupError("Project path must be canonical and not a symlink.");
   directory(root);
-  const settings2 = join8(root, ".claude/settings.local.json");
+  const settings2 = join9(root, ".claude/settings.local.json");
   return {
     settings: settings2,
-    config: join8(configDir(home), "config.json")
+    config: join9(configDir(home), "config.json")
   };
 }
 var BASE = "ANTHROPIC_BASE_URL";
@@ -16193,11 +16206,11 @@ var HEADERS = "ANTHROPIC_CUSTOM_HEADERS";
 var proxyKeyLine = (config) => `X-LangSmith-Proxy-Key: ${config.secret}`;
 function routingSnapshot(path3) {
   try {
-    const root = dirname4(dirname4(path3));
-    if (realpathSync2(root) !== root)
+    const root = dirname5(dirname5(path3));
+    if (realpathSync3(root) !== root)
       throw new Error("Noncanonical routing target");
     directory(root);
-    directory(dirname4(path3));
+    directory(dirname5(path3));
     return snapshot(path3);
   } catch (error) {
     if (error.code !== "ENOENT")
@@ -16288,22 +16301,22 @@ function settings(s) {
   return { value, env };
 }
 function supportedHome(home, env) {
-  if (env.CLAUDE_CONFIG_DIR && env.CLAUDE_CONFIG_DIR !== join9(home, ".claude"))
+  if (env.CLAUDE_CONFIG_DIR && env.CLAUDE_CONFIG_DIR !== join10(home, ".claude"))
     fail("Custom CLAUDE_CONFIG_DIR is unsupported. Restart Claude Code with its default configuration directory, then use /langsmith-gateway:setup or /langsmith-gateway:disable.");
 }
 function lock(home) {
   directories(home, true);
   const dir = configDir(home);
   try {
-    mkdirSync6(dir, { mode: 448 });
+    mkdirSync7(dir, { mode: 448 });
   } catch (e) {
     if (e.code !== "EEXIST")
       throw e;
   }
   privatePath(dir, true);
-  const path3 = join9(dir, "settings.lock");
+  const path3 = join10(dir, "settings.lock");
   try {
-    mkdirSync6(path3, { mode: 448 });
+    mkdirSync7(path3, { mode: 448 });
   } catch {
     return fail("Another setup/disable is running or left settings.lock. Stop it before removing that lock directory and retrying.");
   }
@@ -16316,7 +16329,7 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
   const unlock = lock(home);
   try {
     const p = targetPaths(home, requested.scope, cwd);
-    directory(dirname5(p.settings), true);
+    directory(dirname6(p.settings), true);
     const beforeSettings = snapshot(p.settings);
     const { value, env: savedEnv } = settings(beforeSettings);
     if (value.disableAllHooks === true)
@@ -16411,7 +16424,7 @@ async function enable(entry2, args, env = process.env, home = userHome(), cwd = 
       unchanged(p.config, currentConfig, true);
       for (const item of targets)
         unchangedRouting(item.path, item.saved);
-      directory(dirname5(p.settings));
+      directory(dirname6(p.settings));
       const afterHeaders = keys.length ? headers : withProxyKey(headers, config);
       savedEnv[BASE] = target;
       savedEnv[HEADERS] = afterHeaders;
@@ -16527,7 +16540,7 @@ function routingStatus(paths, config) {
 }
 
 // dist/src/proxy/status.js
-import { join as join10 } from "node:path";
+import { join as join11 } from "node:path";
 
 // dist/src/proxy/credential-report.js
 function signInSummary(config) {
@@ -16566,7 +16579,7 @@ var STATUS_ERROR = "Gateway status unavailable; review config, settings, permiss
 async function gatewayStatus(args, env, home, cwd) {
   const { scope } = parseStatusArgs(args);
   try {
-    if (env.CLAUDE_CONFIG_DIR && env.CLAUDE_CONFIG_DIR !== join10(home, ".claude"))
+    if (env.CLAUDE_CONFIG_DIR && env.CLAUDE_CONFIG_DIR !== join11(home, ".claude"))
       throw new Error("Unsupported configuration directory");
     const scopes = scope ? [scope] : ["global", "project"];
     const targets = scopes.map((selected) => ({
@@ -16631,13 +16644,13 @@ async function handleGatewayInput(input, entry2, env = process.env, home = userH
 
 // dist/src/utils/stdin.js
 function readStdin() {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve4, reject) => {
     let data = "";
     process.stdin.setEncoding("utf-8");
     process.stdin.on("data", (chunk) => data += chunk);
     process.stdin.on("end", () => {
       try {
-        resolve3(JSON.parse(data));
+        resolve4(JSON.parse(data));
       } catch (err) {
         reject(new Error(`Failed to parse hook input: ${err}`));
       }

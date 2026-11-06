@@ -90,8 +90,11 @@ describe.skipIf(!built)("the standalone binary, bin/langsmith-claude-code-tracin
     const result = dispatch([event], "/langsmith-tracing:trace");
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
-    const decision = result.stdout === "" ? undefined : JSON.parse(result.stdout).decision;
-    expect(decision).toBe(event === "UserPromptSubmit" ? "block" : undefined);
+    const replyEvent =
+      result.stdout === ""
+        ? undefined
+        : JSON.parse(result.stdout).hookSpecificOutput?.hookEventName;
+    expect(replyEvent).toBe(event === "UserPromptSubmit" ? "UserPromptSubmit" : undefined);
   });
 
   it.each(["--help", "-h"])("prints the usage for %s and runs no handler", (flag) => {
