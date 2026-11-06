@@ -454,6 +454,39 @@ it("leaves a finished subagent call to its own hook when a later tool finishes f
   expect(sent.filter((run) => run.name === "Task")).toEqual([]);
 });
 
+it("uploads a finished model call whose own tool never fired its hook", async () => {
+  await prompt("PUBLIC_PROMPT", "A");
+  for (const [id, text] of [
+    ["toolu_one", "PUBLIC_FIRST"],
+    ["toolu_two", "PUBLIC_SECOND"],
+    ["toolu_three", "PUBLIC_THIRD"],
+  ]) {
+    assistant(
+      [
+        { type: "text", text },
+        { type: "tool_use", id, name: "Bash", input: {} },
+      ],
+      "tool_use",
+      "A",
+    );
+    await hook("PreToolUse", { tool_name: "Bash", tool_input: {}, tool_use_id: id });
+    user([{ type: "tool_result", tool_use_id: id, content: "done" }], "A");
+  }
+  await hook("PostToolUse", {
+    tool_name: "Bash",
+    tool_input: {},
+    tool_use_id: "toolu_three",
+    tool_response: {},
+  });
+
+  const llmRuns = (await sentRuns()).filter((run) => run.run_type === "llm");
+  const early = JSON.stringify(llmRuns.map((run) => run.outputs));
+
+  expect(early).toContain("PUBLIC_FIRST");
+  expect(early).toContain("PUBLIC_SECOND");
+  expect(early).not.toContain("PUBLIC_THIRD");
+});
+
 it("uploads a muted turn's finished model calls without their content", async () => {
   await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
   await prompt("SECRET_PROMPT", "A");

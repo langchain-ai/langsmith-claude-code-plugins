@@ -55,6 +55,7 @@ import {
 import {
   captureRun,
   captureToolRun,
+  operationFor,
   postedInputs,
   settledFromTurn,
   turnFiller,
@@ -193,6 +194,25 @@ function buildUsageMetadata(usage: Usage) {
  * Trace a turn to LangSmith.
  * @returns A map of agent_id -> tool run info (ID and dotted_order) for Task tools (used to link subagent traces)
  */
+function modelCallRunId(turn: Turn, turnRunId: string, index: number): string {
+  return stableRunId(turn.llmCalls[index].startTime, turnRunId, turn.promptId, index);
+}
+
+export async function firstUnpostedCall(
+  turn: Turn,
+  turnRunId: string,
+  rootRunId: string,
+  callCount: number,
+): Promise<number> {
+  let first = callCount;
+  while (first > 0) {
+    const runId = modelCallRunId(turn, turnRunId, first - 1);
+    if ((await operationFor(runId, rootRunId)) === "patch") break;
+    first--;
+  }
+  return first;
+}
+
 export async function traceTurn(options: TraceTurnOptions): Promise<Record<string, TaskRunEntry>> {
   const {
     turn,
@@ -279,7 +299,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     const assistantInputs = { messages: [...accumulatedMessages] };
 
     // Generate run ID for this LLM call
-    const assistantRunId = stableRunId(llmCall.startTime, turnRunId, turnId, llmIndex);
+    const assistantRunId = modelCallRunId(turn, turnRunId, llmIndex);
     const assistantDottedOrderSegment = generateDottedOrderSegment(
       llmCall.startTime,
       assistantRunId,

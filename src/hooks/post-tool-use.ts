@@ -8,7 +8,12 @@
 
 import { resolveTurnTracingMode, toolTracingMode } from "../tracing-mode.js";
 import { debug, error } from "../logger.js";
-import { currentTurnMetadata, generateDottedOrderSegment, traceTurn } from "../langsmith.js";
+import {
+  currentTurnMetadata,
+  firstUnpostedCall,
+  generateDottedOrderSegment,
+  traceTurn,
+} from "../langsmith.js";
 import {
   loadState,
   atomicUpdateState,
@@ -324,6 +329,6 @@ async function traceFinishedModelCalls(
     traceId: sessionState.current_trace_id,
     parentDottedOrder: sessionState.current_dotted_order,
     captureHookOutputs: config.captureHookOutputs,
-    uploadFromCall: finished.length - 1,
+    uploadFromCall: await firstUnpostedCall(turn, turnRunId, turnRunId, finished.length),
   });
 }
