@@ -45,7 +45,7 @@ import {
   SESSION_START_HOOK,
   USER_PROMPT_TURN_NAME,
 } from "./constants.js";
-import { stripContentMarkup } from "./utils/harness.js";
+import { stripContentMarkup, typedSkillName } from "./utils/harness.js";
 import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import {
   repoScopedMetadata,
@@ -327,14 +327,21 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
           dotted_order: toolDottedOrder,
           metadata: codingAgentMetadata({
             sessionId,
-            base: repoScopedMetadata(turnMetadataBase, toolCall.tool_use.input, sessionCwd),
+            base: repoScopedMetadata(
+              turnMetadataBase,
+              toolCall.tool_use.input,
+              llmCall.cwd ?? sessionCwd,
+              toolCall.tool_use.name,
+            ),
             turnId,
             turnNumber: turnNum,
             runtimeVersion,
             agentType,
             toolName: toolCall.tool_use.name,
             runName: toolCall.tool_use.name,
-            skillName: skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input),
+            skillName: toolCall.result?.isError
+              ? undefined
+              : skillNameFromTool(toolCall.tool_use.name, toolCall.tool_use.input),
           }),
         },
         toolMode,
@@ -366,6 +373,10 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
         runtimeVersion,
         agentType,
         modelName: llmCall.model,
+        skillName:
+          llmIndex === 0 && llmCall.userMessagesBefore?.length
+            ? typedSkillName(turn.userContent)
+            : undefined,
         usageMetadata: buildUsageMetadata(llmCall.usage),
         runSpecific: {
           ls_provider: resolveProvider(llmCall.model),

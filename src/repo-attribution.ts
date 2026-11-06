@@ -39,8 +39,8 @@ function withPinsOf(
   return scoped;
 }
 
-export function toolOrigin(toolInput: unknown, sessionCwd?: string): ToolOrigin {
-  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd) };
+export function toolOrigin(toolInput: unknown, sessionCwd?: string, toolName?: string): ToolOrigin {
+  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd, toolName) };
 }
 
 export function sessionScopedMetadata(
@@ -54,10 +54,11 @@ export function repoScopedMetadata(
   base: Record<string, unknown> | undefined,
   toolInput: unknown,
   sessionCwd?: string,
+  toolName?: string,
 ): Record<string, unknown> | undefined {
   return repositoryAttributor().toolMetadata(
     withoutUnpinnedRepositoryKeys(base),
-    toolOrigin(toolInput, sessionCwd),
+    toolOrigin(toolInput, sessionCwd, toolName),
   );
 }
 

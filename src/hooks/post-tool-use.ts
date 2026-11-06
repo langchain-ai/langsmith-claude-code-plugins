@@ -93,7 +93,7 @@ export async function main(): Promise<void> {
     ? detectWorkflowLaunch(input.tool_name, input.tool_response)
     : undefined;
 
-  const origin = toolOrigin(input.tool_input, input.cwd);
+  const origin = toolOrigin(input.tool_input, input.cwd, input.tool_name);
   let held = false;
   const heldKey = [config.stateFilePath, input.session_id, input.tool_use_id] as const;
   const hold = async (run: ClaudeRun, mode: TracingMode, _parent: string, from: ToolOrigin) => {

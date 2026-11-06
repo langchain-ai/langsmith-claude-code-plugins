@@ -406,6 +406,7 @@ function mergeAssistantChunks(chunks: AssistantMessage[]): {
   model: string;
   usage: Usage;
   effort?: string;
+  cwd?: string;
   startTime: string;
   endTime: string;
 } {
@@ -425,6 +426,7 @@ function mergeAssistantChunks(chunks: AssistantMessage[]): {
     model: stripModelDateSuffix(first.message.model),
     usage: last.message.usage, // SSE usage is cumulative; last chunk has final totals.
     effort: chunks.find((c) => c.effort)?.effort, // Only some chunks carry effort; take the first.
+    cwd: first.cwd,
     startTime: first.timestamp,
     endTime: last.timestamp,
   };
@@ -458,7 +460,9 @@ function mergeAdjacentTextBlocks(blocks: ContentBlock[]): ContentBlock[] {
 function findToolResult(
   toolUseId: string,
   toolResults: ToolResultMessage[],
-): { content: ToolResultContent; timestamp: string; agentId?: string } | undefined {
+):
+  | { content: ToolResultContent; timestamp: string; isError?: boolean; agentId?: string }
+  | undefined {
   for (const msg of toolResults) {
     for (const block of msg.message.content) {
       if (block.type === "tool_result" && block.tool_use_id === toolUseId) {
@@ -470,6 +474,7 @@ function findToolResult(
         return {
           content,
           timestamp: msg.timestamp,
+          isError: block.is_error,
           agentId: msg.toolUseResult?.agentId,
         };
       }
@@ -544,7 +549,9 @@ function groupTurns(messages: TranscriptMessage[], keepUnanswered: boolean): Tur
         const result = findToolResult(tu.id, toolResults);
         return {
           tool_use: tu,
-          result: result ? { content: result.content, timestamp: result.timestamp } : undefined,
+          result: result
+            ? { content: result.content, timestamp: result.timestamp, isError: result.isError }
+            : undefined,
           agentId: result?.agentId,
           hooks: hooksByTool.get(tu.id),
         };
@@ -555,6 +562,7 @@ function groupTurns(messages: TranscriptMessage[], keepUnanswered: boolean): Tur
         model: merged.model,
         usage: merged.usage,
         effort: merged.effort,
+        cwd: merged.cwd,
         startTime: merged.startTime,
         endTime: merged.endTime,
         toolCalls,
