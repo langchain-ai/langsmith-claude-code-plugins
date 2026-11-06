@@ -52,7 +52,14 @@ import {
   sessionScopedMetadata,
   turnScopedMetadata,
 } from "./repo-attribution.js";
-import { captureRun, captureToolRun, postedInputs, turnFiller } from "./tracing-engine.js";
+import {
+  captureRun,
+  captureToolRun,
+  operationFor,
+  postedInputs,
+  settledFromTurn,
+  turnFiller,
+} from "./tracing-engine.js";
 import { stableRunId } from "./utils/ids/run-id.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -187,6 +194,25 @@ function buildUsageMetadata(usage: Usage) {
  * Trace a turn to LangSmith.
  * @returns A map of agent_id -> tool run info (ID and dotted_order) for Task tools (used to link subagent traces)
  */
+function modelCallRunId(turn: Turn, turnRunId: string, index: number): string {
+  return stableRunId(turn.llmCalls[index].startTime, turnRunId, turn.promptId, index);
+}
+
+export async function firstUnpostedCall(
+  turn: Turn,
+  turnRunId: string,
+  rootRunId: string,
+  callCount: number,
+): Promise<number> {
+  let first = callCount;
+  while (first > 0) {
+    const runId = modelCallRunId(turn, turnRunId, first - 1);
+    if ((await operationFor(runId, rootRunId)) === "patch") break;
+    first--;
+  }
+  return first;
+}
+
 export async function traceTurn(options: TraceTurnOptions): Promise<Record<string, TaskRunEntry>> {
   const {
     turn,
@@ -205,6 +231,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     toolTracingModes,
     hookCwd,
     captureHookOutputs,
+    uploadFromCall = 0,
   } = options;
   const captured = (hooks?: HookOutput[]) => (captureHookOutputs ? hooks : undefined);
 
@@ -272,7 +299,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     const assistantInputs = { messages: [...accumulatedMessages] };
 
     // Generate run ID for this LLM call
-    const assistantRunId = stableRunId(llmCall.startTime, turnRunId, turnId, llmIndex);
+    const assistantRunId = modelCallRunId(turn, turnRunId, llmIndex);
     const assistantDottedOrderSegment = generateDottedOrderSegment(
       llmCall.startTime,
       assistantRunId,
@@ -285,7 +312,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
       const toolMode =
         tracing === "metadata" ? "metadata" : (toolTracingModes?.[toolCall.tool_use.id] ?? tracing);
       // Skip tools already traced by PostToolUse (agent tools via existingTaskRunMap,
-      // regular tools via tracedToolUseIds).
+      // any tool via tracedToolUseIds).
       if (toolCall.agentId && existingTaskRunMap?.[toolCall.agentId]) {
         logger.debug(
           `Skipping Task tool for agent ${toolCall.agentId} - already traced by PostToolUse`,
@@ -293,7 +320,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
         lastEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
         continue;
       }
-      if (!toolCall.agentId && tracedToolUseIds?.has(toolCall.tool_use.id)) {
+      if (llmIndex < uploadFromCall || tracedToolUseIds?.has(toolCall.tool_use.id)) {
         lastEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
         continue;
       }
@@ -391,23 +418,25 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
         },
       }),
     );
-    await captureRun(
-      {
-        id: assistantRunId,
-        name: ASSISTANT_RUN_NAME,
-        run_type: "llm",
-        inputs: assistantInputs,
-        outputs: { messages: outputMessages },
-        start_time: llmCall.startTime,
-        end_time: assistantEndTime,
-        parent_run_id: turnRunId,
-        trace_id: traceId!,
-        dotted_order: assistantDottedOrder,
-        metadata: assistantMetadata,
-      },
-      tracing,
-      recordRunId ?? assistantRunId,
-    );
+    if (llmIndex >= uploadFromCall) {
+      await captureRun(
+        {
+          id: assistantRunId,
+          name: ASSISTANT_RUN_NAME,
+          run_type: "llm",
+          inputs: assistantInputs,
+          outputs: { messages: outputMessages },
+          start_time: llmCall.startTime,
+          end_time: assistantEndTime,
+          parent_run_id: turnRunId,
+          trace_id: traceId!,
+          dotted_order: assistantDottedOrder,
+          metadata: assistantMetadata,
+        },
+        tracing,
+        recordRunId ?? assistantRunId,
+      );
+    }
 
     // Accumulate context for next LLM call.
     accumulatedMessages.push(...outputMessages);
@@ -591,6 +620,18 @@ export async function flushHeldToolRuns(
     for (const [id] of refs) delete runs[id];
     return { ...state, [sessionId]: { ...session, held_tool_runs: runs } };
   });
+}
+
+export async function currentTurnMetadata(
+  base: Record<string, unknown> | undefined,
+  sessionState: SessionState,
+): Promise<Record<string, unknown> | undefined> {
+  const notifiedBy = sessionState.current_notification_agent_id;
+  const notifiedFrom = notifiedBy
+    ? ((sessionState.task_run_map?.[notifiedBy]?.deferred as Record<string, unknown> | undefined)
+        ?.parent_run_id as string | undefined)
+    : undefined;
+  return settledFromTurn(base, notifiedFrom);
 }
 
 export function turnHooks(
