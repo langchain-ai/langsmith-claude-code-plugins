@@ -363,10 +363,10 @@ async function traceSubagentSoFar(
   agentId: string,
 ): Promise<void> {
   const transcriptPath = expandHome(input.transcript_path);
-  if (!transcriptPath || input.agent_type === WORKFLOW_SUBAGENT_TYPE) return;
+  if (!transcriptPath || !input.agent_type || input.agent_type === WORKFLOW_SUBAGENT_TYPE) return;
   const subagent = {
     agent_id: agentId,
-    agent_type: input.agent_type ?? "",
+    agent_type: input.agent_type,
     agent_transcript_path: subagentTranscriptPath(transcriptPath, input.session_id, agentId),
     session_id: input.session_id,
   };
@@ -414,19 +414,34 @@ async function traceSubagentSoFar(
 
   const tracing = toolCallTracing(config, input, sessionState, launch.id);
   const runId = stableRunId(startTime, input.session_id, launch.id);
+  const task = {
+    tracing,
+    run_id: runId,
+    dotted_order: `${parentDottedOrder}.${generateDottedOrderSegment(startTime, runId)}`,
+    deferred: {
+      trace_id: traceId,
+      parent_run_id: turnRunId,
+      start_time: new Date(startTime).toISOString(),
+      ...(tracing === "full" ? { inputs: launch.input } : {}),
+    },
+  };
+  if (!sessionState.opened_subagents?.[launch.id]) {
+    await atomicUpdateState(config.stateFilePath, (state) => {
+      const latest = getSessionState(state, input.session_id);
+      const opened = { agent_id: agentId, agent_type: subagent.agent_type, task };
+      return {
+        ...state,
+        [input.session_id]: {
+          ...latest,
+          opened_subagents: { ...latest.opened_subagents, [launch.id]: opened },
+          traced_tool_use_ids: [...(latest.traced_tool_use_ids ?? []), launch.id],
+        },
+      };
+    });
+  }
   await traceRunningSubagent({
     subagent,
-    taskRunInfo: {
-      tracing,
-      run_id: runId,
-      dotted_order: `${parentDottedOrder}.${generateDottedOrderSegment(startTime, runId)}`,
-      deferred: {
-        trace_id: traceId,
-        parent_run_id: turnRunId,
-        start_time: new Date(startTime).toISOString(),
-        ...(tracing === "full" ? { inputs: launch.input } : {}),
-      },
-    },
+    taskRunInfo: task,
     turns,
     sessionId: input.session_id,
     customMetadata: await currentTurnMetadata(config.customMetadata, sessionState),

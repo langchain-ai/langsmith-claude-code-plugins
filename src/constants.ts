@@ -181,6 +181,8 @@ const TRANSCRIPT_FILE_EXTENSION = ".jsonl";
 
 const DEFAULT_SUBAGENT_TYPE = "Agent";
 
+const SUBAGENT_INTERRUPTED_ERROR = "Subagent interrupted";
+
 const FIRST_LINE_CHUNK_BYTES = 64 * 1024;
 
 /** A killed subagent never fires SubagentStop, so other statuses count as completed. */
@@ -304,5 +306,6 @@ export {
   SUBAGENT_FILE_PREFIX,
   TRANSCRIPT_FILE_EXTENSION,
   DEFAULT_SUBAGENT_TYPE,
+  SUBAGENT_INTERRUPTED_ERROR,
   FIRST_LINE_CHUNK_BYTES,
 };

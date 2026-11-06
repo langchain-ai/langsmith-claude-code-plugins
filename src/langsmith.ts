@@ -22,6 +22,7 @@ import type {
   PendingSubagent,
   TaskRunEntry,
   AgentToolRunOptions,
+  OpenedSubagentsClose,
   RunningSubagentOptions,
   SubagentChainRunOptions,
   TraceTurnOptions,
@@ -46,6 +47,7 @@ import {
   ASSISTANT_RUN_NAME,
   DEFAULT_SUBAGENT_TYPE,
   SERVER_TOOL_RESULT_TYPE,
+  SUBAGENT_INTERRUPTED_ERROR,
   SESSION_START_HOOK,
   USER_PROMPT_TURN_NAME,
 } from "./constants.js";
@@ -826,6 +828,19 @@ export async function closeInterruptedTurn(options: {
       logger.error(`Failed to trace pending subagents on interrupt: ${err}`);
     }
   }
+  await closeOpenedSubagents({
+    stateFilePath,
+    sessionId,
+    turnRunId: sessionState.current_turn_run_id,
+    handledAgentIds: new Set([
+      ...pendingSubagents.map((pending) => pending.agent_id),
+      ...Object.keys(taskRunMap),
+    ]),
+    customMetadata,
+    runtimeVersion,
+    turnId,
+    turnNumber,
+  });
 
   await flushHeldToolRuns(options, sessionId, sessionState.current_turn_run_id, read.messages);
 
@@ -1057,7 +1072,6 @@ export async function traceRunningSubagent(options: RunningSubagentOptions): Pro
     subagentType,
     chainName: `${subagentType} Subagent`,
     subagentTurns: finished,
-    uploadFromCall: (finished.at(-1)?.llmCalls.length ?? 0) - 1,
     startTime: run.start_time as string,
     inputs: deferred.inputs as Record<string, unknown> | undefined,
     customMetadata: options.customMetadata,
@@ -1092,6 +1106,37 @@ function subagentChainRun(opts: SubagentChainRunOptions): ClaudeRun {
   };
 }
 
+export async function closeOpenedSubagents(options: OpenedSubagentsClose): Promise<void> {
+  const { stateFilePath, sessionId } = options;
+  const session = getSessionState(loadState(stateFilePath), sessionId);
+  const opened = Object.entries(session.opened_subagents ?? {}).filter(
+    ([, entry]) => entry.task.deferred?.parent_run_id === options.turnRunId,
+  );
+  if (opened.length === 0) return;
+  for (const [, entry] of opened) {
+    if (options.handledAgentIds.has(entry.agent_id)) continue;
+    await closeAgentToolRun({
+      tracing: entry.task.tracing,
+      sessionId,
+      agentId: entry.agent_id,
+      agentType: entry.agent_type,
+      taskRunInfo: entry.task,
+      customMetadata: options.customMetadata,
+      runtimeVersion: options.runtimeVersion,
+      turnId: options.turnId,
+      turnNumber: options.turnNumber,
+      wasOpen: false,
+      error: SUBAGENT_INTERRUPTED_ERROR,
+    });
+  }
+  await atomicUpdateState(stateFilePath, (state) => {
+    const latest = getSessionState(state, sessionId);
+    const remaining = { ...latest.opened_subagents };
+    for (const [launchId] of opened) delete remaining[launchId];
+    return { ...state, [sessionId]: { ...latest, opened_subagents: remaining } };
+  });
+}
+
 /**
  * Post an intermediate "<name> Subagent" chain run under a parent run (an Agent
  * tool run, or a dynamic Workflow run) and nest the subagent's own turns beneath
@@ -1119,7 +1164,6 @@ async function traceSubagentChain(opts: {
   turnNumber?: number;
   rootRunId?: string;
   captureHookOutputs?: boolean;
-  uploadFromCall?: number;
 }): Promise<void> {
   const filledForTheTurn = await turnFiller(opts.rootRunId);
   const chain = subagentChainRun(opts);
@@ -1139,6 +1183,16 @@ async function traceSubagentChain(opts: {
     );
   }
 
+  const lastTurn = opts.subagentTurns.at(-1);
+  const uploadFromCall =
+    opts.endTime === undefined && lastTurn
+      ? await firstUnpostedCall(
+          lastTurn,
+          chain.id,
+          opts.rootRunId ?? chain.id,
+          lastTurn.llmCalls.length,
+        )
+      : undefined;
   for (let i = 0; i < opts.subagentTurns.length; i++) {
     await traceTurn({
       tracing: opts.tracing,
@@ -1154,7 +1208,7 @@ async function traceSubagentChain(opts: {
       agentType: "subagent",
       rootRunId: opts.rootRunId,
       captureHookOutputs: opts.captureHookOutputs,
-      uploadFromCall: i === opts.subagentTurns.length - 1 ? opts.uploadFromCall : undefined,
+      uploadFromCall: i === opts.subagentTurns.length - 1 ? uploadFromCall : undefined,
     });
   }
 

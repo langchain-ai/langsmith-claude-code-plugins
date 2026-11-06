@@ -640,6 +640,43 @@ describe("a running subagent", () => {
     expect(llmOutputs).not.toContain("PUBLIC_Read");
   });
 
+  it("uploads a subagent's finished step whose own tool never fired its hook", async () => {
+    await prompt("PUBLIC_PROMPT", "A");
+    await launchSubagent();
+    subagentLine({ type: "user", message: { role: "user", content: "SUB_PROMPT" } });
+    for (const [id, text] of [
+      ["toolu_sub_one", "PUBLIC_SUB_FIRST"],
+      ["toolu_sub_two", "PUBLIC_SUB_SECOND"],
+      ["toolu_sub_three", "PUBLIC_SUB_THIRD"],
+    ]) {
+      subagentReply(
+        [
+          { type: "text", text },
+          { type: "tool_use", id, name: "Bash", input: {} },
+        ],
+        "tool_use",
+      );
+      const tool = { ...SUBAGENT, tool_name: "Bash", tool_input: {}, tool_use_id: id };
+      await hook("PreToolUse", tool);
+      const result = { type: "tool_result", tool_use_id: id, content: "done" };
+      subagentLine({ type: "user", message: { role: "user", content: [result] } });
+    }
+    await hook("PostToolUse", {
+      ...SUBAGENT,
+      tool_name: "Bash",
+      tool_input: {},
+      tool_use_id: "toolu_sub_three",
+      tool_response: {},
+    });
+
+    const llmRuns = (await sentRuns()).filter((run) => run.run_type === "llm");
+    const early = JSON.stringify(llmRuns.map((run) => run.outputs));
+
+    expect(early).toContain("PUBLIC_SUB_FIRST");
+    expect(early).toContain("PUBLIC_SUB_SECOND");
+    expect(early).not.toContain("PUBLIC_SUB_THIRD");
+  });
+
   it("closes the subagent runs it opened early once the turn ends", async () => {
     await prompt("PUBLIC_PROMPT", "A");
     await launchSubagent();
@@ -709,6 +746,38 @@ describe("a running subagent", () => {
     expect(ended("general-purpose Subagent")).toBe(true);
   });
 
+  it("closes a synchronous subagent's early runs when it never stops", async () => {
+    await prompt("PUBLIC_PROMPT", "A");
+    await launchSubagent();
+    await subagentWorks("PUBLIC");
+    const result = { type: "tool_result", tool_use_id: "toolu_task", content: "interrupted" };
+    line({ type: "user", promptId: "A", message: { role: "user", content: [result] } });
+    assistant([{ type: "text", text: "PUBLIC_ANSWER" }], "end_turn", "A");
+    await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_ANSWER" });
+
+    const sent = await sentRuns();
+    const closed = (name: string) => {
+      const id = sent.find((run) => run.name === name)?.id;
+      return sent.some((run) => run.id === id && run.end_time && run.error);
+    };
+
+    expect(closed("Agent")).toBe(true);
+    expect(closed("general-purpose Subagent")).toBe(true);
+    expect(sent.map((run) => run.name)).not.toContain("Task");
+  });
+
+  it("closes a synchronous subagent's early runs when its turn is interrupted", async () => {
+    await prompt("PUBLIC_PROMPT", "A");
+    await launchSubagent();
+    await subagentWorks("PUBLIC");
+    await prompt("PUBLIC_NEXT", "B");
+
+    const sent = await sentRuns();
+    const agent = sent.find((run) => run.name === "Agent")?.id;
+
+    expect(sent.some((run) => run.id === agent && run.end_time && run.error)).toBe(true);
+  });
+
   it("leaves a subagent alone when two launches share its prompt", async () => {
     await prompt("PUBLIC_PROMPT", "A");
     await launchSubagent("toolu_task");
@@ -737,6 +806,22 @@ describe("a running subagent", () => {
     const sent = await sentRuns();
 
     expect(sent.map((run) => run.name)).not.toContain("Agent");
+  });
+
+  it("leaves a running subagent alone when its hook does not say its type", async () => {
+    await prompt("PUBLIC_PROMPT", "A");
+    await launchSubagent();
+    const known = SUBAGENT.agent_type;
+    SUBAGENT.agent_type = "";
+    try {
+      await subagentWorks("PUBLIC");
+    } finally {
+      SUBAGENT.agent_type = known;
+    }
+
+    const sent = await sentRuns();
+
+    expect(sent.map((run) => run.name)).not.toContain("Agent Subagent");
   });
 
   it("uploads a muted turn's running subagent without its content", async () => {
