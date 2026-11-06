@@ -371,6 +371,126 @@ it("keeps a new session's open turn when another session prunes the shared state
   expect(loadState(process.env.STATE_FILE!)[SESSION]?.current_turn_run_id).toBeDefined();
 });
 
+async function twoToolCalls(text: string): Promise<void> {
+  const bash = { tool_name: "Bash", tool_input: BASH, tool_use_id: "toolu_bash" };
+  const read = { tool_name: "Read", tool_input: {}, tool_use_id: "toolu_read" };
+  const bashUse = { type: "tool_use", id: "toolu_bash", name: "Bash", input: BASH };
+  assistant([{ type: "text", text: `${text}_FIRST` }, bashUse], "tool_use", "A");
+  await hook("PreToolUse", bash);
+  user([{ type: "tool_result", tool_use_id: "toolu_bash", content: `${text}_BASH` }], "A");
+  await hook("PostToolUse", { ...bash, tool_response: { stdout: `${text}_BASH` } });
+  const readUse = { type: "tool_use", id: "toolu_read", name: "Read", input: {} };
+  assistant([{ type: "text", text: `${text}_SECOND` }, readUse], "tool_use", "A");
+  await hook("PreToolUse", read);
+  user([{ type: "tool_result", tool_use_id: "toolu_read", content: `${text}_READ` }], "A");
+}
+
+const readDone = {
+  tool_name: "Read",
+  tool_input: {},
+  tool_use_id: "toolu_read",
+  tool_response: {},
+};
+
+it("uploads a turn's finished model calls when a tool finishes, before Stop", async () => {
+  await prompt("PUBLIC_PROMPT", "A");
+  await twoToolCalls("PUBLIC");
+  await hook("PostToolUse", readDone);
+
+  const early = (await sentRuns()).filter((run) => run.run_type === "llm");
+
+  expect(early.map((run) => JSON.stringify(run.outputs))).toEqual([
+    expect.stringContaining("PUBLIC_FIRST"),
+  ]);
+
+  assistant([{ type: "text", text: "PUBLIC_ANSWER" }], "end_turn", "A");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_ANSWER" });
+  await drain();
+  const llmPosts = uploads
+    .flatMap((body: any) => body.post ?? [])
+    .filter((run) => run.run_type === "llm");
+
+  const bashPosts = uploads
+    .flatMap((body: any) => body.post ?? [])
+    .filter((run) => run.name === "Bash");
+
+  expect(new Set(llmPosts.map((run) => run.id)).size).toBe(3);
+  expect(llmPosts).toHaveLength(3);
+  expect(bashPosts).toHaveLength(1);
+});
+
+it("leaves a finished subagent call to its own hook when a later tool finishes first", async () => {
+  await prompt("PUBLIC_PROMPT", "A");
+  const agentUse = { type: "tool_use", id: "toolu_agent", name: "Task", input: { prompt: "go" } };
+  assistant([agentUse], "tool_use", "A");
+  await hook("PreToolUse", {
+    tool_name: "Task",
+    tool_input: { prompt: "go" },
+    tool_use_id: "toolu_agent",
+  });
+  line({
+    type: "user",
+    promptId: "A",
+    toolUseResult: { agentId: "agent1" },
+    message: {
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: "toolu_agent", content: "done" }],
+    },
+  });
+  const readUse = { type: "tool_use", id: "toolu_read", name: "Read", input: {} };
+  assistant([readUse], "tool_use", "A");
+  await hook("PreToolUse", { tool_name: "Read", tool_input: {}, tool_use_id: "toolu_read" });
+  user([{ type: "tool_result", tool_use_id: "toolu_read", content: "PUBLIC_READ" }], "A");
+  await hook("PostToolUse", readDone);
+
+  const sent = await sentRuns();
+
+  expect(sent.some((run) => run.run_type === "llm")).toBe(true);
+  expect(sent.filter((run) => run.name === "Task")).toEqual([]);
+});
+
+it("uploads a muted turn's finished model calls without their content", async () => {
+  await hook("UserPromptSubmit", { prompt: "/langsmith-tracing:mute" });
+  await prompt("SECRET_PROMPT", "A");
+  await twoToolCalls("SECRET");
+  await hook("PostToolUse", readDone);
+
+  const sent = await sentRuns();
+
+  expect(sent.some((run) => run.run_type === "llm")).toBe(true);
+  expect(JSON.stringify(sent)).not.toContain("SECRET");
+});
+
+it("keeps a late tool hook from filing the previous turn's model calls under the next turn", async () => {
+  await prompt("PUBLIC_PROMPT", "A");
+  await twoToolCalls("PUBLIC");
+  assistant([{ type: "text", text: "PUBLIC_ANSWER" }], "end_turn", "A");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "PUBLIC_ANSWER" });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await hook("UserPromptSubmit", { prompt: "PUBLIC_NEXT" });
+  await hook("PostToolUse", readDone);
+
+  const sent = await sentRuns();
+  const [first] = sent.filter((run) => run.name === "Claude Code Turn");
+  const parents = sent.filter((run) => run.run_type === "llm").map((run) => run.parent_run_id);
+
+  expect(new Set(parents)).toEqual(new Set([first?.id]));
+});
+
+it("waits to upload a turn's model calls until the turn before it is closed", async () => {
+  await prompt("FIRST_PROMPT", "Z");
+  assistant([{ type: "text", text: "FIRST_ANSWER" }], "end_turn", "Z");
+  await hook("Stop", { stop_hook_active: false, last_assistant_message: "FIRST_ANSWER" });
+  await prompt("PUBLIC_PROMPT", "A");
+  await twoToolCalls("PUBLIC");
+  await hook("PostToolUse", readDone);
+
+  const sent = await uploaded();
+
+  expect(sent).toContain("FIRST_ANSWER");
+  expect(sent).not.toContain("PUBLIC_FIRST");
+});
+
 it("uploads the next turn after the transcript loses lines it already read", async () => {
   await prompt("FIRST_PROMPT", "Z");
   assistant([{ type: "text", text: "FIRST_ANSWER" }], "end_turn", "Z");
