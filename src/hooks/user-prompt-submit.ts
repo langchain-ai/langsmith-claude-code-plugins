@@ -10,13 +10,14 @@
  * transcript before closing it with "User interrupt".
  */
 
+import { LOGIN_NOTICE_KIND } from "@langchain/plugins-base/auth";
 import {
-  LOGIN_NOTICE_KIND,
-  readLoginNotice,
-  sdkSetting,
-  refusedLoginReplicas,
-} from "@langchain/plugins-base/auth";
-import { shouldShowNotice } from "@langchain/plugins-base/plugin";
+  matchPromptCommand,
+  promptCommandResponse,
+  runPromptCommand,
+  shouldShowNotice,
+} from "@langchain/plugins-base/plugin";
+import type { PromptCommandResponse } from "@langchain/plugins-base/plugin";
 import { debug, error } from "../logger.js";
 import {
   closeInterruptedTurn,
@@ -47,25 +48,23 @@ import {
   KILLED_NOTIFICATION_STATUS,
   LS_INTEGRATION,
   NOTICE_KINDS,
-  MUTE_LOCKED_REPLY,
+  TRACING_COMMANDS,
+  TURN_START_FAILED,
+  RESPONSE_WRITE_FAILED,
   OWN_PROMPT_LINE_MAX_AGE_MS,
   USER_PROMPT_TURN_NAME,
 } from "../constants.js";
-import { engineStorageRoot, writerOptions } from "../engine-writer.js";
-import { hasUsableDestination } from "../utils/replicas.js";
+import { engineStorageRoot, readUploadNotices } from "../engine-writer.js";
+import { resolveTurnTracingMode } from "../tracing-mode.js";
 import { codingAgentMetadata } from "../metadata.js";
 import { loadConfig } from "../config.js";
-import { describeThreadLinks } from "../thread-link.js";
-import {
-  parseTracingCommand,
-  setThreadTracingMode,
-  getThreadTracingMode,
-} from "../tracing-policy.js";
+import { COMMAND_HANDLERS } from "../tracing-commands.js";
 import { queueClosing } from "../closing-queue.js";
 import type {
   Config,
   InterruptedClosingInput,
   QueuedClosing,
+  TracingMode,
   Turn,
   UserPromptSubmitHookInput,
 } from "../types.js";
@@ -83,53 +82,49 @@ function readStartBeforeOwnPrompt(filePath: string, promptText: string): number 
 }
 
 export async function main(): Promise<void> {
-  const hookStartTime = Date.now();
   const input: UserPromptSubmitHookInput = await readStdin();
   if (!isPayloadForHook(input, "UserPromptSubmit")) return;
 
   // Local commands must be handled before the master switch, credentials, or
-  // any tracing/turn-state work. Even failures consume the prompt, not the model.
-  const command = parseTracingCommand(input.prompt);
-  if (command) {
-    let reason: string;
-    try {
-      const commandConfig = loadConfig({ cwd: input.cwd });
-      if (command === "trace") {
-        reason = await describeThreadLinks(commandConfig, input.session_id);
-      } else if (command === "unmute" && commandConfig.mutedLocked) {
-        reason = MUTE_LOCKED_REPLY;
-      } else {
-        const mode = command === "mute" ? "metadata" : "full";
-        const result = await setThreadTracingMode(
-          commandConfig.stateFilePath,
-          input.session_id,
-          mode,
-        );
-        reason = `Thread tracing ${command === "mute" ? "muted (metadata-only)" : "unmuted (full content)"}. Preference saved for the next turn; the current turn is unchanged.`;
-        // Filesystem warnings stay in this local, blocked response, never tracing.
-        if (result?.warning) reason += ` Warning: ${result.warning}.`;
-        if (commandConfig.managedConfigProblem) {
-          reason += ` ${commandConfig.managedConfigProblem}`;
-        } else if (!commandConfig.enabled) {
-          reason += " Master tracing is disabled; this preference does not enable it.";
-        } else if (!hasUsableDestination(commandConfig)) {
-          reason += " Tracing remains inactive until credentials are configured.";
-        }
-      }
-    } catch (err) {
-      reason =
-        command === "trace"
-          ? `Could not run the trace command. Session ID: ${input.session_id}. No tracing settings were changed.`
-          : `Could not ${command} thread tracing: ${err instanceof Error ? err.message : String(err)}. Tracing may still be enabled. Command blocked; no model turn was started.`;
-    }
-    try {
-      console.log(JSON.stringify({ decision: "block", reason }));
-    } catch (err) {
-      error(`Could not write the ${command} command response: ${err}`);
-    }
-    return;
+  // any tracing/turn-state work. Even failures become the reply.
+  const command = matchPromptCommand(input.prompt, TRACING_COMMANDS);
+  const currentTurnMode = command ? threadModeBeforeCommand(input) : undefined;
+  const reply = command ? await runPromptCommand(command, COMMAND_HANDLERS, input) : undefined;
+  const output: PromptCommandResponse = {};
+  try {
+    await startTurn(input, output, currentTurnMode);
+  } catch (err) {
+    error(TURN_START_FAILED.replace("{error}", () => String(err)));
   }
+  const response =
+    reply === undefined
+      ? output
+      : promptCommandResponse(reply, {
+          systemMessages: output.systemMessage === undefined ? [] : [output.systemMessage],
+          blockReason: output.reason,
+        });
+  if (Object.keys(response).length === 0) return;
+  try {
+    console.log(JSON.stringify(response));
+  } catch (err) {
+    error(RESPONSE_WRITE_FAILED.replace("{error}", () => String(err)));
+  }
+}
 
+function threadModeBeforeCommand(input: UserPromptSubmitHookInput): TracingMode | undefined {
+  try {
+    return resolveTurnTracingMode(loadConfig({ cwd: input.cwd }), input.session_id);
+  } catch {
+    return undefined;
+  }
+}
+
+async function startTurn(
+  input: UserPromptSubmitHookInput,
+  output: PromptCommandResponse,
+  currentTurnMode: TracingMode | undefined,
+): Promise<void> {
+  const hookStartTime = Date.now();
   const config = initHook(input.cwd);
   if (!config) {
     const setup = loadConfig({ cwd: input.cwd });
@@ -139,13 +134,13 @@ export async function main(): Promise<void> {
       setup.strictAuth &&
       !setup.managedConfigProblem
     ) {
-      console.log(JSON.stringify({ decision: "block", reason: setup.credentialProblem }));
+      Object.assign(output, { decision: "block", reason: setup.credentialProblem });
       return;
     }
     if (setup.managedConfigProblem)
-      await showNotice(NOTICE_KINDS.managed, setup.managedConfigProblem, setup);
+      await showNotice(NOTICE_KINDS.managed, setup.managedConfigProblem, setup, output);
     else if (setup.enabled)
-      await showNotice(NOTICE_KINDS.credential, setup.credentialProblem, setup);
+      await showNotice(NOTICE_KINDS.credential, setup.credentialProblem, setup, output);
     return;
   }
 
@@ -164,25 +159,16 @@ export async function main(): Promise<void> {
 
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
-  const apiKey = sdkSetting(config.apiKey);
-  const loginNotice = readLoginNotice(
-    engineStorageRoot(config.stateFilePath),
-    process.env,
-    config.login || apiKey === undefined ? undefined : { apiKey, apiUrl: config.apiBaseUrl },
-    config.profile,
-  );
-  const credentialNotice = config.login
-    ? refusedLoginReplicas(writerOptions(config).replicas, config.apiBaseUrl)
-    : undefined;
+  const { loginNotice, credentialNotice } = readUploadNotices(config);
   const turnMode = config.mutedLocked
     ? "metadata"
-    : getThreadTracingMode(config.stateFilePath, input.session_id, config.defaultMuted);
+    : resolveTurnTracingMode(config, input.session_id, currentTurnMode);
   if (loginNotice && config.strictAuth) {
-    console.log(JSON.stringify({ decision: "block", reason: loginNotice }));
+    Object.assign(output, { decision: "block", reason: loginNotice });
     return;
   }
-  if (!(await showNotice(LOGIN_NOTICE_KIND, loginNotice, config))) {
-    await showNotice(NOTICE_KINDS.credential, credentialNotice, config);
+  if (!(await showNotice(LOGIN_NOTICE_KIND, loginNotice, config, output))) {
+    await showNotice(NOTICE_KINDS.credential, credentialNotice, config, output);
   }
 
   // CLI version (ls_agent_runtime_version); best-effort, Stop backfills if empty.
@@ -395,6 +381,7 @@ async function showNotice(
   kind: string,
   notice: string | undefined,
   config: Pick<Config, "noticeCooldown" | "stateFilePath">,
+  output: PromptCommandResponse,
 ): Promise<boolean> {
   const options = {
     plugin: LS_INTEGRATION,
@@ -403,7 +390,7 @@ async function showNotice(
     storageRoot: engineStorageRoot(config.stateFilePath),
   };
   if (!notice || !(await shouldShowNotice(options))) return false;
-  console.log(JSON.stringify({ systemMessage: notice }));
+  output.systemMessage = notice;
   return true;
 }
 

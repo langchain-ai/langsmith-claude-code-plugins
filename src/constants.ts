@@ -1,5 +1,6 @@
 import { COMMON_BOOLEAN_SETTINGS } from "@langchain/plugins-base/settings";
-import type { HookPlacement } from "./types.js";
+import type { PromptCommand } from "@langchain/plugins-base/plugin";
+import type { HookPlacement, TracingCommand } from "./types.js";
 
 const USER_PROMPT_TURN_NAME = "Claude Code Turn";
 const ASSISTANT_RUN_NAME = "Claude";
@@ -125,7 +126,40 @@ const NOTICE_KINDS = {
   credential: "credential-problem",
 } as const;
 const NOTICE_COOLDOWN_OFF = "off";
-const MUTE_LOCKED_REPLY = "An admin locked muting on, so this conversation stays muted.";
+const MUTE_LOCKED_REPLY =
+  "An admin has enabled muting for all sessions, so this thread cannot be unmuted.";
+const TRACING_COMMAND_PREFIX = "/langsmith-tracing:";
+const TRACING_COMMAND_ENTRIES = [
+  { name: "mute", takesArguments: false },
+  { name: "unmute", takesArguments: false },
+  { name: "trace", takesArguments: false },
+  { name: "setup", takesArguments: true },
+] as const;
+const TRACING_COMMANDS: readonly PromptCommand<TracingCommand>[] = TRACING_COMMAND_ENTRIES.map(
+  (entry) => ({ ...entry, text: `${TRACING_COMMAND_PREFIX}${entry.name}` }),
+);
+const THREAD_MODE_REPLIES = {
+  metadata: {
+    verb: "mute",
+    saved:
+      "Thread tracing muted (metadata-only). Preference saved for the next turn; the current turn is unchanged.",
+  },
+  full: {
+    verb: "unmute",
+    saved:
+      "Thread tracing unmuted (full content). Preference saved for the next turn; the current turn is unchanged.",
+  },
+} as const;
+const MASTER_DISABLED_NOTE =
+  " Tracing is disabled. Changes will not take effect until it's configured with /langsmith-tracing:setup.";
+const NO_CREDENTIALS_NOTE =
+  " No tracing credentials are configured, so this session won't be traced.";
+const MUTE_FAILED = "Could not {verb} thread tracing: {error}. Tracing may still be enabled.";
+const TRACE_FAILED =
+  "Could not run the trace command. Session ID: {sessionId}. No tracing settings were changed.";
+const HARNESS_DIRECTORY = ".claude";
+const TURN_START_FAILED = "Could not start the turn: {error}";
+const RESPONSE_WRITE_FAILED = "Could not write the UserPromptSubmit response: {error}";
 
 const BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
@@ -221,6 +255,16 @@ export {
   NOTICE_KINDS,
   NOTICE_COOLDOWN_OFF,
   MUTE_LOCKED_REPLY,
+  TRACING_COMMAND_ENTRIES,
+  TRACING_COMMANDS,
+  THREAD_MODE_REPLIES,
+  MASTER_DISABLED_NOTE,
+  NO_CREDENTIALS_NOTE,
+  MUTE_FAILED,
+  TRACE_FAILED,
+  HARNESS_DIRECTORY,
+  TURN_START_FAILED,
+  RESPONSE_WRITE_FAILED,
   MAX_LOG_BYTES,
   LOOKUP_TIMEOUT_MS,
   AGENT_ADDRESS_KIND,
