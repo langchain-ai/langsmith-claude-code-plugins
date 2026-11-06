@@ -37,6 +37,7 @@ import {
   turnHooks,
   withTaskRunHooks,
   currentTurnMetadata,
+  closeOpenedSubagents,
 } from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
@@ -267,11 +268,17 @@ export async function closeStoppedTurn(
   const processedAgentIds = new Set<string>();
   if (pendingSubagents.length > 0) {
     debug(`Processing ${pendingSubagents.length} pending subagent trace(s)`);
+    const openedTasks = Object.fromEntries(
+      Object.values(freshSession.opened_subagents ?? {}).map((entry) => [
+        entry.agent_id,
+        entry.task,
+      ]),
+    );
     await tracePendingSubagents({
       tracing: currentTracing,
       sessionId: input.session_id,
       pendingSubagents,
-      taskRunMap: mergedTaskRunMap,
+      taskRunMap: { ...openedTasks, ...mergedTaskRunMap },
       parentTraceId: sessionState.current_trace_id,
       customMetadata: sessionMetadata,
       runtimeVersion,
@@ -281,6 +288,16 @@ export async function closeStoppedTurn(
     });
     for (const sa of pendingSubagents) processedAgentIds.add(sa.agent_id);
   }
+  await closeOpenedSubagents({
+    stateFilePath: config.stateFilePath,
+    sessionId: input.session_id,
+    turnRunId: currentRunId,
+    handledAgentIds: new Set([...processedAgentIds, ...Object.keys(mergedTaskRunMap)]),
+    customMetadata: sessionMetadata,
+    runtimeVersion,
+    turnId: lastTurnId,
+    turnNumber: sessionState.current_turn_number,
+  });
 
   // Save updated state — re-read inside the lock so we don't clobber
   // concurrent writes from PostToolUse/SubagentStop.
