@@ -24475,6 +24475,8 @@ var HARNESS_DROPPED_ELEMENT = /<(system-reminder|local-command-caveat|command-me
 var HARNESS_COMMAND = /<command-name>([\s\S]*?)<\/command-name>\s*(?:<command-args>([\s\S]*?)<\/command-args>)?/g;
 var HARNESS_TASK_NOTIFICATION = /^(?:\s*<task-notification>\s*<task-id>(?:(?!<\/task-notification>)[\s\S])*<\/task-notification>)+\s*$/;
 var HARNESS_TASK_NOTIFICATION_KEPT = /<(summary|result)>([\s\S]*?)<\/\1>/g;
+var HARNESS_TASK_NOTIFICATION_BLOCK = /<task-notification>[\s\S]*?<\/task-notification>/g;
+var HARNESS_TASK_NOTIFICATION_TOOL_USE_ID = /<tool-use-id>([^<]+)<\/tool-use-id>/;
 var HARNESS_UNWRAPPED_TAG = /<\/?(bash-input|bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|<\/?pasted_content(\s[^>]*)?>/g;
 var SKILL_COMMAND_OPENING = "<command-message>";
 var SKILL_NAME_LEADING_SLASH = /^\//;
@@ -25533,6 +25535,11 @@ function advanceToolTracingProgress(session, ids, phase) {
 function pruneOldSessions(state, now = Date.now()) {
   return pruneStateEntries(state, SESSION_MAX_AGE_MS, now);
 }
+function continuesLaunchingTurn(session) {
+  const agentId = session.current_notification_agent_id;
+  const launch = agentId ? session.task_run_map?.[agentId]?.deferred : void 0;
+  return session.current_turn_run_id !== void 0 && launch?.parent_run_id === session.current_turn_run_id;
+}
 function readPosition(position) {
   const { last_line, last_line_uuid, last_line_at } = position;
   return { last_line, last_line_uuid, last_line_at };
@@ -26123,6 +26130,18 @@ function isPayloadForHook(input, event) {
 function stripHarnessMarkup(text) {
   return text.replace(HARNESS_DROPPED_ELEMENT, "").replace(HARNESS_COMMAND, (_, name, args = "") => `${name.trim()} ${args.trim()}`.trim()).replace(HARNESS_TASK_NOTIFICATION, (block) => [...block.matchAll(HARNESS_TASK_NOTIFICATION_KEPT)].map((m) => m[2].trim()).join("\n\n")).replace(HARNESS_UNWRAPPED_TAG, "").trim();
 }
+function backgroundAgentAnswers(content) {
+  if (typeof content !== "string" || !HARNESS_TASK_NOTIFICATION.test(content))
+    return void 0;
+  const answers = [];
+  for (const [block] of content.matchAll(HARNESS_TASK_NOTIFICATION_BLOCK)) {
+    const toolUseId = HARNESS_TASK_NOTIFICATION_TOOL_USE_ID.exec(block)?.[1];
+    if (!toolUseId)
+      return void 0;
+    answers.push({ toolUseId, text: stripHarnessMarkup(block) });
+  }
+  return answers;
+}
 function typedSkillName(content) {
   if (typeof content !== "string" || !content.startsWith(SKILL_COMMAND_OPENING))
     return void 0;
@@ -26353,6 +26372,13 @@ function assistantMessages(blocks) {
     messages.push({ role: "assistant", content });
   return messages;
 }
+function backgroundAgentMessages(content) {
+  return backgroundAgentAnswers(content)?.map(({ toolUseId, text }) => ({
+    role: "tool",
+    tool_call_id: toolUseId,
+    content: textBlocks(text)
+  }));
+}
 function textBlocks(content) {
   return typeof content === "string" ? [{ type: "text", text: content }] : content;
 }
@@ -26394,6 +26420,9 @@ async function traceTurn(options) {
   let traceId = providedTraceId;
   let parentDottedOrder = providedParentDottedOrder;
   const userContent = textBlocks(stripContentMarkup(turn.userContent) ?? turn.userContent);
+  const promptInputs = backgroundAgentMessages(turn.userContent) ?? [
+    { role: "user", content: userContent }
+  ];
   let turnRunId;
   let shouldCreateTurn = false;
   const turnMetadataBase = turnScopedMetadata(customMetadata, turnToolInputs(turn), sessionCwd);
@@ -26412,15 +26441,18 @@ async function traceTurn(options) {
   }
   const recordRunId = options.rootRunId ?? (agentType === "root" ? parentRunId : void 0);
   const filledForTheTurn = await turnFiller(recordRunId);
-  const accumulatedMessages = [
-    { role: "user", content: userContent }
-  ];
+  const accumulatedMessages = [...promptInputs];
   const taskRunMap = {
     ...existingTaskRunMap
   };
   let lastEndTime = turn.userTimestamp;
   for (const [llmIndex, llmCall] of turn.llmCalls.entries()) {
     for (const content of llmCall.userMessagesBefore ?? []) {
+      const answers = backgroundAgentMessages(content);
+      if (answers) {
+        accumulatedMessages.push(...answers);
+        continue;
+      }
       const shown = stripContentMarkup(content);
       if (shown)
         accumulatedMessages.push({ role: "user", content: textBlocks(shown) });
@@ -26526,7 +26558,7 @@ async function traceTurn(options) {
     lastEndTime = assistantEndTime;
   }
   if (shouldCreateTurn) {
-    const turnOutputs = accumulatedMessages.filter((m) => m.role !== "user");
+    const turnOutputs = accumulatedMessages.slice(promptInputs.length).filter((m) => m.role !== "user");
     const error2 = turn.isComplete ? void 0 : "Interrupted";
     await captureRun({
       id: turnRunId,
@@ -26534,7 +26566,7 @@ async function traceTurn(options) {
       trace_id: traceId,
       dotted_order: parentDottedOrder,
       name: USER_PROMPT_TURN_NAME,
-      inputs: withHooks({ messages: [{ role: "user", content: userContent }] }, captured(turn.hooks), "input"),
+      inputs: withHooks({ messages: promptInputs }, captured(turn.hooks), "input"),
       start_time: turn.userTimestamp,
       end_time: lastEndTime,
       outputs: withHooks({ messages: turnOutputs }, captured(turn.hooks), "output"),
@@ -26564,11 +26596,12 @@ async function patchTurnRun(id, result, eventKey = id.runId) {
     parent_run_id: id.parentRunId,
     start_time: id.startTime,
     end_time: (/* @__PURE__ */ new Date()).toISOString(),
-    ..."error" in result ? { error: result.error } : {
+    ...result.error ? { error: result.error } : {},
+    ..."lastAssistantMessage" in result ? {
       outputs: {
         messages: result.lastAssistantMessage ? [{ role: "assistant", content: result.lastAssistantMessage }] : []
       }
-    },
+    } : {},
     metadata: codingAgentMetadata({
       sessionId: id.sessionId,
       base: id.customMetadata,
@@ -26645,7 +26678,7 @@ function turnHooks(session, { messages, promptId }) {
   return hooks.length > 0 ? hooks : void 0;
 }
 async function completeTurnRun(options) {
-  await patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage }, options.eventKey);
+  await patchTurnRun(options, { lastAssistantMessage: options.lastAssistantMessage, error: options.error }, options.eventKey);
 }
 async function closeTurnRun(id, error2) {
   await patchTurnRun(id, { error: error2 });
@@ -26665,6 +26698,7 @@ async function closeInterruptedTurn(options) {
   let position = sessionState;
   let turnsTraced = 0;
   let consumedToolUseIds = [];
+  const continued = continuesLaunchingTurn(sessionState);
   let read = { messages: [] };
   let taskRunMap = sessionState.task_run_map ?? {};
   let turnId;
@@ -26682,7 +26716,7 @@ async function closeInterruptedTurn(options) {
             toolTracingModes: sessionState.tool_tracing_modes ?? {},
             turn: turns[turns.length - 1],
             sessionId,
-            turnNum: sessionState.turn_count + 1,
+            turnNum: continued ? sessionState.current_turn_number ?? sessionState.turn_count : sessionState.turn_count + 1,
             parentRunId: sessionState.current_turn_run_id,
             existingTaskRunMap: taskRunMap,
             tracedToolUseIds: new Set(sessionState.traced_tool_use_ids ?? []),
@@ -26694,7 +26728,7 @@ async function closeInterruptedTurn(options) {
             captureHookOutputs: options.captureHookOutputs
           });
           position = { last_line: lastLine, ...anchor };
-          turnsTraced = 1;
+          turnsTraced = continued ? 0 : 1;
           consumedToolUseIds = completedToolUseIds(turns);
         }
       }
@@ -26724,6 +26758,8 @@ async function closeInterruptedTurn(options) {
     }
   }
   await flushHeldToolRuns(options, sessionId, sessionState.current_turn_run_id, read.messages);
+  if (continued)
+    return { position, turnsTraced, consumedToolUseIds };
   await closeTurnRun({
     sessionId,
     customMetadata,
@@ -27059,7 +27095,8 @@ async function finalizeNotificationChain(opts) {
         await completeTurnRun({
           ...turnIdentityFromOpenTurn(toComplete, { sessionId, customMetadata: settled }),
           tracing: resolveTurnTracingMode(opts, sessionId, toComplete.tracing),
-          lastAssistantMessage: toComplete.last_assistant_message
+          lastAssistantMessage: toComplete.last_assistant_message,
+          error: toComplete.error
         });
         debug(`Completed launching turn ${toComplete.run_id} after notification chain`);
       } catch (err) {
@@ -27069,6 +27106,33 @@ async function finalizeNotificationChain(opts) {
     agentId = nextAgentId;
     interrupted = false;
   }
+}
+async function finishNotificationTurn(opts) {
+  const { stateFilePath, sessionId, agentId } = opts;
+  if (opts.interrupted) {
+    await finalizeNotificationChain(opts);
+    return;
+  }
+  let finalizeNow = false;
+  await atomicUpdateState(stateFilePath, (s) => {
+    const ss = getSessionState(s, sessionId);
+    if (ss.task_run_map?.[agentId]?.subagent_done) {
+      finalizeNow = true;
+      return s;
+    }
+    return {
+      ...s,
+      [sessionId]: {
+        ...ss,
+        notification_done_agents: [
+          ...(ss.notification_done_agents ?? []).filter((id) => id !== agentId),
+          agentId
+        ]
+      }
+    };
+  });
+  if (finalizeNow)
+    await finalizeNotificationChain(opts);
 }
 
 // dist/src/closing-queue.js
@@ -27205,10 +27269,11 @@ async function closeStoppedTurn(_id, closing, config) {
   const currentTraceId = sessionState.current_trace_id;
   const currentDottedOrder = sessionState.current_dotted_order;
   const currentParentRunId = sessionState.current_parent_run_id;
+  const continuedLaunch = continuesLaunchingTurn(sessionState);
   for (let i = 0; i < turns.length; i++) {
     const turn = turns[i];
     const isLastTurn = i === turns.length - 1;
-    const turnNum = isLastTurn && continuedRunId ? sessionState.current_turn_number ?? sessionState.turn_count : sessionState.turn_count + tracedTurns + 1;
+    const turnNum = isLastTurn && (continuedRunId || continuedLaunch) ? sessionState.current_turn_number ?? sessionState.turn_count : sessionState.turn_count + tracedTurns + 1;
     const parentRunId = isLastTurn ? currentRunId ?? continuedRunId : void 0;
     const traceId = isLastTurn ? currentTraceId : void 0;
     const dottedOrder = isLastTurn ? currentDottedOrder : void 0;
@@ -27291,7 +27356,7 @@ async function closeStoppedTurn(_id, closing, config) {
       latestState,
       input.session_id,
       furtherRead(latestSession, savedPosition),
-      Math.max(latestSession.turn_count, sessionState.turn_count + tracedTurns - (continuedRunId ? 1 : 0)),
+      Math.max(latestSession.turn_count, sessionState.turn_count + tracedTurns - (continuedRunId || continuedLaunch ? 1 : 0)),
       // Merge any late PostToolUse writes with our traced entries. allTaskRunMaps
       // wins on conflicts since it has the fully resolved data from traceTurn.
       withTaskRunHooks({ ...latestSession.task_run_map, ...allTaskRunMaps }, turns)
@@ -27308,8 +27373,21 @@ async function closeStoppedTurn(_id, closing, config) {
     const entry = currentRunId ? openTurns[currentRunId] : void 0;
     if (currentRunId && entry) {
       const remaining = entry.agent_ids.filter((id) => !processedAgentIds.has(id));
-      doneAgentsToFinalize = remaining.filter((id) => latestSession.task_run_map?.[id]?.subagent_done && notifiedWithinTurn.has(id));
-      if (remaining.length > 0) {
+      doneAgentsToFinalize = remaining.filter((id) => latestSession.task_run_map?.[id]?.subagent_done && notifiedWithinTurn.has(id) && !(continuedLaunch && id === notifAgentId));
+      if (remaining.length > 0 && continuedLaunch) {
+        openTurns[currentRunId] = {
+          ...entry,
+          agent_ids: remaining,
+          last_assistant_message: currentTracing === "metadata" ? MUTED_TRACE_CONTENT : finalMessage,
+          turn_id: lastTurnId,
+          error: void 0,
+          ...hooks && currentTracing === "full" ? { hooks: [...entry.hooks ?? [], ...hooks] } : {}
+        };
+        s.closed_turn_hooks = openTurns[currentRunId].hooks;
+        notificationToFinalize = notifAgentId;
+        notificationInterrupted = notifInterrupted;
+        debug(`Turn ${currentRunId} continued by agent ${notifAgentId}, deferring its completion`);
+      } else if (remaining.length > 0) {
         openTurns[currentRunId] = {
           ...entry,
           agent_ids: remaining,
@@ -27385,45 +27463,16 @@ async function closeStoppedTurn(_id, closing, config) {
       agentId: doneAgentId
     });
   }
-  if (notificationToFinalize && notificationInterrupted) {
-    await finalizeNotificationChain({
+  if (notificationToFinalize) {
+    await finishNotificationTurn({
       defaultMuted: config.defaultMuted,
       stateFilePath: config.stateFilePath,
       sessionId: input.session_id,
       customMetadata: config.customMetadata,
       runtimeVersion,
       agentId: notificationToFinalize,
-      interrupted: true
+      interrupted: notificationInterrupted
     });
-  } else if (notificationToFinalize) {
-    let finalizeNow = false;
-    await atomicUpdateState(config.stateFilePath, (s) => {
-      const ss = getSessionState(s, input.session_id);
-      if (ss.task_run_map?.[notificationToFinalize]?.subagent_done) {
-        finalizeNow = true;
-        return s;
-      }
-      return {
-        ...s,
-        [input.session_id]: {
-          ...ss,
-          notification_done_agents: [
-            ...(ss.notification_done_agents ?? []).filter((id) => id !== notificationToFinalize),
-            notificationToFinalize
-          ]
-        }
-      };
-    });
-    if (finalizeNow) {
-      await finalizeNotificationChain({
-        defaultMuted: config.defaultMuted,
-        stateFilePath: config.stateFilePath,
-        sessionId: input.session_id,
-        customMetadata: config.customMetadata,
-        runtimeVersion,
-        agentId: notificationToFinalize
-      });
-    }
   }
   const duration = ((Date.now() - startTime) / 1e3).toFixed(1);
   log(`Processed ${tracedTurns} turns in ${duration}s`);
@@ -27459,6 +27508,32 @@ async function closeFailedTurn(_id, closing, config) {
   const errorMessage = input.error_details ? `${input.error}: ${input.error_details}` : input.error;
   const read = config.captureHookOutputs ? readTranscript(expandHome(input.transcript_path), sessionState.last_line, void 0, turnPrompt(sessionState), sessionState) : { messages: [] };
   await flushHeldToolRuns(config, input.session_id, sessionState.current_turn_run_id, read.messages);
+  if (continuesLaunchingTurn(sessionState)) {
+    const launchingTurnId = sessionState.current_turn_run_id;
+    await atomicUpdateState(config.stateFilePath, (s) => {
+      const ss = getSessionState(s, input.session_id);
+      const entry = ss.open_turns?.[launchingTurnId];
+      if (!entry)
+        return s;
+      return {
+        ...s,
+        [input.session_id]: {
+          ...ss,
+          open_turns: { ...ss.open_turns, [launchingTurnId]: { ...entry, error: errorMessage } }
+        }
+      };
+    });
+    await finishNotificationTurn({
+      defaultMuted: config.defaultMuted,
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      customMetadata: config.customMetadata,
+      runtimeVersion: sessionState.runtime_version,
+      agentId: sessionState.current_notification_agent_id,
+      interrupted: sessionState.current_notification_interrupted
+    });
+    return;
+  }
   try {
     await captureRun(await withTurnHooks(turnHooks(sessionState, read), {
       name: USER_PROMPT_TURN_NAME,
@@ -27583,7 +27658,7 @@ async function closeEndedSession(_id, closing, config) {
     }
   }
   for (const [turnRunId, entry] of Object.entries(openTurns)) {
-    if (turnRunId === sessionState.current_turn_run_id)
+    if (turnRunId === sessionState.current_turn_run_id && !continuesLaunchingTurn(sessionState))
       continue;
     try {
       if (entry.stop_seen) {
@@ -27593,7 +27668,8 @@ async function closeEndedSession(_id, closing, config) {
             customMetadata: config.customMetadata
           }),
           tracing: resolveTurnTracingMode(config, input.session_id, entry.tracing),
-          lastAssistantMessage: entry.last_assistant_message
+          lastAssistantMessage: entry.last_assistant_message,
+          error: entry.error
         });
         debug(`Completed deferred turn ${turnRunId} on session end`);
       } else {
@@ -27964,7 +28040,15 @@ async function startTurn(input, output, currentTurnMode) {
   const notificationAgentId = agentToolRun ? notifAgentId : void 0;
   const notificationStatus = notificationAgentId ? /<status>([^<]+)<\/status>/.exec(input.prompt)?.[1] : void 0;
   const notificationInterrupted = notificationStatus?.toLowerCase() === KILLED_NOTIFICATION_STATUS;
-  if (agentToolRun) {
+  const launchingTurnId = agentToolRun?.deferred?.parent_run_id;
+  const launchingTurn = launchingTurnId ? sessionState.open_turns?.[launchingTurnId] : void 0;
+  const continuedTurn = launchingTurn?.stop_seen && launchingTurn.trace_id && launchingTurn.dotted_order ? launchingTurn : void 0;
+  if (continuedTurn) {
+    traceId = continuedTurn.trace_id;
+    parentRunId = continuedTurn.parent_run_id;
+    dottedOrder = continuedTurn.dotted_order;
+    debug(`Task-notification for agent ${notifAgentId}, continuing turn ${continuedTurn.run_id}`);
+  } else if (agentToolRun) {
     traceId = parseDottedOrder(agentToolRun.dotted_order).traceId;
     parentRunId = agentToolRun.run_id;
     dottedOrder = `${agentToolRun.dotted_order}.${segment}`;
@@ -27980,35 +28064,39 @@ async function startTurn(input, output, currentTurnMode) {
     parentRunId = void 0;
     dottedOrder = segment;
   }
-  const launchingTurnId = agentToolRun?.deferred?.parent_run_id;
   const inherited = await settledFromTurn(config.customMetadata, launchingTurnId);
-  await captureRun({
-    id: runId,
-    name: USER_PROMPT_TURN_NAME,
-    run_type: "chain",
-    inputs: {
-      messages: [{ role: "user", content: stripHarnessMarkup(input.prompt) || input.prompt }]
-    },
-    start_time: startTime,
-    trace_id: traceId,
-    dotted_order: dottedOrder,
-    ...parentRunId ? { parent_run_id: parentRunId } : {},
-    metadata: codingAgentMetadata({
-      sessionId: input.session_id,
-      base: inherited,
-      turnNumber: turnNum,
-      runtimeVersion,
-      approvalPolicy,
-      agentType: "root"
-    })
-  }, turnMode);
-  debug(`Created initial run ${runId} for turn ${turnNum}`);
+  const turnRunId = continuedTurn?.run_id ?? runId;
+  if (!continuedTurn) {
+    await captureRun({
+      id: runId,
+      name: USER_PROMPT_TURN_NAME,
+      run_type: "chain",
+      inputs: {
+        messages: backgroundAgentMessages(input.prompt) ?? [
+          { role: "user", content: stripHarnessMarkup(input.prompt) || input.prompt }
+        ]
+      },
+      start_time: startTime,
+      trace_id: traceId,
+      dotted_order: dottedOrder,
+      ...parentRunId ? { parent_run_id: parentRunId } : {},
+      metadata: codingAgentMetadata({
+        sessionId: input.session_id,
+        base: inherited,
+        turnNumber: turnNum,
+        runtimeVersion,
+        approvalPolicy,
+        agentType: "root"
+      })
+    }, turnMode);
+    debug(`Created initial run ${runId} for turn ${turnNum}`);
+  }
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);
     const inflightAgentIds = new Set(Object.values(ss.open_turns ?? {}).flatMap((t) => t.agent_ids));
     const preservedTaskRunMap = Object.fromEntries(Object.entries(ss.task_run_map ?? {}).filter(([id]) => inflightAgentIds.has(id)));
     const preservedOpenTurns = { ...ss.open_turns };
-    if (sessionState.current_turn_run_id) {
+    if (sessionState.current_turn_run_id && !continuesLaunchingTurn(sessionState)) {
       delete preservedOpenTurns[sessionState.current_turn_run_id];
     }
     return {
@@ -28017,12 +28105,12 @@ async function startTurn(input, output, currentTurnMode) {
         ...ss,
         updated: (/* @__PURE__ */ new Date()).toISOString(),
         current_turn_tracing: turnMode,
-        current_turn_run_id: runId,
+        current_turn_run_id: turnRunId,
         current_trace_id: traceId,
         current_dotted_order: dottedOrder,
         current_parent_run_id: parentRunId,
-        current_turn_number: turnNum,
-        current_turn_start: startTime,
+        current_turn_number: continuedTurn?.turn_number ?? turnNum,
+        current_turn_start: continuedTurn?.start_time ?? startTime,
         current_turn_prompt_hash: hashPrompt(input.prompt),
         // If this is a task-notification turn, record the agent it's for so Stop
         // closes that agent's tool run + launching turn once this turn completes.

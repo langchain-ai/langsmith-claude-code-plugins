@@ -236,6 +236,11 @@ export interface LLMCall {
   synthetic?: boolean;
 }
 
+export interface BackgroundAgentAnswer {
+  toolUseId: string;
+  text: string;
+}
+
 /** A complete turn: one user prompt → one or more LLM calls. */
 export interface Turn {
   userContent: string | Array<Record<string, unknown>>;
@@ -488,6 +493,7 @@ export interface OpenTurn {
    *  (handles a notification turn that spawns its own background subagent). */
   notification_for_agent_id?: string;
   hooks?: HookOutput[];
+  error?: string;
 }
 
 export type HeldRunKey = readonly [stateFilePath: string, sessionId: string, toolUseId: string];

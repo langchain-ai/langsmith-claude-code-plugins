@@ -197,6 +197,8 @@ const HARNESS_COMMAND =
 const HARNESS_TASK_NOTIFICATION =
   /^(?:\s*<task-notification>\s*<task-id>(?:(?!<\/task-notification>)[\s\S])*<\/task-notification>)+\s*$/;
 const HARNESS_TASK_NOTIFICATION_KEPT = /<(summary|result)>([\s\S]*?)<\/\1>/g;
+const HARNESS_TASK_NOTIFICATION_BLOCK = /<task-notification>[\s\S]*?<\/task-notification>/g;
+const HARNESS_TASK_NOTIFICATION_TOOL_USE_ID = /<tool-use-id>([^<]+)<\/tool-use-id>/;
 const HARNESS_UNWRAPPED_TAG =
   /<\/?(bash-input|bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|<\/?pasted_content(\s[^>]*)?>/g;
 const SKILL_COMMAND_OPENING = "<command-message>";
@@ -292,6 +294,8 @@ export {
   GLOB_CHARACTER,
   HARNESS_TASK_NOTIFICATION,
   HARNESS_TASK_NOTIFICATION_KEPT,
+  HARNESS_TASK_NOTIFICATION_BLOCK,
+  HARNESS_TASK_NOTIFICATION_TOOL_USE_ID,
   HARNESS_UNWRAPPED_TAG,
   SERVER_TOOL_RESULT_TYPE,
   WORKFLOW_TOOL_NAME,

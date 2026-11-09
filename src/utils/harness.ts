@@ -3,13 +3,15 @@ import {
   HARNESS_COMMAND,
   HARNESS_DROPPED_ELEMENT,
   HARNESS_TASK_NOTIFICATION,
+  HARNESS_TASK_NOTIFICATION_BLOCK,
   HARNESS_TASK_NOTIFICATION_KEPT,
+  HARNESS_TASK_NOTIFICATION_TOOL_USE_ID,
   HARNESS_UNWRAPPED_TAG,
   NON_SKILL_PROMPT_COMMAND,
   SKILL_COMMAND_OPENING,
   SKILL_NAME_LEADING_SLASH,
 } from "../constants.js";
-import type { HookEventName, HookEventPayload, Turn } from "../types.js";
+import type { BackgroundAgentAnswer, HookEventName, HookEventPayload, Turn } from "../types.js";
 
 export function isCursorPayload(input: unknown): boolean {
   return typeof input === "object" && input !== null && Object.hasOwn(input, CURSOR_VERSION_FIELD);
@@ -33,6 +35,19 @@ export function stripHarnessMarkup(text: string): string {
     )
     .replace(HARNESS_UNWRAPPED_TAG, "")
     .trim();
+}
+
+export function backgroundAgentAnswers(
+  content: Turn["userContent"],
+): BackgroundAgentAnswer[] | undefined {
+  if (typeof content !== "string" || !HARNESS_TASK_NOTIFICATION.test(content)) return undefined;
+  const answers: BackgroundAgentAnswer[] = [];
+  for (const [block] of content.matchAll(HARNESS_TASK_NOTIFICATION_BLOCK)) {
+    const toolUseId = HARNESS_TASK_NOTIFICATION_TOOL_USE_ID.exec(block)?.[1];
+    if (!toolUseId) return undefined;
+    answers.push({ toolUseId, text: stripHarnessMarkup(block) });
+  }
+  return answers;
 }
 
 export function typedSkillName(content: Turn["userContent"]): string | undefined {

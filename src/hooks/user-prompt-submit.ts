@@ -20,6 +20,7 @@ import {
 import type { PromptCommandResponse } from "@langchain/plugins-base/plugin";
 import { debug, error } from "../logger.js";
 import {
+  backgroundAgentMessages,
   closeInterruptedTurn,
   generateDottedOrderSegment,
   parseDottedOrder,
@@ -33,6 +34,7 @@ import {
   atomicUpdateState,
   getSessionState,
   advanceToolTracingProgress,
+  continuesLaunchingTurn,
   furtherRead,
 } from "../state.js";
 import {
@@ -250,8 +252,8 @@ async function startTurn(
   // message-format changes; a 17-char hex id colliding with human text is
   // astronomically unlikely. (Reading origin.kind from the transcript doesn't work
   // here either — the prompt's line often isn't flushed to disk when this fires.)
-  // A match nests the turn under that subagent's Agent tool run instead of
-  // cluttering the top-level turn sequence.
+  // A match continues the turn that launched the agent, or nests under its Agent
+  // tool run once that turn has closed.
   const notifAgentId = Object.keys(sessionState.task_run_map ?? {}).find((id) =>
     input.prompt.includes(id),
   );
@@ -268,7 +270,20 @@ async function startTurn(
     : undefined;
   const notificationInterrupted = notificationStatus?.toLowerCase() === KILLED_NOTIFICATION_STATUS;
 
-  if (agentToolRun) {
+  const launchingTurnId = (agentToolRun?.deferred as Record<string, unknown> | undefined)
+    ?.parent_run_id as string | undefined;
+  const launchingTurn = launchingTurnId ? sessionState.open_turns?.[launchingTurnId] : undefined;
+  const continuedTurn =
+    launchingTurn?.stop_seen && launchingTurn.trace_id && launchingTurn.dotted_order
+      ? launchingTurn
+      : undefined;
+
+  if (continuedTurn) {
+    traceId = continuedTurn.trace_id!;
+    parentRunId = continuedTurn.parent_run_id;
+    dottedOrder = continuedTurn.dotted_order!;
+    debug(`Task-notification for agent ${notifAgentId}, continuing turn ${continuedTurn.run_id}`);
+  } else if (agentToolRun) {
     traceId = parseDottedOrder(agentToolRun.dotted_order).traceId;
     parentRunId = agentToolRun.run_id;
     dottedOrder = `${agentToolRun.dotted_order}.${segment}`;
@@ -288,35 +303,37 @@ async function startTurn(
     dottedOrder = segment;
   }
 
-  const launchingTurnId = (agentToolRun?.deferred as Record<string, unknown> | undefined)
-    ?.parent_run_id as string | undefined;
   const inherited = await settledFromTurn(config.customMetadata, launchingTurnId);
+  const turnRunId = continuedTurn?.run_id ?? runId;
 
-  await captureRun(
-    {
-      id: runId,
-      name: USER_PROMPT_TURN_NAME,
-      run_type: "chain",
-      inputs: {
-        messages: [{ role: "user", content: stripHarnessMarkup(input.prompt) || input.prompt }],
+  if (!continuedTurn) {
+    await captureRun(
+      {
+        id: runId,
+        name: USER_PROMPT_TURN_NAME,
+        run_type: "chain",
+        inputs: {
+          messages: backgroundAgentMessages(input.prompt) ?? [
+            { role: "user", content: stripHarnessMarkup(input.prompt) || input.prompt },
+          ],
+        },
+        start_time: startTime,
+        trace_id: traceId,
+        dotted_order: dottedOrder,
+        ...(parentRunId ? { parent_run_id: parentRunId } : {}),
+        metadata: codingAgentMetadata({
+          sessionId: input.session_id,
+          base: inherited,
+          turnNumber: turnNum,
+          runtimeVersion,
+          approvalPolicy,
+          agentType: "root",
+        }),
       },
-      start_time: startTime,
-      trace_id: traceId,
-      dotted_order: dottedOrder,
-      ...(parentRunId ? { parent_run_id: parentRunId } : {}),
-      metadata: codingAgentMetadata({
-        sessionId: input.session_id,
-        base: inherited,
-        turnNumber: turnNum,
-        runtimeVersion,
-        approvalPolicy,
-        agentType: "root",
-      }),
-    },
-    turnMode,
-  );
-
-  debug(`Created initial run ${runId} for turn ${turnNum}`);
+      turnMode,
+    );
+    debug(`Created initial run ${runId} for turn ${turnNum}`);
+  }
 
   await atomicUpdateState(config.stateFilePath, (s) => {
     const ss = getSessionState(s, input.session_id);
@@ -334,7 +351,7 @@ async function startTurn(
       Object.entries(ss.task_run_map ?? {}).filter(([id]) => inflightAgentIds.has(id)),
     );
     const preservedOpenTurns = { ...ss.open_turns };
-    if (sessionState.current_turn_run_id) {
+    if (sessionState.current_turn_run_id && !continuesLaunchingTurn(sessionState)) {
       delete preservedOpenTurns[sessionState.current_turn_run_id];
     }
 
@@ -344,12 +361,12 @@ async function startTurn(
         ...ss,
         updated: new Date().toISOString(),
         current_turn_tracing: turnMode,
-        current_turn_run_id: runId,
+        current_turn_run_id: turnRunId,
         current_trace_id: traceId,
         current_dotted_order: dottedOrder,
         current_parent_run_id: parentRunId,
-        current_turn_number: turnNum,
-        current_turn_start: startTime,
+        current_turn_number: continuedTurn?.turn_number ?? turnNum,
+        current_turn_start: continuedTurn?.start_time ?? startTime,
         current_turn_prompt_hash: hashPrompt(input.prompt),
         // If this is a task-notification turn, record the agent it's for so Stop
         // closes that agent's tool run + launching turn once this turn completes.
