@@ -3,7 +3,7 @@
  * messages into Turns (user prompt → LLM calls → tool results).
  */
 
-import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
+import { existsSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import type { HookOutput } from "@langchain/plugins-base/tracing";
 import {
@@ -11,7 +11,6 @@ import {
   HOOK_CONTEXT_ATTACHMENT,
   HOOK_ENTRY_TYPE,
   HOOK_PLACEMENTS,
-  MAX_FULL_READ_BYTES,
   PLUGIN_CONTEXT_SUFFIX,
   SESSION_START_HOOK,
   TASK_NOTIFICATION_OPENING,
@@ -115,35 +114,9 @@ export function readTranscript(
     needle && !anchorFound
       ? readTranscript(filePath, afterLine, cutAt, turn, { last_line_at: anchor.last_line_at })
       : { ...read, anchor: lastAnchor, promptId };
-  let size: number;
-  try {
-    size = statSync(filePath).size;
-  } catch {
-    return { messages: [], lastLine: afterLine, laterPrompt, anchor };
-  }
+  if (!existsSync(filePath)) return { messages: [], lastLine: afterLine, laterPrompt, anchor };
 
-  // For small-to-moderate files, read the whole thing (simple, fast).
-  if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync(filePath, "utf-8");
-
-    const messages: TranscriptMessage[] = [];
-    let lastLine = afterLine;
-    let i = -1;
-    const rows = raw.split("\n");
-
-    for (const [row, line] of rows.entries()) {
-      if (line.trim() === "") continue;
-      i++;
-      const read = alreadyRead(i, line);
-      if (!read && endsBeforeCut(line, row === rows.length - 1)) break;
-      lastLine = i;
-      if (read) continue;
-      consume(messages, line);
-    }
-    return finish({ messages, lastLine, laterPrompt });
-  }
-
-  // Large file: stream through in chunks to avoid loading everything at once.
+  // Stream through in chunks to avoid loading everything at once.
   // We still need accurate line indices, but we only parse lines after afterLine.
   const fd = openSync(filePath, "r");
   try {
@@ -209,14 +182,7 @@ export function getTranscriptEndLine(filePath: string): number {
     const size = statSync(filePath).size;
     if (size === 0) return -1;
 
-    // Small files: simple read.
-    if (size <= MAX_FULL_READ_BYTES) {
-      const raw = readFileSync(filePath, "utf-8");
-      const lines = raw.split("\n").filter((l) => l.trim() !== "");
-      return lines.length > 0 ? lines.length - 1 : -1;
-    }
-
-    // Large files: count non-empty lines by streaming chunks.
+    // Count non-empty lines by streaming chunks.
     const fd = openSync(filePath, "r");
     try {
       const chunkSize = 1024 * 1024; // 1 MB

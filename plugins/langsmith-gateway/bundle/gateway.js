@@ -659,7 +659,6 @@ var BOOLEAN_SETTINGS = {
   capture_hook_outputs: { env: "CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS", restrictive: false }
 };
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
-var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 var LEGACY_MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 var LEGACY_EMPTY_FOLDER_IDLE_MS = 2 * 60 * 60 * 1e3;
 var LEGACY_UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";

@@ -24470,7 +24470,6 @@ var WORKSPACE_ID_VARIABLE = "LANGSMITH_WORKSPACE_ID";
 var LOOKUP_FORBIDDEN_STATUS = 403;
 var NO_PROJECT_ACCESS_REPLY = "You don't have access to this project so we're unable to generate a valid link. Please follow up with a LangSmith admin to update your access.";
 var TASK_NOTIFICATION_OPENING = "<task-notification>";
-var MAX_FULL_READ_BYTES = 50 * 1024 * 1024;
 var HARNESS_DROPPED_ELEMENT = /<(system-reminder|local-command-caveat|command-message|ide_opened_file|ide_selection)>[\s\S]*?<\/\1>/g;
 var HARNESS_COMMAND = /<command-name>([\s\S]*?)<\/command-name>\s*(?:<command-args>([\s\S]*?)<\/command-args>)?/g;
 var HARNESS_TASK_NOTIFICATION = /^(?:\s*<task-notification>\s*<task-id>(?:(?!<\/task-notification>)[\s\S])*<\/task-notification>)+\s*$/;
@@ -25636,7 +25635,7 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
 }
 
 // dist/src/transcript.js
-import { readFileSync as readFileSync16, statSync as statSync8, fstatSync as fstatSync3, openSync as openSync6, readSync, closeSync as closeSync6 } from "node:fs";
+import { existsSync as existsSync4, statSync as statSync8, fstatSync as fstatSync3, openSync as openSync6, readSync, closeSync as closeSync6 } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
 // dist/src/utils/ids/prompt-hash.js
@@ -25717,32 +25716,8 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
       lastAnchor = { last_line_uuid: message.uuid, last_line_at: message.timestamp };
   };
   const finish = (read) => needle && !anchorFound ? readTranscript(filePath, afterLine, cutAt, turn, { last_line_at: anchor.last_line_at }) : { ...read, anchor: lastAnchor, promptId };
-  let size;
-  try {
-    size = statSync8(filePath).size;
-  } catch {
+  if (!existsSync4(filePath))
     return { messages: [], lastLine: afterLine, laterPrompt, anchor };
-  }
-  if (size <= MAX_FULL_READ_BYTES) {
-    const raw = readFileSync16(filePath, "utf-8");
-    const messages = [];
-    let lastLine = afterLine;
-    let i = -1;
-    const rows = raw.split("\n");
-    for (const [row, line] of rows.entries()) {
-      if (line.trim() === "")
-        continue;
-      i++;
-      const read = alreadyRead(i, line);
-      if (!read && endsBeforeCut(line, row === rows.length - 1))
-        break;
-      lastLine = i;
-      if (read)
-        continue;
-      consume(messages, line);
-    }
-    return finish({ messages, lastLine, laterPrompt });
-  }
   const fd = openSync6(filePath, "r");
   try {
     const chunkSize = 2 * 1024 * 1024;
@@ -25795,11 +25770,6 @@ function getTranscriptEndLine(filePath) {
     const size = statSync8(filePath).size;
     if (size === 0)
       return -1;
-    if (size <= MAX_FULL_READ_BYTES) {
-      const raw = readFileSync16(filePath, "utf-8");
-      const lines = raw.split("\n").filter((l) => l.trim() !== "");
-      return lines.length > 0 ? lines.length - 1 : -1;
-    }
     const fd = openSync6(filePath, "r");
     try {
       const chunkSize = 1024 * 1024;
@@ -26993,6 +26963,47 @@ function readStdin() {
   });
 }
 
+// dist/src/background-runs.js
+function recordBackgroundRun(session, turn, backgroundId, entry) {
+  const existing = session.open_turns?.[turn.run_id];
+  return {
+    task_run_map: {
+      ...session.task_run_map,
+      [backgroundId]: entry
+    },
+    open_turns: {
+      ...session.open_turns,
+      [turn.run_id]: {
+        ...existing,
+        tracing: existing?.tracing ?? turn.tracing,
+        run_id: turn.run_id,
+        trace_id: turn.trace_id,
+        dotted_order: turn.dotted_order,
+        parent_run_id: turn.parent_run_id,
+        start_time: turn.start_time,
+        turn_number: turn.turn_number,
+        runtime_version: turn.runtime_version,
+        approval_policy: turn.approval_policy,
+        stop_seen: existing?.stop_seen ?? false,
+        agent_ids: [
+          ...(existing?.agent_ids ?? []).filter((id) => id !== backgroundId),
+          backgroundId
+        ]
+      }
+    }
+  };
+}
+function withoutTracedAgentPayloads(taskRunMap, tracedAgentIds) {
+  if (!taskRunMap)
+    return taskRunMap;
+  return Object.fromEntries(Object.entries(taskRunMap).map(([id, entry]) => {
+    if (!tracedAgentIds.has(id) || !entry.deferred)
+      return [id, entry];
+    const { inputs: _inputs, outputs: _outputs, ...kept } = entry.deferred;
+    return [id, { ...entry, deferred: kept }];
+  }));
+}
+
 // dist/src/finalize.js
 async function finalizeNotificationChain(opts) {
   const { stateFilePath, sessionId, customMetadata, runtimeVersion } = opts;
@@ -27303,6 +27314,7 @@ async function closeStoppedTurn(_id, closing, config) {
     }
     const notifAgentId = sessionState.current_notification_agent_id;
     const notifInterrupted = sessionState.current_notification_interrupted ?? false;
+    s.task_run_map = withoutTracedAgentPayloads(s.task_run_map, processedAgentIds);
     s.pending_subagent_traces = (latestSession.pending_subagent_traces ?? []).filter((sa) => !processedAgentIds.has(sa.agent_id));
     const openTurns = { ...latestSession.open_turns };
     const entry = currentRunId ? openTurns[currentRunId] : void 0;
@@ -28606,37 +28618,6 @@ async function runEngineWorker(cwd, sessionId) {
     warn(`The uploader for ${sessionId} stopped with ${result}`);
   }
   await importLegacyRuns(config, cwd);
-}
-
-// dist/src/background-runs.js
-function recordBackgroundRun(session, turn, backgroundId, entry) {
-  const existing = session.open_turns?.[turn.run_id];
-  return {
-    task_run_map: {
-      ...session.task_run_map,
-      [backgroundId]: entry
-    },
-    open_turns: {
-      ...session.open_turns,
-      [turn.run_id]: {
-        ...existing,
-        tracing: existing?.tracing ?? turn.tracing,
-        run_id: turn.run_id,
-        trace_id: turn.trace_id,
-        dotted_order: turn.dotted_order,
-        parent_run_id: turn.parent_run_id,
-        start_time: turn.start_time,
-        turn_number: turn.turn_number,
-        runtime_version: turn.runtime_version,
-        approval_policy: turn.approval_policy,
-        stop_seen: existing?.stop_seen ?? false,
-        agent_ids: [
-          ...(existing?.agent_ids ?? []).filter((id) => id !== backgroundId),
-          backgroundId
-        ]
-      }
-    }
-  };
 }
 
 // dist/src/hooks/post-tool-use.js
