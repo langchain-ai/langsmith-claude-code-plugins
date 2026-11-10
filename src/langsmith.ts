@@ -37,7 +37,13 @@ import {
   hookPlacement,
   windowHooks,
 } from "./transcript.js";
-import { loadState, getSessionState, atomicUpdateState, takeHeldRun } from "./state.js";
+import {
+  atomicUpdateState,
+  continuesLaunchingTurn,
+  getSessionState,
+  loadState,
+  takeHeldRun,
+} from "./state.js";
 import * as logger from "./logger.js";
 import {
   ASSISTANT_RUN_NAME,
@@ -45,7 +51,7 @@ import {
   SESSION_START_HOOK,
   USER_PROMPT_TURN_NAME,
 } from "./constants.js";
-import { stripContentMarkup, typedSkillName } from "./utils/harness.js";
+import { backgroundAgentAnswers, stripContentMarkup, typedSkillName } from "./utils/harness.js";
 import { codingAgentMetadata, skillNameFromTool } from "./metadata.js";
 import {
   repoScopedMetadata,
@@ -142,6 +148,16 @@ function assistantMessages(blocks: ContentBlock[]): Array<Record<string, unknown
   return messages;
 }
 
+export function backgroundAgentMessages(
+  content: Turn["userContent"],
+): Array<Record<string, unknown>> | undefined {
+  return backgroundAgentAnswers(content)?.map(({ toolUseId, text }) => ({
+    role: "tool",
+    tool_call_id: toolUseId,
+    content: textBlocks(text),
+  }));
+}
+
 function textBlocks(content: Turn["userContent"]): Array<Record<string, unknown>> {
   return typeof content === "string" ? [{ type: "text", text: content }] : content;
 }
@@ -218,6 +234,9 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
   let parentDottedOrder = providedParentDottedOrder;
 
   const userContent = textBlocks(stripContentMarkup(turn.userContent) ?? turn.userContent);
+  const promptInputs = backgroundAgentMessages(turn.userContent) ?? [
+    { role: "user", content: userContent },
+  ];
 
   // Determine the turn run ID and whether we need to create it
   let turnRunId: string;
@@ -251,9 +270,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
   const filledForTheTurn = await turnFiller(recordRunId);
 
   // Track accumulated messages for LLM input context.
-  const accumulatedMessages: Array<Record<string, unknown>> = [
-    { role: "user", content: userContent },
-  ];
+  const accumulatedMessages: Array<Record<string, unknown>> = [...promptInputs];
 
   // Track Task tool runs for subagent linking (merge with existing)
   const taskRunMap: Record<string, TaskRunEntry> = {
@@ -265,6 +282,11 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
   // 2. Process each LLM call - create as children of the turn run
   for (const [llmIndex, llmCall] of turn.llmCalls.entries()) {
     for (const content of llmCall.userMessagesBefore ?? []) {
+      const answers = backgroundAgentMessages(content);
+      if (answers) {
+        accumulatedMessages.push(...answers);
+        continue;
+      }
       const shown = stripContentMarkup(content);
       if (shown) accumulatedMessages.push({ role: "user", content: textBlocks(shown) });
     }
@@ -424,7 +446,9 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
 
   // 4. Complete the turn run (only if we created it ourselves)
   if (shouldCreateTurn) {
-    const turnOutputs = accumulatedMessages.filter((m) => m.role !== "user");
+    const turnOutputs = accumulatedMessages
+      .slice(promptInputs.length)
+      .filter((m) => m.role !== "user");
 
     // Mark incomplete turns with an error so they're visible in LangSmith
     const error = turn.isComplete ? undefined : "Interrupted";
@@ -435,11 +459,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
         trace_id: traceId,
         dotted_order: parentDottedOrder,
         name: USER_PROMPT_TURN_NAME,
-        inputs: withHooks(
-          { messages: [{ role: "user", content: userContent }] },
-          captured(turn.hooks),
-          "input",
-        ),
+        inputs: withHooks({ messages: promptInputs }, captured(turn.hooks), "input"),
         start_time: turn.userTimestamp,
         end_time: lastEndTime,
         outputs: withHooks({ messages: turnOutputs }, captured(turn.hooks), "output"),
@@ -477,7 +497,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
  */
 async function patchTurnRun(
   id: TurnRunIdentity,
-  result: { lastAssistantMessage?: string } | { error: string },
+  result: { lastAssistantMessage?: string; error?: string },
   eventKey: string = id.runId,
 ): Promise<void> {
   await captureRun(
@@ -490,15 +510,16 @@ async function patchTurnRun(
       parent_run_id: id.parentRunId,
       start_time: id.startTime!,
       end_time: new Date().toISOString(),
-      ...("error" in result
-        ? { error: result.error }
-        : {
+      ...(result.error ? { error: result.error } : {}),
+      ...("lastAssistantMessage" in result
+        ? {
             outputs: {
               messages: result.lastAssistantMessage
                 ? [{ role: "assistant", content: result.lastAssistantMessage }]
                 : [],
             },
-          }),
+          }
+        : {}),
       metadata: codingAgentMetadata({
         sessionId: id.sessionId,
         base: id.customMetadata,
@@ -634,10 +655,11 @@ export async function completeTurnRun(options: {
   approvalPolicy?: string;
   eventKey?: string;
   hooks?: HookOutput[];
+  error?: string;
 }): Promise<void> {
   await patchTurnRun(
     options,
-    { lastAssistantMessage: options.lastAssistantMessage },
+    { lastAssistantMessage: options.lastAssistantMessage, error: options.error },
     options.eventKey,
   );
 }
@@ -720,6 +742,7 @@ export async function closeInterruptedTurn(options: {
   let position: ReadPosition = sessionState;
   let turnsTraced = 0;
   let consumedToolUseIds: string[] = [];
+  const continued = continuesLaunchingTurn(sessionState);
   let read: Pick<TranscriptRead, "messages" | "promptId"> = { messages: [] };
   let taskRunMap = sessionState.task_run_map ?? {};
   // Parent turn markers to propagate onto subagent runs.
@@ -746,7 +769,9 @@ export async function closeInterruptedTurn(options: {
             toolTracingModes: sessionState.tool_tracing_modes ?? {},
             turn: turns[turns.length - 1],
             sessionId,
-            turnNum: sessionState.turn_count + 1,
+            turnNum: continued
+              ? (sessionState.current_turn_number ?? sessionState.turn_count)
+              : sessionState.turn_count + 1,
             parentRunId: sessionState.current_turn_run_id,
             existingTaskRunMap: taskRunMap,
             tracedToolUseIds: new Set(sessionState.traced_tool_use_ids ?? []),
@@ -758,7 +783,7 @@ export async function closeInterruptedTurn(options: {
             captureHookOutputs: options.captureHookOutputs,
           });
           position = { last_line: lastLine, ...anchor };
-          turnsTraced = 1;
+          turnsTraced = continued ? 0 : 1;
           consumedToolUseIds = completedToolUseIds(turns);
         }
       }
@@ -796,6 +821,7 @@ export async function closeInterruptedTurn(options: {
   await flushHeldToolRuns(options, sessionId, sessionState.current_turn_run_id, read.messages);
 
   // Close the parent turn run with the error message.
+  if (continued) return { position, turnsTraced, consumedToolUseIds };
   await closeTurnRun(
     {
       sessionId,

@@ -17,6 +17,8 @@ import { readTranscript, turnPrompt } from "../transcript.js";
 import { expandHome, initHook } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
+import { finishNotificationTurn } from "../finalize.js";
+import { atomicUpdateState, continuesLaunchingTurn, getSessionState } from "../state.js";
 
 import { USER_PROMPT_TURN_NAME } from "../constants.js";
 import { codingAgentMetadata } from "../metadata.js";
@@ -68,6 +70,31 @@ export async function closeFailedTurn(
     sessionState.current_turn_run_id,
     read.messages,
   );
+  if (continuesLaunchingTurn(sessionState)) {
+    const launchingTurnId = sessionState.current_turn_run_id!;
+    await atomicUpdateState(config.stateFilePath, (s) => {
+      const ss = getSessionState(s, input.session_id);
+      const entry = ss.open_turns?.[launchingTurnId];
+      if (!entry) return s;
+      return {
+        ...s,
+        [input.session_id]: {
+          ...ss,
+          open_turns: { ...ss.open_turns, [launchingTurnId]: { ...entry, error: errorMessage } },
+        },
+      };
+    });
+    await finishNotificationTurn({
+      defaultMuted: config.defaultMuted,
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      customMetadata: config.customMetadata,
+      runtimeVersion: sessionState.runtime_version,
+      agentId: sessionState.current_notification_agent_id!,
+      interrupted: sessionState.current_notification_interrupted,
+    });
+    return;
+  }
 
   try {
     await captureRun(

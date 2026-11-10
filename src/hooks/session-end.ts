@@ -17,7 +17,14 @@ import {
   completeTurnRun,
   turnIdentityFromOpenTurn,
 } from "../langsmith.js";
-import { loadState, atomicUpdateState, getSessionState, furtherRead, dropHeld } from "../state.js";
+import {
+  loadState,
+  atomicUpdateState,
+  getSessionState,
+  furtherRead,
+  dropHeld,
+  continuesLaunchingTurn,
+} from "../state.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { initTracing } from "../tracing-engine.js";
 import { queueClosing } from "../closing-queue.js";
@@ -169,11 +176,13 @@ export async function closeEndedSession(
   //
   // A deferred turn that has stop_seen=true already produced its main response
   // (Stop ran and stashed last_assistant_message); only its background subagents
-  // were still running. Complete it with its real outputs — it succeeded, it is
-  // NOT an error. Only a turn whose Stop never fired (stop_seen=false, e.g. the
-  // turn was interrupted before completing) is closed with an error.
+  // were still running. Complete it with its real outputs, plus the error of an
+  // agent's follow-up that failed. Only a turn whose Stop never fired
+  // (stop_seen=false, e.g. the turn was interrupted before completing) is closed
+  // with an error.
   for (const [turnRunId, entry] of Object.entries(openTurns)) {
-    if (turnRunId === sessionState.current_turn_run_id) continue; // closed above
+    if (turnRunId === sessionState.current_turn_run_id && !continuesLaunchingTurn(sessionState))
+      continue; // closed above
     try {
       if (entry.stop_seen) {
         await completeTurnRun({
@@ -183,6 +192,7 @@ export async function closeEndedSession(
           }),
           tracing: resolveTurnTracingMode(config, input.session_id, entry.tracing),
           lastAssistantMessage: entry.last_assistant_message,
+          error: entry.error,
         });
         debug(`Completed deferred turn ${turnRunId} on session end`);
       } else {

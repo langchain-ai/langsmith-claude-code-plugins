@@ -26,6 +26,7 @@ import {
   furtherRead,
   pruneOldSessions,
   advanceToolTracingProgress,
+  continuesLaunchingTurn,
   pruneHeldRuns,
 } from "../state.js";
 import {
@@ -40,7 +41,7 @@ import {
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
-import { finalizeNotificationChain } from "../finalize.js";
+import { finalizeNotificationChain, finishNotificationTurn } from "../finalize.js";
 import { initTracing, settledFromTurn } from "../tracing-engine.js";
 import { MUTED_TRACE_CONTENT } from "@langchain/plugins-base/privacy";
 import { queueClosing, turnClosedReset } from "../closing-queue.js";
@@ -195,12 +196,13 @@ export async function closeStoppedTurn(
   const currentTraceId = sessionState.current_trace_id;
   const currentDottedOrder = sessionState.current_dotted_order;
   const currentParentRunId = sessionState.current_parent_run_id;
+  const continuedLaunch = continuesLaunchingTurn(sessionState);
 
   for (let i = 0; i < turns.length; i++) {
     const turn = turns[i];
     const isLastTurn = i === turns.length - 1;
     const turnNum =
-      isLastTurn && continuedRunId
+      isLastTurn && (continuedRunId || continuedLaunch)
         ? (sessionState.current_turn_number ?? sessionState.turn_count)
         : sessionState.turn_count + tracedTurns + 1;
 
@@ -343,7 +345,7 @@ export async function closeStoppedTurn(
       furtherRead(latestSession, savedPosition),
       Math.max(
         latestSession.turn_count,
-        sessionState.turn_count + tracedTurns - (continuedRunId ? 1 : 0),
+        sessionState.turn_count + tracedTurns - (continuedRunId || continuedLaunch ? 1 : 0),
       ),
       // Merge any late PostToolUse writes with our traced entries. allTaskRunMaps
       // wins on conflicts since it has the fully resolved data from traceTurn.
@@ -380,9 +382,28 @@ export async function closeStoppedTurn(
       // finalize them after the lock so the turn doesn't hang. Agents finished but
       // awaiting a *separate* notification turn are left for that turn to finalize.
       doneAgentsToFinalize = remaining.filter(
-        (id) => latestSession.task_run_map?.[id]?.subagent_done && notifiedWithinTurn.has(id),
+        (id) =>
+          latestSession.task_run_map?.[id]?.subagent_done &&
+          notifiedWithinTurn.has(id) &&
+          !(continuedLaunch && id === notifAgentId),
       );
-      if (remaining.length > 0) {
+      if (remaining.length > 0 && continuedLaunch) {
+        openTurns[currentRunId] = {
+          ...entry,
+          agent_ids: remaining,
+          last_assistant_message:
+            currentTracing === "metadata" ? MUTED_TRACE_CONTENT : finalMessage,
+          turn_id: lastTurnId,
+          error: undefined,
+          ...(hooks && currentTracing === "full"
+            ? { hooks: [...(entry.hooks ?? []), ...hooks] }
+            : {}),
+        };
+        s.closed_turn_hooks = openTurns[currentRunId].hooks;
+        notificationToFinalize = notifAgentId;
+        notificationInterrupted = notifInterrupted;
+        debug(`Turn ${currentRunId} continued by agent ${notifAgentId}, deferring its completion`);
+      } else if (remaining.length > 0) {
         openTurns[currentRunId] = {
           ...entry,
           agent_ids: remaining,
@@ -471,55 +492,16 @@ export async function closeStoppedTurn(
     });
   }
 
-  // If this was a task-notification turn that completed now, finalize the agent's
-  // chain — but only once its subagent has actually been traced. SubagentStop and
-  // this notification turn fire in non-deterministic order; we close the agent's
-  // (open) tool run + launching turn from whichever runs LAST. Here (notification
-  // side): if SubagentStop already traced the agent (task_run_map subagent_done is
-  // set), we're last → finalize. Otherwise record this side as done and let
-  // SubagentStop do it.
-  if (notificationToFinalize && notificationInterrupted) {
-    // The subagent was killed/interrupted: SubagentStop never fires for it, so
-    // there's no join to wait on — finalize now, marking its tool run interrupted,
-    // rather than leaving the launching turn open until SessionEnd.
-    await finalizeNotificationChain({
+  if (notificationToFinalize) {
+    await finishNotificationTurn({
       defaultMuted: config.defaultMuted,
       stateFilePath: config.stateFilePath,
       sessionId: input.session_id,
       customMetadata: config.customMetadata,
       runtimeVersion,
       agentId: notificationToFinalize,
-      interrupted: true,
+      interrupted: notificationInterrupted,
     });
-  } else if (notificationToFinalize) {
-    let finalizeNow = false;
-    await atomicUpdateState(config.stateFilePath, (s) => {
-      const ss = getSessionState(s, input.session_id);
-      if (ss.task_run_map?.[notificationToFinalize!]?.subagent_done) {
-        finalizeNow = true;
-        return s;
-      }
-      return {
-        ...s,
-        [input.session_id]: {
-          ...ss,
-          notification_done_agents: [
-            ...(ss.notification_done_agents ?? []).filter((id) => id !== notificationToFinalize),
-            notificationToFinalize!,
-          ],
-        },
-      };
-    });
-    if (finalizeNow) {
-      await finalizeNotificationChain({
-        defaultMuted: config.defaultMuted,
-        stateFilePath: config.stateFilePath,
-        sessionId: input.session_id,
-        customMetadata: config.customMetadata,
-        runtimeVersion,
-        agentId: notificationToFinalize,
-      });
-    }
   }
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);

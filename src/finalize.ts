@@ -131,6 +131,7 @@ export async function finalizeNotificationChain(opts: {
           ...turnIdentityFromOpenTurn(toComplete, { sessionId, customMetadata: settled }),
           tracing: resolveTurnTracingMode(opts, sessionId, toComplete.tracing),
           lastAssistantMessage: toComplete.last_assistant_message,
+          error: toComplete.error,
         });
         logger.debug(`Completed launching turn ${toComplete.run_id} after notification chain`);
       } catch (err) {
@@ -144,4 +145,43 @@ export async function finalizeNotificationChain(opts: {
     agentId = nextAgentId;
     interrupted = false;
   }
+}
+
+export async function finishNotificationTurn(
+  opts: Parameters<typeof finalizeNotificationChain>[0],
+): Promise<void> {
+  const { stateFilePath, sessionId, agentId } = opts;
+  // If this was a task-notification turn that completed now, finalize the agent's
+  // chain — but only once its subagent has actually been traced. SubagentStop and
+  // this notification turn fire in non-deterministic order; we close the agent's
+  // (open) tool run + launching turn from whichever runs LAST. Here (notification
+  // side): if SubagentStop already traced the agent (task_run_map subagent_done is
+  // set), we're last → finalize. Otherwise record this side as done and let
+  // SubagentStop do it.
+  if (opts.interrupted) {
+    // The subagent was killed/interrupted: SubagentStop never fires for it, so
+    // there's no join to wait on — finalize now, marking its tool run interrupted,
+    // rather than leaving the launching turn open until SessionEnd.
+    await finalizeNotificationChain(opts);
+    return;
+  }
+  let finalizeNow = false;
+  await atomicUpdateState(stateFilePath, (s) => {
+    const ss = getSessionState(s, sessionId);
+    if (ss.task_run_map?.[agentId]?.subagent_done) {
+      finalizeNow = true;
+      return s;
+    }
+    return {
+      ...s,
+      [sessionId]: {
+        ...ss,
+        notification_done_agents: [
+          ...(ss.notification_done_agents ?? []).filter((id) => id !== agentId),
+          agentId,
+        ],
+      },
+    };
+  });
+  if (finalizeNow) await finalizeNotificationChain(opts);
 }

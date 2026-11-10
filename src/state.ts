@@ -104,6 +104,15 @@ export function pruneOldSessions(state: TracingState, now: number = Date.now()):
   return pruneStateEntries(state, SESSION_MAX_AGE_MS, now);
 }
 
+export function continuesLaunchingTurn(session: SessionState): boolean {
+  const agentId = session.current_notification_agent_id;
+  const launch = agentId ? session.task_run_map?.[agentId]?.deferred : undefined;
+  return (
+    session.current_turn_run_id !== undefined &&
+    launch?.parent_run_id === session.current_turn_run_id
+  );
+}
+
 export function readPosition(position: ReadPosition): ReadPosition {
   const { last_line, last_line_uuid, last_line_at } = position;
   return { last_line, last_line_uuid, last_line_at };

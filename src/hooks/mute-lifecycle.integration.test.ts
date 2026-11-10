@@ -885,6 +885,235 @@ describe("closing hooks hand their work to the uploader", () => {
     expect(h.errors).toEqual([]);
   });
 
+  it("a second agent's answer cutting off the first still closes their launching turn once, cleanly", async () => {
+    reset("full");
+    await hook("prompt");
+    const launch = h.state.session.current_turn_run_id;
+    for (const [id, agentId] of [
+      ["a", "first"],
+      ["b", "second"],
+    ]) {
+      const input = { tool_use_id: id, tool_name: "Task" };
+      await hook("pre", input);
+      await hook("post", { ...input, tool_response: { agentId, status: "async_launched" } });
+    }
+    h.messages = transcript({ id: "a", name: "Task", agentId: "first" });
+    await hook("stop");
+    for (const agentId of ["first", "second"]) {
+      await hook("agent", {
+        agent_id: agentId,
+        agent_type: "Explore",
+        agent_transcript_path: "/a",
+      });
+    }
+    await hook("prompt", { prompt: "notification first" });
+    h.messages = transcript(undefined, "notification first");
+    await hook("prompt", { prompt: "notification second" });
+    expect(h.state.session.open_turns?.[launch!]?.agent_ids).toEqual(["second"]);
+    const cutOff = h.operations.filter((op) => op.config.run_type === "llm").at(-1);
+    expect(cutOff?.config.extra.metadata.turn_number).toBe(1);
+    h.messages = transcript(undefined, "notification second");
+    await hook("stop");
+
+    const launchPatches = h.operations.filter(
+      (op) => op.action === "patch" && op.config.id === launch,
+    );
+    expect(launchPatches.map((op) => op.config.error)).toEqual([undefined]);
+    expect(h.state.session.open_turns).toEqual({});
+    expect(h.state.session.notification_done_agents ?? []).toEqual([]);
+    await hook("prompt", { prompt: "next" });
+    expect(h.state.session.current_turn_number).toBe(2);
+    expect(h.errors).toEqual([]);
+  });
+
+  async function continueLaunchOf(agents: string[]) {
+    await hook("prompt");
+    const launch = h.state.session.current_turn_run_id;
+    for (const agentId of agents) {
+      const input = { tool_use_id: agentId, tool_name: "Task" };
+      await hook("pre", input);
+      await hook("post", { ...input, tool_response: { agentId, status: "async_launched" } });
+    }
+    h.messages = transcript({ id: agents[0], name: "Task", agentId: agents[0] });
+    await hook("stop");
+    await hook("agent", {
+      agent_id: agents[0],
+      agent_type: "Explore",
+      agent_transcript_path: "/a",
+    });
+    await hook("prompt", { prompt: `notification ${agents[0]}` });
+    h.messages = transcript(undefined, `notification ${agents[0]}`);
+    return () => h.operations.filter((op) => op.action === "patch" && op.config.id === launch);
+  }
+
+  it("a session ending during an agent's follow-up still closes the launching turn", async () => {
+    reset("full");
+    const launchPatches = await continueLaunchOf(["first"]);
+    await hook("end", { reason: "other" });
+    expect(launchPatches().map((op) => op.config.error)).toEqual([undefined]);
+  });
+
+  it("a failed model call in an agent's follow-up keeps that agent's trace and fails the launching turn last", async () => {
+    reset("full");
+    await hook("prompt");
+    const launch = h.state.session.current_turn_run_id;
+    for (const agentId of ["first", "second"]) {
+      const input = { tool_use_id: agentId, tool_name: "Task" };
+      await hook("pre", input);
+      await hook("post", { ...input, tool_response: { agentId, status: "async_launched" } });
+    }
+    h.messages = transcript({ id: "first", name: "Task", agentId: "first" });
+    await hook("stop");
+    await hook("prompt", { prompt: "notification first" });
+    h.messages = transcript(undefined, "notification first");
+    await hook("failure", { error: "rate_limit" });
+    const launchPatches = () =>
+      h.operations.filter((op) => op.action === "patch" && op.config.id === launch);
+    expect(launchPatches()).toEqual([]);
+    for (const agentId of ["first", "second"]) {
+      await hook("agent", {
+        agent_id: agentId,
+        agent_type: "Explore",
+        agent_transcript_path: "/a",
+      });
+    }
+    expect(h.operations.filter((op) => op.config.name === "Explore Subagent")).toHaveLength(2);
+    await hook("prompt", { prompt: "notification second" });
+    h.messages = transcript(undefined, "notification second");
+    await hook("stop");
+    expect(launchPatches().map((op) => op.config.error)).toEqual([undefined]);
+    expect(h.state.session.open_turns).toEqual({});
+  });
+
+  it.each(["its agent finishing", "the session ending"])(
+    "a failed follow-up closes the launching turn with its reply and the error on %s",
+    async (ending) => {
+      reset("full");
+      const launchPatches = await continueLaunchOf(
+        ending === "its agent finishing" ? ["first"] : ["first", "second"],
+      );
+      await hook("failure", { error: "rate_limit" });
+      if (ending === "the session ending") await hook("end", { reason: "other" });
+      expect(launchPatches().map((op) => [op.config.error, op.config.outputs])).toEqual([
+        ["rate_limit", { messages: [{ role: "assistant", content: privateText }] }],
+      ]);
+    },
+  );
+
+  it("a failed follow-up for a killed agent closes the launching turn without waiting", async () => {
+    reset("full");
+    await hook("prompt");
+    const launch = h.state.session.current_turn_run_id;
+    const input = { tool_use_id: "task", tool_name: "Task" };
+    await hook("pre", input);
+    await hook("post", { ...input, tool_response: { agentId: "bg", status: "async_launched" } });
+    h.messages = transcript({ id: "task", name: "Task", agentId: "bg" });
+    await hook("stop");
+    await hook("prompt", { prompt: "notification bg <status>killed</status>" });
+    h.messages = transcript(undefined, "notification bg <status>killed</status>");
+    await hook("failure", { error: "rate_limit" });
+    const launchPatches = h.operations.filter(
+      (op) => op.action === "patch" && op.config.id === launch,
+    );
+    expect(launchPatches.map((op) => op.config.error)).toEqual(["rate_limit"]);
+    expect(h.state.session.open_turns).toEqual({});
+  });
+
+  it.each(["full", "metadata"] as const)(
+    "a %s follow-up keeps the launching turn's hooks, also through a blocking Stop",
+    async (followUp) => {
+      reset("full", true);
+      await hook("prompt");
+      const launch = h.state.session.current_turn_run_id;
+      const input = { tool_use_id: "task", tool_name: "Task" };
+      await hook("pre", input);
+      await hook("post", { ...input, tool_response: { agentId: "bg", status: "async_launched" } });
+      const [user, ...rest] = transcript({ id: "task", name: "Task", agentId: "bg" });
+      h.messages = [user, hookEntry("UserPromptSubmit", "a"), ...rest, hookEntry("Stop", "b")];
+      await hook("stop");
+      await hook("agent", { agent_id: "bg", agent_type: "Explore", agent_transcript_path: "/a" });
+      h.policy = followUp;
+      await hook("prompt", { prompt: "notification bg" });
+      const [answer, ...reply] = transcript(undefined, "notification bg");
+      h.messages = [answer, hookEntry("UserPromptSubmit", "c"), ...reply, hookEntry("Stop", "d")];
+      await hook("stop");
+      const followUpCall = h.operations.filter((op) => op.config.run_type === "llm").at(-1);
+      expect(followUpCall?.config.extra.metadata.turn_number).toBe(1);
+      h.messages = [...transcript(undefined, "again").slice(1), hookEntry("Stop", "e")];
+      await hook("stop", { stop_hook_active: true });
+      const root = h.operations.filter((op) => op.action === "patch" && op.config.id === launch);
+      const kept = followUp === "full" ? 2 : 1;
+      expect(root[0].config.inputs.hooks).toEqual(Array(kept).fill(promptHook));
+      expect(root.at(-1)?.config.inputs.hooks).toEqual(
+        followUp === "full" ? [promptHook, promptHook] : undefined,
+      );
+      expect(h.state.session.turn_count).toBe(1);
+      expect(h.errors).toEqual([]);
+    },
+  );
+
+  it("nests an answer under its call when the user interrupted the launching turn", async () => {
+    reset("full");
+    await hook("prompt");
+    const launch = h.state.session.current_turn_run_id;
+    const input = { tool_use_id: "task", tool_name: "Task" };
+    await hook("pre", input);
+    await hook("post", { ...input, tool_response: { agentId: "bg", status: "async_launched" } });
+    const agentRun = h.state.session.task_run_map!.bg.run_id;
+    await hook("agent", { agent_id: "bg", agent_type: "Explore", agent_transcript_path: "/a" });
+    const from = h.operations.length;
+    await hook("prompt", { prompt: "notification bg" });
+    expect(h.state.session.current_turn_run_id).not.toBe(launch);
+    expect(h.operations.slice(from).find((op) => op.action === "post")?.config.parent_run_id).toBe(
+      agentRun,
+    );
+  });
+
+  it("closes a nested answer turn at session end while its launching turn's Stop is still queued", async () => {
+    reset("full");
+    await hook("prompt");
+    const launch = h.state.session.current_turn_run_id;
+    const input = { tool_use_id: "task", tool_name: "Task" };
+    await hook("pre", input);
+    await hook("post", { ...input, tool_response: { agentId: "bg", status: "async_launched" } });
+    h.messages = transcript({ id: "task", name: "Task", agentId: "bg" });
+    await hook("stop", {}, { closings: false });
+    await hook(
+      "agent",
+      { agent_id: "bg", agent_type: "Explore", agent_transcript_path: "/a" },
+      {
+        closings: false,
+      },
+    );
+    await hook("prompt", { prompt: "notification bg" });
+    const answerTurn = h.state.session.current_turn_run_id;
+    expect(answerTurn).not.toBe(launch);
+    h.messages = transcript(undefined, "notification bg");
+    await hook("end", { reason: "other" });
+    expect(h.operations.some((op) => op.action === "patch" && op.config.id === answerTurn)).toBe(
+      true,
+    );
+  });
+
+  it("labels an answer as its call's result when the launching turn already closed", async () => {
+    reset("full");
+    await hook("prompt");
+    const input = { tool_use_id: "task", tool_name: "Task" };
+    await hook("pre", input);
+    await hook("post", { ...input, tool_response: { agentId: "bg", status: "async_launched" } });
+    h.state.session.open_turns = {};
+    const agentRun = h.state.session.task_run_map!.bg.run_id;
+    const from = h.operations.length;
+    const answer =
+      "<task-notification>\n<task-id>bg</task-id>\n<tool-use-id>task</tool-use-id>\n" +
+      "<status>completed</status>\n<summary>Done</summary>\n</task-notification>";
+    await hook("prompt", { prompt: answer });
+    expect(h.operations[from].config.parent_run_id).toBe(agentRun);
+    expect(h.operations[from].config.inputs.messages).toEqual([
+      { role: "tool", tool_call_id: "task", content: [{ type: "text", text: "Done" }] },
+    ]);
+  });
+
   it("an interrupted turn's queued closing leaves the next turn's synchronous subagent alone", async () => {
     reset("full");
     await hook("prompt");
@@ -1565,9 +1794,7 @@ describe("privacy propagation without lifecycle changes", () => {
     const from = h.operations.length;
     await hook("prompt", { prompt: "notification background " + privateText });
     expect(h.state.session.current_turn_tracing).toBe(next);
-    expect(h.operations[from].config.parent_run_id).toBe(
-      before.session.task_run_map!.background.run_id,
-    );
+    expect(h.operations.slice(from)).toEqual([]);
     const agentFrom = h.operations.length;
     await hook("agent", {
       agent_id: "background",
@@ -1586,18 +1813,22 @@ describe("privacy propagation without lifecycle changes", () => {
     const stopFrom = h.operations.length;
     h.messages = transcript(undefined, "notification background " + privateText);
     await hook("stop");
-    const notificationOps = [
-      h.operations[from],
-      ...h.operations
-        .slice(stopFrom)
-        .filter(
-          (op) =>
-            op.config.id !== oldRoot &&
-            op.config.id !== before.session.task_run_map!.background.run_id,
-        ),
-    ];
-    if (next === "metadata") expectPrivate(notificationOps);
-    else
+    const stopOps = h.operations.slice(stopFrom);
+    const notificationOps = stopOps.filter(
+      (op) =>
+        op.config.id !== oldRoot && op.config.id !== before.session.task_run_map!.background.run_id,
+    );
+    expect(notificationOps.find((op) => op.config.run_type === "llm")?.config.parent_run_id).toBe(
+      oldRoot,
+    );
+    const rootOutputs = stopOps
+      .filter((op) => op.config.id === oldRoot)
+      .map((op) => op.config.outputs);
+    expect(rootOutputs).not.toEqual([]);
+    if (next === "metadata") {
+      expectPrivate(notificationOps);
+      expect(JSON.stringify(rootOutputs)).not.toContain(privateText);
+    } else
       expect(notificationOps.every((op) => !op.config.extra?.metadata?.ls_tracing_mode)).toBe(true);
     expect(h.errors).toEqual([]);
   });

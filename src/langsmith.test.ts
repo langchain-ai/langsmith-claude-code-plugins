@@ -502,6 +502,40 @@ describe("traceTurn", () => {
     ]);
   });
 
+  it("shows a background agent's answer as the result of the call that launched it", async () => {
+    const answer = (taskId: string, toolUseId: string) =>
+      `<task-notification>\n<task-id>${taskId}</task-id>\n` +
+      (toolUseId ? `<tool-use-id>${toolUseId}</tool-use-id>\n` : "") +
+      `<status>completed</status>\n<summary>Agent ${taskId} finished</summary>\n` +
+      `<result>Found ${taskId}</result>\n</task-notification>`;
+    const turn: Turn = {
+      userContent: answer("a", "toolu_a") + "\n" + answer("b", "toolu_b"),
+      userTimestamp: "2025-01-01T00:00:00Z",
+      llmCalls: [
+        call([{ type: "text", text: "Done." }], {
+          userMessagesBefore: [answer("c", "toolu_c"), answer("d", "")],
+        }),
+      ],
+      isComplete: true,
+    };
+
+    await traceTurn({ turn, sessionId: "session-123", turnNum: 1 });
+
+    const shown = (id: string) => [{ type: "text", text: `Agent ${id} finished\n\nFound ${id}` }];
+    expect(llmRuns()[0].inputs.messages).toEqual([
+      { role: "tool", tool_call_id: "toolu_a", content: shown("a") },
+      { role: "tool", tool_call_id: "toolu_b", content: shown("b") },
+      { role: "tool", tool_call_id: "toolu_c", content: shown("c") },
+      { role: "user", content: shown("d") },
+    ]);
+    expect(created(USER_PROMPT_TURN_NAME).inputs.messages).toEqual(
+      llmRuns()[0].inputs.messages.slice(0, 2),
+    );
+    expect(
+      created(USER_PROMPT_TURN_NAME).outputs.messages.map((m: { role: string }) => m.role),
+    ).toEqual(["tool", "assistant"]);
+  });
+
   it("names the skill on the model call that receives a typed skill's instructions", async () => {
     const typed =
       "<command-message>review-pr</command-message>\n<command-name>/review-pr</command-name>";
