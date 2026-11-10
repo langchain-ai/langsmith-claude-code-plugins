@@ -6,6 +6,7 @@
 import { readFileSync, statSync, fstatSync, openSync, readSync, closeSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import type { HookOutput } from "@langchain/plugins-base/tracing";
+import { dirname, join } from "node:path";
 import {
   ASYNC_HOOK_ATTACHMENT,
   HOOK_CONTEXT_ATTACHMENT,
@@ -14,10 +15,14 @@ import {
   MAX_FULL_READ_BYTES,
   PLUGIN_CONTEXT_SUFFIX,
   SESSION_START_HOOK,
+  SUBAGENT_FILE_PREFIX,
+  SUBAGENT_METADATA_EXTENSION,
+  SUBAGENTS_DIR_NAME,
   TASK_NOTIFICATION_OPENING,
+  TRANSCRIPT_FILE_EXTENSION,
   TURN_INPUT_HOOK,
 } from "./constants.js";
-import { readJson } from "./utils/files.js";
+import { readJson, readText } from "./utils/files.js";
 import { hashPrompt } from "./utils/ids/prompt-hash.js";
 import type {
   TranscriptMessage,
@@ -33,6 +38,7 @@ import type {
   HookEntry,
   HookPlacement,
   SessionState,
+  SubagentMetadata,
   TranscriptRead,
   TurnPrompt,
   ReadAnchor,
@@ -644,4 +650,30 @@ function groupTurns(messages: TranscriptMessage[], keepUnanswered: boolean): Tur
   finalizeTurn(true);
 
   return turns;
+}
+
+export function subagentTranscriptPath(
+  transcriptPath: string,
+  sessionId: string,
+  agentId: string,
+): string {
+  const fileName = `${SUBAGENT_FILE_PREFIX}${agentId}${TRANSCRIPT_FILE_EXTENSION}`;
+  return join(dirname(transcriptPath), sessionId, SUBAGENTS_DIR_NAME, fileName);
+}
+
+export function subagentLaunchId(agentTranscriptPath: string): string | undefined {
+  const metadataPath =
+    agentTranscriptPath.slice(0, -TRANSCRIPT_FILE_EXTENSION.length) + SUBAGENT_METADATA_EXTENSION;
+  const metadata = readJson(readText(metadataPath)) as SubagentMetadata | undefined;
+  return typeof metadata?.toolUseId === "string" ? metadata.toolUseId : undefined;
+}
+
+export function findToolUse(
+  messages: TranscriptMessage[],
+  toolUseId: string,
+): ToolUseBlock | undefined {
+  return messages
+    .filter(isAssistantMessage)
+    .flatMap((message) => message.message.content)
+    .find((block): block is ToolUseBlock => block.type === "tool_use" && block.id === toolUseId);
 }
