@@ -36,12 +36,13 @@ import {
   flushHeldToolRuns,
   turnHooks,
   withTaskRunHooks,
+  currentTurnMetadata,
 } from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { finalizeNotificationChain } from "../finalize.js";
-import { initTracing, settledFromTurn } from "../tracing-engine.js";
+import { initTracing } from "../tracing-engine.js";
 import { MUTED_TRACE_CONTENT } from "@langchain/plugins-base/privacy";
 import { queueClosing, turnClosedReset } from "../closing-queue.js";
 import { STOP_FLUSH_WAIT_MS } from "../constants.js";
@@ -129,12 +130,7 @@ export async function closeStoppedTurn(
 
   log(`Found ${messages.length} new messages`);
 
-  const notifiedBy = sessionState.current_notification_agent_id;
-  const notifiedFrom = notifiedBy
-    ? ((sessionState.task_run_map?.[notifiedBy]?.deferred as Record<string, unknown> | undefined)
-        ?.parent_run_id as string | undefined)
-    : undefined;
-  const sessionMetadata = await settledFromTurn(config.customMetadata, notifiedFrom);
+  const sessionMetadata = await currentTurnMetadata(config.customMetadata, sessionState);
 
   // A blocking Stop hook makes Claude reply again after the turn closed, so that reply joins it.
   const continuedRunId =

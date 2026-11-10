@@ -548,6 +548,7 @@ export interface TraceTurnOptions {
   rootRunId?: string;
   hookCwd?: string;
   captureHookOutputs?: boolean;
+  uploadFromCall?: number;
 }
 
 /** What it takes to close a turn run. */
