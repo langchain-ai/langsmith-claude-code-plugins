@@ -21,6 +21,7 @@ import {
   MAX_REQUEST_BYTES,
   PASSTHROUGH_HEADER,
   PROOF_PATH,
+  PROOF_PREFIX,
   PROTOCOL_VERSION,
   TENANT_HEADER,
   TENANT_HEADER_GUIDANCE,
@@ -54,7 +55,7 @@ export const identity = (c: ProxyConfig) =>
     .digest("hex");
 
 export const proof = (secret: string, challenge: string) =>
-  createHmac("sha256", secret).update(challenge).digest("hex");
+  createHmac("sha256", secret).update(PROOF_PREFIX + challenge).digest("hex");
 
 export function authenticated(req: IncomingMessage, secret: string): boolean {
   const keys = req.rawHeaders.filter(

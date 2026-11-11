@@ -68,6 +68,7 @@ export const CREDENTIAL_STATE_PATH = "/_langsmith/credential";
 export const PROOF_PATH = "/_langsmith/proof";
 export const CHALLENGE_HEADER = "x-langsmith-proxy-challenge";
 export const CHALLENGE_BYTES = 32;
+export const PROOF_PREFIX = "langsmith-proxy-proof:";
 
 export const SIGN_IN_COMMAND =
   "the identity token command you configured; the LangSmith CLI is not used";

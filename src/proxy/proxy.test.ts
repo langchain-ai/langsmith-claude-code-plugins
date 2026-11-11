@@ -3,7 +3,7 @@ import http from "node:http";
 import * as childProcess from "node:child_process";
 import { handleGatewayInput } from "./commands.js";
 import { connect } from "node:net";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { once } from "node:events";
 import { mkdirSync, readFileSync, writeFileSync, chmodSync, statSync } from "node:fs";
 import * as os from "node:os";
@@ -1138,6 +1138,10 @@ describe("shared lifecycle and explicit configuration", () => {
   it.each([
     ["replays an earlier answer", () => proof(base.secret, "0".repeat(64))],
     ["answers without the key", (challenge: string) => proof("b".repeat(64), challenge)],
+    [
+      "answers with a plain HMAC of the challenge",
+      (challenge: string) => createHmac("sha256", base.secret).update(challenge).digest("hex"),
+    ],
   ])("never sends the key to a listener that %s", async (_, answer) => {
     const keys: unknown[] = [];
     const config = { ...base };

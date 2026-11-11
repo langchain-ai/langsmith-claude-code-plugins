@@ -827,6 +827,7 @@ var CREDENTIAL_STATE_PATH = "/_langsmith/credential";
 var PROOF_PATH = "/_langsmith/proof";
 var CHALLENGE_HEADER = "x-langsmith-proxy-challenge";
 var CHALLENGE_BYTES = 32;
+var PROOF_PREFIX = "langsmith-proxy-proof:";
 var SIGN_IN_COMMAND = "the identity token command you configured; the LangSmith CLI is not used";
 var SIGN_IN_CLI_DEFAULT = "the LangSmith CLI with its default/current profile";
 var SIGN_IN_CLI_PROFILE = (profile) => `the LangSmith CLI with profile ${JSON.stringify(profile)}`;
@@ -15538,7 +15539,7 @@ var identity = (c) => createHash("sha256").update(JSON.stringify([
   c.identityTokenTtlMs,
   c.workspaceId
 ])).digest("hex");
-var proof = (secret, challenge) => createHmac("sha256", secret).update(challenge).digest("hex");
+var proof = (secret, challenge) => createHmac("sha256", secret).update(PROOF_PREFIX + challenge).digest("hex");
 function authenticated(req, secret) {
   const keys = req.rawHeaders.filter((_, i) => i % 2 === 0 && req.rawHeaders[i].toLowerCase() === KEY_HEADER);
   const value = req.headers[KEY_HEADER];
