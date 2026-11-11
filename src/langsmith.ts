@@ -21,6 +21,10 @@ import type {
   TracingMode,
   PendingSubagent,
   TaskRunEntry,
+  AgentToolRunOptions,
+  OpenedSubagentsClose,
+  RunningSubagentOptions,
+  SubagentChainRunOptions,
   TraceTurnOptions,
   TurnRunIdentity,
   ReadPosition,
@@ -41,7 +45,9 @@ import { loadState, getSessionState, atomicUpdateState, takeHeldRun } from "./st
 import * as logger from "./logger.js";
 import {
   ASSISTANT_RUN_NAME,
+  DEFAULT_SUBAGENT_TYPE,
   SERVER_TOOL_RESULT_TYPE,
+  SUBAGENT_INTERRUPTED_ERROR,
   SESSION_START_HOOK,
   USER_PROMPT_TURN_NAME,
 } from "./constants.js";
@@ -52,7 +58,14 @@ import {
   sessionScopedMetadata,
   turnScopedMetadata,
 } from "./repo-attribution.js";
-import { captureRun, captureToolRun, postedInputs, turnFiller } from "./tracing-engine.js";
+import {
+  captureRun,
+  captureToolRun,
+  operationFor,
+  postedInputs,
+  settledFromTurn,
+  turnFiller,
+} from "./tracing-engine.js";
 import { stableRunId } from "./utils/ids/run-id.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -187,6 +200,25 @@ function buildUsageMetadata(usage: Usage) {
  * Trace a turn to LangSmith.
  * @returns A map of agent_id -> tool run info (ID and dotted_order) for Task tools (used to link subagent traces)
  */
+function modelCallRunId(turn: Turn, turnRunId: string, index: number): string {
+  return stableRunId(turn.llmCalls[index].startTime, turnRunId, turn.promptId, index);
+}
+
+export async function firstUnpostedCall(
+  turn: Turn,
+  turnRunId: string,
+  rootRunId: string,
+  callCount: number,
+): Promise<number> {
+  let first = callCount;
+  while (first > 0) {
+    const runId = modelCallRunId(turn, turnRunId, first - 1);
+    if ((await operationFor(runId, rootRunId)) === "patch") break;
+    first--;
+  }
+  return first;
+}
+
 export async function traceTurn(options: TraceTurnOptions): Promise<Record<string, TaskRunEntry>> {
   const {
     turn,
@@ -205,6 +237,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     toolTracingModes,
     hookCwd,
     captureHookOutputs,
+    uploadFromCall = 0,
   } = options;
   const captured = (hooks?: HookOutput[]) => (captureHookOutputs ? hooks : undefined);
 
@@ -272,7 +305,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
     const assistantInputs = { messages: [...accumulatedMessages] };
 
     // Generate run ID for this LLM call
-    const assistantRunId = stableRunId(llmCall.startTime, turnRunId, turnId, llmIndex);
+    const assistantRunId = modelCallRunId(turn, turnRunId, llmIndex);
     const assistantDottedOrderSegment = generateDottedOrderSegment(
       llmCall.startTime,
       assistantRunId,
@@ -285,7 +318,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
       const toolMode =
         tracing === "metadata" ? "metadata" : (toolTracingModes?.[toolCall.tool_use.id] ?? tracing);
       // Skip tools already traced by PostToolUse (agent tools via existingTaskRunMap,
-      // regular tools via tracedToolUseIds).
+      // any tool via tracedToolUseIds).
       if (toolCall.agentId && existingTaskRunMap?.[toolCall.agentId]) {
         logger.debug(
           `Skipping Task tool for agent ${toolCall.agentId} - already traced by PostToolUse`,
@@ -293,7 +326,7 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
         lastEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
         continue;
       }
-      if (!toolCall.agentId && tracedToolUseIds?.has(toolCall.tool_use.id)) {
+      if (llmIndex < uploadFromCall || tracedToolUseIds?.has(toolCall.tool_use.id)) {
         lastEndTime = toolCall.result?.timestamp ?? llmCall.endTime;
         continue;
       }
@@ -391,23 +424,25 @@ export async function traceTurn(options: TraceTurnOptions): Promise<Record<strin
         },
       }),
     );
-    await captureRun(
-      {
-        id: assistantRunId,
-        name: ASSISTANT_RUN_NAME,
-        run_type: "llm",
-        inputs: assistantInputs,
-        outputs: { messages: outputMessages },
-        start_time: llmCall.startTime,
-        end_time: assistantEndTime,
-        parent_run_id: turnRunId,
-        trace_id: traceId!,
-        dotted_order: assistantDottedOrder,
-        metadata: assistantMetadata,
-      },
-      tracing,
-      recordRunId ?? assistantRunId,
-    );
+    if (llmIndex >= uploadFromCall) {
+      await captureRun(
+        {
+          id: assistantRunId,
+          name: ASSISTANT_RUN_NAME,
+          run_type: "llm",
+          inputs: assistantInputs,
+          outputs: { messages: outputMessages },
+          start_time: llmCall.startTime,
+          end_time: assistantEndTime,
+          parent_run_id: turnRunId,
+          trace_id: traceId!,
+          dotted_order: assistantDottedOrder,
+          metadata: assistantMetadata,
+        },
+        tracing,
+        recordRunId ?? assistantRunId,
+      );
+    }
 
     // Accumulate context for next LLM call.
     accumulatedMessages.push(...outputMessages);
@@ -591,6 +626,18 @@ export async function flushHeldToolRuns(
     for (const [id] of refs) delete runs[id];
     return { ...state, [sessionId]: { ...session, held_tool_runs: runs } };
   });
+}
+
+export async function currentTurnMetadata(
+  base: Record<string, unknown> | undefined,
+  sessionState: SessionState,
+): Promise<Record<string, unknown> | undefined> {
+  const notifiedBy = sessionState.current_notification_agent_id;
+  const notifiedFrom = notifiedBy
+    ? ((sessionState.task_run_map?.[notifiedBy]?.deferred as Record<string, unknown> | undefined)
+        ?.parent_run_id as string | undefined)
+    : undefined;
+  return settledFromTurn(base, notifiedFrom);
 }
 
 export function turnHooks(
@@ -792,6 +839,19 @@ export async function closeInterruptedTurn(options: {
       logger.error(`Failed to trace pending subagents on interrupt: ${err}`);
     }
   }
+  await closeOpenedSubagents({
+    stateFilePath,
+    sessionId,
+    turnRunId: sessionState.current_turn_run_id,
+    handledAgentIds: new Set([
+      ...pendingSubagents.map((pending) => pending.agent_id),
+      ...Object.keys(taskRunMap),
+    ]),
+    customMetadata,
+    runtimeVersion,
+    turnId,
+    turnNumber,
+  });
 
   await flushHeldToolRuns(options, sessionId, sessionState.current_turn_run_id, read.messages);
 
@@ -877,7 +937,7 @@ export async function tracePendingSubagents(options: {
       const tracing = taskRunInfo.tracing ?? options.tracing ?? "full";
       const parentToolRunId = taskRunInfo.run_id;
       const agentToolDottedOrder = taskRunInfo.dotted_order;
-      const toolName = subagent.agent_type || "Agent";
+      const toolName = subagent.agent_type || DEFAULT_SUBAGENT_TYPE;
       const deferred = taskRunInfo.deferred;
       const rootRunId = (deferred?.parent_run_id as string | undefined) ?? parentTraceId;
       const filledForTheTurn = await turnFiller(rootRunId);
@@ -916,44 +976,24 @@ export async function tracePendingSubagents(options: {
         new Date().toISOString();
 
       // PostToolUse deferred the Agent tool run creation so we can use the
-      // real subagent name. Create it now with the correct name and clamped times.
-      if (deferred) {
+      // real subagent name. Create it now, or close the one a subagent hook opened.
+      const operation = deferred ? await operationFor(parentToolRunId) : undefined;
+      if (deferred && (!keepAgentToolRunOpen || operation === "post")) {
+        const run = agentToolRun({ ...options, subagent, taskRunInfo, filledForTheTurn });
         await captureRun(
           {
-            id: parentToolRunId,
-            name: "Agent",
-            run_type: "tool",
-            inputs: withHooks({ input: deferred.inputs ?? {} }, taskRunInfo.hooks, "input"),
+            ...run,
             outputs: withHooks({ output: deferred.outputs ?? {} }, taskRunInfo.hooks, "output"),
-            start_time: subagentStartTime,
             // Leave open for async agents — the task-notification turn nests under
             // this run, so it can't be closed until that turn completes.
             end_time: keepAgentToolRunOpen ? undefined : subagentEndTime,
-            parent_run_id: deferred.parent_run_id as string,
-            trace_id: deferred.trace_id as string,
-            dotted_order: agentToolDottedOrder,
-            metadata: filledForTheTurn(
-              codingAgentMetadata({
-                sessionId,
-                base: customMetadata,
-                runtimeVersion,
-                turnId,
-                turnNumber,
-                agentType: "root",
-                // run_type "tool" (run name "Agent", native tool "Task").
-                toolName: "Task",
-                runName: "Agent",
-                runSpecific: {
-                  agent_type: toolName, // DEPRECATED compat alias.
-                  agent_id: subagent.agent_id, // DEPRECATED compat alias.
-                },
-              }),
-            ),
           },
           tracing,
+          parentToolRunId,
+          operation,
         );
-        if (keepAgentToolRunOpen) openedAgentRunIds.push(subagent.agent_id);
       }
+      if (deferred && keepAgentToolRunOpen) openedAgentRunIds.push(subagent.agent_id);
 
       // Nest the subagent's own work under the Agent tool run — skipped when the
       // transcript was empty (the Agent tool run above still represents the run).
@@ -988,6 +1028,126 @@ export async function tracePendingSubagents(options: {
   return openedAgentRunIds;
 }
 
+function agentToolRun(options: AgentToolRunOptions): ClaudeRun {
+  const { subagent, taskRunInfo } = options;
+  const deferred = taskRunInfo.deferred ?? {};
+  return {
+    id: taskRunInfo.run_id,
+    name: "Agent",
+    run_type: "tool",
+    inputs: withHooks({ input: deferred.inputs ?? {} }, taskRunInfo.hooks, "input"),
+    start_time: (deferred.start_time as string | undefined) ?? new Date().toISOString(),
+    parent_run_id: deferred.parent_run_id as string,
+    trace_id: deferred.trace_id as string,
+    dotted_order: taskRunInfo.dotted_order,
+    metadata: options.filledForTheTurn(
+      codingAgentMetadata({
+        sessionId: options.sessionId,
+        base: options.customMetadata,
+        runtimeVersion: options.runtimeVersion,
+        turnId: options.turnId,
+        turnNumber: options.turnNumber,
+        agentType: "root",
+        // run_type "tool" (run name "Agent", native tool "Task").
+        toolName: "Task",
+        runName: "Agent",
+        runSpecific: {
+          agent_type: subagent.agent_type || DEFAULT_SUBAGENT_TYPE, // DEPRECATED compat alias.
+          agent_id: subagent.agent_id, // DEPRECATED compat alias.
+        },
+      }),
+    ),
+  };
+}
+
+export async function traceRunningSubagent(options: RunningSubagentOptions): Promise<void> {
+  const { subagent, taskRunInfo } = options;
+  const deferred = taskRunInfo.deferred ?? {};
+  const rootRunId = deferred.parent_run_id as string;
+  const run = agentToolRun({ ...options, filledForTheTurn: await turnFiller(rootRunId) });
+  await captureRun(run, taskRunInfo.tracing, run.id);
+
+  const { turns } = options;
+  if (turns.length === 0) return;
+  const finished = turns.map((turn, index) =>
+    index < turns.length - 1 ? turn : { ...turn, llmCalls: turn.llmCalls.slice(0, -1) },
+  );
+  const subagentType = subagent.agent_type || DEFAULT_SUBAGENT_TYPE;
+  await traceSubagentChain({
+    tracing: taskRunInfo.tracing,
+    sessionId: options.sessionId,
+    parentRunId: run.id,
+    parentDottedOrder: taskRunInfo.dotted_order,
+    parentTraceId: deferred.trace_id as string,
+    subagentId: subagent.agent_id,
+    subagentType,
+    chainName: `${subagentType} Subagent`,
+    subagentTurns: finished,
+    startTime: run.start_time as string,
+    inputs: deferred.inputs as Record<string, unknown> | undefined,
+    customMetadata: options.customMetadata,
+    runtimeVersion: options.runtimeVersion,
+    turnId: options.turnId,
+    turnNumber: options.turnNumber,
+    rootRunId,
+    captureHookOutputs: options.captureHookOutputs,
+  });
+}
+
+function subagentChainRun(opts: SubagentChainRunOptions): ClaudeRun {
+  const id = stableRunId(opts.startTime, opts.parentRunId, opts.subagentId);
+  return {
+    id,
+    name: opts.chainName,
+    run_type: "chain",
+    start_time: opts.startTime,
+    parent_run_id: opts.parentRunId,
+    trace_id: opts.parentTraceId,
+    dotted_order: `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, id)}`,
+    metadata: codingAgentMetadata({
+      sessionId: opts.sessionId,
+      base: opts.customMetadata,
+      runtimeVersion: opts.runtimeVersion,
+      turnId: opts.turnId,
+      turnNumber: opts.turnNumber,
+      agentType: "subagent",
+      subagentId: opts.subagentId, // → ls_subagent_id (+ agent_id alias).
+      subagentType: opts.subagentType, // → ls_subagent_type (+ agent_type alias).
+    }),
+  };
+}
+
+export async function closeOpenedSubagents(options: OpenedSubagentsClose): Promise<void> {
+  const { stateFilePath, sessionId } = options;
+  const session = getSessionState(loadState(stateFilePath), sessionId);
+  const opened = Object.entries(session.opened_subagents ?? {}).filter(
+    ([, entry]) => entry.task.deferred?.parent_run_id === options.turnRunId,
+  );
+  if (opened.length === 0) return;
+  for (const [, entry] of opened) {
+    if (options.handledAgentIds.has(entry.agent_id)) continue;
+    await closeAgentToolRun({
+      tracing: entry.task.tracing,
+      sessionId,
+      agentId: entry.agent_id,
+      agentType: entry.agent_type,
+      taskRunInfo: entry.task,
+      customMetadata: options.customMetadata,
+      runtimeVersion: options.runtimeVersion,
+      turnId: options.turnId,
+      turnNumber: options.turnNumber,
+      wasOpen: false,
+      error: SUBAGENT_INTERRUPTED_ERROR,
+    });
+  }
+  await atomicUpdateState(stateFilePath, (state) => {
+    const latest = getSessionState(state, sessionId);
+    const remaining = { ...latest.opened_subagents };
+    for (const [launchId] of opened) delete remaining[launchId];
+    return { ...state, [sessionId]: { ...latest, opened_subagents: remaining } };
+  });
+}
+
 /**
  * Post an intermediate "<name> Subagent" chain run under a parent run (an Agent
  * tool run, or a dynamic Workflow run) and nest the subagent's own turns beneath
@@ -1006,7 +1166,7 @@ async function traceSubagentChain(opts: {
   chainName: string;
   subagentTurns: Turn[];
   startTime: string;
-  endTime: string;
+  endTime?: string;
   inputs?: Record<string, unknown>;
   outputs?: Record<string, unknown>;
   customMetadata?: Record<string, unknown>;
@@ -1017,52 +1177,49 @@ async function traceSubagentChain(opts: {
   captureHookOutputs?: boolean;
 }): Promise<void> {
   const filledForTheTurn = await turnFiller(opts.rootRunId);
-  const subagentChainId = stableRunId(opts.startTime, opts.parentRunId, opts.subagentId);
-  const subagentChainDottedOrder = `${opts.parentDottedOrder}.${generateDottedOrderSegment(opts.startTime, subagentChainId)}`;
+  const chain = subagentChainRun(opts);
+  const operation = await operationFor(chain.id);
+  if (opts.endTime !== undefined || operation === "post") {
+    await captureRun(
+      {
+        ...chain,
+        inputs: opts.inputs ?? {},
+        outputs: { output: opts.outputs },
+        end_time: opts.endTime,
+        metadata: filledForTheTurn(chain.metadata),
+      },
+      opts.tracing,
+      chain.id,
+      operation,
+    );
+  }
 
-  await captureRun(
-    {
-      id: subagentChainId,
-      name: opts.chainName,
-      run_type: "chain",
-      inputs: opts.inputs ?? {},
-      outputs: { output: opts.outputs },
-      start_time: opts.startTime,
-      end_time: opts.endTime,
-      parent_run_id: opts.parentRunId,
-      trace_id: opts.parentTraceId,
-      dotted_order: subagentChainDottedOrder,
-      metadata: filledForTheTurn(
-        codingAgentMetadata({
-          sessionId: opts.sessionId,
-          base: opts.customMetadata,
-          runtimeVersion: opts.runtimeVersion,
-          turnId: opts.turnId,
-          turnNumber: opts.turnNumber,
-          agentType: "subagent",
-          subagentId: opts.subagentId, // → ls_subagent_id (+ agent_id alias).
-          subagentType: opts.subagentType, // → ls_subagent_type (+ agent_type alias).
-        }),
-      ),
-    },
-    opts.tracing,
-  );
-
+  const lastTurn = opts.subagentTurns.at(-1);
+  const uploadFromCall =
+    opts.endTime === undefined && lastTurn
+      ? await firstUnpostedCall(
+          lastTurn,
+          chain.id,
+          opts.rootRunId ?? chain.id,
+          lastTurn.llmCalls.length,
+        )
+      : undefined;
   for (let i = 0; i < opts.subagentTurns.length; i++) {
     await traceTurn({
       tracing: opts.tracing,
       turn: opts.subagentTurns[i],
       sessionId: opts.sessionId,
       turnNum: i + 1,
-      parentRunId: subagentChainId,
+      parentRunId: chain.id,
       existingTaskRunMap: undefined,
       traceId: opts.parentTraceId,
-      parentDottedOrder: subagentChainDottedOrder,
+      parentDottedOrder: chain.dotted_order,
       customMetadata: opts.customMetadata,
       runtimeVersion: opts.runtimeVersion,
       agentType: "subagent",
       rootRunId: opts.rootRunId,
       captureHookOutputs: opts.captureHookOutputs,
+      uploadFromCall: i === opts.subagentTurns.length - 1 ? uploadFromCall : undefined,
     });
   }
 
@@ -1199,6 +1356,33 @@ export async function closeAgentToolRun(options: {
     },
     options.taskRunInfo.tracing ?? options.tracing,
     options.taskRunInfo.run_id,
-    options.wasOpen ? "patch" : "post",
+    options.wasOpen ? "patch" : await operationFor(options.taskRunInfo.run_id),
   );
+
+  const chain = subagentChainRun({
+    sessionId: options.sessionId,
+    parentRunId: options.taskRunInfo.run_id,
+    parentDottedOrder: options.taskRunInfo.dotted_order,
+    parentTraceId: deferred.trace_id as string,
+    subagentId: options.agentId,
+    subagentType: agentTypeAlias,
+    chainName: `${agentTypeAlias} Subagent`,
+    startTime: deferred.start_time as string,
+    customMetadata: options.customMetadata,
+    runtimeVersion: options.runtimeVersion,
+    turnId: options.turnId,
+    turnNumber: options.turnNumber,
+  });
+  if (!isWorkflow && !options.wasOpen && (await operationFor(chain.id)) === "patch") {
+    await captureRun(
+      {
+        ...chain,
+        end_time: new Date().toISOString(),
+        ...(options.error ? { error: options.error } : {}),
+      },
+      options.taskRunInfo.tracing ?? options.tracing,
+      chain.id,
+      "patch",
+    );
+  }
 }

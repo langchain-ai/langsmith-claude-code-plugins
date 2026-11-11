@@ -36,13 +36,15 @@ import {
   flushHeldToolRuns,
   turnHooks,
   withTaskRunHooks,
+  currentTurnMetadata,
+  closeOpenedSubagents,
 } from "../langsmith.js";
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
 import { withoutTracedAgentPayloads } from "../background-runs.js";
 import { finalizeNotificationChain } from "../finalize.js";
-import { initTracing, settledFromTurn } from "../tracing-engine.js";
+import { initTracing } from "../tracing-engine.js";
 import { MUTED_TRACE_CONTENT } from "@langchain/plugins-base/privacy";
 import { queueClosing, turnClosedReset } from "../closing-queue.js";
 import { STOP_FLUSH_WAIT_MS } from "../constants.js";
@@ -130,12 +132,7 @@ export async function closeStoppedTurn(
 
   log(`Found ${messages.length} new messages`);
 
-  const notifiedBy = sessionState.current_notification_agent_id;
-  const notifiedFrom = notifiedBy
-    ? ((sessionState.task_run_map?.[notifiedBy]?.deferred as Record<string, unknown> | undefined)
-        ?.parent_run_id as string | undefined)
-    : undefined;
-  const sessionMetadata = await settledFromTurn(config.customMetadata, notifiedFrom);
+  const sessionMetadata = await currentTurnMetadata(config.customMetadata, sessionState);
 
   // A blocking Stop hook makes Claude reply again after the turn closed, so that reply joins it.
   const continuedRunId =
@@ -272,11 +269,17 @@ export async function closeStoppedTurn(
   const processedAgentIds = new Set<string>();
   if (pendingSubagents.length > 0) {
     debug(`Processing ${pendingSubagents.length} pending subagent trace(s)`);
+    const openedTasks = Object.fromEntries(
+      Object.values(freshSession.opened_subagents ?? {}).map((entry) => [
+        entry.agent_id,
+        entry.task,
+      ]),
+    );
     await tracePendingSubagents({
       tracing: currentTracing,
       sessionId: input.session_id,
       pendingSubagents,
-      taskRunMap: mergedTaskRunMap,
+      taskRunMap: { ...openedTasks, ...mergedTaskRunMap },
       parentTraceId: sessionState.current_trace_id,
       customMetadata: sessionMetadata,
       runtimeVersion,
@@ -286,6 +289,16 @@ export async function closeStoppedTurn(
     });
     for (const sa of pendingSubagents) processedAgentIds.add(sa.agent_id);
   }
+  await closeOpenedSubagents({
+    stateFilePath: config.stateFilePath,
+    sessionId: input.session_id,
+    turnRunId: currentRunId,
+    handledAgentIds: new Set([...processedAgentIds, ...Object.keys(mergedTaskRunMap)]),
+    customMetadata: sessionMetadata,
+    runtimeVersion,
+    turnId: lastTurnId,
+    turnNumber: sessionState.current_turn_number,
+  });
 
   // Save updated state — re-read inside the lock so we don't clobber
   // concurrent writes from PostToolUse/SubagentStop.
