@@ -827,6 +827,8 @@ var CREDENTIAL_STATE_PATH = "/_langsmith/credential";
 var PROOF_PATH = "/_langsmith/proof";
 var CHALLENGE_HEADER = "x-langsmith-proxy-challenge";
 var CHALLENGE_BYTES = 32;
+var EXIT_REASONS = ["prompt_input_exit", "logout", "other"];
+var KEY_ROTATED_MARKER = "key-rotated";
 var PROOF_PREFIX = "langsmith-proxy-proof:";
 var SIGN_IN_COMMAND = "the identity token command you configured; the LangSmith CLI is not used";
 var SIGN_IN_CLI_DEFAULT = "the LangSmith CLI with its default/current profile";
@@ -16063,6 +16065,7 @@ function parseGatewayCommand(prompt) {
 // dist/src/proxy/settings.js
 import { mkdirSync as mkdirSync7, rmdirSync } from "node:fs";
 import { dirname as dirname6, join as join10 } from "node:path";
+import { randomBytes as randomBytes4 } from "node:crypto";
 
 // dist/src/proxy/setup.js
 import { mkdirSync as mkdirSync6 } from "node:fs";
@@ -16095,6 +16098,7 @@ function createConfig(profile, port, home = userHome(), urls = {}, useClaudeSubs
   if (snapshot(path3, true))
     throw new Error("Proxy config already exists");
   atomic(path3, jsonText(config), void 0);
+  atomic(join8(dir, KEY_ROTATED_MARKER), "", void 0);
 }
 
 // dist/src/proxy/lifecycle.js
@@ -16546,6 +16550,40 @@ function disable(args, env = process.env, home = userHome(), cwd = process.cwd()
     unlock();
   }
 }
+function rotateKey(home = userHome()) {
+  const marker = join10(configDir(home), KEY_ROTATED_MARKER);
+  if (!loadConfig(home) || snapshot(marker, true))
+    return;
+  const unlock = lock(home);
+  try {
+    const config = loadConfig(home);
+    if (!config || snapshot(marker, true))
+      return;
+    const path3 = join10(configDir(home), "config.json");
+    const next = { ...config, secret: randomBytes4(32).toString("hex") };
+    const targets = [targetPaths(home, "global", "").settings, ...config.settingsTargets ?? []];
+    const writes = [...new Set(targets)].flatMap((target) => {
+      try {
+        const saved = routingSnapshot(target);
+        if (!matchesRouting(routingEnv(saved), config))
+          return [];
+        const { value, env: savedEnv } = settings(saved);
+        savedEnv[HEADERS] = lines(text(savedEnv[HEADERS])).map((line) => line === proxyKeyLine(config) ? proxyKeyLine(next) : line).join("\n");
+        value.env = savedEnv;
+        return [{ path: target, text: jsonText(value), prior: saved }];
+      } catch {
+        return [];
+      }
+    });
+    transaction([
+      ...writes,
+      { path: path3, text: jsonText(next), prior: snapshot(path3, true) },
+      { path: marker, text: "", prior: void 0 }
+    ]);
+  } finally {
+    unlock();
+  }
+}
 function routingStatus(paths, config) {
   const current = routingSnapshot(paths.settings);
   const env = routingEnv(current);
@@ -16663,7 +16701,12 @@ async function handleGatewayInput(input, entry2, env = process.env, home = userH
     }
     return;
   }
-  await gatewayHook(input.hook_event_name, input.session_id, entry2, home);
+  try {
+    await gatewayHook(input.hook_event_name, input.session_id, entry2, home);
+  } finally {
+    if (input.hook_event_name === "SessionEnd" && EXIT_REASONS.includes(String(input.reason)))
+      rotateKey(home);
+  }
 }
 
 // dist/src/utils/stdin.js

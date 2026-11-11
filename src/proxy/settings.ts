@@ -1,5 +1,6 @@
 import { mkdirSync, rmdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { randomBytes } from "node:crypto";
 import { configDir, endpoints, loadConfig, privatePath, userHome } from "./config.js";
 import {
   CONFLICT_ENVIRONMENT_GUIDANCE,
@@ -7,6 +8,7 @@ import {
   CONFLICT_SETTINGS_GUIDANCE,
   CONFLICTING_AUTH_GUIDANCE,
   CONFLICTING_BASE_GUIDANCE,
+  KEY_ROTATED_MARKER,
   PINNED_CHANGE_GUIDANCE,
   PINNED_FIELD_LABELS,
   PROVIDER_ROUTING,
@@ -391,6 +393,40 @@ export function disable(
     for (const item of targets) unchangedRouting(item.path, item.saved);
     transaction(writes);
     // Config watcher drains within five seconds; never kills a listener by PID/port.
+  } finally {
+    unlock();
+  }
+}
+
+export function rotateKey(home = userHome()): void {
+  const marker = join(configDir(home), KEY_ROTATED_MARKER);
+  if (!loadConfig(home) || snapshot(marker, true)) return;
+  const unlock = lock(home);
+  try {
+    const config = loadConfig(home);
+    if (!config || snapshot(marker, true)) return;
+    const path = join(configDir(home), "config.json");
+    const next: ProxyConfig = { ...config, secret: randomBytes(32).toString("hex") };
+    const targets = [targetPaths(home, "global", "").settings, ...(config.settingsTargets ?? [])];
+    const writes = [...new Set(targets)].flatMap((target) => {
+      try {
+        const saved = routingSnapshot(target);
+        if (!matchesRouting(routingEnv(saved), config)) return [];
+        const { value, env: savedEnv } = settings(saved);
+        savedEnv[HEADERS] = lines(text(savedEnv[HEADERS]))
+          .map((line) => (line === proxyKeyLine(config) ? proxyKeyLine(next) : line))
+          .join("\n");
+        value.env = savedEnv;
+        return [{ path: target, text: jsonText(value), prior: saved }];
+      } catch {
+        return [];
+      }
+    });
+    transaction([
+      ...writes,
+      { path, text: jsonText(next), prior: snapshot(path, true) },
+      { path: marker, text: "", prior: undefined },
+    ]);
   } finally {
     unlock();
   }

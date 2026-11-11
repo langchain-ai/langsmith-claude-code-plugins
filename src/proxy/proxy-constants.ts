@@ -68,6 +68,8 @@ export const CREDENTIAL_STATE_PATH = "/_langsmith/credential";
 export const PROOF_PATH = "/_langsmith/proof";
 export const CHALLENGE_HEADER = "x-langsmith-proxy-challenge";
 export const CHALLENGE_BYTES = 32;
+export const EXIT_REASONS = ["prompt_input_exit", "logout", "other"];
+export const KEY_ROTATED_MARKER = "key-rotated";
 export const PROOF_PREFIX = "langsmith-proxy-proof:";
 
 export const SIGN_IN_COMMAND =
