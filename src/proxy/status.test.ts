@@ -51,7 +51,12 @@ describe("packaged read-only status", () => {
       expect(result).toContain("the LangSmith CLI with its default/current profile.");
       expect(result).not.toContain("undefined");
       expect(result).toContain("matching listener reachable");
-      expect(requests).toEqual(["GET /_langsmith/health", "GET /_langsmith/credential"]);
+      expect(requests).toEqual([
+        "GET /_langsmith/proof",
+        "GET /_langsmith/health",
+        "GET /_langsmith/proof",
+        "GET /_langsmith/credential",
+      ]);
     },
   );
   it.each([{ enabled: false }, { useClaudeSubscription: undefined }])(
@@ -98,7 +103,12 @@ describe("packaged read-only status", () => {
           disclaimer,
         ].join("\n"),
       );
-      expect(requests).toEqual(["GET /_langsmith/health", "GET /_langsmith/credential"]);
+      expect(requests).toEqual([
+        "GET /_langsmith/proof",
+        "GET /_langsmith/health",
+        "GET /_langsmith/proof",
+        "GET /_langsmith/credential",
+      ]);
     },
   );
   it.each(["mismatch", "offline", "timeout", "draining"] as const)(
@@ -113,7 +123,13 @@ describe("packaged read-only status", () => {
       expect(result).toContain("Shared daemon: not reachable or incompatible.");
       expect(result).toContain("unchecked, because no matching daemon is running to ask.");
       expect(result).not.toContain("stopped");
-      expect(requests).toEqual(kind === "offline" ? [] : ["GET /_langsmith/health"]);
+      const sent = {
+        mismatch: ["GET /_langsmith/proof", "GET /_langsmith/health"],
+        offline: [],
+        timeout: ["GET /_langsmith/proof", "GET /_langsmith/health"],
+        draining: ["GET /_langsmith/proof", "GET /_langsmith/health"],
+      };
+      expect(requests).toEqual(sent[kind]);
     },
   );
   it("preserves disabled retained mode while checking a listener awaiting drain", async () => {
@@ -128,7 +144,12 @@ describe("packaged read-only status", () => {
     expect(result).toContain(
       "matching listener reachable (saved config disabled; may be awaiting drain)",
     );
-    expect(requests).toEqual(["GET /_langsmith/health", "GET /_langsmith/credential"]);
+    expect(requests).toEqual([
+      "GET /_langsmith/proof",
+      "GET /_langsmith/health",
+      "GET /_langsmith/proof",
+      "GET /_langsmith/credential",
+    ]);
   });
   it("shows a reachable daemon whose credential is broken, and names the command and workspace", async () => {
     await probe("match", { sinceFailureMs: 4000 });

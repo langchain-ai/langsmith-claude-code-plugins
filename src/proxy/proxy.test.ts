@@ -14,11 +14,13 @@ import {
   upstreamPath,
   Sessions,
   identity,
+  proof,
   nativeToken,
 } from "./server.js";
 import { endpoints, configDir, loadConfig } from "./config.js";
 import {
   API_URL,
+  CHALLENGE_HEADER,
   CREDENTIAL_SLOT_GUIDANCE,
   EXPIRED_TOKEN_REASON,
   GATEWAY_REFUSED_LOG,
@@ -34,6 +36,7 @@ import { loginGuidance, loginToken, SignInFailure, TokenCache } from "./token.js
 import { control, ensure, gatewayHook, waitForStopped } from "./lifecycle.js";
 import { createConfig } from "./setup.js";
 import {
+  answeredProof,
   base,
   fixture,
   jwt,
@@ -960,15 +963,17 @@ describe("shared lifecycle and explicit configuration", () => {
       await gatewayHook("UserPromptSubmit", "two", "/must-not-spawn", home);
       await gatewayHook("SessionEnd", "one", "/must-not-spawn", home);
       expect([...f.sessions.leases.keys()]).toEqual(["two"]);
-      expect(controls).toEqual([
-        "GET /_langsmith/health",
-        "PUT /_langsmith/sessions/one",
-        "GET /_langsmith/health",
-        "PUT /_langsmith/sessions/two",
-        "GET /_langsmith/health",
-        "PUT /_langsmith/sessions/two",
-        "DELETE /_langsmith/sessions/one",
-      ]);
+      expect(controls).toEqual(
+        [
+          "GET /_langsmith/health",
+          "PUT /_langsmith/sessions/one",
+          "GET /_langsmith/health",
+          "PUT /_langsmith/sessions/two",
+          "GET /_langsmith/health",
+          "PUT /_langsmith/sessions/two",
+          "DELETE /_langsmith/sessions/one",
+        ].flatMap((step) => ["GET /_langsmith/proof", step]),
+      );
       expect(loadConfig(home)?.useClaudeSubscription).toBe(savedMode);
       expect(readFileSync(path, "utf8")).toBe(before);
       expect(f.token).not.toHaveBeenCalled();
@@ -1061,6 +1066,7 @@ describe("shared lifecycle and explicit configuration", () => {
     const methods: string[] = [];
     const config = { ...base };
     const server = http.createServer((req, res) => {
+      if (answeredProof(config.secret, req, res)) return;
       methods.push(req.method!);
       // A health gate would fail, even though DELETE can be accepted.
       res.writeHead(req.method === "DELETE" ? 204 : 503);
@@ -1129,6 +1135,36 @@ describe("shared lifecycle and explicit configuration", () => {
     cleanup.push(() => recovered.drain());
     expect(await control(f.config, "GET", "/_langsmith/health")).toBe(identity(f.config));
   });
+  it.each([
+    ["replays an earlier answer", () => proof(base.secret, "0".repeat(64))],
+    ["answers without the key", (challenge: string) => proof("b".repeat(64), challenge)],
+  ])("never sends the key to a listener that %s", async (_, answer) => {
+    const keys: unknown[] = [];
+    const config = { ...base };
+    const squatter = http.createServer((req, res) => {
+      keys.push(req.headers[KEY_HEADER]);
+      res.end(answer(String(req.headers[CHALLENGE_HEADER])));
+    });
+    config.port = await listen(squatter);
+    await expect(control(config, "GET", "/_langsmith/health")).rejects.toThrow(
+      "Local proxy unavailable",
+    );
+    expect(keys).toEqual([undefined]);
+  });
+  it("never sends the key on a new connection after the one that proved itself closes", async () => {
+    const keys: unknown[] = [];
+    const config = { ...base };
+    const server = http.createServer((req, res) => {
+      keys.push(req.headers[KEY_HEADER]);
+      res.setHeader("connection", "close");
+      if (!answeredProof(config.secret, req, res)) res.end(identity(config));
+    });
+    config.port = await listen(server);
+    await expect(control(config, "GET", "/_langsmith/health")).rejects.toThrow(
+      "Local proxy unavailable",
+    );
+    expect(keys).toEqual([undefined]);
+  });
   it("refuses to reuse an older forwarding daemon without killing its listener", async () => {
     const config = { ...base };
     const oldIdentity = () =>
@@ -1144,7 +1180,9 @@ describe("shared lifecycle and explicit configuration", () => {
           ]),
         )
         .digest("hex");
-    const server = http.createServer((_req, res) => res.end(oldIdentity()));
+    const server = http.createServer((req, res) => {
+      if (!answeredProof(config.secret, req, res)) res.end(oldIdentity());
+    });
     config.port = await listen(server);
     expect(await control(config, "GET", "/_langsmith/health")).not.toBe(identity(config));
     const entry = join(temporary(), "candidate.cjs");

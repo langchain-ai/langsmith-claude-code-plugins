@@ -1,19 +1,28 @@
-import http from "node:http";
-import { connect } from "node:net";
+import http, { type OutgoingHttpHeaders } from "node:http";
+import { randomBytes } from "node:crypto";
+import { connect, type Socket } from "node:net";
 import { spawn } from "node:child_process";
 import { loadConfig, userHome } from "./config.js";
-import { HEALTH_PATH, KEY_HEADER } from "./proxy-constants.js";
+import {
+  CHALLENGE_BYTES,
+  CHALLENGE_HEADER,
+  HEALTH_PATH,
+  KEY_HEADER,
+  PROOF_PATH,
+} from "./proxy-constants.js";
 import type { ProxyConfig } from "./proxy-models.js";
-import { identity } from "./server.js";
+import { identity, proof } from "./server.js";
 import { cliEnvironment } from "./token.js";
 import { GATEWAY_PLUGIN, PLUGIN_FLAG } from "../constants.js";
 import { builtAsBinary } from "../integration-version.js";
 
-export function control(
+function send(
   config: ProxyConfig,
+  socket: Socket,
   method: string,
   path: string,
-  timeoutMs = 500,
+  headers: OutgoingHttpHeaders,
+  timeoutMs: number,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = http.request(
@@ -22,8 +31,8 @@ export function control(
         port: config.port,
         method,
         path,
-        agent: false,
-        headers: { [KEY_HEADER]: config.secret, "content-length": "0" },
+        createConnection: () => socket,
+        headers: { ...headers, connection: "keep-alive", "content-length": "0" },
       },
       (res) => {
         let data = "";
@@ -45,6 +54,31 @@ export function control(
     req.on("error", () => reject(new Error("Local proxy unavailable")));
     req.end();
   });
+}
+
+export async function control(
+  config: ProxyConfig,
+  method: string,
+  path: string,
+  timeoutMs = 500,
+): Promise<string> {
+  const socket = connect({ host: "127.0.0.1", port: config.port });
+  socket.on("error", () => {});
+  try {
+    const challenge = randomBytes(CHALLENGE_BYTES).toString("hex");
+    const answer = await send(
+      config,
+      socket,
+      "GET",
+      PROOF_PATH,
+      { [CHALLENGE_HEADER]: challenge },
+      timeoutMs,
+    );
+    if (answer !== proof(config.secret, challenge)) throw new Error("Local proxy unavailable");
+    return await send(config, socket, method, path, { [KEY_HEADER]: config.secret }, timeoutMs);
+  } finally {
+    socket.destroy();
+  }
 }
 export async function healthy(config: ProxyConfig): Promise<boolean> {
   try {

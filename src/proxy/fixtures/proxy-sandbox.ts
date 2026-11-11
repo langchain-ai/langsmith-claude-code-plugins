@@ -1,11 +1,11 @@
 import { vi } from "vitest";
-import http from "node:http";
+import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import type https from "node:https";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createProxy } from "../server.js";
-import { KEY_HEADER } from "../proxy-constants.js";
+import { createProxy, proof } from "../server.js";
+import { CHALLENGE_HEADER, KEY_HEADER, PROOF_PATH } from "../proxy-constants.js";
 import type { ProxyConfig } from "../proxy-models.js";
 import { cleanup, listen } from "./server-sandbox.js";
 
@@ -20,6 +20,11 @@ export const base: ProxyConfig = {
   port: 19991,
   secret: "a".repeat(64),
 };
+export function answeredProof(secret: string, req: IncomingMessage, res: ServerResponse) {
+  if (req.url !== PROOF_PATH) return false;
+  res.end(proof(secret, String(req.headers[CHALLENGE_HEADER])));
+  return true;
+}
 export function temporary() {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "ls-proxy-test-")));
   cleanup.push(() => rmSync(dir, { recursive: true, force: true }));

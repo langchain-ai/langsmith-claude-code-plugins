@@ -449,9 +449,10 @@ require("node:module").syncBuiltinESMExports();
           reason: expect.stringContaining("configured to use the local gateway proxy"),
         });
       }
-      const probes = ["health", "health", "health", "credential"].map(
-        (p) => `GET /_langsmith/${p}`,
-      );
+      const probes = ["health", "health", "health", "credential"].flatMap((p) => [
+        "GET /_langsmith/proof",
+        `GET /_langsmith/${p}`,
+      ]);
       expect(controls).toEqual([...probes, ...probes]);
       expect(token).not.toHaveBeenCalled();
       expect(json(settings).env.ANTHROPIC_CUSTOM_HEADERS).toBe(

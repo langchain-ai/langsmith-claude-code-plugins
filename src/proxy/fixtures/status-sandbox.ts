@@ -17,9 +17,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { configDir } from "../config.js";
-import { CREDENTIAL_STATE_PATH, HEALTH_PATH } from "../proxy-constants.js";
+import { CREDENTIAL_STATE_PATH, HEALTH_PATH, PROOF_PATH } from "../proxy-constants.js";
 import type { ProxyConfig } from "../proxy-models.js";
 import { identity } from "../server.js";
+import { answeredProof } from "./proxy-sandbox.js";
 import { targetPaths } from "../scopes.js";
 
 export let root: string, home: string, project: string, config: ProxyConfig;
@@ -68,8 +69,12 @@ export async function probe(
   allowHealth = true;
   listener = http.createServer((req, res) => {
     requests.push(`${req.method} ${req.url}`);
-    expect(req.headers["x-langsmith-proxy-key"]).toBe(config.secret);
+    if (answeredProof(config.secret, req, res)) {
+      expect(req.headers["x-langsmith-proxy-key"]).toBeUndefined();
+      return;
+    }
     if (kind === "timeout") return;
+    expect(req.headers["x-langsmith-proxy-key"]).toBe(config.secret);
     if (req.url === CREDENTIAL_STATE_PATH) {
       res.end(typeof credential === "string" ? credential : JSON.stringify(credential));
       return;
@@ -101,9 +106,9 @@ for (const [module, names] of [
 globalThis.fetch = deny;
 const http = require("node:http"), request = http.request;
 http.get = deny;
-const readOnlyPaths = ${JSON.stringify([HEALTH_PATH, CREDENTIAL_STATE_PATH])};
+const readOnlyPaths = ${JSON.stringify([PROOF_PATH, HEALTH_PATH, CREDENTIAL_STATE_PATH])};
 http.request = (opts, ...args) => ${allowHealth} && opts.hostname === "127.0.0.1" && opts.port === port &&
- opts.method === "GET" && readOnlyPaths.includes(opts.path) && opts.agent === false
+ opts.method === "GET" && readOnlyPaths.includes(opts.path) && typeof opts.createConnection === "function"
  ? request(opts, ...args) : deny();
 const net = require("node:net"), connect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function(...args) {

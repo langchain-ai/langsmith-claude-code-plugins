@@ -4,11 +4,12 @@ import http, {
   type ServerResponse,
 } from "node:http";
 import https from "node:https";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { endpoints } from "./config.js";
 import {
   API_KEY_SLOT,
   BEARER_SLOT,
+  CHALLENGE_HEADER,
   CREDENTIAL_PREFIX,
   CREDENTIAL_SLOT_GUIDANCE,
   CREDENTIAL_STATE_PATH,
@@ -19,6 +20,7 @@ import {
   LOGIN_TOKEN_TTL_MS,
   MAX_REQUEST_BYTES,
   PASSTHROUGH_HEADER,
+  PROOF_PATH,
   PROTOCOL_VERSION,
   TENANT_HEADER,
   TENANT_HEADER_GUIDANCE,
@@ -50,6 +52,9 @@ export const identity = (c: ProxyConfig) =>
       ]),
     )
     .digest("hex");
+
+export const proof = (secret: string, challenge: string) =>
+  createHmac("sha256", secret).update(challenge).digest("hex");
 
 export function authenticated(req: IncomingMessage, secret: string): boolean {
   const keys = req.rawHeaders.filter(
@@ -308,6 +313,11 @@ export function createProxy(
   const transport = options.transport ?? https.request;
   let draining = false;
   const server = http.createServer({ maxHeaderSize: 32768 }, (req, res) => {
+    const challenge = req.headers[CHALLENGE_HEADER];
+    if (req.method === "GET" && req.url === PROOF_PATH && typeof challenge === "string") {
+      res.end(proof(config.secret, challenge));
+      return;
+    }
     if (!authenticated(req, config.secret)) {
       reply(res, 401, "Local proxy authentication required");
       return;

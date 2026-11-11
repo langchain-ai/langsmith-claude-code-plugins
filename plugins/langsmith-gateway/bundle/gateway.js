@@ -813,7 +813,7 @@ var ORIGIN_SHAPE_GUIDANCE = "Endpoints must be HTTPS DNS origins without credent
 var ORIGIN_DNS_GUIDANCE = "Endpoints must use public DNS names and HTTPS ports 1-65535";
 var API_URL = "https://api.smith.langchain.com";
 var UPSTREAM = "https://gateway.smith.langchain.com";
-var PROTOCOL_VERSION = 12;
+var PROTOCOL_VERSION = 13;
 var KEY_HEADER = "x-langsmith-proxy-key";
 var BEARER_SLOT = "authorization";
 var API_KEY_SLOT = "x-api-key";
@@ -824,6 +824,9 @@ var CREDENTIAL_SLOT_GUIDANCE = "Exactly one sk-ant-... credential with a nonempt
 var TENANT_HEADER = "x-tenant-id";
 var HEALTH_PATH = "/_langsmith/health";
 var CREDENTIAL_STATE_PATH = "/_langsmith/credential";
+var PROOF_PATH = "/_langsmith/proof";
+var CHALLENGE_HEADER = "x-langsmith-proxy-challenge";
+var CHALLENGE_BYTES = 32;
 var SIGN_IN_COMMAND = "the identity token command you configured; the LangSmith CLI is not used";
 var SIGN_IN_CLI_DEFAULT = "the LangSmith CLI with its default/current profile";
 var SIGN_IN_CLI_PROFILE = (profile) => `the LangSmith CLI with profile ${JSON.stringify(profile)}`;
@@ -1064,7 +1067,7 @@ function warn(message) {
 // dist/src/proxy/server.js
 import http from "node:http";
 import https from "node:https";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 // dist/src/proxy/header-slots.js
 var slotPresent = (req, name) => req.rawHeaders.some((header, i) => i % 2 === 0 && header.toLowerCase() === name);
@@ -15535,6 +15538,7 @@ var identity = (c) => createHash("sha256").update(JSON.stringify([
   c.identityTokenTtlMs,
   c.workspaceId
 ])).digest("hex");
+var proof = (secret, challenge) => createHmac("sha256", secret).update(challenge).digest("hex");
 function authenticated(req, secret) {
   const keys = req.rawHeaders.filter((_, i) => i % 2 === 0 && req.rawHeaders[i].toLowerCase() === KEY_HEADER);
   const value = req.headers[KEY_HEADER];
@@ -15746,6 +15750,11 @@ function createProxy(config, options = {}) {
   const transport = options.transport ?? https.request;
   let draining = false;
   const server = http.createServer({ maxHeaderSize: 32768 }, (req, res) => {
+    const challenge = req.headers[CHALLENGE_HEADER];
+    if (req.method === "GET" && req.url === PROOF_PATH && typeof challenge === "string") {
+      res.end(proof(config.secret, challenge));
+      return;
+    }
     if (!authenticated(req, config.secret)) {
       reply(res, 401, "Local proxy authentication required");
       return;
@@ -16089,17 +16098,18 @@ function createConfig(profile, port, home = userHome(), urls = {}, useClaudeSubs
 
 // dist/src/proxy/lifecycle.js
 import http2 from "node:http";
+import { randomBytes as randomBytes3 } from "node:crypto";
 import { connect } from "node:net";
 import { spawn as spawn2 } from "node:child_process";
-function control(config, method, path3, timeoutMs = 500) {
+function send(config, socket, method, path3, headers, timeoutMs) {
   return new Promise((resolve4, reject) => {
     const req = http2.request({
       hostname: "127.0.0.1",
       port: config.port,
       method,
       path: path3,
-      agent: false,
-      headers: { [KEY_HEADER]: config.secret, "content-length": "0" }
+      createConnection: () => socket,
+      headers: { ...headers, connection: "keep-alive", "content-length": "0" }
     }, (res) => {
       let data = "";
       res.setEncoding("utf8");
@@ -16116,6 +16126,20 @@ function control(config, method, path3, timeoutMs = 500) {
     req.on("error", () => reject(new Error("Local proxy unavailable")));
     req.end();
   });
+}
+async function control(config, method, path3, timeoutMs = 500) {
+  const socket = connect({ host: "127.0.0.1", port: config.port });
+  socket.on("error", () => {
+  });
+  try {
+    const challenge = randomBytes3(CHALLENGE_BYTES).toString("hex");
+    const answer = await send(config, socket, "GET", PROOF_PATH, { [CHALLENGE_HEADER]: challenge }, timeoutMs);
+    if (answer !== proof(config.secret, challenge))
+      throw new Error("Local proxy unavailable");
+    return await send(config, socket, method, path3, { [KEY_HEADER]: config.secret }, timeoutMs);
+  } finally {
+    socket.destroy();
+  }
 }
 async function healthy(config) {
   try {
