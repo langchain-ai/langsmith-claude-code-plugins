@@ -928,7 +928,7 @@ describe("shared lifecycle and explicit configuration", () => {
     await control(f.config, "PUT", "/_langsmith/sessions/one");
     await control(f.config, "PUT", "/_langsmith/sessions/two");
     await control(f.config, "PUT", "/_langsmith/sessions/two");
-    await control(f.config, "DELETE", "/_langsmith/sessions/one");
+    expect(await control(f.config, "DELETE", "/_langsmith/sessions/one")).toBe("1");
     expect([...f.sessions.leases.keys()]).toEqual(["two"]);
     expect(f.sessions.idle()).toBe(false);
     expect(

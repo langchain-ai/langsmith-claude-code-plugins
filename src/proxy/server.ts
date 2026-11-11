@@ -353,7 +353,11 @@ export function createProxy(
         reply(res, 429, "Session registration unavailable");
         return;
       }
-      if (req.method === "DELETE") sessions.release(control[1]);
+      if (req.method === "DELETE") {
+        sessions.release(control[1]);
+        reply(res, 200, String(sessions.leases.size));
+        return;
+      }
       reply(res, 204, "");
       return;
     }

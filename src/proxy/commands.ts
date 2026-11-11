@@ -69,10 +69,11 @@ export async function handleGatewayInput(
     }
     return;
   }
-  try {
-    await gatewayHook(input.hook_event_name, input.session_id, entry, home);
-  } finally {
-    if (input.hook_event_name === "SessionEnd" && EXIT_REASONS.includes(String(input.reason)))
-      rotateKey(home);
-  }
+  const openSessions = await gatewayHook(input.hook_event_name, input.session_id, entry, home);
+  if (
+    input.hook_event_name === "SessionEnd" &&
+    EXIT_REASONS.includes(String(input.reason)) &&
+    openSessions === "0"
+  )
+    rotateKey(home);
 }

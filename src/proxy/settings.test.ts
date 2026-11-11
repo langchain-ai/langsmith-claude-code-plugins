@@ -1567,8 +1567,8 @@ describe("a gateway command that cannot answer", () => {
 });
 
 describe("one-time proxy key rotation", () => {
-  const exit = (reason: string) => {
-    vi.mocked(gatewayHook).mockResolvedValueOnce(undefined);
+  const exit = (reason: string, openSessions = "0") => {
+    vi.mocked(gatewayHook).mockResolvedValueOnce(openSessions);
     return handleGatewayInput(
       { hook_event_name: "SessionEnd", session_id: "one", reason },
       "/fake",
@@ -1586,8 +1586,7 @@ describe("one-time proxy key rotation", () => {
   it("swaps the key in settings and config once when Claude Code exits", async () => {
     const old = await installedBeforeRotation();
     const before = json(settings);
-    vi.mocked(gatewayHook).mockRejectedValueOnce(new Error("Local proxy unavailable"));
-    await expect(exit("prompt_input_exit")).rejects.toThrow("Local proxy unavailable");
+    await exit("prompt_input_exit");
     const rotated = loadConfig()!;
     expect(rotated.secret).not.toBe(old.secret);
     expect(rotated).toEqual({ ...old, secret: rotated.secret });
@@ -1618,10 +1617,14 @@ describe("one-time proxy key rotation", () => {
     );
     expect(readFileSync(broken, "utf8")).toBe("{");
   });
-  it.each(["clear", "resume"])("keeps the key when a session ends with %s", async (reason) => {
+  it.each([
+    ["clear", "0"],
+    ["resume", "0"],
+    ["prompt_input_exit", "1"],
+  ])("keeps the key when a session ends with %s and %s others open", async (reason, open) => {
     const old = await installedBeforeRotation();
     const before = readFileSync(settings, "utf8");
-    await exit(reason);
+    await exit(reason, open);
     expect(loadConfig()).toEqual(old);
     expect(readFileSync(settings, "utf8")).toBe(before);
   });

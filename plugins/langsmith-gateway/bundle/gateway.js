@@ -15788,8 +15788,11 @@ function createProxy(config, options = {}) {
         reply(res, 429, "Session registration unavailable");
         return;
       }
-      if (req.method === "DELETE")
+      if (req.method === "DELETE") {
         sessions.release(control2[1]);
+        reply(res, 200, String(sessions.leases.size));
+        return;
+      }
       reply(res, 204, "");
       return;
     }
@@ -16182,7 +16185,7 @@ async function gatewayHook(event, session, entry2, home = userHome()) {
   if (!["SessionStart", "UserPromptSubmit", "SessionEnd"].includes(String(event)) || typeof session !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(session))
     return;
   if (event === "SessionEnd") {
-    await control(config, "DELETE", `/_langsmith/sessions/${session}`);
+    return await control(config, "DELETE", `/_langsmith/sessions/${session}`);
   } else {
     await ensure(config, entry2);
     await control(config, "PUT", `/_langsmith/sessions/${session}`);
@@ -16701,12 +16704,9 @@ async function handleGatewayInput(input, entry2, env = process.env, home = userH
     }
     return;
   }
-  try {
-    await gatewayHook(input.hook_event_name, input.session_id, entry2, home);
-  } finally {
-    if (input.hook_event_name === "SessionEnd" && EXIT_REASONS.includes(String(input.reason)))
-      rotateKey(home);
-  }
+  const openSessions = await gatewayHook(input.hook_event_name, input.session_id, entry2, home);
+  if (input.hook_event_name === "SessionEnd" && EXIT_REASONS.includes(String(input.reason)) && openSessions === "0")
+    rotateKey(home);
 }
 
 // dist/src/utils/stdin.js

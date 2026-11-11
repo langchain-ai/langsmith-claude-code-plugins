@@ -117,7 +117,7 @@ export async function gatewayHook(
   session: unknown,
   entry: string,
   home = userHome(),
-): Promise<void> {
+): Promise<string | undefined> {
   const config = loadConfig(home);
   if (!config) return;
   if (
@@ -129,7 +129,7 @@ export async function gatewayHook(
   if (event === "SessionEnd") {
     // Record the end even before registration/health completes. Never spawn here.
     // If no listener exists yet, lease expiry is the fallback (no persistent state).
-    await control(config, "DELETE", `/_langsmith/sessions/${session}`);
+    return await control(config, "DELETE", `/_langsmith/sessions/${session}`);
   } else {
     await ensure(config, entry);
     await control(config, "PUT", `/_langsmith/sessions/${session}`);
