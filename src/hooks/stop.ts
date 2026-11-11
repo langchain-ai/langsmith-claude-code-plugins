@@ -42,6 +42,7 @@ import {
 import { initHook, expandHome } from "../utils/hook-init.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { readStdin } from "../utils/stdin.js";
+import { withoutTracedAgentPayloads } from "../background-runs.js";
 import { finalizeNotificationChain } from "../finalize.js";
 import { initTracing } from "../tracing-engine.js";
 import { MUTED_TRACE_CONTENT } from "@langchain/plugins-base/privacy";
@@ -376,6 +377,7 @@ export async function closeStoppedTurn(
     const notifAgentId = sessionState.current_notification_agent_id;
     const notifInterrupted = sessionState.current_notification_interrupted ?? false;
 
+    s.task_run_map = withoutTracedAgentPayloads(s.task_run_map, processedAgentIds);
     // Drop the sync subagents we just traced from the queue.
     s.pending_subagent_traces = (latestSession.pending_subagent_traces ?? []).filter(
       (sa) => !processedAgentIds.has(sa.agent_id),

@@ -56,3 +56,17 @@ export function recordBackgroundRun(
     },
   };
 }
+
+export function withoutTracedAgentPayloads(
+  taskRunMap: SessionState["task_run_map"],
+  tracedAgentIds: ReadonlySet<string>,
+): SessionState["task_run_map"] {
+  if (!taskRunMap) return taskRunMap;
+  return Object.fromEntries(
+    Object.entries(taskRunMap).map(([id, entry]) => {
+      if (!tracedAgentIds.has(id) || !entry.deferred) return [id, entry];
+      const { inputs: _inputs, outputs: _outputs, ...kept } = entry.deferred;
+      return [id, { ...entry, deferred: kept }];
+    }),
+  );
+}

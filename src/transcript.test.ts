@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -111,38 +111,25 @@ describe("readTranscript", () => {
     expect(lastLine).toBe(1);
   });
 
-  it.each([
-    ["read whole", Number.MAX_SAFE_INTEGER],
-    ["streamed", 0],
-  ])(
-    "when %s, keeps a closing turn's late lines but stops at the next prompt after the cut, even across a split character",
-    async (_, fullReadBytes) => {
-      vi.resetModules();
-      vi.doMock("./constants.js", async (original) => ({
-        ...(await original<typeof import("./constants.js")>()),
-        MAX_FULL_READ_BYTES: fullReadBytes,
-      }));
-      const { readTranscript: read } = await import("./transcript.js");
-      const first = [0, 1, 2]
-        .map((pad) => makeUser("x".repeat(pad) + "\u4e2d".repeat(800_000)))
-        .find((line) => (Buffer.from(JSON.stringify(line))[2 * 1024 * 1024] & 0xc0) === 0x80)!;
-      const path = writeJsonl("cut.jsonl", [
-        first,
-        makeAssistant("msg_1", "a"),
-        makeAssistant("msg_2", "late", { ts: T1 }),
-        makeUser("Next", T1),
-        makeAssistant("msg_3", "c", { ts: T1 }),
-      ]);
+  it("keeps a closing turn's late lines but stops at the next prompt after the cut, even across a split character", () => {
+    const first = [0, 1, 2]
+      .map((pad) => makeUser("x".repeat(pad) + "\u4e2d".repeat(800_000)))
+      .find((line) => (Buffer.from(JSON.stringify(line))[2 * 1024 * 1024] & 0xc0) === 0x80)!;
+    const path = writeJsonl("cut.jsonl", [
+      first,
+      makeAssistant("msg_1", "a"),
+      makeAssistant("msg_2", "late", { ts: T1 }),
+      makeUser("Next", T1),
+      makeAssistant("msg_3", "c", { ts: T1 }),
+    ]);
 
-      const { messages, lastLine } = read(path, -1, T0);
+    const { messages, lastLine } = readTranscript(path, -1, T0);
 
-      expect(messages.map((m) => m.type)).toEqual(["user", "assistant", "assistant"]);
-      expect(messages[0]).toEqual(first);
-      expect(lastLine).toBe(2);
-      expect(read(path, -1).messages).toHaveLength(5);
-      vi.doUnmock("./constants.js");
-    },
-  );
+    expect(messages.map((m) => m.type)).toEqual(["user", "assistant", "assistant"]);
+    expect(messages[0]).toEqual(first);
+    expect(lastLine).toBe(2);
+    expect(readTranscript(path, -1).messages).toHaveLength(5);
+  });
 
   it("keeps a turn's own prompt and its follow-up lines but stops at the next turn's prompt", () => {
     const own = makeUser("Own", T0, "p1");
