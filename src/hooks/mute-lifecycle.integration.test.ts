@@ -887,6 +887,29 @@ describe("closing hooks hand their work to the uploader", () => {
     expect(h.errors).toEqual([]);
   });
 
+  it("drops a synchronous subagent's prompt and result from state once Stop traces it", async () => {
+    reset("full");
+    await hook("prompt");
+    const turn = h.state.session.current_turn_run_id;
+    const trace = h.state.session.current_trace_id;
+    const background = { tool_use_id: "background-task", tool_name: "Task" };
+    const launched = { agentId: "background-agent", status: "async_launched" };
+    await hook("pre", background);
+    await hook("post", { ...background, tool_response: launched });
+    await syncAgent();
+    await hook("stop");
+
+    expect(h.operations.map((op) => `${op.action} ${op.config.name}`)).toContain("post Agent");
+    const agents = h.state.session.task_run_map!;
+    expect(agents["sync-agent"].deferred).not.toHaveProperty("inputs");
+    expect(agents["sync-agent"].deferred).not.toHaveProperty("outputs");
+    expect(agents["sync-agent"].deferred).toMatchObject({ trace_id: trace, parent_run_id: turn });
+    expect(agents["background-agent"].deferred).toMatchObject({
+      inputs: { content: privateText },
+      outputs: launched,
+    });
+  });
+
   it("an interrupted turn's queued closing leaves the next turn's synchronous subagent alone", async () => {
     reset("full");
     await hook("prompt");
