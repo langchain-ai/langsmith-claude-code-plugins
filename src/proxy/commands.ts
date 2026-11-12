@@ -1,12 +1,18 @@
 import { parseGatewayCommand, SetupError } from "./options.js";
-import { BASE_OVERWRITE_NOTICE, COMMAND_GUIDANCE } from "./proxy-constants.js";
-import { enable, disable, modeSummary } from "./settings.js";
+import { BASE_OVERWRITE_NOTICE, COMMAND_GUIDANCE, EXIT_REASONS } from "./proxy-constants.js";
+import { enable, disable, modeSummary, rotateKey } from "./settings.js";
 import { gatewayHook } from "./lifecycle.js";
 import { gatewayStatus } from "./status.js";
 import { ConfigError, userHome } from "./config.js";
 
 export async function handleGatewayInput(
-  input: { hook_event_name?: unknown; prompt?: unknown; session_id?: unknown; cwd?: string },
+  input: {
+    hook_event_name?: unknown;
+    prompt?: unknown;
+    session_id?: unknown;
+    reason?: unknown;
+    cwd?: string;
+  },
   entry: string,
   env = process.env,
   home = userHome(),
@@ -63,5 +69,11 @@ export async function handleGatewayInput(
     }
     return;
   }
-  await gatewayHook(input.hook_event_name, input.session_id, entry, home);
+  const openSessions = await gatewayHook(input.hook_event_name, input.session_id, entry, home);
+  if (
+    input.hook_event_name === "SessionEnd" &&
+    EXIT_REASONS.includes(String(input.reason)) &&
+    openSessions === "0"
+  )
+    rotateKey(home);
 }

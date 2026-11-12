@@ -11,12 +11,12 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { enable, disable, routingStatus, SetupError } from "./settings.js";
 import { configDir, loadConfig } from "./config.js";
-import { API_URL, UPSTREAM } from "./proxy-constants.js";
+import { API_URL, KEY_ROTATED_MARKER, UPSTREAM } from "./proxy-constants.js";
 import { atomic, snapshot, transaction } from "./files.js";
-import { control, ensure, waitForStopped } from "./lifecycle.js";
+import { control, ensure, gatewayHook, waitForStopped } from "./lifecycle.js";
 import { targetPaths, routingEnv, matchesRouting, BASE, HEADERS } from "./scopes.js";
 import { handleGatewayInput } from "./commands.js";
 import { identity } from "./server.js";
@@ -40,12 +40,16 @@ vi.mock("node:os", async (original) => ({
   ...(await original<typeof import("node:os")>()),
   userInfo: vi.fn(),
 }));
-vi.mock("./lifecycle.js", async (original) => ({
-  ...(await original<typeof import("./lifecycle.js")>()),
-  ensure: vi.fn(),
-  control: vi.fn(),
-  waitForStopped: vi.fn(),
-}));
+vi.mock("./lifecycle.js", async (original) => {
+  const lifecycle = await original<typeof import("./lifecycle.js")>();
+  return {
+    ...lifecycle,
+    gatewayHook: vi.fn(lifecycle.gatewayHook),
+    ensure: vi.fn(),
+    control: vi.fn(),
+    waitForStopped: vi.fn(),
+  };
+});
 
 describe("consented user transport setup (OS-home isolated, no real CLI/network)", () => {
   it.each([undefined, "claude-gateway"])(
@@ -1559,5 +1563,80 @@ describe("a gateway command that cannot answer", () => {
     expect(process.exitCode).toBe(before);
     expect(said).toHaveBeenCalledWith(expect.stringContaining("could not be written"));
     said.mockRestore();
+  });
+});
+
+describe("one-time proxy key rotation", () => {
+  const exit = (reason: string, openSessions = "0") => {
+    vi.mocked(gatewayHook).mockResolvedValueOnce(openSessions);
+    return handleGatewayInput(
+      { hook_event_name: "SessionEnd", session_id: "one", reason },
+      "/fake",
+      {},
+      home,
+      vi.fn(),
+    );
+  };
+  async function installedBeforeRotation() {
+    save({ model: "keep", env: { ANTHROPIC_CUSTOM_HEADERS: "X-Keep: original" } });
+    await run();
+    rmSync(join(configDir(home), KEY_ROTATED_MARKER));
+    return loadConfig()!;
+  }
+  it("swaps the key in settings and config once when Claude Code exits", async () => {
+    const old = await installedBeforeRotation();
+    const before = json(settings);
+    await exit("prompt_input_exit");
+    const rotated = loadConfig()!;
+    expect(rotated.secret).not.toBe(old.secret);
+    expect(rotated).toEqual({ ...old, secret: rotated.secret });
+    expect(json(settings)).toEqual({
+      ...before,
+      env: {
+        ...before.env,
+        [HEADERS]: `X-Keep: original\nX-LangSmith-Proxy-Key: ${rotated.secret}`,
+      },
+    });
+    await exit("other");
+    expect(loadConfig()).toEqual(rotated);
+  });
+  it("rotates the key even when another tracked settings file can't be read", async () => {
+    const old = await installedBeforeRotation();
+    const broken = join(home, "project/.claude/settings.local.json");
+    mkdirSync(dirname(broken), { recursive: true });
+    writeFileSync(broken, "{", { mode: 0o600 });
+    const path = join(configDir(home), "config.json");
+    writeFileSync(path, JSON.stringify({ ...json(path), settingsTargets: [settings, broken] }), {
+      mode: 0o600,
+    });
+    await exit("prompt_input_exit");
+    const rotated = loadConfig()!;
+    expect(rotated.secret).not.toBe(old.secret);
+    expect(json(settings).env[HEADERS]).toBe(
+      `X-Keep: original\nX-LangSmith-Proxy-Key: ${rotated.secret}`,
+    );
+    expect(readFileSync(broken, "utf8")).toBe("{");
+  });
+  it.each([
+    ["clear", "0"],
+    ["resume", "0"],
+    ["prompt_input_exit", "1"],
+  ])("keeps the key when a session ends with %s and %s others open", async (reason, open) => {
+    const old = await installedBeforeRotation();
+    const before = readFileSync(settings, "utf8");
+    await exit(reason, open);
+    expect(loadConfig()).toEqual(old);
+    expect(readFileSync(settings, "utf8")).toBe(before);
+  });
+  it("leaves a rotated install alone while setup holds the lock", async () => {
+    await run();
+    mkdirSync(join(configDir(home), "settings.lock"));
+    await expect(exit("prompt_input_exit")).resolves.toBeUndefined();
+  });
+  it("never rotates a key created by this version", async () => {
+    await run();
+    const config = loadConfig()!;
+    await exit("prompt_input_exit");
+    expect(loadConfig()).toEqual(config);
   });
 });

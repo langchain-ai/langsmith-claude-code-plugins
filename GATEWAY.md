@@ -58,4 +58,8 @@ This is for orgs that have a custom OIDC provider configured in LangSmith. It ma
 - Your workspace id is in your LangSmith workspace settings.
 - The command runs through `/bin/sh` without your terminal's setup, so use full paths and print nothing but the token.
 
+## Shared machines
+
+The helper listens on a local port so another user on your machine could take that port while the helper is stopped and receive the key Claude Code sends with each request. The plugin's hooks check that the helper holds the key before sending it, but Claude Code's own requests can't do that check. If other people have accounts on your machine, only use the gateway if you trust all of them.
+
 [LangSmith tracing](./README.md) is the separate plugin that records what the agent did.

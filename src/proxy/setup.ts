@@ -11,6 +11,7 @@ import {
   isProfile,
   isWorkspaceId,
 } from "./config-validation.js";
+import { KEY_ROTATED_MARKER } from "./proxy-constants.js";
 import type { CredentialIdentity, ProxyConfig } from "./proxy-models.js";
 
 export function createConfig(
@@ -50,4 +51,5 @@ export function createConfig(
   const path = join(dir, "config.json");
   if (snapshot(path, true)) throw new Error("Proxy config already exists");
   atomic(path, jsonText(config), undefined);
+  atomic(join(dir, KEY_ROTATED_MARKER), "", undefined);
 }

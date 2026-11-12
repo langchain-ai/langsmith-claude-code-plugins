@@ -53,7 +53,7 @@ export const ORIGIN_DNS_GUIDANCE = "Endpoints must use public DNS names and HTTP
 
 export const API_URL = "https://api.smith.langchain.com";
 export const UPSTREAM = "https://gateway.smith.langchain.com";
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 export const KEY_HEADER = "x-langsmith-proxy-key";
 export const BEARER_SLOT = "authorization";
 export const API_KEY_SLOT = "x-api-key";
@@ -65,6 +65,12 @@ export const CREDENTIAL_SLOT_GUIDANCE =
 export const TENANT_HEADER = "x-tenant-id";
 export const HEALTH_PATH = "/_langsmith/health";
 export const CREDENTIAL_STATE_PATH = "/_langsmith/credential";
+export const PROOF_PATH = "/_langsmith/proof";
+export const CHALLENGE_HEADER = "x-langsmith-proxy-challenge";
+export const CHALLENGE_BYTES = 32;
+export const EXIT_REASONS = ["prompt_input_exit", "logout", "other"];
+export const KEY_ROTATED_MARKER = "key-rotated";
+export const PROOF_PREFIX = "langsmith-proxy-proof:";
 
 export const SIGN_IN_COMMAND =
   "the identity token command you configured; the LangSmith CLI is not used";
