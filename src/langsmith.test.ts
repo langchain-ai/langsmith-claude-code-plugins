@@ -18,10 +18,6 @@ vi.mock("./tracing-engine.js", async () => {
   const { buildCodingAgentMetadata } = await import("@langchain/plugins-base/metadata");
   return {
     turnFiller: async () => (metadata: unknown) => metadata,
-    operationFor: async (id: string) =>
-      allRunTreeInstances.some((run) => run.params.id === id && run.ops.includes("postRun"))
-        ? "patch"
-        : "post",
     captureRun: async (
       { metadata, ...run }: Record<string, any>,
       _mode?: string,

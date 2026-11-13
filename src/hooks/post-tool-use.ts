@@ -8,13 +8,7 @@
 
 import { resolveTurnTracingMode, toolTracingMode } from "../tracing-mode.js";
 import { debug, error } from "../logger.js";
-import {
-  currentTurnMetadata,
-  firstUnpostedCall,
-  generateDottedOrderSegment,
-  traceRunningSubagent,
-  traceTurn,
-} from "../langsmith.js";
+import { generateDottedOrderSegment } from "../langsmith.js";
 import {
   loadState,
   atomicUpdateState,
@@ -31,25 +25,8 @@ import { toolOrigin } from "../repo-attribution.js";
 import { recordBackgroundRun } from "../background-runs.js";
 import { detectWorkflowLaunch } from "../workflows.js";
 import { captureToolRun, initTracing } from "../tracing-engine.js";
-import {
-  findToolUse,
-  groupIntoTurns,
-  readRuntimeVersion,
-  readTranscript,
-  subagentLaunchId,
-  subagentTranscriptPath,
-  turnPrompt,
-} from "../transcript.js";
-import { WORKFLOW_SUBAGENT_TYPE } from "../constants.js";
 import { stableRunId } from "../utils/ids/run-id.js";
-import type {
-  ClaudeRun,
-  Config,
-  PostToolUseHookInput,
-  SessionState,
-  ToolOrigin,
-  TracingMode,
-} from "../types.js";
+import type { ClaudeRun, PostToolUseHookInput, ToolOrigin, TracingMode } from "../types.js";
 
 export async function main(): Promise<void> {
   const input: PostToolUseHookInput = await readStdin();
@@ -58,15 +35,11 @@ export async function main(): Promise<void> {
   const config = initHook(input.cwd);
   if (!config) return;
 
-  // Subagent tool calls are traced from the subagent's transcript, not this payload,
-  // to avoid double-tracing and orphan runs. A main-agent turn
+  // Subagent tool calls are traced by the Stop hook from the transcript.
+  // Skip here to avoid double-tracing and orphan runs. A main-agent turn
   // carries agent_type without agent_id and is traced here as usual.
   if (input.agent_id) {
-    try {
-      await traceSubagentSoFar(config, input, input.agent_id);
-    } catch (err) {
-      error(`Failed to upload the subagent's finished steps: ${err}`);
-    }
+    debug("Skipping PostToolUse for subagent tool — Stop hook handles tracing");
     return;
   }
 
@@ -74,7 +47,23 @@ export async function main(): Promise<void> {
   const state = loadState(config.stateFilePath);
   const sessionState = getSessionState(state, input.session_id);
 
-  const tracing = toolCallTracing(config, input, sessionState, input.tool_use_id);
+  const turnTracing = resolveTurnTracingMode(
+    config,
+    input.session_id,
+    sessionState.tool_tracing_modes?.[input.tool_use_id],
+    sessionState.current_turn_tracing,
+    sessionState.current_turn_run_id
+      ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing
+      : undefined,
+  );
+  const tracing = toolTracingMode(
+    config,
+    input.session_id,
+    sessionState,
+    expandHome(input.transcript_path),
+    input.tool_use_id,
+    turnTracing,
+  );
   const parentRunId = sessionState.current_turn_run_id;
   const traceId = sessionState.current_trace_id;
   const parentDottedOrder = sessionState.current_dotted_order;
@@ -83,8 +72,6 @@ export async function main(): Promise<void> {
     error("No current_turn_run_id or trace_id in state - UserPromptSubmit hook may not have run");
     return;
   }
-
-  initTracing(config, input.cwd, input.session_id);
 
   // Generate run ID and dotted order for this tool.
   // Use PreToolUse's recorded start time if available (accurate wall-clock time
@@ -126,6 +113,7 @@ export async function main(): Promise<void> {
     debug(
       `Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`,
     );
+    initTracing(config, input.cwd, input.session_id);
     await captureToolRun(
       {
         id: toolRunId,
@@ -152,6 +140,7 @@ export async function main(): Promise<void> {
       origin,
     );
   } else {
+    initTracing(config, input.cwd, input.session_id);
     await (config.captureHookOutputs ? hold : captureToolRun)(
       {
         id: toolRunId,
@@ -277,176 +266,4 @@ export async function main(): Promise<void> {
     };
   });
   if (held && !kept) takeHeldRun(...heldKey);
-
-  try {
-    await traceFinishedModelCalls(config, input, sessionState);
-  } catch (err) {
-    error(`Failed to upload finished model calls: ${err}`);
-  }
-}
-
-async function traceFinishedModelCalls(
-  config: Config,
-  input: PostToolUseHookInput,
-  sessionState: SessionState,
-): Promise<void> {
-  const transcriptPath = expandHome(input.transcript_path);
-  const turnRunId = sessionState.current_turn_run_id;
-  const toolStart = sessionState.tool_start_times?.[input.tool_use_id];
-  if (!transcriptPath || !turnRunId || toolStart === undefined) return;
-
-  const { messages } = readTranscript(
-    transcriptPath,
-    sessionState.last_line,
-    undefined,
-    turnPrompt(sessionState, sessionState.read_turn_run_id === turnRunId),
-    sessionState,
-  );
-  const turns = groupIntoTurns(messages);
-  const turn = turns.length === 1 ? turns[0] : undefined;
-  const finished = turn?.llmCalls.slice(0, -1) ?? [];
-  if (!turn || finished.length === 0) return;
-  const toolCalls = finished.flatMap((llmCall) => llmCall.toolCalls);
-
-  await traceTurn({
-    tracing: resolveTurnTracingMode(
-      config,
-      input.session_id,
-      sessionState.current_turn_tracing,
-      sessionState.open_turns?.[turnRunId]?.tracing,
-    ),
-    turn: { ...turn, llmCalls: finished },
-    sessionId: input.session_id,
-    turnNum: sessionState.turn_count + 1,
-    customMetadata: await currentTurnMetadata(config.customMetadata, sessionState),
-    hookCwd: input.cwd,
-    runtimeVersion: sessionState.runtime_version ?? readRuntimeVersion(transcriptPath),
-    approvalPolicy: sessionState.approval_policy ?? input.permission_mode,
-    parentRunId: turnRunId,
-    tracedToolUseIds: new Set(toolCalls.map((toolCall) => toolCall.tool_use.id)),
-    traceId: sessionState.current_trace_id,
-    parentDottedOrder: sessionState.current_dotted_order,
-    captureHookOutputs: config.captureHookOutputs,
-    uploadFromCall: await firstUnpostedCall(turn, turnRunId, turnRunId, finished.length),
-  });
-}
-
-function toolCallTracing(
-  config: Config,
-  input: PostToolUseHookInput,
-  sessionState: SessionState,
-  toolUseId: string,
-): TracingMode {
-  const turnTracing = resolveTurnTracingMode(
-    config,
-    input.session_id,
-    sessionState.tool_tracing_modes?.[toolUseId],
-    sessionState.current_turn_tracing,
-    sessionState.current_turn_run_id
-      ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing
-      : undefined,
-  );
-  return toolTracingMode(
-    config,
-    input.session_id,
-    sessionState,
-    expandHome(input.transcript_path),
-    toolUseId,
-    turnTracing,
-  );
-}
-
-async function traceSubagentSoFar(
-  config: Config,
-  input: PostToolUseHookInput,
-  agentId: string,
-): Promise<void> {
-  const transcriptPath = expandHome(input.transcript_path);
-  if (!transcriptPath || !input.agent_type || input.agent_type === WORKFLOW_SUBAGENT_TYPE) return;
-  const subagent = {
-    agent_id: agentId,
-    agent_type: input.agent_type,
-    agent_transcript_path: subagentTranscriptPath(transcriptPath, input.session_id, agentId),
-    session_id: input.session_id,
-  };
-  const turns = groupIntoTurns(readTranscript(subagent.agent_transcript_path, -1).messages);
-  const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
-  const turnRunId = sessionState.current_turn_run_id;
-  const readCurrentTurn = () =>
-    readTranscript(
-      transcriptPath,
-      sessionState.last_line,
-      undefined,
-      turnPrompt(sessionState, sessionState.read_turn_run_id === turnRunId),
-      sessionState,
-    ).messages;
-  const recordedLaunch = sessionState.task_run_map?.[agentId];
-  initTracing(config, input.cwd, input.session_id);
-
-  if (recordedLaunch) {
-    const launchedBy = recordedLaunch.deferred?.parent_run_id as string | undefined;
-    const launchingTurn = launchedBy ? sessionState.open_turns?.[launchedBy] : undefined;
-    const currentTurnId =
-      launchedBy === turnRunId ? groupIntoTurns(readCurrentTurn()).at(-1)?.promptId : undefined;
-    await traceRunningSubagent({
-      subagent,
-      taskRunInfo: recordedLaunch,
-      turns,
-      sessionId: input.session_id,
-      customMetadata: config.customMetadata,
-      runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
-      turnId: launchingTurn?.turn_id ?? currentTurnId,
-      turnNumber: launchingTurn?.turn_number ?? sessionState.current_turn_number,
-      captureHookOutputs: config.captureHookOutputs,
-    });
-    return;
-  }
-
-  const launchId = subagentLaunchId(subagent.agent_transcript_path);
-  const startTime = launchId ? sessionState.tool_start_times?.[launchId] : undefined;
-  if (!launchId || startTime === undefined) return;
-  const messages = readCurrentTurn();
-  const launch = findToolUse(messages, launchId);
-  const traceId = sessionState.current_trace_id;
-  const parentDottedOrder = sessionState.current_dotted_order;
-  if (!launch || !turnRunId || !traceId || !parentDottedOrder) return;
-
-  const tracing = toolCallTracing(config, input, sessionState, launch.id);
-  const runId = stableRunId(startTime, input.session_id, launch.id);
-  const task = {
-    tracing,
-    run_id: runId,
-    dotted_order: `${parentDottedOrder}.${generateDottedOrderSegment(startTime, runId)}`,
-    deferred: {
-      trace_id: traceId,
-      parent_run_id: turnRunId,
-      start_time: new Date(startTime).toISOString(),
-      ...(tracing === "full" ? { inputs: launch.input } : {}),
-    },
-  };
-  if (!sessionState.opened_subagents?.[launch.id]) {
-    await atomicUpdateState(config.stateFilePath, (state) => {
-      const latest = getSessionState(state, input.session_id);
-      const opened = { agent_id: agentId, agent_type: subagent.agent_type, task };
-      return {
-        ...state,
-        [input.session_id]: {
-          ...latest,
-          opened_subagents: { ...latest.opened_subagents, [launch.id]: opened },
-          traced_tool_use_ids: [...(latest.traced_tool_use_ids ?? []), launch.id],
-        },
-      };
-    });
-  }
-  await traceRunningSubagent({
-    subagent,
-    taskRunInfo: task,
-    turns,
-    sessionId: input.session_id,
-    customMetadata: await currentTurnMetadata(config.customMetadata, sessionState),
-    runtimeVersion: sessionState.runtime_version ?? readRuntimeVersion(transcriptPath),
-    turnId: groupIntoTurns(messages).at(-1)?.promptId,
-    turnNumber: sessionState.current_turn_number,
-    captureHookOutputs: config.captureHookOutputs,
-  });
 }

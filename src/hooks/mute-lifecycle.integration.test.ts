@@ -122,8 +122,6 @@ vi.mock("../tracing-engine.js", async () => {
       const post = h.operations.find((op) => op.action === "post" && op.config.id === id)?.config;
       return post?.extra.metadata.ls_tracing_mode === "metadata" ? undefined : post?.inputs;
     },
-    operationFor: async (id: string) =>
-      h.operations.some((op) => op.action === "post" && op.config.id === id) ? "patch" : "post",
     settledFromTurn: async (base: unknown) => base,
     turnFiller: async () => (metadata: unknown) => metadata,
     captureRun,

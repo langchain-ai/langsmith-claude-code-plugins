@@ -211,18 +211,6 @@ const WORKFLOW_TOOL_NAME = "Workflow";
 
 const WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
 
-const SUBAGENTS_DIR_NAME = "subagents";
-
-const SUBAGENT_FILE_PREFIX = "agent-";
-
-const TRANSCRIPT_FILE_EXTENSION = ".jsonl";
-
-const SUBAGENT_METADATA_EXTENSION = ".meta.json";
-
-const DEFAULT_SUBAGENT_TYPE = "Agent";
-
-const SUBAGENT_INTERRUPTED_ERROR = "Subagent interrupted";
-
 /** A killed subagent never fires SubagentStop, so other statuses count as completed. */
 const KILLED_NOTIFICATION_STATUS = "killed";
 
@@ -354,10 +342,4 @@ export {
   PLUGIN_FLAG,
   GATEWAY_PLUGIN,
   BUNDLE_USAGE,
-  SUBAGENTS_DIR_NAME,
-  SUBAGENT_FILE_PREFIX,
-  TRANSCRIPT_FILE_EXTENSION,
-  SUBAGENT_METADATA_EXTENSION,
-  DEFAULT_SUBAGENT_TYPE,
-  SUBAGENT_INTERRUPTED_ERROR,
 };
