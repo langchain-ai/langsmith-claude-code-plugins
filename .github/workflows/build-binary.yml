@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: langchain-ai/plugins-base/.github/workflows/build-binary.yml@564729bc6c84f7256970babbf072e50bb3f56875 # v0.6.3
+    uses: langchain-ai/langsmith-plugins-base/.github/workflows/build-binary.yml@564729bc6c84f7256970babbf072e50bb3f56875 # v0.6.3
     with:
       bun-version: 1.4.4
       binary-directory: plugins/langsmith-tracing/binary
@@ -37,7 +37,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: langchain-ai/plugins-base/.github/workflows/build-binary.yml@564729bc6c84f7256970babbf072e50bb3f56875 # v0.6.3
+    uses: langchain-ai/langsmith-plugins-base/.github/workflows/build-binary.yml@564729bc6c84f7256970babbf072e50bb3f56875 # v0.6.3
     with:
       config: langsmith-claude.binary.config.json
       bun-version: 1.4.4
