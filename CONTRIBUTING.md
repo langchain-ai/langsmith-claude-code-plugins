@@ -79,7 +79,7 @@ gateway. Smoke-test against a scratch LangSmith project whenever you change hook
 `pnpm build:binary` uses Bun to compile the hook dispatcher into one macOS executable that carries
 its own JavaScript runtime, which is why it traces on a machine with no Node installed. The build,
 the signing and the release all come from
-[langsmith-plugin-binary](https://github.com/langchain-ai/langsmith-plugin-binary) and everything it
+[plugins-base](https://github.com/langchain-ai/plugins-base) and everything it
 needs to know about this plugin lives in `binary.config.json`, so go to that repository rather than
 this one for how any of it works.
 
