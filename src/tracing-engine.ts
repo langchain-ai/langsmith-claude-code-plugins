@@ -3,7 +3,7 @@ import type { CodingAgentMetadataOptions } from "@langchain/plugins-base/metadat
 import { settledTurnMetadata } from "@langchain/plugins-base/tracing/settlement";
 import { LS_INTEGRATION, POST_EVENT_PREFIX, TRACING_NOT_STARTED_MESSAGE } from "./constants.js";
 import type { ReconstructionJobInput } from "@langchain/plugins-base/tracing/reconstruction";
-import { captureInto, posted, saveOrWarn } from "./engine-capture.js";
+import { captureInto, saveOrWarn } from "./engine-capture.js";
 import { openSession } from "./engine-session.js";
 import { captureToolRun as captureToolRunInto } from "./engine-tool-settlement.js";
 import { readEngineTurn } from "./engine-turn-record.js";
@@ -49,13 +49,6 @@ export async function captureRun(
   eventKey: string = run.id,
 ): Promise<void> {
   await captureInto(started(), run, mode, rootRunId, operation, eventKey);
-}
-
-export async function operationFor(
-  runId: string,
-  rootRunId: string = runId,
-): Promise<RunOperation> {
-  return (await posted(started(), rootRunId, runId)) ? "patch" : "post";
 }
 
 export async function captureToolRun(
