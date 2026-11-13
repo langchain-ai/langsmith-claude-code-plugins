@@ -44,7 +44,7 @@ The plugin only trusts the file when:
 
 Set `workspace_id` as well when your users sign in with the LangSmith CLI. Each user's sign-in may default to a different workspace, so setting it here keeps everyone's traces in one place. API keys ignore this setting so use one scoped to a workspace.
 
-If the file is broken or fails these checks then tracing stops and Claude Code explains why. See [the settings guide](https://github.com/langchain-ai/langsmith-plugin-binary/blob/main/docs/settings.md) to set it up.
+If the file is broken or fails these checks then tracing stops and Claude Code explains why. See [the settings guide](https://github.com/langchain-ai/langsmith-plugins-base/blob/main/docs/settings.md) to set it up.
 
 ## Authenticate
 
