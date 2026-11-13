@@ -106,10 +106,13 @@ describe("separate marketplace packages", () => {
   it("resolves marketplace sources to matching independent manifests and local hook bundles", () => {
     const entries = json(join(root, ".claude-plugin/marketplace.json")).plugins;
     expect(entries.map((entry: { name: string }) => entry.name).sort()).toEqual([
+      "langchain-skills",
       "langsmith-gateway",
       "langsmith-tracing",
     ]);
-    for (const entry of entries) {
+    for (const entry of entries.filter(
+      (entry: { source: unknown }) => typeof entry.source === "string",
+    )) {
       expect(entry.source).toBe(
         entry.name === "langsmith-tracing"
           ? "./plugins/langsmith-tracing"

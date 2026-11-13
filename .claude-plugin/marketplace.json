@@ -19,6 +19,15 @@
       "description": "Experimental opt-in local subscription gateway proxy, managed through Claude Code setup/disable commands and independent of tracing.",
       "source": "./plugins/langsmith-gateway",
       "homepage": "https://github.com/langchain-ai/langsmith-claude-code-plugins"
+    },
+    {
+      "name": "langchain-skills",
+      "description": "Agent skills for building agents with LangChain, LangGraph, and Deep Agents",
+      "source": {
+        "source": "github",
+        "repo": "langchain-ai/langchain-skills"
+      },
+      "homepage": "https://github.com/langchain-ai/langchain-skills"
     }
   ]
 }
