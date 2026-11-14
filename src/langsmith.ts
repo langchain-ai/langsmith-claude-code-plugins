@@ -125,7 +125,7 @@ function formatContent(blocks: ContentBlock[]): Array<Record<string, unknown>> {
 }
 
 /** Split assistant content so each result of a tool the API ran itself is its own tool message. */
-function assistantMessages(blocks: ContentBlock[]): Array<Record<string, unknown>> {
+export function assistantMessages(blocks: ContentBlock[]): Array<Record<string, unknown>> {
   const messages: Array<Record<string, unknown>> = [];
   let content: Array<Record<string, unknown>> = [];
   for (const block of formatContent(blocks)) {
@@ -142,12 +142,14 @@ function assistantMessages(blocks: ContentBlock[]): Array<Record<string, unknown
   return messages;
 }
 
-function textBlocks(content: Turn["userContent"]): Array<Record<string, unknown>> {
+export function textBlocks(content: Turn["userContent"]): Array<Record<string, unknown>> {
   return typeof content === "string" ? [{ type: "text", text: content }] : content;
 }
 
 /** Tool reference and search result blocks have no LangSmith form, so they become text. */
-function toolResultBlocks(content: ToolResultContent | undefined): Array<Record<string, unknown>> {
+export function toolResultBlocks(
+  content: ToolResultContent | undefined,
+): Array<Record<string, unknown>> {
   if (content === undefined || typeof content === "string") return textBlocks(content ?? "");
   return content.map((block) => {
     if (block.type === "tool_reference") return { type: "text", text: String(block.tool_name) };
@@ -158,7 +160,7 @@ function toolResultBlocks(content: ToolResultContent | undefined): Array<Record<
 }
 
 /** Build usage_metadata from Usage for LangSmith. Returns undefined if there are no tokens. */
-function buildUsageMetadata(usage: Usage) {
+export function buildUsageMetadata(usage: Usage) {
   const input_tokens =
     (usage.input_tokens ?? 0) +
     (usage.cache_creation_input_tokens ?? 0) +
