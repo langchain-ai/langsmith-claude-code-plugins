@@ -22519,6 +22519,7 @@ var createTranscriptBuilder = ({ sessionId, savedState, sink }) => {
         const turn = state.turns[state.currentTurn ?? ""];
         if (note.agentId || turn === void 0)
           return;
+        state.pendingStart = void 0;
         clearRepoAttributionCache();
         turn.gitMetadata = originScopedMetadata(state.baseMetadata, turn.toolOrigins, state.cwd);
         stopTurn(state.currentTurn, { text: details.lastAssistantMessage });
@@ -22527,6 +22528,7 @@ var createTranscriptBuilder = ({ sessionId, savedState, sink }) => {
       case HOOK_EVENTS.stopFailure: {
         if (note.agentId || state.currentTurn === void 0)
           return;
+        state.pendingStart = void 0;
         const error2 = details.errorDetails ? `${details.error}: ${details.errorDetails}` : details.error;
         stopTurn(state.currentTurn, { error: error2 });
         return;
