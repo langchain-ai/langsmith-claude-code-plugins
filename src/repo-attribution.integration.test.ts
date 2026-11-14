@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGitSandbox } from "./fixtures/git-sandbox.js";
 import { noManagedConfigEnv } from "./fixtures/no-managed-config-env.js";
-import { waitFor } from "./fixtures/wait-for.js";
 import { USER_PROMPT_TURN_NAME } from "./constants.js";
 
 // Claude Code runs the built bundle, so drive that, one real process per hook.
@@ -72,7 +71,7 @@ async function hook(
       LANGSMITH_API_KEY: "lsv2_pt_fake_key_for_tests",
       LANGSMITH_ENDPOINT: endpoint,
       CC_LANGSMITH_PROJECT: "repo-attribution-e2e",
-      STATE_FILE: join(sandbox.root, "state.json"),
+      STATE_FILE: join(sandbox.root, String(payload.session_id), "state.json"),
     },
   });
   child.stdin.end(JSON.stringify(payload));
@@ -118,27 +117,8 @@ function transcript(
     { type: "user", timestamp: at(2), message: { role: "user", content: results } },
   ]
     .map((message) => JSON.stringify(message))
-    .join("\n");
-}
-
-/** A turn the assistant answered without touching a tool, so only the hooks know anything. */
-function replyOnly(): string {
-  return [
-    { type: "user", message: { role: "user", content: "find" }, timestamp: "2025-01-01T00:00:00Z" },
-    {
-      type: "assistant",
-      timestamp: "2025-01-01T00:00:01Z",
-      message: {
-        id: "msg_1",
-        role: "assistant",
-        model: "claude-sonnet-4-5-20250929",
-        content: [{ type: "text", text: "Looking." }],
-        usage: { input_tokens: 10, output_tokens: 5 },
-      },
-    },
-  ]
-    .map((message) => JSON.stringify(message))
-    .join("\n");
+    .join("\n")
+    .concat("\n");
 }
 
 function toolRun(name: string): Record<string, unknown> {
@@ -154,8 +134,16 @@ const prompt = (base: Record<string, unknown>, home?: string, env?: Record<strin
     home,
     env,
   );
-const stop = (base: Record<string, unknown>, home?: string, env?: Record<string, string>) =>
-  hook("Stop", { ...base, hook_event_name: "Stop", last_assistant_message: "done" }, home, env);
+async function stop(base: Record<string, unknown>, home?: string, env?: Record<string, string>) {
+  const stderr = await hook(
+    "Stop",
+    { ...base, hook_event_name: "Stop", last_assistant_message: "done" },
+    home,
+    env,
+  );
+  await hook("SessionEnd", { ...base, hook_event_name: "SessionEnd" }, home, env);
+  return stderr;
+}
 
 beforeEach(() => (posted.length = 0));
 
@@ -201,14 +189,6 @@ describe("a turn working across repositories", () => {
     const base = { session_id: session, transcript_path: path, cwd: alpha };
 
     await prompt(base);
-    await hook("PostToolUse", {
-      ...base,
-      hook_event_name: "PostToolUse",
-      tool_name: "Read",
-      tool_input: { file_path: join(beta, "seed.txt") },
-      tool_response: { ok: true },
-      tool_use_id: `${session}-tool-0`,
-    });
     writeFileSync(path, transcript(join(beta, "seed.txt")));
     await stop(base);
 
@@ -218,7 +198,7 @@ describe("a turn working across repositories", () => {
       ls_attribution_identifier: "Beta Owner",
     };
     await settled(() => {
-      for (const name of ["Read", "Glob"]) expect(toolRun(name)).toMatchObject(inBeta);
+      expect(toolRun("Glob")).toMatchObject(inBeta);
       expect(toolRun("Edit")).toMatchObject({ ls_git_repo: "acme/a", ls_git_branch: "trunk-a" });
     });
   }, 120_000);
@@ -279,57 +259,17 @@ describe("a turn working across repositories", () => {
     });
   }, 120_000);
 
-  // Catches the end-of-turn fill going blank once the hook stops settling: here the turn
-  // has no transcript tool call to learn from, so the saved tool call is its only source.
-  it("fills a turn from a tool call only the hook saw", async () => {
-    const session = "turn-from-hook";
-    const path = join(sandbox.root, `${session}.jsonl`);
-    // Started outside every repository, so nothing but the tool call names one.
-    const base = { session_id: session, transcript_path: path, cwd: sandbox.root };
-
-    await prompt(base);
-    await hook("PostToolUse", {
-      ...base,
-      hook_event_name: "PostToolUse",
-      tool_name: "Read",
-      tool_input: { file_path: join(beta, "seed.txt") },
-      tool_response: { ok: true },
-      tool_use_id: `${session}-tool-0`,
-    });
-    expect(await waitFor(() => posted.some((run) => run.name === "Read"))).toBe(true);
-    writeFileSync(path, replyOnly());
-    await stop(base);
-
-    await settled(() => {
-      const turnRuns = posted.filter((run) => run.name === USER_PROMPT_TURN_NAME);
-      expect(turnRuns.at(-1)?.extra?.metadata).toMatchObject({
-        ls_git_repo: "acme/b",
-        ls_attribution_identifier: "Beta Owner",
-      });
-    });
-  }, 120_000);
-
   it("names the home folder's own repository once a tool reads a file there", async () => {
     const session = "private-home";
     const path = join(sandbox.root, `${session}.jsonl`);
     const base = { session_id: session, transcript_path: path, cwd: alpha };
 
     await prompt(base, home);
-    await hook(
-      "PostToolUse",
-      {
-        ...base,
-        hook_event_name: "PostToolUse",
-        tool_name: "Read",
-        tool_input: { file_path: join(home, "seed.txt") },
-        tool_response: { ok: true },
-        tool_use_id: `${session}-tool-0`,
-      },
-      home,
-    );
+    writeFileSync(path, transcript(join(home, "seed.txt")));
+    await stop(base, home);
 
     await settled(() =>
-      expect(toolRun("Read")).toMatchObject({
+      expect(toolRun("Glob")).toMatchObject({
         ls_git_repo: "private/dotfiles",
         ls_git_branch: "trunk-home",
         ls_attribution_identifier: "Private Person",
