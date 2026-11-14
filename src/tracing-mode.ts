@@ -17,6 +17,16 @@ export function resolveTurnTracingMode(
   );
 }
 
+export function promptTurnMode(
+  config: Config,
+  sessionId: string,
+  currentTurnMode: TracingMode | undefined,
+): TracingMode {
+  return config.mutedLocked
+    ? "metadata"
+    : resolveTurnTracingMode(config, sessionId, currentTurnMode);
+}
+
 export function toolTracingMode(
   config: Config,
   sessionId: string,

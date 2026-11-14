@@ -55,7 +55,7 @@ import {
   USER_PROMPT_TURN_NAME,
 } from "../constants.js";
 import { engineStorageRoot, readUploadNotices } from "../engine-writer.js";
-import { resolveTurnTracingMode } from "../tracing-mode.js";
+import { promptTurnMode, resolveTurnTracingMode } from "../tracing-mode.js";
 import { codingAgentMetadata } from "../metadata.js";
 import { loadConfig } from "../config.js";
 import { COMMAND_HANDLERS } from "../tracing-commands.js";
@@ -66,6 +66,7 @@ import type {
   QueuedClosing,
   TracingMode,
   Turn,
+  TurnStarter,
   UserPromptSubmitHookInput,
 } from "../types.js";
 
@@ -82,6 +83,10 @@ function readStartBeforeOwnPrompt(filePath: string, promptText: string): number 
 }
 
 export async function main(): Promise<void> {
+  await answerPrompt(startTurn);
+}
+
+export async function answerPrompt(beginTurn: TurnStarter): Promise<void> {
   const input: UserPromptSubmitHookInput = await readStdin();
   if (!isPayloadForHook(input, "UserPromptSubmit")) return;
 
@@ -92,7 +97,7 @@ export async function main(): Promise<void> {
   const reply = command ? await runPromptCommand(command, COMMAND_HANDLERS, input) : undefined;
   const output: PromptCommandResponse = {};
   try {
-    await startTurn(input, output, currentTurnMode);
+    await beginTurn(input, output, currentTurnMode);
   } catch (err) {
     error(TURN_START_FAILED.replace("{error}", () => String(err)));
   }
@@ -119,12 +124,10 @@ function threadModeBeforeCommand(input: UserPromptSubmitHookInput): TracingMode 
   }
 }
 
-async function startTurn(
+export async function promptTracingConfig(
   input: UserPromptSubmitHookInput,
   output: PromptCommandResponse,
-  currentTurnMode: TracingMode | undefined,
-): Promise<void> {
-  const hookStartTime = Date.now();
+): Promise<Config | undefined> {
   const config = initHook(input.cwd);
   if (!config) {
     const setup = loadConfig({ cwd: input.cwd });
@@ -155,14 +158,7 @@ async function startTurn(
     return;
   }
 
-  initTracing(config, input.cwd, input.session_id);
-
-  const state = loadState(config.stateFilePath);
-  const sessionState = getSessionState(state, input.session_id);
   const { loginNotice, credentialNotice } = readUploadNotices(config);
-  const turnMode = config.mutedLocked
-    ? "metadata"
-    : resolveTurnTracingMode(config, input.session_id, currentTurnMode);
   if (loginNotice && config.strictAuth) {
     Object.assign(output, { decision: "block", reason: loginNotice });
     return;
@@ -170,6 +166,21 @@ async function startTurn(
   if (!(await showNotice(LOGIN_NOTICE_KIND, loginNotice, config, output))) {
     await showNotice(NOTICE_KINDS.credential, credentialNotice, config, output);
   }
+  return config;
+}
+
+async function startTurn(
+  input: UserPromptSubmitHookInput,
+  output: PromptCommandResponse,
+  currentTurnMode: TracingMode | undefined,
+): Promise<void> {
+  const hookStartTime = Date.now();
+  const config = await promptTracingConfig(input, output);
+  if (!config) return;
+  initTracing(config, input.cwd, input.session_id);
+  const state = loadState(config.stateFilePath);
+  const sessionState = getSessionState(state, input.session_id);
+  const turnMode = promptTurnMode(config, input.session_id, currentTurnMode);
 
   // CLI version (ls_agent_runtime_version); best-effort, Stop backfills if empty.
   const expandedTranscript = expandHome(input.transcript_path);

@@ -75,10 +75,18 @@ export function turnScopedMetadata(
   sessionCwd?: string,
 ): Record<string, unknown> | undefined {
   const origins = [...toolInputs].map((input) => toolOrigin(input, sessionCwd));
-  return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, origins));
+  return originScopedMetadata(base, origins, sessionCwd);
 }
 
-/** Tests only, since a hook process never outlives its caches. */
+export function originScopedMetadata(
+  base: Record<string, unknown> | undefined,
+  toolOrigins: ToolOrigin[],
+  sessionCwd?: string,
+): Record<string, unknown> | undefined {
+  return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, toolOrigins));
+}
+
+/** Drops cached repository facts, since the worker outlives branch switches. */
 export function clearRepoAttributionCache(): void {
   attributor = undefined;
 }
