@@ -399,7 +399,7 @@ function mergeAssistantChunks(chunks: AssistantMessage[]): {
 }
 
 /** Merge adjacent text blocks into one (e.g. streaming token fragments). */
-function mergeAdjacentTextBlocks(blocks: ContentBlock[]): ContentBlock[] {
+export function mergeAdjacentTextBlocks(blocks: ContentBlock[]): ContentBlock[] {
   const result: ContentBlock[] = [];
   let textBuffer: string | null = null;
 
