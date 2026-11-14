@@ -62,6 +62,7 @@ describe("hook notes", () => {
     const { posts, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });
     main(prompt("p1", 0, "hi"), assistant("a1", 2, [{ type: "text", text: "hey" }], "end_turn"));
+    send("UserPromptSubmit", {}, { time: ms(1) });
     send("Stop");
     main(assistant("a2", 8, [{ type: "text", text: "agent finished" }], "end_turn"));
     send("Stop");
@@ -73,13 +74,16 @@ describe("hook notes", () => {
   });
 
   it("closes a failed turn with the API error", () => {
-    const { patches, main, send } = fakeSession();
+    const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });
     main(prompt("p1", 0, "hi"), assistant("a1", 1, [toolUse("t1")]));
+    send("UserPromptSubmit", {}, { time: ms(2) });
     send("StopFailure", {}, { error: "rate_limit", errorDetails: "429 Too Many Requests" });
+    main(assistant("a2", 9, [{ type: "text", text: "later" }], "end_turn"));
 
     const turn = patches.find((r) => r.name === "Claude Code Turn");
     expect(turn?.error).toBe("rate_limit: 429 Too Many Requests");
+    expect(posts.filter((r) => r.name === "Claude Code Turn")[1].start_time).toBe(at(9));
   });
 
   it("puts a turn that has no prompt hook on the hook clock", () => {

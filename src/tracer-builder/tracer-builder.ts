@@ -573,11 +573,13 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = ({
       case HOOK_EVENTS.stop: {
         const turn = state.turns[state.currentTurn ?? ""];
         if (note.agentId || turn === undefined) return;
+        state.pendingStart = undefined;
         stopTurn(state.currentTurn!, { text: details.lastAssistantMessage });
         return;
       }
       case HOOK_EVENTS.stopFailure: {
         if (note.agentId || state.currentTurn === undefined) return;
+        state.pendingStart = undefined;
         const error = details.errorDetails
           ? `${details.error}: ${details.errorDetails}`
           : details.error;
