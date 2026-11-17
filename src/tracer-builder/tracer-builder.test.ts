@@ -100,6 +100,26 @@ describe("hook notes", () => {
     expect(builder.turnOpen()).toBe(false);
   });
 
+  it("leaves a transcript-only notice out of turn prompts and model inputs", () => {
+    const { posts, main, send } = fakeSession();
+    const said = (text: string) => [{ type: "text", text }];
+    const notice = prompt("n1", 3, "<task-notification>bg1</task-notification>");
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "first"), assistant("a1", 2, [toolUse("t1")]));
+    main({ ...notice, queueTranscriptOnly: true }, toolResult("r1", 4, "t1"));
+    main(assistant("a2", 5, said("ok"), "end_turn"));
+    send("Stop");
+    main({ ...notice, uuid: "n2", queueTranscriptOnly: true });
+    send("UserPromptSubmit", {}, { time: ms(11) });
+    main({ ...prompt("p2", 12, "from a peer"), isMeta: true });
+    main(assistant("a3", 13, said("done"), "end_turn"));
+    send("Stop");
+
+    const turns = posts.filter((r) => r.name === "Claude Code Turn");
+    expect(JSON.stringify(turns[1]?.inputs)).toContain("from a peer");
+    expect(JSON.stringify(posts)).not.toContain("bg1");
+  });
+
   it("closes a failed turn with the API error", () => {
     const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });

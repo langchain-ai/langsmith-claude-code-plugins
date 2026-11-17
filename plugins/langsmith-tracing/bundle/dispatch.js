@@ -30235,8 +30235,10 @@ var createTranscriptBuilder = (context) => {
     const endTurnSeen = state.currentTurn ? thread.endTurnSeen : false;
     if (target?.launch)
       finishAgent(target.agentId);
-    if (!startsNewTurn({ ...thread, promptId, endTurnSeen }, line, hasTurn)) {
-      thread.messages.push({ role: "user", content: line.message?.content });
+    const transcriptOnly = line.queueTranscriptOnly === true;
+    if (transcriptOnly || !startsNewTurn({ ...thread, promptId, endTurnSeen }, line, hasTurn)) {
+      if (!transcriptOnly)
+        thread.messages.push({ role: "user", content: line.message?.content });
       if (target?.launch) {
         target.launch.notified = true;
         maybeCloseAgentTool(target);

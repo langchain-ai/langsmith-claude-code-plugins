@@ -169,6 +169,7 @@ export interface ClaudeLine {
   promptId?: string;
   isCompactSummary?: boolean;
   isSidechain?: boolean;
+  queueTranscriptOnly?: boolean;
   version?: string;
   permissionMode?: string;
   effort?: string;
