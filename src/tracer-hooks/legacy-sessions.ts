@@ -3,10 +3,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { LegacySession } from "@langchain/plugins-base/tracer";
 import { runEngineWorker } from "../engine-worker.js";
-import { writerOptions } from "../engine-writer.js";
+import { tracerWriter } from "../engine-writer.js";
 import { loadState } from "../state.js";
 import { legacyOpenTurn } from "../tracer-builder/tracer-builder.js";
-import { initHook } from "../utils/hook-init.js";
+import { loadConfig } from "../config.js";
+import { hasUsableDestination } from "../utils/replicas.js";
 import { jsonField } from "../utils/records.js";
 import { CLAUDE_PROJECTS_PATH, TRANSCRIPT_EXTENSION, TRANSCRIPT_HEAD_BYTES } from "../constants.js";
 
@@ -21,16 +22,23 @@ function projectFolders(): string[] {
 
 function transcriptCwd(path: string): string | undefined {
   const head = Buffer.alloc(TRANSCRIPT_HEAD_BYTES);
-  const file = openSync(path, "r");
-  const size = readSync(file, head, 0, head.length, 0);
-  closeSync(file);
+  let file: number | undefined;
+  let size = 0;
+  try {
+    file = openSync(path, "r");
+    size = readSync(file, head, 0, head.length, 0);
+  } catch {
+    return undefined;
+  } finally {
+    if (file !== undefined) closeSync(file);
+  }
   const lines = head.subarray(0, size).toString("utf8").split("\n");
   return lines.map((line) => jsonField(line, "cwd")).find((cwd) => cwd !== undefined);
 }
 
 function sessionWriter(cwd: string | undefined): LegacySession["writer"] {
-  const config = cwd === undefined ? null : initHook(cwd);
-  return config ? writerOptions(config) : undefined;
+  const config = cwd === undefined ? undefined : loadConfig({ cwd });
+  return config?.enabled && hasUsableDestination(config) ? tracerWriter(config) : undefined;
 }
 
 export function readLegacySessions(stateFile: string): LegacySession[] {

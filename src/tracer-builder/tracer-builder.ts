@@ -9,6 +9,7 @@ import {
   toolResultBlocks,
 } from "../langsmith.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "../constants.js";
+import { withPinnedRepositoryKeys } from "../config.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
 import {
   clearRepoAttributionCache,
@@ -463,7 +464,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       mode: toolMode(tool),
       metadata: metadata({
         base: repoScopedMetadata(
-          state.baseMetadata,
+          withPinnedRepositoryKeys(state.baseMetadata, state.pinnedRepositoryKeys),
           tool.input,
           tool.cwd ?? state.cwd,
           tool.toolName,
@@ -800,7 +801,10 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     const details = (note.details ?? {}) as NoteDetails;
     const time =
       details.time === undefined ? (state.lastTime ?? iso(Date.now())) : iso(details.time);
-    if (details.metadata) state.baseMetadata = details.metadata;
+    if (details.metadata) {
+      state.baseMetadata = details.metadata;
+      state.pinnedRepositoryKeys = details.pinnedRepositoryKeys;
+    }
     if (details.cwd) state.cwd = details.cwd;
     if (state.mainPath === undefined && note.transcriptPath && !note.agentId)
       state.mainPath = note.transcriptPath;

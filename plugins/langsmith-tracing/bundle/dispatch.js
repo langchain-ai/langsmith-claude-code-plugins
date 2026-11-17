@@ -25975,6 +25975,11 @@ function sendHookNote(note, options) {
   }
 }
 
+// dist/src/config.js
+import { readFileSync as readFileSync15 } from "node:fs";
+import { homedir as homedir3, userInfo as userInfo2 } from "node:os";
+import { join as join28 } from "node:path";
+
 // dist/src/engine-writer.js
 import { dirname as dirname15, join as join27 } from "node:path";
 
@@ -26006,6 +26011,12 @@ function writerOptions(config) {
 function engineStorageRoot(stateFilePath) {
   return join27(dirname15(stateFilePath), ENGINE_STORAGE_DIR_NAME);
 }
+function tracerStorageRoot(stateFilePath) {
+  return tracerPaths(dirname15(stateFilePath)).folder;
+}
+function tracerWriter(config) {
+  return { ...writerOptions(config), storageRoot: tracerStorageRoot(config.stateFilePath) };
+}
 function uploadReplicas(replicas) {
   return (replicas ?? replicasFromEnvironment() ?? []).map(writerReplica);
 }
@@ -26018,9 +26029,191 @@ function writerReplica(replica) {
 }
 function readUploadNotices(config) {
   const apiKey = sdkSetting(config.apiKey);
-  const loginNotice = readLoginNotice(engineStorageRoot(config.stateFilePath), process.env, config.login || apiKey === void 0 ? void 0 : { apiKey, apiUrl: config.apiBaseUrl }, config.profile);
+  const loginNotice = readLoginNotice(tracerStorageRoot(config.stateFilePath), process.env, config.login || apiKey === void 0 ? void 0 : { apiKey, apiUrl: config.apiBaseUrl }, config.profile);
   const credentialNotice = config.login ? refusedLoginReplicas(writerOptions(config).replicas, config.apiBaseUrl) : void 0;
   return { loginNotice, credentialNotice };
+}
+
+// dist/src/config.js
+function readAnthropicUserId() {
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
+  if (!homeDir)
+    return void 0;
+  const configPath = join28(homeDir, ".claude.json");
+  try {
+    const raw = readFileSync15(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    const userId = parsed?.userID;
+    if (typeof userId === "string" && userId.length > 0) {
+      return userId;
+    }
+  } catch (err) {
+    debug(`Could not read Anthropic user ID from ${configPath}: ${err}`);
+  }
+  return void 0;
+}
+function readLocalUsername() {
+  return userInfo2().username;
+}
+function pinnedRepositoryKeys(metadata) {
+  return metadata?.[PINNED_REPOSITORY_KEYS] ?? NO_PINNED_KEYS;
+}
+function withPinnedRepositoryKeys(metadata, keys = []) {
+  return Object.defineProperty({ ...metadata }, PINNED_REPOSITORY_KEYS, { value: new Set(keys) });
+}
+function envBoolean(field4) {
+  const setting = BOOLEAN_SETTINGS[field4];
+  const env = process.env[setting.env]?.toLowerCase();
+  if (env === void 0)
+    return void 0;
+  if (env === "true")
+    return true;
+  if (env === "false")
+    return false;
+  return setting.restrictive;
+}
+function envCooldown() {
+  const env = process.env.CC_LANGSMITH_NOTICE_COOLDOWN?.trim().toLowerCase();
+  if (!env)
+    return void 0;
+  if (env === NOTICE_COOLDOWN_OFF)
+    return NOTICE_COOLDOWN_OFF;
+  const minutes = Number(env);
+  return Number.isFinite(minutes) && minutes >= 0 ? minutes : void 0;
+}
+function resolveStateFilePath() {
+  return process.env.STATE_FILE ?? join28(homedir3(), ...STATE_FILE_DEFAULT);
+}
+function loadConfig(options) {
+  const cwd = options?.cwd ?? process.cwd();
+  const homeDir = homedir3();
+  const stateFilePath = resolveStateFilePath();
+  const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
+  let replicas;
+  const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
+  if (providedReplicas !== void 0) {
+    try {
+      replicas = JSON.parse(providedReplicas);
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_RUNS_ENDPOINTS. Please make sure they are valid JSON.");
+    }
+  }
+  const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
+  let customMetadata;
+  const providedMetadata = process.env.CC_LANGSMITH_METADATA;
+  if (providedMetadata !== void 0) {
+    try {
+      const parsed = JSON.parse(providedMetadata);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        customMetadata = parsed;
+      } else {
+        error("CC_LANGSMITH_METADATA must be a JSON object (not an array or primitive).");
+      }
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
+    }
+  }
+  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").trim().toLowerCase();
+  const redact = !["0", "false", "no", "off"].includes(redactEnv);
+  let redactExtraRules;
+  const providedExtra = process.env.CC_LANGSMITH_REDACT_EXTRA;
+  if (providedExtra !== void 0) {
+    try {
+      const parsed = JSON.parse(providedExtra);
+      if (!Array.isArray(parsed)) {
+        error("CC_LANGSMITH_REDACT_EXTRA must be a JSON array of { pattern, replace }.");
+      } else {
+        const validRules = [];
+        for (const rule of parsed) {
+          if (typeof rule !== "object" || rule === null || typeof rule.pattern !== "string" || rule.replace !== void 0 && typeof rule.replace !== "string") {
+            error(`Skipping invalid CC_LANGSMITH_REDACT_EXTRA rule (expected { pattern: string, replace?: string }): ${JSON.stringify(rule)}`);
+            continue;
+          }
+          try {
+            new RegExp(rule.pattern);
+          } catch {
+            error(`Skipping CC_LANGSMITH_REDACT_EXTRA rule with an invalid regex pattern: ${rule.pattern}`);
+            continue;
+          }
+          validRules.push(rule);
+        }
+        if (validRules.length > 0 || parsed.length === 0)
+          redactExtraRules = validRules;
+      }
+    } catch {
+      error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");
+    }
+  }
+  const files = readCommonConfigFiles({ cwd, home: homeDir, harnessDirectory: HARNESS_DIRECTORY });
+  const common = mergeCommonConfig({
+    harness: files.harness.common,
+    root: files.root.common,
+    user: files.user.common,
+    userRoot: files.userRoot.common,
+    env: {
+      enabled: envBoolean("enabled"),
+      defaultMuted: envBoolean("defaultMuted"),
+      strict_auth: envBoolean("strict_auth"),
+      capture_hook_outputs: envBoolean("capture_hook_outputs"),
+      notice_cooldown: envCooldown(),
+      api_key: process.env.CC_LANGSMITH_API_KEY,
+      api_url: process.env.LANGSMITH_ENDPOINT,
+      project: process.env.CC_LANGSMITH_PROJECT,
+      metadata: customMetadata,
+      redact: process.env.CC_LANGSMITH_REDACT === void 0 ? void 0 : redact,
+      redact_extra_rules: redactExtraRules
+    },
+    defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" }
+  }, { envFirst: true });
+  if (replicas === void 0 || common.locked.includes("replicas")) {
+    replicas = toSdkReplicas(common.replicas);
+  }
+  redactExtraRules = common.redact_extra_rules;
+  const credential = resolveUploadCredential({
+    apiKey: common.api_key,
+    apiUrl: common.api_url,
+    apiUrlIsDefault: common.defaulted.includes("api_url"),
+    profile: common.profile,
+    workspaceId: common.workspace_id,
+    agentId: common.agent_id
+  });
+  const unreachable = credential.kind === "login" ? loginReplicaRefusal(uploadReplicas(replicas), credential.apiUrl) : void 0;
+  customMetadata = common.metadata && withBothGitMetadataNames(common.metadata);
+  const anthropicUserId = readAnthropicUserId();
+  const localUsername = readLocalUsername();
+  const identityMetadata = { local_username: localUsername };
+  if (anthropicUserId) {
+    identityMetadata.user_id = anthropicUserId;
+    identityMetadata.anthropic_user_id = anthropicUserId;
+  }
+  const pinned = REPOSITORY_METADATA_KEYS.filter((key) => customMetadata?.[key] !== void 0);
+  customMetadata = { cwd, ...identityMetadata, ...customMetadata };
+  Object.defineProperty(customMetadata, PINNED_REPOSITORY_KEYS, { value: new Set(pinned) });
+  return {
+    enabled: common.enabled,
+    defaultMuted: common.defaultMuted,
+    apiKey: credential.kind === "api-key" && sdkSetting(common.api_key) === void 0 ? credential.apiKey : common.api_key,
+    project: common.project,
+    apiBaseUrl: credential.kind === "login" ? credential.apiUrl : common.api_url,
+    stateFilePath,
+    debug: debug2,
+    parentDottedOrder,
+    replicas,
+    customMetadata,
+    redact: common.redact,
+    redactExtraRules,
+    ...common.managedConfigProblem === void 0 ? {} : { managedConfigProblem: common.managedConfigProblem },
+    ...credential.kind === "login" ? { login: credential.login } : {},
+    ...common.profile === void 0 ? {} : { profile: common.profile },
+    ...common.agent_id === void 0 ? {} : { agentId: common.agent_id },
+    ...credential.kind === "none" ? { credentialProblem: credential.reason } : {},
+    ...unreachable ? { credentialProblem: unreachable } : {},
+    ...common.strict_auth ? { strictAuth: true } : {},
+    ...common.capture_hook_outputs ? { captureHookOutputs: true } : {},
+    ...common.notice_cooldown === void 0 ? {} : { noticeCooldown: common.notice_cooldown },
+    ...common.locked.includes("project") ? { projectLocked: true } : {},
+    ...common.locked.includes("defaultMuted") && common.defaultMuted ? { mutedLocked: true } : {}
+  };
 }
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_79c6d84a8529e5e5adb3bc48743c717a/node_modules/@langchain/plugins-base/dist/tracing/hook-outputs.js
@@ -26093,7 +26286,7 @@ import { existsSync as existsSync6, statSync as statSync9, fstatSync as fstatSyn
 import { StringDecoder } from "node:string_decoder";
 
 // dist/src/utils/files.js
-import { lstatSync as lstatSync4, mkdirSync as mkdirSync11, readdirSync as readdirSync4, readFileSync as readFileSync15, renameSync as renameSync8, rmdirSync as rmdirSync2, unlinkSync as unlinkSync4, writeFileSync as writeFileSync5 } from "node:fs";
+import { lstatSync as lstatSync4, mkdirSync as mkdirSync11, readdirSync as readdirSync4, readFileSync as readFileSync16, renameSync as renameSync8, rmdirSync as rmdirSync2, unlinkSync as unlinkSync4, writeFileSync as writeFileSync5 } from "node:fs";
 import { randomUUID as randomUUID9 } from "node:crypto";
 import { dirname as dirname17 } from "node:path";
 function listDirectory(path3) {
@@ -26129,7 +26322,7 @@ function removeEmptyFolder(path3) {
 }
 function readText(path3) {
   try {
-    return readFileSync15(path3, "utf-8");
+    return readFileSync16(path3, "utf-8");
   } catch {
     return "";
   }
@@ -26542,7 +26735,7 @@ function promptTurnMode(config, sessionId, currentTurnMode) {
 }
 
 // dist/src/state.js
-import { join as join28 } from "node:path";
+import { join as join29 } from "node:path";
 var stores = /* @__PURE__ */ new Map();
 function storeFor(stateFilePath) {
   let store = stores.get(stateFilePath);
@@ -26615,7 +26808,7 @@ function updateSessionState(state, sessionId, position, turnCount, taskRunMap, c
     }
   };
 }
-var heldRunPath = (...[stateFilePath, sessionId, toolUseId]) => join28(engineStorageRoot(stateFilePath), `${HELD_TOOL_RUN_PREFIX}${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`);
+var heldRunPath = (...[stateFilePath, sessionId, toolUseId]) => join29(engineStorageRoot(stateFilePath), `${HELD_TOOL_RUN_PREFIX}${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`);
 function takeHeldRun(...key) {
   const held = readJson(readText(heldRunPath(...key)));
   removeFile3(heldRunPath(...key));
@@ -26624,9 +26817,9 @@ function takeHeldRun(...key) {
 function pruneHeldRuns(stateFilePath, now = Date.now()) {
   const folder = engineStorageRoot(stateFilePath);
   for (const name of listDirectory(folder).filter((n2) => n2.startsWith(HELD_TOOL_RUN_PREFIX))) {
-    const modified = entryInfo(join28(folder, name))?.mtimeMs ?? now;
+    const modified = entryInfo(join29(folder, name))?.mtimeMs ?? now;
     if (now - modified > HELD_TOOL_RUN_MAX_AGE_MS)
-      removeFile3(join28(folder, name));
+      removeFile3(join29(folder, name));
   }
 }
 function dropHeld(stateFilePath, sessionId, session) {
@@ -26717,7 +26910,7 @@ function nearestExistingDirectory(path3) {
 }
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_79c6d84a8529e5e5adb3bc48743c717a/node_modules/@langchain/plugins-base/dist/git/github-login.js
-import { mkdirSync as mkdirSync12, readFileSync as readFileSync16, renameSync as renameSync9, writeFileSync as writeFileSync6 } from "node:fs";
+import { mkdirSync as mkdirSync12, readFileSync as readFileSync17, renameSync as renameSync9, writeFileSync as writeFileSync6 } from "node:fs";
 import { dirname as dirname19 } from "node:path";
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_79c6d84a8529e5e5adb3bc48743c717a/node_modules/@langchain/plugins-base/dist/git/constants.js
@@ -26770,7 +26963,7 @@ import { resolve as resolve14 } from "node:path";
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_79c6d84a8529e5e5adb3bc48743c717a/node_modules/@langchain/plugins-base/dist/utils/desktop/launch.js
 import { accessSync, constants as constants2, statSync as statSync11 } from "node:fs";
-import { join as join29, posix, win32 } from "node:path";
+import { join as join30, posix, win32 } from "node:path";
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_79c6d84a8529e5e5adb3bc48743c717a/node_modules/@langchain/plugins-base/dist/utils/desktop/desktop-constants.js
 var DESKTOP_WINDOWS_EXTENSIONS = ".EXE;.CMD;.BAT";
@@ -26788,7 +26981,7 @@ function findExecutable(name, env, platform) {
   const absolute = windows ? win32.isAbsolute : posix.isAbsolute;
   for (const folder of folders.filter((entry) => entry !== "" && absolute(entry))) {
     for (const extension of extensions) {
-      const candidate = join29(folder, `${name}${extension}`);
+      const candidate = join30(folder, `${name}${extension}`);
       try {
         accessSync(candidate, constants2.X_OK);
         if (statSync11(candidate).isFile())
@@ -26953,7 +27146,7 @@ function createGitHubLoginFallback(options) {
   let login;
   function failedRecently() {
     try {
-      const marker = JSON.parse(readFileSync16(options.markerPath, "utf-8"));
+      const marker = JSON.parse(readFileSync17(options.markerPath, "utf-8"));
       const failed = new Date(marker.failed).getTime();
       const since = now() - failed;
       return since >= 0 && since < retryAfterMs;
@@ -26990,10 +27183,10 @@ function createGitHubLoginFallback(options) {
 }
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_79c6d84a8529e5e5adb3bc48743c717a/node_modules/@langchain/plugins-base/dist/git/paths.js
-import { readFileSync as readFileSync17, statSync as statSync12 } from "node:fs";
-import { dirname as dirname20, join as join30, resolve as resolve15 } from "node:path";
+import { readFileSync as readFileSync18, statSync as statSync12 } from "node:fs";
+import { dirname as dirname20, join as join31, resolve as resolve15 } from "node:path";
 function gitMarkerAt(directory) {
-  const marker = join30(directory, GIT_DIRECTORY_NAME);
+  const marker = join31(directory, GIT_DIRECTORY_NAME);
   try {
     if (statSync12(marker).isDirectory())
       return GIT_MARKERS.REPOSITORY_ROOT;
@@ -27004,7 +27197,7 @@ function gitMarkerAt(directory) {
 }
 function pointsAtGitDirectory(directory, marker) {
   try {
-    const pointer = readFileSync17(marker, "utf-8").match(GIT_FILE_POINTER)?.[1];
+    const pointer = readFileSync18(marker, "utf-8").match(GIT_FILE_POINTER)?.[1];
     return pointer !== void 0 && statSync12(resolve15(directory, pointer)).isDirectory();
   } catch {
     return false;
@@ -27128,188 +27321,6 @@ function withoutRepositoryKeys(base, pinned) {
       delete stripped[key];
   }
   return stripped;
-}
-
-// dist/src/config.js
-import { readFileSync as readFileSync18 } from "node:fs";
-import { homedir as homedir3, userInfo as userInfo2 } from "node:os";
-import { join as join31 } from "node:path";
-function readAnthropicUserId() {
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
-  if (!homeDir)
-    return void 0;
-  const configPath = join31(homeDir, ".claude.json");
-  try {
-    const raw = readFileSync18(configPath, "utf-8");
-    const parsed = JSON.parse(raw);
-    const userId = parsed?.userID;
-    if (typeof userId === "string" && userId.length > 0) {
-      return userId;
-    }
-  } catch (err) {
-    debug(`Could not read Anthropic user ID from ${configPath}: ${err}`);
-  }
-  return void 0;
-}
-function readLocalUsername() {
-  return userInfo2().username;
-}
-function pinnedRepositoryKeys(metadata) {
-  return metadata?.[PINNED_REPOSITORY_KEYS] ?? NO_PINNED_KEYS;
-}
-function envBoolean(field4) {
-  const setting = BOOLEAN_SETTINGS[field4];
-  const env = process.env[setting.env]?.toLowerCase();
-  if (env === void 0)
-    return void 0;
-  if (env === "true")
-    return true;
-  if (env === "false")
-    return false;
-  return setting.restrictive;
-}
-function envCooldown() {
-  const env = process.env.CC_LANGSMITH_NOTICE_COOLDOWN?.trim().toLowerCase();
-  if (!env)
-    return void 0;
-  if (env === NOTICE_COOLDOWN_OFF)
-    return NOTICE_COOLDOWN_OFF;
-  const minutes = Number(env);
-  return Number.isFinite(minutes) && minutes >= 0 ? minutes : void 0;
-}
-function resolveStateFilePath() {
-  return process.env.STATE_FILE ?? join31(homedir3(), ...STATE_FILE_DEFAULT);
-}
-function loadConfig(options) {
-  const cwd = options?.cwd ?? process.cwd();
-  const homeDir = homedir3();
-  const stateFilePath = resolveStateFilePath();
-  const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
-  let replicas;
-  const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
-  if (providedReplicas !== void 0) {
-    try {
-      replicas = JSON.parse(providedReplicas);
-    } catch {
-      error("Failed to parse provided CC_LANGSMITH_RUNS_ENDPOINTS. Please make sure they are valid JSON.");
-    }
-  }
-  const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
-  let customMetadata;
-  const providedMetadata = process.env.CC_LANGSMITH_METADATA;
-  if (providedMetadata !== void 0) {
-    try {
-      const parsed = JSON.parse(providedMetadata);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        customMetadata = parsed;
-      } else {
-        error("CC_LANGSMITH_METADATA must be a JSON object (not an array or primitive).");
-      }
-    } catch {
-      error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
-    }
-  }
-  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").trim().toLowerCase();
-  const redact = !["0", "false", "no", "off"].includes(redactEnv);
-  let redactExtraRules;
-  const providedExtra = process.env.CC_LANGSMITH_REDACT_EXTRA;
-  if (providedExtra !== void 0) {
-    try {
-      const parsed = JSON.parse(providedExtra);
-      if (!Array.isArray(parsed)) {
-        error("CC_LANGSMITH_REDACT_EXTRA must be a JSON array of { pattern, replace }.");
-      } else {
-        const validRules = [];
-        for (const rule of parsed) {
-          if (typeof rule !== "object" || rule === null || typeof rule.pattern !== "string" || rule.replace !== void 0 && typeof rule.replace !== "string") {
-            error(`Skipping invalid CC_LANGSMITH_REDACT_EXTRA rule (expected { pattern: string, replace?: string }): ${JSON.stringify(rule)}`);
-            continue;
-          }
-          try {
-            new RegExp(rule.pattern);
-          } catch {
-            error(`Skipping CC_LANGSMITH_REDACT_EXTRA rule with an invalid regex pattern: ${rule.pattern}`);
-            continue;
-          }
-          validRules.push(rule);
-        }
-        if (validRules.length > 0 || parsed.length === 0)
-          redactExtraRules = validRules;
-      }
-    } catch {
-      error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");
-    }
-  }
-  const files = readCommonConfigFiles({ cwd, home: homeDir, harnessDirectory: HARNESS_DIRECTORY });
-  const common = mergeCommonConfig({
-    harness: files.harness.common,
-    root: files.root.common,
-    user: files.user.common,
-    userRoot: files.userRoot.common,
-    env: {
-      enabled: envBoolean("enabled"),
-      defaultMuted: envBoolean("defaultMuted"),
-      strict_auth: envBoolean("strict_auth"),
-      capture_hook_outputs: envBoolean("capture_hook_outputs"),
-      notice_cooldown: envCooldown(),
-      api_key: process.env.CC_LANGSMITH_API_KEY,
-      api_url: process.env.LANGSMITH_ENDPOINT,
-      project: process.env.CC_LANGSMITH_PROJECT,
-      metadata: customMetadata,
-      redact: process.env.CC_LANGSMITH_REDACT === void 0 ? void 0 : redact,
-      redact_extra_rules: redactExtraRules
-    },
-    defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" }
-  }, { envFirst: true });
-  if (replicas === void 0 || common.locked.includes("replicas")) {
-    replicas = toSdkReplicas(common.replicas);
-  }
-  redactExtraRules = common.redact_extra_rules;
-  const credential = resolveUploadCredential({
-    apiKey: common.api_key,
-    apiUrl: common.api_url,
-    apiUrlIsDefault: common.defaulted.includes("api_url"),
-    profile: common.profile,
-    workspaceId: common.workspace_id,
-    agentId: common.agent_id
-  });
-  const unreachable = credential.kind === "login" ? loginReplicaRefusal(uploadReplicas(replicas), credential.apiUrl) : void 0;
-  customMetadata = common.metadata && withBothGitMetadataNames(common.metadata);
-  const anthropicUserId = readAnthropicUserId();
-  const localUsername = readLocalUsername();
-  const identityMetadata = { local_username: localUsername };
-  if (anthropicUserId) {
-    identityMetadata.user_id = anthropicUserId;
-    identityMetadata.anthropic_user_id = anthropicUserId;
-  }
-  const pinned = REPOSITORY_METADATA_KEYS.filter((key) => customMetadata?.[key] !== void 0);
-  customMetadata = { cwd, ...identityMetadata, ...customMetadata };
-  Object.defineProperty(customMetadata, PINNED_REPOSITORY_KEYS, { value: new Set(pinned) });
-  return {
-    enabled: common.enabled,
-    defaultMuted: common.defaultMuted,
-    apiKey: credential.kind === "api-key" && sdkSetting(common.api_key) === void 0 ? credential.apiKey : common.api_key,
-    project: common.project,
-    apiBaseUrl: credential.kind === "login" ? credential.apiUrl : common.api_url,
-    stateFilePath,
-    debug: debug2,
-    parentDottedOrder,
-    replicas,
-    customMetadata,
-    redact: common.redact,
-    redactExtraRules,
-    ...common.managedConfigProblem === void 0 ? {} : { managedConfigProblem: common.managedConfigProblem },
-    ...credential.kind === "login" ? { login: credential.login } : {},
-    ...common.profile === void 0 ? {} : { profile: common.profile },
-    ...common.agent_id === void 0 ? {} : { agentId: common.agent_id },
-    ...credential.kind === "none" ? { credentialProblem: credential.reason } : {},
-    ...unreachable ? { credentialProblem: unreachable } : {},
-    ...common.strict_auth ? { strictAuth: true } : {},
-    ...common.capture_hook_outputs ? { captureHookOutputs: true } : {},
-    ...common.notice_cooldown === void 0 ? {} : { noticeCooldown: common.notice_cooldown },
-    ...common.locked.includes("project") ? { projectLocked: true } : {},
-    ...common.locked.includes("defaultMuted") && common.defaultMuted ? { mutedLocked: true } : {}
-  };
 }
 
 // dist/src/repo-attribution-paths.js
@@ -29594,7 +29605,7 @@ async function showNotice(kind, notice, config, output) {
     plugin: LS_INTEGRATION,
     kind,
     cooldown: config.noticeCooldown,
-    storageRoot: engineStorageRoot(config.stateFilePath)
+    storageRoot: tracerStorageRoot(config.stateFilePath)
   };
   if (!notice || !await shouldShowNotice(options))
     return false;
@@ -30065,7 +30076,7 @@ var createTranscriptBuilder = (context) => {
       start: iso(start),
       mode: toolMode(tool),
       metadata: metadata({
-        base: repoScopedMetadata(state.baseMetadata, tool.input, tool.cwd ?? state.cwd, tool.toolName),
+        base: repoScopedMetadata(withPinnedRepositoryKeys(state.baseMetadata, state.pinnedRepositoryKeys), tool.input, tool.cwd ?? state.cwd, tool.toolName),
         turnId: thread?.promptId,
         turnNumber: thread?.turnNumber,
         agentType: thread?.agentType ?? "root",
@@ -30418,8 +30429,10 @@ var createTranscriptBuilder = (context) => {
   function receiveNote(note) {
     const details = note.details ?? {};
     const time = details.time === void 0 ? state.lastTime ?? iso(Date.now()) : iso(details.time);
-    if (details.metadata)
+    if (details.metadata) {
       state.baseMetadata = details.metadata;
+      state.pinnedRepositoryKeys = details.pinnedRepositoryKeys;
+    }
     if (details.cwd)
       state.cwd = details.cwd;
     if (state.mainPath === void 0 && note.transcriptPath && !note.agentId)
@@ -30505,15 +30518,23 @@ function projectFolders() {
 }
 function transcriptCwd(path3) {
   const head = Buffer.alloc(TRANSCRIPT_HEAD_BYTES);
-  const file = openSync9(path3, "r");
-  const size = readSync5(file, head, 0, head.length, 0);
-  closeSync9(file);
+  let file;
+  let size = 0;
+  try {
+    file = openSync9(path3, "r");
+    size = readSync5(file, head, 0, head.length, 0);
+  } catch {
+    return void 0;
+  } finally {
+    if (file !== void 0)
+      closeSync9(file);
+  }
   const lines = head.subarray(0, size).toString("utf8").split("\n");
   return lines.map((line) => jsonField(line, "cwd")).find((cwd) => cwd !== void 0);
 }
 function sessionWriter(cwd) {
-  const config = cwd === void 0 ? null : initHook(cwd);
-  return config ? writerOptions(config) : void 0;
+  const config = cwd === void 0 ? void 0 : loadConfig({ cwd });
+  return config?.enabled && hasUsableDestination(config) ? tracerWriter(config) : void 0;
 }
 function readLegacySessions(stateFile) {
   const folders = projectFolders();
@@ -30556,9 +30577,10 @@ async function sendTracerNote(event, input, config, tracingMode = resolveTurnTra
       error: input.error,
       errorDetails: input.error_details,
       metadata: config.customMetadata,
+      pinnedRepositoryKeys: [...pinnedRepositoryKeys(config.customMetadata)],
       parentDottedOrder: config.parentDottedOrder
     },
-    writer: writerOptions(config)
+    writer: tracerWriter(config)
   }, {
     paths,
     version: PLUGIN_VERSION,

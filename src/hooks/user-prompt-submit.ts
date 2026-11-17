@@ -54,7 +54,7 @@ import {
   OWN_PROMPT_LINE_MAX_AGE_MS,
   USER_PROMPT_TURN_NAME,
 } from "../constants.js";
-import { engineStorageRoot, readUploadNotices } from "../engine-writer.js";
+import { readUploadNotices, tracerStorageRoot } from "../engine-writer.js";
 import { promptTurnMode, resolveTurnTracingMode } from "../tracing-mode.js";
 import { codingAgentMetadata } from "../metadata.js";
 import { loadConfig } from "../config.js";
@@ -394,7 +394,7 @@ async function showNotice(
     plugin: LS_INTEGRATION,
     kind,
     cooldown: config.noticeCooldown,
-    storageRoot: engineStorageRoot(config.stateFilePath),
+    storageRoot: tracerStorageRoot(config.stateFilePath),
   };
   if (!notice || !(await shouldShowNotice(options))) return false;
   output.systemMessage = notice;
