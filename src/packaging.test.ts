@@ -63,9 +63,8 @@ describe("the caller workflow", () => {
       "@langchain/plugins-base"
     ];
     const [, sha, label] =
-      /uses: langchain-ai\/langsmith-plugin-binary\/\S+@([0-9a-f]{40}) # (\S+)/.exec(workflow) ??
-      [];
-    const commit = /^github:langchain-ai\/langsmith-plugin-binary#([0-9a-f]{40})$/.exec(
+      /uses: langchain-ai\/langsmith-plugins-base\/\S+@([0-9a-f]{40}) # (\S+)/.exec(workflow) ?? [];
+    const commit = /^github:langchain-ai\/langsmith-plugins-base#([0-9a-f]{40})$/.exec(
       installed,
     )?.[1];
     if (commit !== undefined) {
