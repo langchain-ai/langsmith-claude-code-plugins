@@ -136,6 +136,20 @@ describe("hook notes", () => {
     expect(JSON.stringify(turns[1]?.inputs)).toContain("from a peer");
   });
 
+  it("keeps the prompt of a turn that reuses the previous turn's prompt id", () => {
+    const { posts, main, send } = fakeSession();
+    const said = (text: string) => [{ type: "text", text }];
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "first"), assistant("a1", 2, said("ok"), "end_turn"));
+    send("Stop");
+    send("UserPromptSubmit", {}, { time: ms(3) });
+    main(prompt("p2", 4, "second", "p1"), assistant("a2", 5, said("done"), "end_turn"));
+    send("Stop");
+
+    const turns = posts.filter((r) => r.name === "Claude Code Turn");
+    expect(JSON.stringify(turns[1]?.inputs)).toContain("second");
+  });
+
   it("keeps a blocked Stop's continuation in the same turn and closes it at the final Stop", () => {
     const { posts, patches, main, send } = fakeSession();
     const said = (text: string) => [{ type: "text", text }];
