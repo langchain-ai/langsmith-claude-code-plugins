@@ -1,7 +1,8 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createGitSandbox } from "../fixtures/git-sandbox.js";
 import {
   assistant,
   at,
@@ -11,23 +12,40 @@ import {
   toolResult,
   toolUse,
 } from "../fixtures/tracer-builder-lines.js";
+import { generateDottedOrderSegment } from "../langsmith.js";
 import { stableRunId } from "../utils/ids/run-id.js";
 import type { SessionState } from "../types.js";
+import { lastLineUuid, subagentTranscriptPath } from "./subagent-files.js";
 import { createTranscriptBuilder, legacyOpenTurn } from "./tracer-builder.js";
-import type { NoteDetails } from "./tracer-builder-models.js";
+import type { BuilderState, NoteDetails } from "./tracer-builder-models.js";
 import type { HookNote, TracingMode, TranscriptLine } from "@langchain/plugins-base/tracer";
 
 function fakeSession(tracingMode?: TracingMode, savedState?: unknown) {
-  const mainPath = "/transcripts/session.jsonl";
+  const dir = mkdtempSync(join(tmpdir(), "tracer-builder-"));
+  const mainPath = join(dir, "session.jsonl");
   const { posts, patches, sink } = recordingSink();
   const builder = createTranscriptBuilder({ sessionId: "session", savedState, sink, tracingMode });
   builder.receiveNote(note("SessionStart", { transcriptPath: mainPath }));
+  const subagent = (agentId: string, lines: object[]) => {
+    const path = subagentTranscriptPath(mainPath, "session", agentId);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, lines.map((line) => JSON.stringify(line)).join("\n") + "\n");
+    return () => {
+      expect(builder.transcripts()).toContain(path);
+      for (const line of lines) builder.readLine(path, line as TranscriptLine);
+    };
+  };
+  const meta = (agentId: string, toolUseId: string) =>
+    writeFileSync(
+      join(dir, "session", "subagents", `agent-${agentId}.meta.json`),
+      JSON.stringify({ toolUseId }),
+    );
   const main = (...lines: object[]) =>
     lines.forEach((line) => builder.readLine(mainPath, line as TranscriptLine));
   const send = (event: string, fields: Partial<HookNote> = {}, details: NoteDetails = {}) =>
     builder.receiveNote(note(event, { sessionId: "session", ...fields, details: { ...details } }));
   const run = (name: string) => posts.find((post) => post.name === name)!;
-  return { builder, posts, patches, main, send, run };
+  return { posts, patches, builder, main, subagent, meta, send, run };
 }
 
 const ms = (second: number) => Date.parse(at(second));
@@ -152,6 +170,7 @@ describe("hook notes", () => {
     first.main(prompt("p1", 0, ask), assistant("a1", 1, uses), ...results.slice(0, 500));
     const saved = JSON.parse(JSON.stringify(first.builder.state()));
     delete saved.threads.main.historyBytes;
+    delete saved.mainPath;
 
     const { builder, posts, main, send } = fakeSession(undefined, saved);
     main(...results.slice(500), assistant("a2", 3, [{ type: "text", text: "ok" }], "end_turn"));
@@ -212,5 +231,128 @@ describe("hook notes", () => {
     expect(posts[0]).toMatchObject({ ...call, metadata: { turnNumber: 2 } });
     const turns = posts.filter((r) => r.name === "Claude Code Turn");
     expect(turns).toMatchObject([{ start_time: at(20) }]);
+  });
+});
+
+describe("subagents", () => {
+  it("nests a muted background agent and its notification turn, closing the launching turn last", () => {
+    const { posts, patches, main, subagent, send, run } = fakeSession();
+    const outside = generateDottedOrderSegment(at(0), "01a183b1-e99b-70a0-a3a6-a3dedc3ce970");
+    const outsideStart = { time: ms(0), parentDottedOrder: outside };
+    send("UserPromptSubmit", { tracingMode: "metadata" }, outsideStart);
+    const agent = toolUse("t1", "Agent", { subagent_type: "Explore" });
+    main(prompt("p1", 1, "go"), assistant("a1", 2, [agent]));
+    send("PreToolUse", {}, { time: ms(3), toolUseId: "t1" });
+    main(toolResult("r1", 4, "t1", { status: "async_launched", agentId: "bg1" }));
+    main(assistant("a2", 5, [{ type: "text", text: "launched" }], "end_turn"));
+    send("Stop");
+    const found = assistant("s2", 9, [{ type: "text", text: "found" }], "end_turn");
+    subagent("bg1", [prompt("s1", 6, "explore"), found])();
+    send("SubagentStop", { agentId: "bg1" });
+    send("UserPromptSubmit", { tracingMode: "full" }, { time: ms(20) });
+    main(prompt("p2", 20, "<task-notification><task-id>bg1</task-id></task-notification>"));
+    main(assistant("a3", 21, [{ type: "text", text: "noted" }], "end_turn"));
+    const closedBeforeNotification = patches.map((r) => r.name);
+    send("Stop");
+
+    const [tool, chain] = [run("Agent"), run("Explore Subagent")];
+    const [launching, notification] = posts.filter((r) => r.name === "Claude Code Turn");
+    expect(chain.id).toBe(stableRunId(at(3), tool.id, "bg1"));
+    expect(chain.parent_run_id).toBe(tool.id);
+    expect(posts.find((r) => r.start_time === at(9))?.parent_run_id).toBe(chain.id);
+    expect(notification.parent_run_id).toBe(tool.id);
+    expect(closedBeforeNotification).toEqual(["Explore Subagent"]);
+    expect(patches.slice(1).map((r) => r.id)).toEqual([notification.id, tool.id, launching.id]);
+    expect(notification.tracingMode).toBe("metadata");
+    expect(launching.dotted_order.startsWith(`${outside}.`)).toBe(true);
+  });
+
+  it("closes a turn whose background agent never reports back once the wait limit passes", () => {
+    const { patches, main } = fakeSession();
+    main(prompt("p1", 1, "go"), assistant("a1", 2, [toolUse("t1", "Agent")]));
+    main(toolResult("r1", 3, "t1", { status: "async_launched", agentId: "lost" }));
+    main(prompt("p2", 4 + 4 * 60 * 60, "later"));
+    expect(patches.slice(1)).toMatchObject([
+      { name: "Agent", end_time: at(3), outputs: { output: "No result" } },
+      { name: "Claude Code Turn", end_time: at(3) },
+    ]);
+  });
+
+  it("closes a subagent at its last line's own id even past a long line", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "tracer-builder-")), "agent.jsonl");
+    const nested = { message: { content: [{ input: { uuid: "inner" } }] }, uuid: "outer" };
+    writeFileSync(path, `${JSON.stringify({ uuid: "first" })}\n${JSON.stringify(nested)}\n`);
+    expect(lastLineUuid(path)).toBe("outer");
+    writeFileSync(path, `${JSON.stringify({ text: "x".repeat(100_000), uuid: "long" })}\n`);
+    expect(lastLineUuid(path)).toBe("long");
+  });
+
+  it("nests an agent launched by a subagent, posting the outer one once when it stops early", () => {
+    const { posts, patches, builder, main, subagent, meta, send, run } = fakeSession();
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "go"), assistant("a1", 2, [toolUse("t1", "Agent")]));
+    send("PreToolUse", {}, { time: ms(3), toolUseId: "t1" });
+    const outer = subagent("outer", [
+      prompt("o1", 4, "outer task"),
+      assistant("o2", 5, [toolUse("t2", "Agent", { subagent_type: "inner" })]),
+      toolResult("o3", 20, "t2", { status: "completed", agentId: "inner" }),
+      assistant("o4", 21, [{ type: "text", text: "outer done" }], "end_turn"),
+    ]);
+    const inner = subagent("inner", [
+      prompt("i1", 6, "inner task"),
+      assistant("i2", 7, [{ type: "text", text: "x" }], "end_turn"),
+    ]);
+    meta("outer", "t1");
+    send("SubagentStop", { agentId: "outer" });
+    outer();
+    main(toolResult("r1", 30, "t1", { status: "completed", agentId: "outer" }));
+    inner();
+    main(assistant("a2", 31, [{ type: "text", text: "all done" }], "end_turn"));
+    send("Stop");
+
+    const outerTool = posts.find((r) => r.name === "Agent" && r.start_time === at(3))!;
+    const outerChain = run("general-purpose Subagent");
+    const innerTool = posts.find((r) => r.name === "Agent" && r.parent_run_id === outerChain.id)!;
+    const innerChain = run("inner Subagent");
+    expect(outerChain.parent_run_id).toBe(outerTool.id);
+    expect(innerChain.parent_run_id).toBe(innerTool.id);
+    expect(innerChain.id).toBe(stableRunId(at(5), innerTool.id, "inner"));
+    expect(posts.find((r) => r.start_time === at(7))?.parent_run_id).toBe(innerChain.id);
+    expect(posts.filter((r) => r.name === "general-purpose Subagent")).toHaveLength(1);
+    const ended = new Set([...posts.filter((r) => r.end_time), ...patches].map((r) => r.id));
+    expect(posts.filter((r) => !ended.has(r.id)).map((r) => r.name)).toEqual([]);
+    expect(Object.keys((builder.state() as BuilderState).threads)).toEqual(["main"]);
+  });
+});
+
+describe("repositories", () => {
+  it("tags each tool with the repository it reached and reads the branch per turn and Stop", () => {
+    const sandbox = createGitSandbox("tracer builder ");
+    const repo = sandbox.makeRepo("repo", "first", "Dev");
+    const other = sandbox.makeRepo("other", "elsewhere", "Other Dev");
+    const { posts, patches, main, send, run } = fakeSession();
+    const read = toolUse("t0", "Read", { file_path: join(other, "seed.txt") });
+    const turn = (n: number, beforeStop = () => {}) => {
+      send("UserPromptSubmit", {}, { time: ms(n * 10) });
+      const bash = toolUse(`t${n}`, "Bash", { command: "ls" });
+      const tools = n === 1 ? [read, bash] : [bash];
+      main(prompt(`p${n}`, n * 10, "go"), { ...assistant(`a${n}`, n * 10 + 1, tools), cwd: repo });
+      send("PreToolUse", {}, { time: ms(n * 10 + 1), toolUseId: `t${n}` });
+      main(toolResult(`r${n}`, n * 10 + 2, `t${n}`));
+      if (n === 1) main(toolResult("r0", 12, "t0"));
+      beforeStop();
+      send("Stop");
+    };
+    turn(1);
+    sandbox.git(repo, "checkout", "-b", "second");
+    turn(2, () => sandbox.git(repo, "checkout", "-b", "third"));
+    sandbox.remove();
+
+    const branches = (runs: { name: string; metadata: { base?: Record<string, unknown> } }[]) =>
+      runs.map((r) => r.metadata.base?.ls_git_branch);
+    expect(branches(posts.filter((r) => r.name === "Bash"))).toEqual(["first", "second"]);
+    expect(run("Read").metadata.base).toMatchObject({ ls_git_branch: "elsewhere" });
+    const turns = patches.filter((r) => r.name === "Claude Code Turn");
+    expect(branches(turns)).toEqual(["first", "third"]);
   });
 });
