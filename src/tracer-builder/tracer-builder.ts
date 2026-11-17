@@ -55,6 +55,7 @@ import {
   DEFAULT_COMPACT_TRIGGER,
   DEFAULT_SUBAGENT_TYPE,
   END_TURN,
+  HOOK_BLOCKING_ATTACHMENT,
   HOOK_EVENTS,
   MAIN_THREAD,
   NO_MESSAGE_ID,
@@ -253,6 +254,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     };
     if (notifiedTool?.launch) notifiedTool.launch.notificationTurn = place.id;
     state.currentTurn = place.id;
+    state.stoppedTurn = undefined;
     state.lastTurnPlace = place;
     state.pendingStart = undefined;
     state.pendingPrompt = undefined;
@@ -615,6 +617,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     const promptId = state.currentTurn ? thread.promptId : pending?.promptId;
     const hasTurn = state.currentTurn !== undefined || pending !== undefined;
     if (!hasTurn && line.promptId !== undefined && line.promptId === thread.promptId) return;
+    if (!hasTurn && line.turnCompanion === true) return;
     const target = notificationTarget(line.message?.content);
     const endTurnSeen = state.currentTurn ? thread.endTurnSeen : false;
     if (target?.launch) finishAgent(target.agentId!);
@@ -692,9 +695,22 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     postRun(run, { inputs: {}, outputs: { compact_summary: summary } });
   }
 
+  function reopenBlockedTurn(line: ClaudeLine) {
+    const turn = state.stoppedTurn;
+    const { type, hookEvent } = line.attachment ?? {};
+    if (type !== HOOK_BLOCKING_ATTACHMENT || hookEvent !== HOOK_EVENTS.stop) return;
+    if (turn === undefined || state.currentTurn !== undefined || state.pendingPrompt) return;
+    state.stoppedTurn = undefined;
+    state.turns[turn.run.id] ??= turn;
+    state.turns[turn.run.id].stopped = false;
+    state.currentTurn = turn.run.id;
+    main().endTurnSeen = false;
+  }
+
   function readMainLine(line: ClaudeLine, time: string) {
     if (typeof line.cwd === "string") state.cwd = line.cwd;
     if (readCompaction(line, time)) return;
+    reopenBlockedTurn(line);
     if (line.isSidechain) return;
     if (line.type === "assistant") {
       if (state.currentTurn === undefined) openTurn(time);
@@ -787,6 +803,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
         state.pendingStart = undefined;
         clearRepoAttributionCache();
         turn.gitMetadata = originScopedMetadata(state.baseMetadata, turn.toolOrigins, state.cwd);
+        state.stoppedTurn = turn;
         stopTurn(state.currentTurn!, { text: details.lastAssistantMessage });
         return;
       }

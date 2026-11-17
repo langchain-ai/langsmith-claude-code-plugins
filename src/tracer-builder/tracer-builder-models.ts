@@ -145,6 +145,7 @@ export interface BuilderState {
   runtimeVersion?: string;
   turnCount: number;
   currentTurn?: string;
+  stoppedTurn?: OpenTurn;
   lastTurnPlace?: RunPlace;
   seededRoot?: RunPlace;
   pendingStart?: PendingStart;
@@ -170,11 +171,13 @@ export interface ClaudeLine {
   isCompactSummary?: boolean;
   isSidechain?: boolean;
   queueTranscriptOnly?: boolean;
+  turnCompanion?: boolean;
   version?: string;
   permissionMode?: string;
   effort?: string;
   toolUseResult?: Record<string, unknown>;
   compactMetadata?: { trigger?: string };
+  attachment?: { type?: string; hookEvent?: string };
   message?: {
     id?: string;
     model?: string;

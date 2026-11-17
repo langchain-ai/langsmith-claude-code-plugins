@@ -24605,6 +24605,7 @@ var SUBAGENT_CHAIN_SUFFIX = " Subagent";
 var NO_MESSAGE_ID = "__no_id__";
 var NO_TOOL_RESULT = "No result";
 var END_TURN = "end_turn";
+var HOOK_BLOCKING_ATTACHMENT = "hook_blocking_error";
 var COMPACT_BOUNDARY_SUBTYPE = "compact_boundary";
 var DEFAULT_COMPACT_TRIGGER = "auto";
 var COMPACTION_RUN_NAME = (trigger) => `Context Compaction (${trigger})`;
@@ -29861,6 +29862,7 @@ var createTranscriptBuilder = (context) => {
     if (notifiedTool?.launch)
       notifiedTool.launch.notificationTurn = place.id;
     state.currentTurn = place.id;
+    state.stoppedTurn = void 0;
     state.lastTurnPlace = place;
     state.pendingStart = void 0;
     state.pendingPrompt = void 0;
@@ -30233,6 +30235,8 @@ var createTranscriptBuilder = (context) => {
     const hasTurn = state.currentTurn !== void 0 || pending !== void 0;
     if (!hasTurn && line.promptId !== void 0 && line.promptId === thread.promptId)
       return;
+    if (!hasTurn && line.turnCompanion === true)
+      return;
     const target = notificationTarget(line.message?.content);
     const endTurnSeen = state.currentTurn ? thread.endTurnSeen : false;
     if (target?.launch)
@@ -30311,11 +30315,25 @@ var createTranscriptBuilder = (context) => {
     run.end = compaction.end;
     postRun(run, { inputs: {}, outputs: { compact_summary: summary } });
   }
+  function reopenBlockedTurn(line) {
+    const turn = state.stoppedTurn;
+    const { type, hookEvent } = line.attachment ?? {};
+    if (type !== HOOK_BLOCKING_ATTACHMENT || hookEvent !== HOOK_EVENTS.stop)
+      return;
+    if (turn === void 0 || state.currentTurn !== void 0 || state.pendingPrompt)
+      return;
+    state.stoppedTurn = void 0;
+    state.turns[turn.run.id] ??= turn;
+    state.turns[turn.run.id].stopped = false;
+    state.currentTurn = turn.run.id;
+    main().endTurnSeen = false;
+  }
   function readMainLine(line, time) {
     if (typeof line.cwd === "string")
       state.cwd = line.cwd;
     if (readCompaction(line, time))
       return;
+    reopenBlockedTurn(line);
     if (line.isSidechain)
       return;
     if (line.type === "assistant") {
@@ -30425,6 +30443,7 @@ var createTranscriptBuilder = (context) => {
         state.pendingStart = void 0;
         clearRepoAttributionCache();
         turn.gitMetadata = originScopedMetadata(state.baseMetadata, turn.toolOrigins, state.cwd);
+        state.stoppedTurn = turn;
         stopTurn(state.currentTurn, { text: details.lastAssistantMessage });
         return;
       }

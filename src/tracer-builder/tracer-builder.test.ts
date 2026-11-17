@@ -136,6 +136,29 @@ describe("hook notes", () => {
     expect(JSON.stringify(turns[1]?.inputs)).toContain("from a peer");
   });
 
+  it("keeps a blocked Stop's continuation in the same turn and closes it at the final Stop", () => {
+    const { posts, patches, main, send } = fakeSession();
+    const said = (text: string) => [{ type: "text", text }];
+    const blocked = { hookEvent: "Stop", type: "hook_blocking_error" };
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "first"), assistant("a1", 2, said("draft"), "end_turn"));
+    send("Stop", {}, { lastAssistantMessage: "draft" });
+    main({ ...prompt("f1", 3, "Stop hook feedback: retry", "p1"), isMeta: true });
+    main({ type: "attachment", uuid: "b1", timestamp: at(3), attachment: blocked });
+    main(assistant("a2", 4, said("final"), "end_turn"));
+    send("Stop", {}, { lastAssistantMessage: "final" });
+    main({ ...prompt("c1", 5, "<system-reminder>x</system-reminder>", "p2"), turnCompanion: true });
+    send("UserPromptSubmit", {}, { time: ms(6) });
+    main(prompt("p2", 6, "<task-notification>done</task-notification>"));
+    main(assistant("a3", 7, said("noted"), "end_turn"));
+
+    const turns = posts.filter((r) => r.name === "Claude Code Turn");
+    expect(turns.length).toBe(2);
+    const closes = patches.filter((r) => r.id === turns[0]?.id);
+    expect(JSON.stringify(closes.at(-1)?.outputs)).toContain("final");
+    expect(JSON.stringify(turns[1]?.inputs)).toContain("task-notification");
+  });
+
   it("closes a failed turn with the API error", () => {
     const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });
