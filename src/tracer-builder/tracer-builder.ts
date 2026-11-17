@@ -614,6 +614,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     const pending = state.pendingPrompt;
     const promptId = state.currentTurn ? thread.promptId : pending?.promptId;
     const hasTurn = state.currentTurn !== undefined || pending !== undefined;
+    if (!hasTurn && line.promptId !== undefined && line.promptId === thread.promptId) return;
     const target = notificationTarget(line.message?.content);
     const endTurnSeen = state.currentTurn ? thread.endTurnSeen : false;
     if (target?.launch) finishAgent(target.agentId!);

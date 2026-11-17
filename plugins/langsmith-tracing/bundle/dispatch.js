@@ -30231,6 +30231,8 @@ var createTranscriptBuilder = (context) => {
     const pending = state.pendingPrompt;
     const promptId = state.currentTurn ? thread.promptId : pending?.promptId;
     const hasTurn = state.currentTurn !== void 0 || pending !== void 0;
+    if (!hasTurn && line.promptId !== void 0 && line.promptId === thread.promptId)
+      return;
     const target = notificationTarget(line.message?.content);
     const endTurnSeen = state.currentTurn ? thread.endTurnSeen : false;
     if (target?.launch)

@@ -120,6 +120,22 @@ describe("hook notes", () => {
     expect(JSON.stringify(posts)).not.toContain("bg1");
   });
 
+  it("keeps a stopped turn's late interrupt notice out of the next turn's prompt", () => {
+    const { posts, main, send } = fakeSession();
+    const said = (text: string) => [{ type: "text", text }];
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "first"), assistant("a1", 2, said("ok"), "end_turn"));
+    send("Stop");
+    main(prompt("i1", 3, "[Request interrupted by user]", "p1"));
+    send("UserPromptSubmit", {}, { time: ms(4) });
+    main({ ...prompt("p2", 5, "from a peer"), isMeta: true });
+    main(assistant("a2", 6, said("done"), "end_turn"));
+    send("Stop");
+
+    const turns = posts.filter((r) => r.name === "Claude Code Turn");
+    expect(JSON.stringify(turns[1]?.inputs)).toContain("from a peer");
+  });
+
   it("closes a failed turn with the API error", () => {
     const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });
