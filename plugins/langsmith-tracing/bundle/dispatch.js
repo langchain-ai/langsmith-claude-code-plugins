@@ -388,14 +388,14 @@ var require_dist = __commonJS({
       _isIntervalPaused() {
         const now = Date.now();
         if (this._intervalId === void 0) {
-          const delay6 = this._intervalEnd - now;
-          if (delay6 < 0) {
+          const delay8 = this._intervalEnd - now;
+          if (delay8 < 0) {
             this._intervalCount = this._carryoverConcurrencyCount ? this._pendingCount : 0;
           } else {
             if (this._timeoutId === void 0) {
               this._timeoutId = setTimeout(() => {
                 this._onResumeInterval();
-              }, delay6);
+              }, delay8);
             }
             return true;
           }
@@ -2992,6 +2992,11 @@ function failure(code, error2) {
 // node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/utils/format.js
 function fillTemplate(template, values) {
   return template.replace(TEMPLATE_PLACEHOLDER, (_match, key) => String(values[key]));
+}
+function sortedKeys(_key, value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    return value;
+  return Object.fromEntries(Object.entries(value).toSorted(([left], [right]) => left.localeCompare(right)));
 }
 
 // node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/storage/capture/account.js
@@ -18180,8 +18185,8 @@ function setContextVar(runTree, key, value) {
 var TIMESTAMP_LENGTH = 36;
 var UUID_NAMESPACE_DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 function getReplicaKey(replica) {
-  const sortedKeys = Object.keys(replica).sort();
-  const keyData = sortedKeys.map((key) => `${key}:${replica[key] ?? ""}`).join("|");
+  const sortedKeys2 = Object.keys(replica).sort();
+  const keyData = sortedKeys2.map((key) => `${key}:${replica[key] ?? ""}`).join("|");
   return v5_default(keyData, UUID_NAMESPACE_DNS);
 }
 function stripNonAlphanumeric(input) {
@@ -20774,9 +20779,9 @@ function parseDottedOrderSegment(segment) {
 }
 function isValidDottedOrderTime(value) {
   const time = value.slice(0, DOTTED_ORDER_TIME_PREFIX_LENGTH);
-  const iso = `${time.slice(0, 4)}-${time.slice(4, 6)}-${time.slice(6, 8)}T${time.slice(9, 11)}:${time.slice(11, 13)}:${time.slice(13, 15)}.${time.slice(15, 18)}Z`;
-  const parsed = new Date(iso);
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === iso;
+  const iso2 = `${time.slice(0, 4)}-${time.slice(4, 6)}-${time.slice(6, 8)}T${time.slice(9, 11)}:${time.slice(11, 13)}:${time.slice(13, 15)}.${time.slice(15, 18)}Z`;
+  const parsed = new Date(iso2);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === iso2;
 }
 function dottedOrderTimePrefix(startTime) {
   return new Date(startTime).toISOString().slice(0, -1).replace(DOTTED_ORDER_STRIP_PATTERN, "");
@@ -24420,9 +24425,7 @@ var WORKER_STOP_STATUSES = ["dropped", "retry-exhausted", "scope-mismatch"];
 var RECOVERY_REPORT_PROBLEM_STATUSES = ["partial", "failed"];
 var TRACING_NOT_STARTED_MESSAGE = "Tracing has not started for this hook";
 var CLOSING_EVENT_PREFIX = "closing:";
-var CLOSING_PRIVACY_MODE = "metadata";
 var STOP_FLUSH_WAIT_MS = 200;
-var OWN_PROMPT_LINE_MAX_AGE_MS = 5e3;
 var HOOK_ENTRY_TYPE = "attachment";
 var HOOK_CONTEXT_ATTACHMENT = "hook_additional_context";
 var ASYNC_HOOK_ATTACHMENT = "async_hook_response";
@@ -24430,9 +24433,6 @@ var PLUGIN_CONTEXT_SUFFIX = /-context$/;
 var HELD_TOOL_RUN_PREFIX = "held-tool-run-";
 var HELD_TOOL_RUN_MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 var UNSAFE_FILE_NAME_CHARS = /[^A-Za-z0-9_-]/g;
-var PRIVATE_FILE_MODE = 384;
-var PRIVATE_FOLDER_MODE = 448;
-var TEMP_FILE_SUFFIX = ".tmp";
 var SESSION_START_HOOK = "SessionStart";
 var RUN_CONTEXT_FIELDS = [
   "id",
@@ -24486,12 +24486,24 @@ var HOOK_PLACEMENTS = /* @__PURE__ */ new Map([
   ["ElicitationResult", TOOL_INPUT_HOOK],
   ["SessionEnd", TURN_OUTPUT_HOOK]
 ]);
+var HOOK_EVENT_NAMES = [
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUse",
+  "Stop",
+  "StopFailure",
+  "SubagentStop",
+  "PreCompact",
+  "PostCompact",
+  "SessionEnd"
+];
 var CURSOR_VERSION_FIELD = "cursor_version";
 var TOOL_PATH_INPUT_KEYS = ["file_path", "notebook_path", "path", "cwd"];
 var PINNED_REPOSITORY_KEYS = /* @__PURE__ */ Symbol("pinned repository metadata keys");
 var NO_PINNED_KEYS = /* @__PURE__ */ new Set();
 var SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 var ENGINE_WORKER_ARG = "--engine-worker";
+var DEVELOPMENT_VERSION = "development";
 var PLUGIN_FLAG = "--plugin";
 var GATEWAY_PLUGIN = "gateway";
 var BUNDLE_USAGE = `Usage: langsmith-claude ${PLUGIN_FLAG} ${GATEWAY_PLUGIN} [arguments]
@@ -24562,9 +24574,7 @@ var GIT_DIR_COMMAND = /^\s*git\s+-C\s+("[^"$`\\]*"|'[^']*'|[^\s"'$`\\;&|<>()*?~]
 var SURROUNDING_QUOTES = /^["']|["']$/g;
 var GLOB_CHARACTER = /[*?[{]/;
 var SERVER_TOOL_RESULT_TYPE = /_tool_result$/;
-var WORKFLOW_TOOL_NAME = "Workflow";
 var WORKFLOW_SUBAGENT_TYPE = "workflow-subagent";
-var KILLED_NOTIFICATION_STATUS = "killed";
 var QUEUE_DIR_NAME = "langsmith_queue";
 var QUEUE_ORIGIN_LENGTH = 12;
 var TURN_RECORD_DIR_NAME = "langsmith_turns";
@@ -24583,9 +24593,45 @@ var LEGACY_QUEUE_FILE = new RegExp(`^${LEGACY_QUEUE_ID}\\.queue\\.json$`);
 var LEGACY_QUEUE_TEMP_FILE = new RegExp(`^${LEGACY_QUEUE_ID}\\.queue\\.json\\.${LEGACY_UUID}\\.queue\\.tmp$`);
 var LEGACY_TURN_FILE = new RegExp(`^${LEGACY_UUID}\\.turn\\.jsonl$`);
 var LEGACY_FLUSH_LOCK_FILE = new RegExp(`^[\\w.-]+\\.flush\\.lock(\\.${LEGACY_UUID}\\.lock\\.staging)?$`);
+var BUILDER_STATE_VERSION = 1;
+var MAIN_THREAD = "main";
+var AGENT_RUN_NAME = "Agent";
+var AGENT_NATIVE_TOOL_NAME = "Task";
+var AGENT_TOOL_NAMES = /* @__PURE__ */ new Set(["Agent", "Task"]);
+var ASYNC_LAUNCHED_STATUS = "async_launched";
+var BACKGROUND_AGENT_WAIT_MS = 4 * 60 * 60 * 1e3;
+var DEFAULT_SUBAGENT_TYPE = "general-purpose";
+var SUBAGENT_CHAIN_SUFFIX = " Subagent";
+var NO_MESSAGE_ID = "__no_id__";
+var NO_TOOL_RESULT = "No result";
+var END_TURN = "end_turn";
+var COMPACT_BOUNDARY_SUBTYPE = "compact_boundary";
+var DEFAULT_COMPACT_TRIGGER = "auto";
+var COMPACTION_RUN_NAME = (trigger) => `Context Compaction (${trigger})`;
+var USER_INTERRUPT_ERROR = "User interrupt";
+var TOOL_INTERRUPTED_ERROR = "Interrupted";
+var SESSION_ENDED_ERROR = "Session ended before turn completed";
+var SUBAGENTS_FOLDER = "subagents";
+var SUBAGENT_FILE = /^agent-(.+)\.jsonl$/;
+var subagentFileName = (agentId) => `agent-${agentId}.jsonl`;
+var subagentMetaFileName = (agentId) => `agent-${agentId}.meta.json`;
+var TRANSCRIPT_EXTENSION = ".jsonl";
+var TRACING_MODE_STRICTNESS = ["full", "metadata", "off"];
+var HOOK_EVENTS = {
+  userPromptSubmit: "UserPromptSubmit",
+  preToolUse: "PreToolUse",
+  stop: "Stop",
+  stopFailure: "StopFailure",
+  subagentStop: "SubagentStop",
+  preCompact: "PreCompact",
+  sessionEnd: "SessionEnd"
+};
+var CLAUDE_PROJECTS_PATH = [".claude", "projects"];
+var TRANSCRIPT_HEAD_BYTES = 65536;
 
 // dist/src/integration-version.js
 var LS_INTEGRATION_VERSION = true ? "0.6.6" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var PLUGIN_VERSION = LS_INTEGRATION_VERSION ?? DEVELOPMENT_VERSION;
 
 // dist/src/logger.js
 import { appendFileSync, mkdirSync as mkdirSync7, statSync as statSync4, renameSync as renameSync6 } from "node:fs";
@@ -24629,549 +24675,1316 @@ function debug(message) {
   }
 }
 
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracing/hook-outputs.js
-function hookOutputs(hooks) {
-  const valid = hooks.filter((hook) => typeof hook?.name === "string" && typeof hook.output === "string" && !hook.output.startsWith(COMMAND_REPLY_MARKER));
-  if (valid.length === 0)
-    return {};
-  return { [HOOK_OUTPUTS_KEY]: valid.map(({ name, output }) => ({ name, output })) };
+// dist/src/tracer-hooks/tracer-hooks.js
+import { dirname as dirname26 } from "node:path";
+import { setTimeout as sleep3 } from "node:timers/promises";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/paths.js
+import { join as join24 } from "node:path";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/constants.js
+var PLUGINS_BASE_FOLDER = "langsmith_plugins_base";
+var LOCK_FILE = "tracer.lock";
+var SNAPSHOT_FILE = "snapshot.json";
+var NOTES_FILE = "notes.jsonl";
+var LOG_FILE2 = "tracer.log";
+var TRACER_FOLDER_MODE = 448;
+var NOTES_FILE_MODE = 384;
+var READ_CHUNK_BYTES = 1048576;
+var BOOKMARK_CHECK_BYTES = 1048576;
+var NEWLINE = 10;
+var SNAPSHOT_VERSION = 1;
+var SNAPSHOT_TEMP_SUFFIX = ".tmp";
+var SNAPSHOT_FILE_MODE = 384;
+var LEGACY_IMPORT_WINDOW_MS = 24 * 60 * 60 * 1e3;
+var LEGACY_ENGINE_FOLDER = "langsmith_engine";
+var LEGACY_STATE_FILE = "langsmith_state.json";
+var LEGACY_QUEUE_WAIT_MS = 3e4;
+var LEGACY_DROPPED_WARNING = "dropped {uploads} queued uploads from {sessions} old sessions: {missing} missing from the old state, {writerless} with tracing off, no known destination or no old rebuild code, {otherAccount} recorded under another account";
+var IGNORED_RUNS = { post: () => void 0, patch: () => void 0 };
+var NOTES_ROTATE_BYTES = 10 * 1024 * 1024;
+var ROTATED_NOTES_SUFFIX = ".rotated.";
+var ROTATED_NOTES_NAME = /\.rotated\.(\d+)-(\d+)$/u;
+var ROTATED_NOTES_SETTLE_MS = 500;
+var UPLOAD_QUEUE_MAX_REQUESTS_IN_FLIGHT = 4;
+var MAX_QUEUED_BYTES = 40 * 1024 * 1024;
+var MAX_QUEUED_RUNS = 5e3;
+var UPLOAD_QUEUE_POLICY = { retryBaseMs: 500, retryMaxMs: 1e4 };
+var UPLOAD_QUEUE_PATCH_FIELDS = ["inputs", "outputs", "end_time", "error"];
+var UPLOAD_QUEUE_RETRY_LOG = "Upload of {count} runs to {destination} failed, retrying in {delayMs} ms: {reason}";
+var UPLOAD_QUEUE_DROPPED_LOG = "DROPPED run {runId} of session {sessionId} on {destination}, since LangSmith rejected it for good: {reason}{hint}";
+var UPLOAD_QUEUE_WRITER_FAILED_LOG = "DROPPED every run for an upload setting that could not be used: {reason}";
+var LOCK_TEMPORARY_SUFFIX = ".claim.";
+var LOCK_TAKEOVER_SUFFIX = ".takeover";
+var LOCK_ATTEMPTS = 3;
+var LOCK_TAKEOVER_STALE_MS = 1e3;
+var UNREAD_NOTES = { base: 0, offset: 0 };
+var HOOK_WARNING_PREFIX = "langsmith tracer: ";
+var READ_DEBOUNCE_MS = 20;
+var TICK_MS = 500;
+var IDLE_EXIT_MS = 3e3;
+var ABANDONED_EXIT_MS = 6e5;
+var HANDOFF_WAIT_MS = 3e4;
+var SESSION_END_EVENT = "SessionEnd";
+var WORKER_STARTED_LOG = "worker started";
+var WORKER_STOPPED_LOG = "worker stopped";
+var WORKER_RESUMED_LOG = "worker resumed for late notes";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/paths.js
+function tracerPaths(agentStateFolder) {
+  const folder = join24(agentStateFolder, PLUGINS_BASE_FOLDER);
+  return {
+    folder,
+    lock: join24(folder, LOCK_FILE),
+    snapshot: join24(folder, SNAPSHOT_FILE),
+    notes: join24(folder, NOTES_FILE),
+    log: join24(folder, LOG_FILE2)
+  };
 }
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/reader/reader.js
+import { closeSync as closeSync6, existsSync as existsSync3, fstatSync as fstatSync3, openSync as openSync6 } from "node:fs";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/reader/bookmark.js
+import { readSync as readSync2 } from "node:fs";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/reader/lines.js
+import { readSync } from "node:fs";
+function scanLines(file, from, to, visit) {
+  let carried = Buffer.alloc(0);
+  let carriedStart = from;
+  let position = from;
+  while (position < to) {
+    const chunk = Buffer.alloc(Math.min(READ_CHUNK_BYTES, to - position));
+    const count = readSync(file, chunk, 0, chunk.length, position);
+    if (count === 0)
+      break;
+    position += count;
+    const data = Buffer.concat([carried, chunk.subarray(0, count)]);
+    let lineStart = 0;
+    let newline = data.indexOf(NEWLINE);
+    while (newline !== -1) {
+      const end = carriedStart + newline + 1;
+      if (visit(data.subarray(lineStart, newline), end))
+        return end;
+      lineStart = newline + 1;
+      newline = data.indexOf(NEWLINE, lineStart);
+    }
+    carried = Buffer.from(data.subarray(lineStart));
+    carriedStart += lineStart;
+  }
+  return carriedStart;
+}
+function parseLine(text) {
+  try {
+    return JSON.parse(text.toString());
+  } catch {
+    return void 0;
+  }
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/reader/bookmark.js
+function recoverBookmark(file, size, bookmark, lineId, notices) {
+  if (bookmark.offset === 0)
+    return;
+  const id = bookmark.lastLineId;
+  if (id === void 0) {
+    if (bookmark.offset <= size)
+      return;
+    bookmark.offset = 0;
+    notices.push(`${bookmark.path} shrank and has no line ID to resume from, reading from the start`);
+    return;
+  }
+  if (bookmark.offset <= size && lastIdEndingAt(file, bookmark.offset, lineId) === id)
+    return;
+  const end = findLineEnd(file, size, id, lineId);
+  if (end === void 0) {
+    bookmark.offset = 0;
+    notices.push(`line ${id} is gone from ${bookmark.path}, reading from the start`);
+    return;
+  }
+  bookmark.offset = end;
+  notices.push(`${bookmark.path} changed, resuming after line ${id} at byte ${end}`);
+}
+function lastIdEndingAt(file, offset, lineId) {
+  const start = Math.max(0, offset - BOOKMARK_CHECK_BYTES);
+  const window2 = Buffer.alloc(offset - start);
+  readSync2(file, window2, 0, window2.length, start);
+  const text = window2.toString("utf8");
+  if (!text.endsWith("\n"))
+    return void 0;
+  const pieces = text.slice(0, -1).split("\n");
+  for (const piece of pieces.toReversed()) {
+    const line = parseLine(piece);
+    const id = line === void 0 ? void 0 : lineId(line);
+    if (id !== void 0)
+      return id;
+  }
+  return void 0;
+}
+function findLineEnd(file, size, id, lineId) {
+  let found;
+  scanLines(file, 0, size, (text, end) => {
+    if (!text.includes(id))
+      return false;
+    const line = parseLine(text);
+    if (line === void 0 || lineId(line) !== id)
+      return false;
+    found = end;
+    return true;
+  });
+  return found;
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/reader/reader.js
+var checkedInodes = /* @__PURE__ */ new WeakMap();
+function readNewLines(bookmark, lineId) {
+  const lines = [];
+  const notices = [];
+  if (!existsSync3(bookmark.path))
+    return { lines, notices, reachedEnd: true };
+  const file = openSync6(bookmark.path, "r");
+  try {
+    const { size: bigSize, ino } = fstatSync3(file, { bigint: true });
+    const size = Number(bigSize);
+    if (size < bookmark.offset || ino === 0n || checkedInodes.get(bookmark) !== ino) {
+      recoverBookmark(file, size, bookmark, lineId, notices);
+      checkedInodes.set(bookmark, ino);
+    }
+    const start = bookmark.offset;
+    let reachedEnd = true;
+    bookmark.offset = scanLines(file, start, size, (text, end) => {
+      const line = parseLine(text);
+      if (line !== void 0) {
+        lines.push({ line, end });
+        const id = lineId(line);
+        if (id !== void 0)
+          bookmark.lastLineId = id;
+      } else if (text.toString("utf8").trim() !== "") {
+        notices.push(`skipped an unreadable line ending at byte ${end} of ${bookmark.path}`);
+      }
+      reachedEnd = end - start < READ_CHUNK_BYTES;
+      return !reachedEnd;
+    });
+    return { lines, notices, reachedEnd };
+  } finally {
+    closeSync6(file);
+  }
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/snapshot/legacy.js
+import { existsSync as existsSync5, mkdirSync as mkdirSync8, readdirSync as readdirSync2, readFileSync as readFileSync13, rmSync as rmSync3 } from "node:fs";
+import { isAbsolute as isAbsolute4, join as join25 } from "node:path";
+import { setTimeout as delay5 } from "node:timers/promises";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/snapshot/snapshot.js
+import { existsSync as existsSync4, readFileSync as readFileSync12 } from "node:fs";
+function loadSnapshot(path3) {
+  const empty = { version: SNAPSHOT_VERSION, sessions: {} };
+  if (!existsSync4(path3))
+    return { snapshot: empty };
+  try {
+    const parsed = JSON.parse(readFileSync12(path3, "utf8"));
+    if (parsed.version !== SNAPSHOT_VERSION || typeof parsed.sessions !== "object") {
+      return { snapshot: empty, problem: `ignored ${path3} since its version is unknown` };
+    }
+    return { snapshot: parsed };
+  } catch (error2) {
+    return { snapshot: empty, problem: `ignored unreadable ${path3}: ${String(error2)}` };
+  }
+}
+function writeSnapshot(path3, snapshot) {
+  publishByRename(path3, JSON.stringify(snapshot), SNAPSHOT_TEMP_SUFFIX, SNAPSHOT_FILE_MODE);
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/snapshot/legacy.js
+function transcriptEnd(path3, lineId) {
+  const bookmark = { path: path3, offset: 0 };
+  for (; ; )
+    if (readNewLines(bookmark, lineId).reachedEnd)
+      return bookmark;
+}
+function openTurnStart(path3, lineId, turn) {
+  if (turn.fromStart)
+    return { path: path3, offset: 0 };
+  if (turn.afterLineId === void 0)
+    return transcriptEnd(path3, lineId);
+  const bookmark = { path: path3, offset: 0 };
+  for (; ; ) {
+    const { lines, reachedEnd } = readNewLines(bookmark, lineId);
+    const after = lines.find(({ line }) => lineId(line) === turn.afterLineId);
+    if (after !== void 0)
+      return { path: path3, offset: after.end, lastLineId: turn.afterLineId };
+    if (reachedEnd)
+      return void 0;
+  }
+}
+function importSessions(options, sessions, paths) {
+  const saved = loadSnapshot(paths.snapshot).snapshot;
+  const cutoff = Date.now() - LEGACY_IMPORT_WINDOW_MS;
+  for (const { sessionId, transcriptPath, updatedAt, tracingMode, writer, openTurn } of sessions) {
+    if (updatedAt < cutoff || writer === void 0)
+      continue;
+    const { lineId } = options.createBuilder({
+      sessionId,
+      savedState: void 0,
+      sink: IGNORED_RUNS
+    });
+    const resume = openTurn && openTurnStart(transcriptPath, lineId, openTurn);
+    saved.sessions[sessionId] = {
+      sessionId,
+      integration: options.integration,
+      writer,
+      bookmarks: { [transcriptPath]: resume ?? transcriptEnd(transcriptPath, lineId) },
+      pendingNotes: [],
+      builderState: resume === void 0 ? void 0 : openTurn?.builderState,
+      tracingMode,
+      ended: false
+    };
+  }
+  mkdirSync8(paths.folder, { recursive: true, mode: TRACER_FOLDER_MODE });
+  writeSnapshot(paths.snapshot, saved);
+}
+async function handOverOpenTurn(storageRoot, integration, sessionId, rootRunId) {
+  for (const directory of [CAPTURE_TURNS_DIRECTORY, CAPTURE_JOBS_DIRECTORY]) {
+    const store = createCaptureStore(storageRoot, directory);
+    for (const { record } of await store.enumerateTurn(integration, sessionId, rootRunId))
+      if (record.runId !== rootRunId || record.eventKind !== LIFECYCLE_POST_EVENT_KIND)
+        await store.remove(scopeOf(record));
+  }
+}
+async function sendOldSession(storageRoot, integration, { sessionId, writer, recover, openTurn }, dropped) {
+  if (openTurn !== void 0)
+    await handOverOpenTurn(storageRoot, integration, sessionId, openTurn.rootRunId);
+  await recover();
+  const bridge = createLifecycleBridge({ storageRoot, integration, sessionId, writer });
+  const result = await bridge.drain();
+  const account = bridge.accountFingerprint;
+  const jobs = await createCaptureStore(storageRoot, CAPTURE_JOBS_DIRECTORY).enumerate(integration, sessionId);
+  const ownJobs = jobs.filter(({ record }) => record.destinationFingerprint === account);
+  if (result.status !== "drained" || result.pending > 0 || ownJobs.length > 0)
+    return false;
+  const otherAccount = result.accountMismatch + jobs.length;
+  dropped.otherAccount += Number(otherAccount > 0);
+  dropped.uploads += otherAccount;
+  return true;
+}
+async function sendOldQueue(storageRoot, integration, sessions, log2) {
+  if (!existsSync5(storageRoot))
+    return true;
+  let sent = true;
+  const dropped = { missing: 0, writerless: 0, otherAccount: 0, uploads: 0 };
+  const queued = /* @__PURE__ */ new Map();
+  for (const directory of [CAPTURE_TURNS_DIRECTORY, CAPTURE_JOBS_DIRECTORY]) {
+    const store = createCaptureStore(storageRoot, directory);
+    for (const { sessionId, captures } of await store.enumerateSessions(integration))
+      queued.set(sessionId, (queued.get(sessionId) ?? 0) + captures.length);
+  }
+  for (const [sessionId, uploads] of queued) {
+    const session = sessions.find((listed) => listed.sessionId === sessionId);
+    const { writer, recover, openTurn } = session ?? {};
+    if (writer === void 0 || recover === void 0) {
+      dropped[session === void 0 ? "missing" : "writerless"] += 1;
+      dropped.uploads += uploads;
+      continue;
+    }
+    const recovery = { sessionId, writer, recover, openTurn };
+    const done = await sendOldSession(storageRoot, integration, recovery, dropped).catch((error2) => {
+      log2(`could not send old session ${sessionId}: ${describe(error2)}`);
+      return false;
+    });
+    sent = done && sent;
+  }
+  const sessionCount = dropped.missing + dropped.writerless + dropped.otherAccount;
+  if (sessionCount > 0)
+    log2(fillTemplate(LEGACY_DROPPED_WARNING, { ...dropped, sessions: sessionCount }));
+  return sent;
+}
+function lockHolders(folder) {
+  try {
+    return readdirSync2(folder, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile() && entry.parentPath.endsWith(FILE_LOCK_DIRECTORY_SUFFIX)).map(({ parentPath, name }) => readFileSync13(join25(parentPath, name), "utf8")).map((claim) => JSON.parse(claim).pid);
+  } catch {
+    return existsSync5(folder) ? void 0 : [];
+  }
+}
+async function oldWorkersStopped(folders) {
+  const holders = /* @__PURE__ */ new Set();
+  for (; ; ) {
+    const scans = folders.map((folder) => lockHolders(folder));
+    for (const pid of scans.flat())
+      if (pid !== void 0)
+        holders.add(pid);
+    for (const pid of holders)
+      if (pid === process.pid || processIsAlive(pid) !== true)
+        holders.delete(pid);
+    if (holders.size === 0 && !scans.includes(void 0))
+      return true;
+    await delay5(FILE_LOCK_POLL_INTERVAL_MS);
+  }
+}
+function upgradeLegacyState(options, log2) {
+  if (!isAbsolute4(options.agentStateFolder)) {
+    throw new Error(`refusing to import legacy state from relative folder "${options.agentStateFolder}"`);
+  }
+  const legacyEngine = join25(options.agentStateFolder, LEGACY_ENGINE_FOLDER);
+  const legacyState = join25(options.agentStateFolder, LEGACY_STATE_FILE);
+  if (!existsSync5(legacyEngine) && !existsSync5(legacyState))
+    return Promise.resolve();
+  const paths = tracerPaths(options.agentStateFolder);
+  const sessions = existsSync5(legacyState) ? options.readLegacySessions(legacyState) : [];
+  if (!existsSync5(paths.snapshot))
+    importSessions(options, sessions, paths);
+  const integration = options.integration;
+  const stateClaims = `${legacyState}${FILE_LOCK_DIRECTORY_SUFFIX}`;
+  const sending = sendOldQueue(legacyEngine, integration, sessions, log2).then((sent) => sent && oldWorkersStopped([legacyEngine, stateClaims])).catch(() => false);
+  const timeout = delay5(LEGACY_QUEUE_WAIT_MS, false, { ref: false });
+  return Promise.race([sending, timeout]).then((sent) => {
+    if (!sent)
+      return;
+    rmSync3(legacyEngine, { recursive: true, force: true });
+    rmSync3(legacyState, { force: true });
+    rmSync3(stateClaims, { recursive: true, force: true });
+  });
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/upload-queue/submissions.js
+function mergeRun(base, update) {
+  if (update === void 0)
+    return base;
+  const merged = { ...base };
+  for (const [field4, value] of Object.entries(update)) {
+    if (value !== void 0)
+      merged[field4] = value;
+  }
+  return merged;
+}
+function postSubmission(run) {
+  const privacyMode = run.tracingMode === "metadata" ? "metadata" : "full";
+  return {
+    operation: "post",
+    integration: run.metadata.integration,
+    privacyMode,
+    metadata: run.metadata,
+    ...privacyMode === "metadata" ? { privacyContext: { status: privacyStatus2(run) } } : {},
+    run: {
+      id: run.id,
+      name: run.name,
+      run_type: run.run_type,
+      start_time: run.start_time,
+      trace_id: run.trace_id,
+      dotted_order: run.dotted_order,
+      inputs: run.inputs ?? {},
+      ...run.parent_run_id === void 0 ? {} : { parent_run_id: run.parent_run_id },
+      ...run.end_time === void 0 ? {} : { end_time: run.end_time },
+      ...run.outputs === void 0 ? {} : { outputs: run.outputs },
+      ...run.error === void 0 ? {} : { error: run.error }
+    }
+  };
+}
+function patchSubmission(patch) {
+  const fields = [];
+  const values = {};
+  for (const field4 of UPLOAD_QUEUE_PATCH_FIELDS) {
+    if (patch[field4] === void 0)
+      continue;
+    fields.push(field4);
+    values[field4] = patch[field4];
+  }
+  return {
+    operation: "patch",
+    integration: patch.metadata.integration,
+    privacyMode: patch.tracingMode === "metadata" ? "metadata" : "full",
+    metadata: patch.metadata,
+    privacyContext: { status: privacyStatus2(patch) },
+    run: {
+      id: patch.id,
+      name: patch.name,
+      run_type: patch.run_type,
+      trace_id: patch.trace_id,
+      dotted_order: patch.dotted_order,
+      ...patch.parent_run_id === void 0 ? {} : { parent_run_id: patch.parent_run_id },
+      ...patch.start_time === void 0 ? {} : { start_time: patch.start_time }
+    },
+    patch: { fields, values }
+  };
+}
+function privacyStatus2(run) {
+  if (run.error !== void 0)
+    return "error";
+  return run.end_time === void 0 ? "running" : "completed";
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/upload-queue/queued-runs.js
+function runKey(lane, runId) {
+  return JSON.stringify([lane.key, runId]);
+}
+function parentKey(run) {
+  const parentId = run.post?.parent_run_id;
+  if (parentId === void 0)
+    return void 0;
+  return runKey(run.lane, parentId);
+}
+function requeue(run) {
+  const sent = run.sending;
+  run.sending = void 0;
+  if (sent?.post !== void 0) {
+    run.post = mergeRun(sent.post, run.patch);
+    run.patch = void 0;
+  } else if (sent?.patch !== void 0 && run.post === void 0) {
+    run.patch = run.patch === void 0 ? sent.patch : mergeRun(sent.patch, run.patch);
+  }
+  run.lane.ready.add(run);
+}
+function startSending(run) {
+  const { post: unsentPost, patch: unsentPatch } = run;
+  run.sending = unsentPost === void 0 ? { patch: unsentPatch } : { post: unsentPost };
+  run.post = void 0;
+  run.patch = void 0;
+  return {
+    submission: unsentPost === void 0 ? patchSubmission(unsentPatch) : postSubmission(unsentPost)
+  };
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/upload-queue/upload-queue.js
+function createUploadQueue(log2, policy = UPLOAD_QUEUE_POLICY) {
+  const lanesByWriter = /* @__PURE__ */ new Map();
+  const lanes = [];
+  const runs = /* @__PURE__ */ new Map();
+  const waitingOnParent = /* @__PURE__ */ new Map();
+  const pendingBySession = /* @__PURE__ */ new Map();
+  let inFlight = 0;
+  let queuedBytes = 0;
+  let nextLane = 0;
+  let retryTimer;
+  function lanesFor(options) {
+    const key = JSON.stringify(options, sortedKeys);
+    const known = lanesByWriter.get(key);
+    if (known !== void 0)
+      return known;
+    let created = [];
+    try {
+      const writer = createLangSmithUploadWriter(options);
+      created = writer.destinations.map(({ id }, index) => ({
+        key: `${lanes.length + index}`,
+        writer,
+        destinationId: id,
+        ready: /* @__PURE__ */ new Set(),
+        failures: 0,
+        retryAt: 0
+      }));
+    } catch (error2) {
+      log2(fillTemplate(UPLOAD_QUEUE_WRITER_FAILED_LOG, { reason: describe(error2) }));
+    }
+    lanesByWriter.set(key, created);
+    lanes.push(...created);
+    return created;
+  }
+  function track(sessionId, lane, runId) {
+    const key = runKey(lane, runId);
+    const known = runs.get(key);
+    if (known !== void 0)
+      return known;
+    const run = { key, runId, sessionId, lane, sendAlone: false, bytes: 0 };
+    runs.set(key, run);
+    pendingBySession.set(sessionId, (pendingBySession.get(sessionId) ?? 0) + 1);
+    return run;
+  }
+  function hold(run) {
+    const held = [run.post, run.patch, run.sending?.post, run.sending?.patch];
+    const bytes = Buffer.byteLength(JSON.stringify(held));
+    queuedBytes += bytes - run.bytes;
+    run.bytes = bytes;
+  }
+  function forget(run) {
+    runs.delete(run.key);
+    queuedBytes -= run.bytes;
+    const left = (pendingBySession.get(run.sessionId) ?? 1) - 1;
+    if (left === 0)
+      pendingBySession.delete(run.sessionId);
+    else
+      pendingBySession.set(run.sessionId, left);
+  }
+  function parentUnacknowledged(key) {
+    const parent = runs.get(key);
+    return parent?.post !== void 0 || parent?.sending?.post !== void 0;
+  }
+  function releaseChildren(run) {
+    for (const child of waitingOnParent.get(run.key) ?? [])
+      child.lane.ready.add(child);
+    waitingOnParent.delete(run.key);
+  }
+  function takeBatch(lane) {
+    const batch = [];
+    const inBatch = /* @__PURE__ */ new Set();
+    let bytes = 0;
+    for (const run of lane.ready) {
+      const parent = parentKey(run);
+      if (parent !== void 0 && !inBatch.has(parent) && parentUnacknowledged(parent)) {
+        lane.ready.delete(run);
+        const siblings = waitingOnParent.get(parent);
+        if (siblings === void 0)
+          waitingOnParent.set(parent, [run]);
+        else
+          siblings.push(run);
+        continue;
+      }
+      if (run.sendAlone && batch.length > 0)
+        continue;
+      if (batch.length > 0 && bytes + run.bytes > lane.writer.batchLimits.maxBytes)
+        break;
+      lane.ready.delete(run);
+      batch.push(run);
+      bytes += run.bytes;
+      inBatch.add(run.key);
+      if (run.sendAlone || batch.length >= lane.writer.batchLimits.maxRuns)
+        break;
+    }
+    return batch;
+  }
+  function acknowledge(run) {
+    const postedNow = run.sending?.post !== void 0;
+    run.sending = void 0;
+    hold(run);
+    if (run.post !== void 0 || run.patch !== void 0)
+      run.lane.ready.add(run);
+    else
+      forget(run);
+    if (postedNow)
+      releaseChildren(run);
+  }
+  function drop(run, error2) {
+    const { reason, status } = rejection(error2);
+    log2(fillTemplate(UPLOAD_QUEUE_DROPPED_LOG, {
+      runId: run.runId,
+      sessionId: run.sessionId,
+      destination: run.lane.destinationId,
+      reason,
+      hint: authHint(status)
+    }));
+    run.sending = void 0;
+    forget(run);
+    releaseChildren(run);
+  }
+  function backOff(lane, count, error2) {
+    lane.failures += 1;
+    const delayMs = Math.min(policy.retryMaxMs, policy.retryBaseMs * 2 ** (lane.failures - 1));
+    lane.retryAt = Date.now() + delayMs;
+    log2(fillTemplate(UPLOAD_QUEUE_RETRY_LOG, {
+      count,
+      destination: lane.destinationId,
+      delayMs,
+      reason: failureReason(error2)
+    }));
+  }
+  async function send(lane, batch) {
+    const error2 = await Promise.resolve().then(() => lane.writer.sendBatch(batch.map(startSending), lane.destinationId)).then(() => void 0, (failure2) => failure2 ?? new Error());
+    inFlight -= 1;
+    if (error2 === void 0) {
+      lane.failures = 0;
+      for (const run of batch)
+        acknowledge(run);
+    } else if (isRetryable(error2) && !(error2 instanceof TypeError)) {
+      backOff(lane, batch.length, error2);
+      for (const run of batch)
+        requeue(run);
+    } else if (batch.length > 1) {
+      for (const run of batch) {
+        run.sendAlone = true;
+        requeue(run);
+      }
+    } else {
+      for (const run of batch)
+        drop(run, error2);
+    }
+    flush();
+  }
+  function laneToServe(now) {
+    for (let step = 0; step < lanes.length; step += 1) {
+      const lane = lanes[(nextLane + step) % lanes.length];
+      if (lane.ready.size > 0 && lane.retryAt <= now) {
+        nextLane = (nextLane + step + 1) % lanes.length;
+        return lane;
+      }
+    }
+    return void 0;
+  }
+  function scheduleRetry(now) {
+    clearTimeout(retryTimer);
+    retryTimer = void 0;
+    let earliest = Infinity;
+    for (const lane of lanes) {
+      if (lane.ready.size > 0 && lane.retryAt > now)
+        earliest = Math.min(earliest, lane.retryAt);
+    }
+    if (earliest === Infinity)
+      return;
+    retryTimer = setTimeout(flush, earliest - now);
+    retryTimer.unref();
+  }
+  function flush() {
+    const now = Date.now();
+    while (inFlight < UPLOAD_QUEUE_MAX_REQUESTS_IN_FLIGHT) {
+      const lane = laneToServe(now);
+      if (lane === void 0)
+        break;
+      const batch = takeBatch(lane);
+      if (batch.length === 0)
+        continue;
+      inFlight += 1;
+      void send(lane, batch);
+    }
+    scheduleRetry(now);
+  }
+  function post(sessionId, options, run) {
+    if (run.tracingMode === "off")
+      return;
+    for (const lane of lanesFor(options)) {
+      const queued = track(sessionId, lane, run.id);
+      if (queued.post !== void 0 || queued.sending?.post !== void 0)
+        continue;
+      queued.post = mergeRun(mergeRun(run, queued.sending?.patch), queued.patch);
+      queued.patch = void 0;
+      hold(queued);
+      if (queued.sending === void 0)
+        lane.ready.add(queued);
+    }
+  }
+  function patch(sessionId, options, update) {
+    if (update.tracingMode === "off")
+      return;
+    for (const lane of lanesFor(options)) {
+      const queued = track(sessionId, lane, update.id);
+      if (queued.post !== void 0) {
+        queued.post = mergeRun(queued.post, update);
+        hold(queued);
+        continue;
+      }
+      queued.patch = queued.patch === void 0 ? update : mergeRun(queued.patch, update);
+      hold(queued);
+      if (queued.sending === void 0)
+        lane.ready.add(queued);
+    }
+  }
+  return {
+    post,
+    patch,
+    pendingFor: (sessionId) => pendingBySession.get(sessionId) ?? 0,
+    idle: () => runs.size === 0,
+    full: () => queuedBytes >= MAX_QUEUED_BYTES || runs.size >= MAX_QUEUED_RUNS,
+    flush
+  };
+}
+function failureReason(error2) {
+  const cause = error2 instanceof Error && error2.cause !== void 0 ? error2.cause : error2;
+  const status = failureStatus(cause);
+  return status === void 0 ? describe(cause) : `${describe(cause)} (HTTP ${status})`;
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/worker/worker.js
+import { appendFileSync as appendFileSync2, mkdirSync as mkdirSync9, watch } from "node:fs";
+import { basename as basename5 } from "node:path";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/worker/lock.js
+import { linkSync, readFileSync as readFileSync14, statSync as statSync5, writeFileSync as writeFileSync4 } from "node:fs";
+import { setTimeout as delay6 } from "node:timers/promises";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/utils/files/remove.js
+import { unlinkSync as unlinkSync3 } from "node:fs";
+function removeFile2(path3) {
+  try {
+    unlinkSync3(path3);
+  } catch (error2) {
+    ifMissing(void 0)(error2);
+  }
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/worker/lock.js
+function createLock(lock, version) {
+  const temporary = `${lock}${LOCK_TEMPORARY_SUFFIX}${process.pid}`;
+  const holder = { pid: process.pid, version };
+  writeFileSync4(temporary, JSON.stringify(holder));
+  try {
+    linkSync(temporary, lock);
+    return true;
+  } catch (error2) {
+    if (errorCode(error2) === FILE_EXISTS_CODE)
+      return false;
+    throw error2;
+  } finally {
+    removeFile2(temporary);
+  }
+}
+function lockOwner2(lock) {
+  try {
+    return readFileSync14(lock, "utf8");
+  } catch (error2) {
+    if (errorCode(error2) === FILE_MISSING_CODE)
+      return void 0;
+    throw error2;
+  }
+}
+function parseHolder(owner) {
+  try {
+    const holder = JSON.parse(owner);
+    const { pid, version } = holder;
+    if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0)
+      return void 0;
+    return { pid, version: typeof version === "string" ? version : "" };
+  } catch {
+    return void 0;
+  }
+}
+function ownerIsAlive(owner) {
+  const holder = parseHolder(owner);
+  return holder !== void 0 && processIsAlive(holder.pid) !== false;
+}
+function claimTakeover(takeover, version) {
+  if (createLock(takeover, version))
+    return true;
+  const claimed = statSync5(takeover, { throwIfNoEntry: false });
+  if (claimed === void 0 || Date.now() - claimed.mtimeMs < LOCK_TAKEOVER_STALE_MS)
+    return false;
+  removeFile2(takeover);
+  return createLock(takeover, version);
+}
+function takeOverDeadLock(lock, deadOwner, version) {
+  const takeover = `${lock}${LOCK_TAKEOVER_SUFFIX}`;
+  if (!claimTakeover(takeover, version))
+    return false;
+  try {
+    if (lockOwner2(lock) === deadOwner)
+      removeFile2(lock);
+    return createLock(lock, version);
+  } finally {
+    removeFile2(takeover);
+  }
+}
+function takeLock(lock, version) {
+  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
+    if (createLock(lock, version))
+      return true;
+    const owner = lockOwner2(lock);
+    if (owner === void 0)
+      continue;
+    if (ownerIsAlive(owner))
+      return false;
+    return takeOverDeadLock(lock, owner, version);
+  }
+  return false;
+}
+function liveLockHolder(lock) {
+  const owner = lockOwner2(lock);
+  return owner !== void 0 && ownerIsAlive(owner) ? parseHolder(owner) : void 0;
+}
+var isNewerVersion = (candidate, current) => candidate.localeCompare(current, void 0, { numeric: true }) > 0;
+async function takeLockFromOlder(lock, version) {
+  const deadline = Date.now() + HANDOFF_WAIT_MS;
+  while (!takeLock(lock, version)) {
+    const holder = liveLockHolder(lock);
+    if (holder !== void 0 && !isNewerVersion(version, holder.version))
+      return false;
+    if (Date.now() >= deadline)
+      return false;
+    await delay6(TICK_MS);
+  }
+  return true;
+}
+function releaseLock(lock) {
+  const owner = lockOwner2(lock);
+  if (owner !== void 0 && parseHolder(owner)?.pid === process.pid)
+    removeFile2(lock);
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/notes/notes.js
+import { closeSync as closeSync7, fstatSync as fstatSync4, openSync as openSync7, readdirSync as readdirSync3, readSync as readSync3, renameSync as renameSync7, statSync as statSync6 } from "node:fs";
+import { basename as basename4, dirname as dirname14, join as join26 } from "node:path";
+var NotesFollower = class {
+  notes;
+  receive;
+  base = 0;
+  offset = 0;
+  rotated = [];
+  settled = [];
+  constructor(notes, receive) {
+    this.notes = notes;
+    this.receive = receive;
+  }
+  readFrom(path3, offset) {
+    let file;
+    try {
+      file = openSync7(path3, "r");
+    } catch (error2) {
+      if (errorCode(error2) === FILE_MISSING_CODE)
+        return { offset, size: 0 };
+      throw error2;
+    }
+    try {
+      const size = fstatSync4(file).size;
+      const buffer = Buffer.alloc(Math.max(0, size - offset));
+      readSync3(file, buffer, 0, buffer.length, offset);
+      const complete = buffer.lastIndexOf(NEWLINE) + 1;
+      const text = buffer.subarray(0, complete).toString("utf8");
+      for (const line of text.split("\n").filter(Boolean))
+        this.receive(line);
+      return { offset: offset + complete, size };
+    } finally {
+      closeSync7(file);
+    }
+  }
+  leftovers() {
+    const folder = dirname14(this.notes);
+    const prefix = `${basename4(this.notes)}${ROTATED_NOTES_SUFFIX}`;
+    return readdirSync3(folder).filter((name) => name.startsWith(prefix)).flatMap((name) => {
+      const match = ROTATED_NOTES_NAME.exec(name);
+      if (match === null)
+        return [];
+      return [{ path: join26(folder, name), base: Number(match[1]), nextBase: Number(match[2]) }];
+    }).toSorted((left, right) => left.base - right.base);
+  }
+  resume(bookmark) {
+    const position = bookmark.base + bookmark.offset;
+    this.base = bookmark.base;
+    for (const leftover of this.leftovers()) {
+      this.readFrom(leftover.path, Math.max(0, Math.min(position, leftover.nextBase) - leftover.base));
+      this.settled.push(leftover.path);
+      this.base = Math.max(this.base, leftover.nextBase);
+    }
+    this.offset = Math.max(0, position - this.base);
+  }
+  take() {
+    this.settle();
+    const read = this.readFrom(this.notes, this.offset);
+    if (read.size < this.offset) {
+      this.base += this.offset;
+      this.offset = 0;
+      return;
+    }
+    this.offset = read.offset;
+    if (this.offset >= NOTES_ROTATE_BYTES && read.size === this.offset)
+      this.rotate();
+  }
+  rotate() {
+    const nextBase = this.base + this.offset;
+    const path3 = `${this.notes}${ROTATED_NOTES_SUFFIX}${this.base}-${nextBase}`;
+    renameSync7(this.notes, path3);
+    this.rotated.push({ path: path3, offset: this.offset, rotatedAt: Date.now() });
+    this.base = nextBase;
+    this.offset = 0;
+  }
+  settle() {
+    for (let next = this.rotated[0]; next !== void 0 && Date.now() - next.rotatedAt >= ROTATED_NOTES_SETTLE_MS; next = this.rotated[0]) {
+      this.readFrom(next.path, next.offset);
+      this.settled.push(next.path);
+      this.rotated.shift();
+    }
+  }
+  removeSettled() {
+    for (const path3 of this.settled.splice(0))
+      removeFile2(path3);
+  }
+  bookmark() {
+    return { base: this.base, offset: this.offset };
+  }
+  rotating() {
+    return this.rotated.length > 0;
+  }
+  unread() {
+    const size = statSync6(this.notes, { throwIfNoEntry: false })?.size ?? 0;
+    return this.rotating() || size > this.offset;
+  }
+};
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/worker/session.js
+import { statSync as statSync7 } from "node:fs";
+var fileSize = (path3) => statSync7(path3, { throwIfNoEntry: false })?.size ?? 0;
+function sessionTranscripts(session) {
+  return [.../* @__PURE__ */ new Set([...Object.keys(session.bookmarks), ...session.builder.transcripts()])];
+}
+function addKnownTranscripts(session, sizes) {
+  for (const path3 of sessionTranscripts(session))
+    sizes[path3] ??= fileSize(path3);
+}
+function positionNote(session, note) {
+  const transcriptSizes = { ...note.transcriptSizes };
+  addKnownTranscripts(session, transcriptSizes);
+  return { ...note, transcriptSizes };
+}
+function noteReached(session, note) {
+  return Object.entries(note.transcriptSizes).every(([path3, size]) => (session.bookmarks[path3]?.offset ?? 0) >= size);
+}
+function deliverReadyNotes(session, log2) {
+  let delivered2 = false;
+  for (let note = session.pendingNotes[0]; note !== void 0; note = session.pendingNotes[0]) {
+    addKnownTranscripts(session, note.transcriptSizes);
+    if (!noteReached(session, note))
+      break;
+    session.pendingNotes.shift();
+    delivered2 = true;
+    if (note.event === SESSION_END_EVENT)
+      session.ended = true;
+    try {
+      session.builder.receiveNote(note);
+    } catch (error2) {
+      log2(`could not apply ${note.event} for ${session.sessionId}: ${describe(error2)}`);
+    }
+  }
+  return delivered2;
+}
+function readLimit(session, path3) {
+  return session.pendingNotes[0]?.transcriptSizes[path3] ?? Infinity;
+}
+function reachNoteAt(session, path3, offset) {
+  const sizes = session.pendingNotes[0]?.transcriptSizes;
+  const size = sizes?.[path3];
+  if (sizes !== void 0 && size !== void 0 && size > offset)
+    sizes[path3] = offset;
+}
+function deliverLine(session, bookmark, read, log2) {
+  try {
+    session.builder.readLine(bookmark.path, read.line);
+  } catch (error2) {
+    log2(`could not trace a line in ${bookmark.path}: ${describe(error2)}`);
+  }
+  bookmark.offset = read.end;
+  const id = session.builder.lineId(read.line);
+  if (id !== void 0)
+    bookmark.lastLineId = id;
+}
+function moveBookmark(bookmark, to) {
+  bookmark.offset = to.offset;
+  if (to.lastLineId === void 0)
+    delete bookmark.lastLineId;
+  else
+    bookmark.lastLineId = to.lastLineId;
+}
+function readTranscript(session, path3, readNewLines2, log2) {
+  const bookmark = session.bookmarks[path3] ??= { path: path3, offset: 0 };
+  const readFrom = { ...bookmark };
+  const lines = readNewLines2(bookmark, session.builder.lineId, log2);
+  const readTo = { ...bookmark };
+  moveBookmark(bookmark, readFrom);
+  let advanced = false;
+  for (const read of lines) {
+    if (read.end > readLimit(session, path3)) {
+      reachNoteAt(session, path3, bookmark.offset);
+      deliverReadyNotes(session, log2);
+      if (read.end > readLimit(session, path3))
+        return advanced;
+    }
+    deliverLine(session, bookmark, read, log2);
+    advanced = true;
+  }
+  if (readTo.offset > bookmark.offset)
+    moveBookmark(bookmark, readTo);
+  return advanced;
+}
+function settleUnreachableNote(session) {
+  const sizes = session.pendingNotes[0]?.transcriptSizes ?? {};
+  let settled = false;
+  for (const [path3, size] of Object.entries(sizes)) {
+    const offset = session.bookmarks[path3]?.offset ?? 0;
+    if (offset >= size || fileSize(path3) >= size)
+      continue;
+    sizes[path3] = offset;
+    settled = true;
+  }
+  return settled;
+}
+function readPass(session, readNewLines2, log2, paused) {
+  let progressed = false;
+  for (; ; ) {
+    if (paused())
+      return progressed;
+    let advanced = deliverReadyNotes(session, log2);
+    for (const path3 of sessionTranscripts(session))
+      advanced = readTranscript(session, path3, readNewLines2, log2) || advanced;
+    if (!advanced)
+      advanced = settleUnreachableNote(session);
+    if (!advanced)
+      return progressed;
+    progressed = true;
+  }
+}
+function snapshotOf({ builder, ...saved }) {
+  return { ...saved, builderState: builder.state() };
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/worker/worker.js
+var TracerWorker = class {
+  options;
+  sessions = /* @__PURE__ */ new Map();
+  scheduled = /* @__PURE__ */ new Set();
+  waitingForUploads = /* @__PURE__ */ new Set();
+  queue;
+  notes;
+  saved = { version: SNAPSHOT_VERSION, sessions: {} };
+  unsaved = false;
+  lastActivity = Date.now();
+  stopRequested = false;
+  ticker;
+  watcher;
+  stop;
+  constructor(options) {
+    this.options = options;
+    this.queue = options.createQueue(this.log);
+    this.notes = new NotesFollower(options.paths.notes, (line) => this.receiveLine(line));
+  }
+  log = (line) => {
+    try {
+      appendFileSync2(this.options.paths.log, `${(/* @__PURE__ */ new Date()).toISOString()} ${line}
+`);
+    } catch {
+      return;
+    }
+  };
+  attempt(failure2, action) {
+    try {
+      action();
+    } catch (error2) {
+      this.log(`${failure2}: ${describe(error2)}`);
+    }
+  }
+  start() {
+    this.log(`${WORKER_STARTED_LOG} ${process.pid}`);
+    this.attempt("could not upgrade older state", () => this.options.upgradeState(this.log));
+    this.attempt("could not load the snapshot", () => {
+      this.saved = this.options.snapshots.load() ?? this.saved;
+    });
+    for (const snapshot of Object.values(this.saved.sessions)) {
+      this.sessions.set(snapshot.sessionId, this.createSession(snapshot));
+      this.scheduleRead(snapshot.sessionId);
+    }
+    this.notes.resume(this.saved.notes ?? UNREAD_NOTES);
+    this.takeNotes();
+    const notesName = basename5(this.options.paths.notes);
+    this.watcher = watch(this.options.paths.folder, (_event, name) => {
+      if (name === null || name === notesName)
+        this.takeNotes();
+    });
+    this.watcher.on("error", (error2) => this.log(`stopped watching notes: ${describe(error2)}`));
+    this.ticker = setInterval(() => this.tick(), TICK_MS);
+  }
+  stopped() {
+    return new Promise((resolve17) => {
+      this.stop = resolve17;
+    });
+  }
+  createSession({ builderState, ...saved }) {
+    const session = {
+      ...saved,
+      builder: this.options.createBuilder({
+        sessionId: saved.sessionId,
+        savedState: builderState,
+        tracingMode: saved.tracingMode,
+        sink: {
+          post: (run) => this.queue.post(session.sessionId, session.writer, run),
+          patch: (patch) => this.queue.patch(session.sessionId, session.writer, patch)
+        }
+      })
+    };
+    return session;
+  }
+  receive(note) {
+    this.lastActivity = Date.now();
+    const session = this.sessions.get(note.sessionId) ?? this.createSession({
+      sessionId: note.sessionId,
+      integration: note.integration,
+      writer: note.writer,
+      bookmarks: {},
+      pendingNotes: [],
+      builderState: void 0,
+      ended: false
+    });
+    this.sessions.set(session.sessionId, session);
+    session.integration = note.integration;
+    session.writer = note.writer;
+    session.ended = false;
+    if (note.transcriptPath !== void 0)
+      session.bookmarks[note.transcriptPath] ??= { path: note.transcriptPath, offset: 0 };
+    session.pendingNotes.push(positionNote(session, note));
+    this.scheduleRead(session.sessionId);
+  }
+  receiveLine(text) {
+    this.unsaved = true;
+    try {
+      const note = JSON.parse(text);
+      if ("stopWorker" in note) {
+        this.log(`stopping for a newer worker ${note.version}`);
+        this.stopRequested = true;
+        return;
+      }
+      if (typeof note.sessionId !== "string")
+        throw new Error("the note has no session id");
+      this.receive(note);
+    } catch (error2) {
+      this.log(`skipped a bad hook note: ${describe(error2)}`);
+    }
+  }
+  scheduleRead(sessionId) {
+    if (this.scheduled.has(sessionId))
+      return;
+    this.scheduled.add(sessionId);
+    setTimeout(() => {
+      this.scheduled.delete(sessionId);
+      this.read(sessionId);
+    }, READ_DEBOUNCE_MS);
+  }
+  read(sessionId) {
+    const session = this.sessions.get(sessionId);
+    if (session === void 0)
+      return;
+    this.attempt(`read failed for ${sessionId}`, () => {
+      if (readPass(session, this.options.readNewLines, this.log, () => this.queue.full())) {
+        this.lastActivity = Date.now();
+        this.unsaved = true;
+      }
+      if (this.queue.full())
+        this.waitingForUploads.add(sessionId);
+      this.queue.flush();
+    });
+  }
+  takeNotes() {
+    this.attempt("could not take the notes", () => this.notes.take());
+  }
+  saveSnapshot() {
+    if (!this.unsaved || this.notes.rotating())
+      return;
+    const sessions = [...this.sessions.values()];
+    if (sessions.some((session) => this.queue.pendingFor(session.sessionId) > 0))
+      return;
+    for (const session of sessions)
+      if (session.ended && session.pendingNotes.length === 0)
+        this.sessions.delete(session.sessionId);
+    this.saved = {
+      version: SNAPSHOT_VERSION,
+      sessions: Object.fromEntries([...this.sessions.values()].map((s) => [s.sessionId, snapshotOf(s)])),
+      notes: this.notes.bookmark()
+    };
+    this.unsaved = false;
+    this.attempt("could not save the snapshot", () => {
+      this.options.snapshots.save(this.saved);
+      this.notes.removeSettled();
+    });
+  }
+  shouldExit() {
+    const busy = this.scheduled.size > 0 || this.waitingForUploads.size > 0 || this.notes.rotating() || !this.queue.idle();
+    if (busy)
+      return false;
+    const quiet = Date.now() - this.lastActivity;
+    return this.stopRequested || quiet >= ABANDONED_EXIT_MS || quiet >= IDLE_EXIT_MS && this.sessions.size === 0 && !this.notes.unread();
+  }
+  resumeReadsAfterUploads() {
+    if (this.queue.full())
+      return;
+    for (const sessionId of this.waitingForUploads)
+      this.scheduleRead(sessionId);
+    this.waitingForUploads.clear();
+  }
+  tick() {
+    this.takeNotes();
+    this.queue.flush();
+    this.resumeReadsAfterUploads();
+    this.saveSnapshot();
+    if (this.shouldExit())
+      this.exit();
+    else
+      for (const sessionId of this.sessions.keys())
+        this.scheduleRead(sessionId);
+  }
+  exit() {
+    const { lock } = this.options.paths;
+    this.unsaved = true;
+    this.saveSnapshot();
+    releaseLock(lock);
+    if (!this.stopRequested && this.notes.unread() && takeLock(lock, this.options.version)) {
+      this.log(`${WORKER_RESUMED_LOG} ${process.pid}`);
+      return;
+    }
+    clearInterval(this.ticker);
+    this.watcher?.close();
+    this.log(`${WORKER_STOPPED_LOG} ${process.pid}`);
+    this.stop?.();
+  }
+};
+async function runWorker(options) {
+  mkdirSync9(options.paths.folder, { recursive: true, mode: TRACER_FOLDER_MODE });
+  if (!await takeLockFromOlder(options.paths.lock, options.version))
+    return;
+  const worker = new TracerWorker(options);
+  const stopped = worker.stopped();
+  try {
+    worker.start();
+  } catch (error2) {
+    worker.log(`worker failed to start: ${describe(error2)}`);
+    releaseLock(options.paths.lock);
+    return;
+  }
+  await stopped;
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/start.js
+function startTracerWorker(options) {
+  const paths = tracerPaths(options.agentStateFolder);
+  let upgrading = Promise.resolve();
+  return runWorker({
+    paths,
+    version: options.version,
+    createBuilder: options.createBuilder,
+    createQueue: (log2) => createUploadQueue(log2),
+    readNewLines: (bookmark, lineId, log2) => {
+      const read = readNewLines(bookmark, lineId);
+      for (const notice of read.notices)
+        log2(notice);
+      return read.lines;
+    },
+    snapshots: {
+      load: () => loadSnapshot(paths.snapshot).snapshot,
+      save: (snapshot) => writeSnapshot(paths.snapshot, snapshot)
+    },
+    upgradeState: (log2) => {
+      upgrading = upgradeLegacyState(options, log2);
+    }
+  }).then(() => upgrading);
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracer/worker/hook.js
+import { appendFileSync as appendFileSync3, mkdirSync as mkdirSync10, statSync as statSync8 } from "node:fs";
+function positioned(note) {
+  const path3 = note.transcriptPath;
+  const size = path3 === void 0 ? void 0 : statSync8(path3, { throwIfNoEntry: false })?.size;
+  const transcriptSizes = path3 !== void 0 && size !== void 0 ? { [path3]: size } : {};
+  return { ...note, transcriptSizes };
+}
+function sendHookNote(note, options) {
+  const { paths, version, startWorker } = options;
+  try {
+    mkdirSync10(paths.folder, { recursive: true, mode: TRACER_FOLDER_MODE });
+    appendFileSync3(paths.notes, `${JSON.stringify(positioned(note))}
+`, { mode: NOTES_FILE_MODE });
+    const holder = liveLockHolder(paths.lock);
+    if (holder === void 0)
+      startWorker();
+    else if (isNewerVersion(version, holder.version)) {
+      const request = { stopWorker: true, version };
+      appendFileSync3(paths.notes, `${JSON.stringify(request)}
+`, { mode: NOTES_FILE_MODE });
+      startWorker();
+    }
+  } catch (error2) {
+    process.stderr.write(`${HOOK_WARNING_PREFIX}${describe(error2)}
+`);
+  }
+}
+
+// dist/src/engine-writer.js
+import { dirname as dirname15, join as join27 } from "node:path";
 
 // dist/src/utils/clone.js
 function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-// dist/src/engine-capture.js
-async function saveOrWarn(runId, save, savedDespite) {
-  try {
-    const result = await save();
-    if (!CAPTURE_SAVED_STATUSES.includes(result.status)) {
-      warn(`Could not save run ${runId} for upload: ${result.status}`);
-    }
-  } catch (err) {
-    if (!await savedDespite(err))
-      throw err;
-    warn(`Saved run ${runId} for upload, but its uploader did not start: ${err}`);
-  }
-}
-async function captureInto(context, run, mode, rootRunId, operation, eventKey = run.id) {
-  const { session, sessionId, store, fingerprint: fingerprint2 } = context;
-  const turnRunId = run.id === rootRunId || await posted(context, rootRunId, rootRunId) ? rootRunId : run.id;
-  const afterPost = operation === "patch" && await posted(context, turnRunId, run.id);
-  const input = captureInput(run, mode, turnRunId, operation, sessionId, afterPost, eventKey);
-  await saveOrWarn(run.id, () => session.capture(input), (err) => readSavedCaptureWake(err, {
-    store,
-    integration: LS_INTEGRATION,
-    sessionId,
-    turnId: turnRunId,
-    eventId: input.eventId,
-    destinationFingerprint: fingerprint2
-  }));
-}
-function captureInput(run, mode, rootRunId, operation, sessionId, afterPost, eventKey = run.id) {
-  const after = [
-    ...afterPost ? [run.id] : [],
-    ...namesItsTurn(run, rootRunId, operation) ? [rootRunId] : []
-  ];
-  return {
-    turnId: rootRunId,
-    eventId: `${RUN_EVENT_PREFIXES[operation]}${eventKey}`,
-    submission: runSubmission(run, mode, operation),
-    turnEvidence: runTurnEvidence(run, rootRunId),
-    ...after.length > 0 ? { dependencies: after.map((runId) => postScope(sessionId, rootRunId, runId)) } : {}
-  };
-}
-function namesItsTurn(run, rootRunId, operation) {
-  return operation === "post" && run.id !== rootRunId && run.parent_run_id === rootRunId;
-}
-function postScope(sessionId, turnId, runId) {
-  return {
-    integration: LS_INTEGRATION,
-    sessionId,
-    turnId,
-    eventId: `${POST_EVENT_PREFIX}${runId}`
-  };
-}
-function runSubmission(run, mode, operation) {
-  const data = cloneJson(run);
-  const pick = (fields) => Object.fromEntries(fields.filter((key) => key in data).map((key) => [key, data[key]]));
-  const status = data.error !== void 0 ? "error" : data.end_time ? "completed" : "running";
-  const patchFields = HOOK_OUTPUTS_KEY2 in (data.inputs ?? {}) ? HOOK_PATCH_FIELDS : RUN_PATCH_FIELDS;
-  const base = { integration: LS_INTEGRATION, privacyMode: mode, metadata: data.metadata };
-  return operation === "post" ? {
-    ...base,
-    operation,
-    run: { inputs: {}, ...pick(RUN_SNAPSHOT_FIELDS) }
-  } : {
-    ...base,
-    operation,
-    run: pick(RUN_CONTEXT_FIELDS),
-    privacyContext: { status },
-    patch: {
-      fields: patchFields.filter((key) => key in data),
-      values: pick(patchFields)
-    }
-  };
-}
-function runTurnEvidence(run, rootRunId) {
-  return run.id === rootRunId ? { rootRunId, childRunIds: [], closureState: run.end_time ? "authoritative" : "open" } : { childRunIds: attributionReady(run.metadata) ? [] : [run.id], closureState: "open" };
-}
-async function posted(context, turnId, runId) {
-  const scope = { integration: LS_INTEGRATION, sessionId: context.sessionId, turnId };
-  return await context.store.read({ ...scope, eventId: `${POST_EVENT_PREFIX}${runId}` }) !== void 0;
-}
-function attributionReady(metadata) {
-  const built = buildCodingAgentMetadata(metadata);
-  return Boolean(built[GIT_METADATA_KEYS.repository] && built[ATTRIBUTION_IDENTIFIER_KEY]);
-}
-
-// dist/src/repo-attribution.js
-import { dirname as dirname19, join as join28 } from "node:path";
-
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/attribution.js
-import { isAbsolute as isAbsolute4 } from "node:path";
-
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/utils/paths.js
-import { statSync as statSync5 } from "node:fs";
-import { dirname as dirname14 } from "node:path";
-function nearestExistingDirectory(path3) {
-  let current = path3;
-  for (; ; ) {
-    const parent = dirname14(current);
-    const reachedFilesystemRoot = parent === current;
-    if (reachedFilesystemRoot)
-      return void 0;
-    try {
-      if (statSync5(current).isDirectory())
-        return current;
-    } catch {
-    }
-    current = parent;
-  }
-}
-
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/github-login.js
-import { mkdirSync as mkdirSync8, readFileSync as readFileSync12, renameSync as renameSync7, writeFileSync as writeFileSync4 } from "node:fs";
-import { dirname as dirname15 } from "node:path";
-
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/constants.js
-var GIT_LOCATION_ENV_KEYS = [
-  "GIT_DIR",
-  "GIT_WORK_TREE",
-  "GIT_COMMON_DIR",
-  "GIT_INDEX_FILE",
-  "GIT_CEILING_DIRECTORIES"
-];
-var NOT_A_REPOSITORY = /not a git repository \(or any of the parent directories\)/i;
-var REMOTE_PATH_EDGE_SLASHES = /^\/+|\/+$/g;
-var REMOTE_PATH_TRAILING_SLASHES = /\/+$/;
-var REMOTE_GIT_SUFFIX = /\.git$/;
-var REMOTE_LINE_WHITESPACE = /\s+/;
-var SCP_REMOTE_PATTERN = /^(?:[^@]+@)?([^:]+):\/?(.+)$/;
-var GIT_DIRECTORY_NAME = ".git";
-var GIT_FILE_POINTER = /^gitdir:\s*(.+?)\s*$/m;
-var GIT_MARKERS = {
-  REPOSITORY_ROOT: "repository root",
-  ONLY_GIT_CAN_SAY: "only git can say",
-  NOTHING_HERE: "nothing here"
-};
-var GIT_PROVIDERS = {
-  "github.com": "github",
-  "gitlab.com": "gitlab",
-  "bitbucket.org": "bitbucket",
-  "dev.azure.com": "devAzure"
-};
-var SELF_HOSTED_PROVIDER_HINTS = ["github", "gitlab", "bitbucket"];
-var PROVIDER_HOSTS = {
-  github: "github.com",
-  gitlab: "gitlab.com",
-  bitbucket: "bitbucket.org",
-  devAzure: "dev.azure.com"
-};
-var GIT_COMMAND_TIMEOUT_MS = 5e3;
-var GH_LOGIN_COMMAND = "gh";
-var GIT_COMMAND = "git";
-var GIT_COMMAND_MISSING = "is not installed in an absolute PATH folder";
-var GH_LOGIN_ARGUMENTS = ["api", "user", "--jq", ".login"];
-var GH_LOGIN_TIMEOUT_MS = 5e3;
-var GH_LOGIN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
-var GH_LOGIN_NULL_OUTPUT = "null";
-var GH_LOGIN_RETRY_AFTER_MS = 24 * 60 * 60 * 1e3;
-
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/repository.js
-import { execFileSync as execFileSync2 } from "node:child_process";
-import { resolve as resolve14 } from "node:path";
-
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/utils/desktop/launch.js
-import { accessSync, constants as constants2, statSync as statSync6 } from "node:fs";
-import { join as join24, posix, win32 } from "node:path";
-
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/utils/desktop/desktop-constants.js
-var DESKTOP_WINDOWS_EXTENSIONS = ".EXE;.CMD;.BAT";
-var DESKTOP_WINDOWS_SEPARATOR = ";";
-var DESKTOP_PATH_SEPARATOR = ":";
-var DESKTOP_PATH_VARIABLES = ["PATH", "Path"];
-var DESKTOP_EXTENSIONS_VARIABLE = "PATHEXT";
-
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/utils/desktop/launch.js
-function findExecutable(name, env, platform) {
-  const windows = platform === WINDOWS_PLATFORM;
-  const extensions = windows ? (env[DESKTOP_EXTENSIONS_VARIABLE] ?? DESKTOP_WINDOWS_EXTENSIONS).split(DESKTOP_WINDOWS_SEPARATOR) : [""];
-  const path3 = DESKTOP_PATH_VARIABLES.map((variable) => env[variable]).find((value) => value !== void 0);
-  const folders = (path3 ?? "").split(windows ? DESKTOP_WINDOWS_SEPARATOR : DESKTOP_PATH_SEPARATOR);
-  const absolute = windows ? win32.isAbsolute : posix.isAbsolute;
-  for (const folder of folders.filter((entry) => entry !== "" && absolute(entry))) {
-    for (const extension of extensions) {
-      const candidate = join24(folder, `${name}${extension}`);
-      try {
-        accessSync(candidate, constants2.X_OK);
-        if (statSync6(candidate).isFile())
-          return candidate;
-      } catch {
-      }
-    }
-  }
-  return void 0;
-}
-
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/repository.js
-function parseRepoName(remoteUrl) {
-  const value = remoteUrl.trim();
-  try {
-    const url = new URL(value);
-    const name = url.pathname.replace(REMOTE_PATH_EDGE_SLASHES, "").replace(REMOTE_GIT_SUFFIX, "");
-    const repository = repositoryOnHost(url.hostname, name);
-    if (repository)
-      return repository;
-  } catch {
-  }
-  const scpMatch = value.match(SCP_REMOTE_PATTERN);
-  if (scpMatch) {
-    const host = scpMatch[1];
-    const path3 = scpMatch[2];
-    if (host && path3) {
-      const name = path3.replace(REMOTE_PATH_TRAILING_SLASHES, "").replace(REMOTE_GIT_SUFFIX, "");
-      return repositoryOnHost(host, name);
-    }
-  }
-  return void 0;
-}
-function repositoryOnHost(hostname, name) {
-  const host = hostname.toLowerCase();
-  if (!name)
-    return void 0;
-  const provider2 = GIT_PROVIDERS[host];
-  if (provider2)
-    return { provider: provider2, name };
-  if (!host.includes("."))
-    return void 0;
-  const hinted = SELF_HOSTED_PROVIDER_HINTS.find((hint) => host.includes(hint));
-  return { provider: hinted ?? host, name, host };
-}
-function gitOutput(args, cwd) {
-  const env = { ...process.env, LC_ALL: "C", LANG: "C" };
-  for (const key of GIT_LOCATION_ENV_KEYS)
-    delete env[key];
-  return execFileSync2(installedCommand(GIT_COMMAND), args, {
-    cwd,
-    env,
-    encoding: "utf-8",
-    timeout: GIT_COMMAND_TIMEOUT_MS,
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-}
-function getRepoName(cwd) {
-  try {
-    const output = gitOutput(["remote", "-v"], cwd);
-    const lines = output.trim().split("\n").filter(Boolean);
-    const remotes = [];
-    for (const line of lines) {
-      const parts = line.split(REMOTE_LINE_WHITESPACE);
-      const name = parts[0];
-      const url = parts[1];
-      if (name && url && line.includes("(fetch)"))
-        remotes.push({ name, url });
-    }
-    const origin = remotes.find((remote) => remote.name === "origin");
-    if (origin) {
-      const name = parseRepoName(origin.url);
-      if (name)
-        return name;
-    }
-    for (const remote of remotes) {
-      const name = parseRepoName(remote.url);
-      if (name)
-        return name;
-    }
-  } catch {
-  }
-  return void 0;
-}
-function getRepoUrl(provider2, name) {
-  const host = PROVIDER_HOSTS[provider2];
-  return host ? `https://${host}/${name}` : void 0;
-}
-function getRepoRoot(cwd) {
-  try {
-    const root = gitOutput(["rev-parse", "--show-toplevel"], cwd).trim();
-    return root ? resolve14(root) : void 0;
-  } catch (error2) {
-    const stderr = String(error2?.stderr ?? "");
-    return NOT_A_REPOSITORY.test(stderr) ? null : void 0;
-  }
-}
-function getGitUserName(cwd, options) {
-  try {
-    const name = gitOutput(["config", "user.name"], cwd).trim();
-    if (name)
-      return name;
-  } catch {
-  }
-  return options?.githubLogin?.();
-}
-function getGitInfo(cwd) {
-  const result = {};
-  try {
-    const branch = gitOutput(["rev-parse", "--abbrev-ref", "HEAD"], cwd).trim();
-    if (branch && branch !== "HEAD")
-      result.branch = branch;
-  } catch {
-  }
-  try {
-    const commit = gitOutput(["rev-parse", "HEAD"], cwd).trim();
-    if (commit)
-      result.commit = commit;
-  } catch {
-  }
-  return result;
-}
-function getRepositoryMetadata(cwd) {
-  const metadata = {};
-  const repoName = getRepoName(cwd);
-  if (repoName) {
-    metadata[GIT_METADATA_KEYS.repository] = repoName.name;
-    metadata[GIT_METADATA_KEYS.provider] = repoName.provider;
-    const url = repoName.host ? `https://${repoName.host}/${repoName.name}` : getRepoUrl(repoName.provider, repoName.name);
-    if (url)
-      metadata[GIT_METADATA_KEYS.repositoryUrl] = url;
-  }
-  const gitInfo = getGitInfo(cwd);
-  if (gitInfo.branch)
-    metadata[GIT_METADATA_KEYS.branch] = gitInfo.branch;
-  if (gitInfo.commit)
-    metadata[GIT_METADATA_KEYS.commit] = gitInfo.commit;
-  return withBothGitMetadataNames(metadata);
-}
-function githubLoginLookup() {
-  return execFileSync2(installedCommand(GH_LOGIN_COMMAND), GH_LOGIN_ARGUMENTS, {
-    encoding: "utf-8",
-    timeout: GH_LOGIN_TIMEOUT_MS,
-    stdio: ["ignore", "pipe", "ignore"]
-  }).trim();
-}
-function isGitHubLogin(printed) {
-  return printed !== GH_LOGIN_NULL_OUTPUT && GH_LOGIN_PATTERN.test(printed);
-}
-function installedCommand(name) {
-  const found = findExecutable(name, process.env, process.platform);
-  if (found === void 0)
-    throw new Error(`${name} ${GIT_COMMAND_MISSING}`);
-  return found;
-}
-
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/github-login.js
-function createGitHubLoginFallback(options) {
-  const now = options.now ?? Date.now;
-  const retryAfterMs = options.retryAfterMs ?? GH_LOGIN_RETRY_AFTER_MS;
-  let alreadyTried = false;
-  let login;
-  function failedRecently() {
-    try {
-      const marker = JSON.parse(readFileSync12(options.markerPath, "utf-8"));
-      const failed = new Date(marker.failed).getTime();
-      const since = now() - failed;
-      return since >= 0 && since < retryAfterMs;
-    } catch {
-      return false;
-    }
-  }
-  function recordFailure2() {
-    try {
-      mkdirSync8(dirname15(options.markerPath), { recursive: true });
-      const partial = `${options.markerPath}.${process.pid}`;
-      const marker = { failed: new Date(now()).toISOString() };
-      writeFileSync4(partial, JSON.stringify(marker));
-      renameSync7(partial, options.markerPath);
-    } catch {
-    }
-  }
-  return () => {
-    if (alreadyTried)
-      return login;
-    alreadyTried = true;
-    if (failedRecently())
-      return void 0;
-    try {
-      const printed = githubLoginLookup();
-      if (isGitHubLogin(printed))
-        login = printed;
-    } catch {
-    }
-    if (login === void 0)
-      recordFailure2();
-    return login;
-  };
-}
-
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/paths.js
-import { readFileSync as readFileSync13, statSync as statSync7 } from "node:fs";
-import { dirname as dirname16, join as join25, resolve as resolve15 } from "node:path";
-function gitMarkerAt(directory) {
-  const marker = join25(directory, GIT_DIRECTORY_NAME);
-  try {
-    if (statSync7(marker).isDirectory())
-      return GIT_MARKERS.REPOSITORY_ROOT;
-  } catch {
-    return GIT_MARKERS.NOTHING_HERE;
-  }
-  return pointsAtGitDirectory(directory, marker) ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
-}
-function pointsAtGitDirectory(directory, marker) {
-  try {
-    const pointer = readFileSync13(marker, "utf-8").match(GIT_FILE_POINTER)?.[1];
-    return pointer !== void 0 && statSync7(resolve15(directory, pointer)).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function rootFromGitMarker(directory) {
-  let current = resolve15(directory);
-  for (; ; ) {
-    const marker = gitMarkerAt(current);
-    if (marker === GIT_MARKERS.REPOSITORY_ROOT)
-      return current;
-    if (marker === GIT_MARKERS.ONLY_GIT_CAN_SAY)
-      return void 0;
-    const parent = dirname16(current);
-    const reachedFilesystemRoot = parent === current;
-    if (reachedFilesystemRoot)
-      return null;
-    current = parent;
-  }
-}
-
-// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/attribution.js
-function createRepositoryAttributor(options) {
-  const rootByDirectory = /* @__PURE__ */ new Map();
-  const attributionByRoot = /* @__PURE__ */ new Map();
-  const identifierByRoot = /* @__PURE__ */ new Map();
-  const githubLogin = createGitHubLoginFallback({ markerPath: options.githubLoginMarkerPath });
-  function rootForPath(path3) {
-    const directory = nearestExistingDirectory(path3);
-    if (!directory)
-      return void 0;
-    if (rootByDirectory.has(directory))
-      return rootByDirectory.get(directory);
-    const walked = rootFromGitMarker(directory);
-    const onlyGitCanSay = walked === void 0;
-    const root = onlyGitCanSay ? getRepoRoot(directory) : walked;
-    rootByDirectory.set(directory, root);
-    return root;
-  }
-  function isSessionsOwnRepository(sessionCwd, root) {
-    return sessionCwd ? rootForPath(sessionCwd) === root : false;
-  }
-  function identifierForRoot(root) {
-    const cached = identifierByRoot.get(root);
-    if (cached)
-      return cached;
-    const userName = getGitUserName(root, { githubLogin });
-    const identifier = userName ? { ls_attribution_identifier: userName } : {};
-    identifierByRoot.set(root, identifier);
-    return identifier;
-  }
-  function attributionForRoot(root) {
-    const cached = attributionByRoot.get(root);
-    if (cached)
-      return cached;
-    const attribution = {
-      ...identifierForRoot(root),
-      ...getRepositoryMetadata(root)
-    };
-    attributionByRoot.set(root, attribution);
-    return attribution;
-  }
-  function scopedToPath(base, origin, pinned) {
-    const namedSomewhereNothingSits = origin.namedAPath && !origin.path;
-    if (namedSomewhereNothingSits)
-      return base;
-    const path3 = origin.path ?? origin.cwd;
-    if (!path3 || !isAbsolute4(path3))
-      return base;
-    const root = rootForPath(path3);
-    const gitCouldNotAnswer = root === void 0;
-    if (gitCouldNotAnswer)
-      return base;
-    const pathIsInNoRepository = root === null;
-    if (pathIsInNoRepository)
-      return withoutRepositoryKeys(base, pinned);
-    if (isSessionsOwnRepository(origin.cwd, root)) {
-      return { ...base, ...withoutPinnedKeys(identifierForRoot(root), pinned) };
-    }
-    return {
-      ...withoutRepositoryKeys(base, pinned),
-      ...withoutPinnedKeys(attributionForRoot(root), pinned)
-    };
-  }
-  function withSessionRepository(base, sessionCwd) {
-    const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : void 0;
-    if (typeof sessionRoot !== "string")
-      return base;
-    return { ...attributionForRoot(sessionRoot), ...base };
-  }
-  function toolMetadata(base, origin) {
-    const pinned = new Set(REPOSITORY_METADATA_KEYS.filter((key) => base?.[key] !== void 0));
-    return scopedToPath(withSessionRepository(base, origin.cwd), origin, pinned);
-  }
-  function turnMetadata(base, cwd, toolOrigins) {
-    const sessionCwd = cwd ? { cwd } : {};
-    const sessionRoot = cwd ? rootForPath(cwd) : void 0;
-    if (typeof sessionRoot === "string") {
-      return toolMetadata(base, { ...sessionCwd, namedAPath: false });
-    }
-    for (const { path: path3, namedAPath } of toolOrigins) {
-      if (!path3)
-        continue;
-      const landedInRepository = typeof rootForPath(path3) === "string";
-      if (landedInRepository)
-        return toolMetadata(base, { path: path3, namedAPath, ...sessionCwd });
-    }
-    return base;
-  }
-  return { toolMetadata, turnMetadata };
-}
-function withoutPinnedKeys(attribution, pinned) {
-  if (pinned.size === 0)
-    return { ...attribution };
-  return Object.fromEntries(Object.entries(attribution).filter(([key]) => !pinned.has(key)));
-}
-function withoutRepositoryKeys(base, pinned) {
-  const stripped = { ...base };
-  for (const key of REPOSITORY_METADATA_KEYS) {
-    if (!pinned.has(key))
-      delete stripped[key];
-  }
-  return stripped;
-}
-
-// dist/src/config.js
-import { readFileSync as readFileSync14 } from "node:fs";
-import { homedir as homedir3, userInfo as userInfo2 } from "node:os";
-import { join as join27 } from "node:path";
-
 // dist/src/engine-writer.js
-import { dirname as dirname17, join as join26 } from "node:path";
 function writerOptions(config) {
   const replicas = uploadReplicas(config.replicas);
   return {
@@ -25192,7 +26005,7 @@ function writerOptions(config) {
   };
 }
 function engineStorageRoot(stateFilePath) {
-  return join26(dirname17(stateFilePath), ENGINE_STORAGE_DIR_NAME);
+  return join27(dirname15(stateFilePath), ENGINE_STORAGE_DIR_NAME);
 }
 function uploadReplicas(replicas) {
   return (replicas ?? replicasFromEnvironment() ?? []).map(writerReplica);
@@ -25211,467 +26024,29 @@ function readUploadNotices(config) {
   return { loginNotice, credentialNotice };
 }
 
-// dist/src/config.js
-function readAnthropicUserId() {
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
-  if (!homeDir)
-    return void 0;
-  const configPath = join27(homeDir, ".claude.json");
-  try {
-    const raw = readFileSync14(configPath, "utf-8");
-    const parsed = JSON.parse(raw);
-    const userId = parsed?.userID;
-    if (typeof userId === "string" && userId.length > 0) {
-      return userId;
-    }
-  } catch (err) {
-    debug(`Could not read Anthropic user ID from ${configPath}: ${err}`);
-  }
-  return void 0;
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/tracing/hook-outputs.js
+function hookOutputs(hooks) {
+  const valid = hooks.filter((hook) => typeof hook?.name === "string" && typeof hook.output === "string" && !hook.output.startsWith(COMMAND_REPLY_MARKER));
+  if (valid.length === 0)
+    return {};
+  return { [HOOK_OUTPUTS_KEY]: valid.map(({ name, output }) => ({ name, output })) };
 }
-function readLocalUsername() {
-  return userInfo2().username;
-}
-function pinnedRepositoryKeys(metadata) {
-  return metadata?.[PINNED_REPOSITORY_KEYS] ?? NO_PINNED_KEYS;
-}
-function envBoolean(field4) {
-  const setting = BOOLEAN_SETTINGS[field4];
-  const env = process.env[setting.env]?.toLowerCase();
-  if (env === void 0)
-    return void 0;
-  if (env === "true")
-    return true;
-  if (env === "false")
-    return false;
-  return setting.restrictive;
-}
-function envCooldown() {
-  const env = process.env.CC_LANGSMITH_NOTICE_COOLDOWN?.trim().toLowerCase();
-  if (!env)
-    return void 0;
-  if (env === NOTICE_COOLDOWN_OFF)
-    return NOTICE_COOLDOWN_OFF;
-  const minutes = Number(env);
-  return Number.isFinite(minutes) && minutes >= 0 ? minutes : void 0;
-}
-function resolveStateFilePath() {
-  return process.env.STATE_FILE ?? join27(homedir3(), ...STATE_FILE_DEFAULT);
-}
-function loadConfig(options) {
-  const cwd = options?.cwd ?? process.cwd();
-  const homeDir = homedir3();
-  const stateFilePath = resolveStateFilePath();
-  const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
-  let replicas;
-  const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
-  if (providedReplicas !== void 0) {
-    try {
-      replicas = JSON.parse(providedReplicas);
-    } catch {
-      error("Failed to parse provided CC_LANGSMITH_RUNS_ENDPOINTS. Please make sure they are valid JSON.");
-    }
-  }
-  const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
-  let customMetadata;
-  const providedMetadata = process.env.CC_LANGSMITH_METADATA;
-  if (providedMetadata !== void 0) {
-    try {
-      const parsed = JSON.parse(providedMetadata);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        customMetadata = parsed;
-      } else {
-        error("CC_LANGSMITH_METADATA must be a JSON object (not an array or primitive).");
-      }
-    } catch {
-      error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
-    }
-  }
-  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").trim().toLowerCase();
-  const redact = !["0", "false", "no", "off"].includes(redactEnv);
-  let redactExtraRules;
-  const providedExtra = process.env.CC_LANGSMITH_REDACT_EXTRA;
-  if (providedExtra !== void 0) {
-    try {
-      const parsed = JSON.parse(providedExtra);
-      if (!Array.isArray(parsed)) {
-        error("CC_LANGSMITH_REDACT_EXTRA must be a JSON array of { pattern, replace }.");
-      } else {
-        const validRules = [];
-        for (const rule of parsed) {
-          if (typeof rule !== "object" || rule === null || typeof rule.pattern !== "string" || rule.replace !== void 0 && typeof rule.replace !== "string") {
-            error(`Skipping invalid CC_LANGSMITH_REDACT_EXTRA rule (expected { pattern: string, replace?: string }): ${JSON.stringify(rule)}`);
-            continue;
-          }
-          try {
-            new RegExp(rule.pattern);
-          } catch {
-            error(`Skipping CC_LANGSMITH_REDACT_EXTRA rule with an invalid regex pattern: ${rule.pattern}`);
-            continue;
-          }
-          validRules.push(rule);
-        }
-        if (validRules.length > 0 || parsed.length === 0)
-          redactExtraRules = validRules;
-      }
-    } catch {
-      error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");
-    }
-  }
-  const files = readCommonConfigFiles({ cwd, home: homeDir, harnessDirectory: HARNESS_DIRECTORY });
-  const common = mergeCommonConfig({
-    harness: files.harness.common,
-    root: files.root.common,
-    user: files.user.common,
-    userRoot: files.userRoot.common,
-    env: {
-      enabled: envBoolean("enabled"),
-      defaultMuted: envBoolean("defaultMuted"),
-      strict_auth: envBoolean("strict_auth"),
-      capture_hook_outputs: envBoolean("capture_hook_outputs"),
-      notice_cooldown: envCooldown(),
-      api_key: process.env.CC_LANGSMITH_API_KEY,
-      api_url: process.env.LANGSMITH_ENDPOINT,
-      project: process.env.CC_LANGSMITH_PROJECT,
-      metadata: customMetadata,
-      redact: process.env.CC_LANGSMITH_REDACT === void 0 ? void 0 : redact,
-      redact_extra_rules: redactExtraRules
-    },
-    defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" }
-  }, { envFirst: true });
-  if (replicas === void 0 || common.locked.includes("replicas")) {
-    replicas = toSdkReplicas(common.replicas);
-  }
-  redactExtraRules = common.redact_extra_rules;
-  const credential = resolveUploadCredential({
-    apiKey: common.api_key,
-    apiUrl: common.api_url,
-    apiUrlIsDefault: common.defaulted.includes("api_url"),
-    profile: common.profile,
-    workspaceId: common.workspace_id,
-    agentId: common.agent_id
-  });
-  const unreachable = credential.kind === "login" ? loginReplicaRefusal(uploadReplicas(replicas), credential.apiUrl) : void 0;
-  customMetadata = common.metadata && withBothGitMetadataNames(common.metadata);
-  const anthropicUserId = readAnthropicUserId();
-  const localUsername = readLocalUsername();
-  const identityMetadata = { local_username: localUsername };
-  if (anthropicUserId) {
-    identityMetadata.user_id = anthropicUserId;
-    identityMetadata.anthropic_user_id = anthropicUserId;
-  }
-  const pinned = REPOSITORY_METADATA_KEYS.filter((key) => customMetadata?.[key] !== void 0);
-  customMetadata = { cwd, ...identityMetadata, ...customMetadata };
-  Object.defineProperty(customMetadata, PINNED_REPOSITORY_KEYS, { value: new Set(pinned) });
-  return {
-    enabled: common.enabled,
-    defaultMuted: common.defaultMuted,
-    apiKey: credential.kind === "api-key" && sdkSetting(common.api_key) === void 0 ? credential.apiKey : common.api_key,
-    project: common.project,
-    apiBaseUrl: credential.kind === "login" ? credential.apiUrl : common.api_url,
-    stateFilePath,
-    debug: debug2,
-    parentDottedOrder,
-    replicas,
-    customMetadata,
-    redact: common.redact,
-    redactExtraRules,
-    ...common.managedConfigProblem === void 0 ? {} : { managedConfigProblem: common.managedConfigProblem },
-    ...credential.kind === "login" ? { login: credential.login } : {},
-    ...common.profile === void 0 ? {} : { profile: common.profile },
-    ...common.agent_id === void 0 ? {} : { agentId: common.agent_id },
-    ...credential.kind === "none" ? { credentialProblem: credential.reason } : {},
-    ...unreachable ? { credentialProblem: unreachable } : {},
-    ...common.strict_auth ? { strictAuth: true } : {},
-    ...common.capture_hook_outputs ? { captureHookOutputs: true } : {},
-    ...common.notice_cooldown === void 0 ? {} : { noticeCooldown: common.notice_cooldown },
-    ...common.locked.includes("project") ? { projectLocked: true } : {},
-    ...common.locked.includes("defaultMuted") && common.defaultMuted ? { mutedLocked: true } : {}
-  };
-}
-
-// dist/src/repo-attribution-paths.js
-import { existsSync as existsSync3 } from "node:fs";
-import { dirname as dirname18, isAbsolute as isAbsolute5, resolve as resolve16 } from "node:path";
-function gitCommandFolder(command) {
-  if (typeof command !== "string")
-    return void 0;
-  return GIT_DIR_COMMAND.exec(command)?.[1]?.replace(SURROUNDING_QUOTES, "");
-}
-function globFolder(input, toolName) {
-  const { pattern, path: path3 } = input;
-  if (toolName !== "Glob" || typeof pattern !== "string" || !isAbsolute5(pattern))
-    return void 0;
-  if (path3 !== void 0)
-    return void 0;
-  const folder = dirname18(`${pattern.split(GLOB_CHARACTER)[0]}_`);
-  return existsSync3(folder) ? folder : void 0;
-}
-function toolPathFromInput(toolInput, sessionCwd, toolName) {
-  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
-    return { namedAPath: false };
-  }
-  const named = toolInput;
-  const folder = gitCommandFolder(named.command) || globFolder(named, toolName);
-  const input = folder ? { ...named, path: folder } : named;
-  let namedAPath = false;
-  for (const key of TOOL_PATH_INPUT_KEYS) {
-    const value = input[key];
-    if (typeof value !== "string" || value.length === 0)
-      continue;
-    namedAPath = true;
-    if (isAbsolute5(value))
-      return { path: value, namedAPath };
-    if (!sessionCwd || !isAbsolute5(sessionCwd))
-      continue;
-    const resolved = resolve16(sessionCwd, value);
-    if (existsSync3(resolved))
-      return { path: resolved, namedAPath };
-  }
-  return { namedAPath };
-}
-
-// dist/src/repo-attribution.js
-var attributor;
-function repositoryAttributor() {
-  attributor ??= createRepositoryAttributor({
-    githubLoginMarkerPath: join28(dirname19(resolveStateFilePath()), GH_LOGIN_MARKER_FILE)
-  });
-  return attributor;
-}
-function withoutUnpinnedRepositoryKeys(base) {
-  const pinned = pinnedRepositoryKeys(base);
-  const stripped = { ...base };
-  for (const key of REPOSITORY_METADATA_KEYS) {
-    if (!pinned.has(key))
-      delete stripped[key];
-  }
-  return stripped;
-}
-function withPinsOf(base, scoped) {
-  if (scoped && base) {
-    Object.defineProperty(scoped, PINNED_REPOSITORY_KEYS, { value: pinnedRepositoryKeys(base) });
-  }
-  return scoped;
-}
-function toolOrigin(toolInput, sessionCwd, toolName) {
-  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd, toolName) };
-}
-function sessionScopedMetadata(base, sessionCwd) {
-  return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, []));
-}
-function repoScopedMetadata(base, toolInput, sessionCwd, toolName) {
-  return repositoryAttributor().toolMetadata(withoutUnpinnedRepositoryKeys(base), toolOrigin(toolInput, sessionCwd, toolName));
-}
-function settledRepositoryMetadata(base, origin) {
-  return repositoryAttributor().toolMetadata(base, origin);
-}
-function turnScopedMetadata(base, toolInputs, sessionCwd) {
-  const origins = [...toolInputs].map((input) => toolOrigin(input, sessionCwd));
-  return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, origins));
-}
-
-// dist/src/engine-tool-settlement.js
-async function captureToolRun(context, run, mode, rootRunId, origin) {
-  if (mode !== "full")
-    return captureInto(context, run, mode, rootRunId, "post");
-  const turnRunId = await posted(context, rootRunId, rootRunId) ? rootRunId : run.id;
-  const input = {
-    turnId: turnRunId,
-    eventId: `${TOOL_SETTLEMENT_EVENT_PREFIX}${run.id}`,
-    sourceRefs: [run.id],
-    privacyMode: mode,
-    turnEvidence: turnRunId === rootRunId ? { childRunIds: [run.id], closureState: "open" } : runTurnEvidence(run, turnRunId),
-    sourceSnapshots: [
-      {
-        sourceRef: run.id,
-        submission: runSubmission(run, mode, "post"),
-        sourceAgeStartedAtMs: Date.now(),
-        attributionContext: { toolOrigin: cloneJson(origin) }
-      }
-    ]
-  };
-  await saveOrWarn(run.id, () => context.session.queueReconstruction(input), (err) => context.session.readSavedReconstructionWake(err, input));
-}
-async function settleToolRuns(job) {
-  return {
-    status: "ready",
-    outputs: (job.sourceSnapshots ?? []).map(({ sourceRef, submission, attributionContext }) => ({
-      eventId: `${POST_EVENT_PREFIX}${submission.run.id}`,
-      sourceRef,
-      ...submission.run.parent_run_id === job.turnId ? { dependencies: [postScope(job.sessionId, job.turnId, job.turnId)] } : {},
-      submission: {
-        ...submission,
-        metadata: {
-          ...submission.metadata,
-          base: settledRepositoryMetadata(submission.metadata.base, attributionContext?.toolOrigin ?? { namedAPath: false }) ?? submission.metadata.base
-        }
-      }
-    }))
-  };
-}
-
-// dist/src/state.js
-import { join as join29 } from "node:path";
-
-// dist/src/utils/files.js
-import { lstatSync as lstatSync4, mkdirSync as mkdirSync9, readdirSync as readdirSync2, readFileSync as readFileSync15, renameSync as renameSync8, rmdirSync as rmdirSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync5 } from "node:fs";
-import { randomUUID as randomUUID9 } from "node:crypto";
-import { dirname as dirname20 } from "node:path";
-function listDirectory(path3) {
-  try {
-    return readdirSync2(path3).sort();
-  } catch {
-    return [];
-  }
-}
-function entryInfo(path3) {
-  try {
-    return lstatSync4(path3);
-  } catch {
-    return void 0;
-  }
-}
-function removeFile2(path3) {
-  if (!entryInfo(path3)?.isFile())
-    return false;
-  try {
-    unlinkSync3(path3);
-    return true;
-  } catch {
-    return false;
-  }
-}
-function removeEmptyFolder(path3) {
-  try {
-    rmdirSync2(path3);
-  } catch {
-    return;
-  }
-}
-function readText(path3) {
-  try {
-    return readFileSync15(path3, "utf-8");
-  } catch {
-    return "";
-  }
-}
-function readJson(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return void 0;
-  }
-}
-function publishFile(path3, text) {
-  mkdirSync9(dirname20(path3), { recursive: true, mode: PRIVATE_FOLDER_MODE });
-  const temp = `${path3}.${randomUUID9()}${TEMP_FILE_SUFFIX}`;
-  writeFileSync5(temp, text, { flag: "wx", mode: PRIVATE_FILE_MODE });
-  renameSync8(temp, path3);
-}
-
-// dist/src/state.js
-var stores = /* @__PURE__ */ new Map();
-function storeFor(stateFilePath) {
-  let store = stores.get(stateFilePath);
-  if (!store) {
-    store = createStateStore({ path: stateFilePath, warn });
-    stores.set(stateFilePath, store);
-  }
-  return store;
-}
-async function atomicUpdateState(stateFilePath, fn) {
-  await storeFor(stateFilePath).update(fn);
-}
-function loadState(stateFilePath) {
-  return storeFor(stateFilePath).read();
-}
-function getSessionState(state, sessionId) {
-  return state[sessionId] ?? {
-    last_line: -1,
-    turn_count: 0,
-    updated: "",
-    task_run_map: {}
-  };
-}
-function advanceToolTracingProgress(session, ids, phase) {
-  const modes = { ...session.tool_tracing_modes };
-  const progress = { ...session.tool_tracing_progress };
-  for (const id of ids) {
-    if (!Object.hasOwn(modes, id))
-      continue;
-    if (progress[id] && progress[id] !== phase) {
-      delete modes[id];
-      delete progress[id];
-    } else {
-      progress[id] = phase;
-    }
-  }
-  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
-}
-function pruneOldSessions(state, now = Date.now()) {
-  return pruneStateEntries(state, SESSION_MAX_AGE_MS, now);
-}
-function readPosition(position) {
-  const { last_line, last_line_uuid, last_line_at } = position;
-  return { last_line, last_line_uuid, last_line_at };
-}
-function furtherRead(a, b) {
-  const aAt = Date.parse(a.last_line_at ?? "");
-  const bAt = Date.parse(b.last_line_at ?? "");
-  if (aAt !== bAt && !Number.isNaN(aAt) && !Number.isNaN(bAt)) {
-    return readPosition(aAt > bAt ? a : b);
-  }
-  return readPosition(a.last_line >= b.last_line ? a : b);
-}
-function updateSessionState(state, sessionId, position, turnCount, taskRunMap, currentTurnRunId) {
-  const existingSession = state[sessionId] ?? {
-    last_line: -1,
-    turn_count: 0,
-    updated: "",
-    task_run_map: {}
-  };
-  return {
-    ...state,
-    [sessionId]: {
-      ...existingSession,
-      ...readPosition(position),
-      turn_count: turnCount,
-      updated: (/* @__PURE__ */ new Date()).toISOString(),
-      task_run_map: taskRunMap ?? existingSession.task_run_map,
-      current_turn_run_id: currentTurnRunId !== void 0 ? currentTurnRunId : existingSession.current_turn_run_id
-    }
-  };
-}
-var heldRunPath = (...[stateFilePath, sessionId, toolUseId]) => join29(engineStorageRoot(stateFilePath), `${HELD_TOOL_RUN_PREFIX}${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`);
-var saveHeldRun = (held, ...key) => publishFile(heldRunPath(...key), JSON.stringify(held));
-function takeHeldRun(...key) {
-  const held = readJson(readText(heldRunPath(...key)));
-  removeFile2(heldRunPath(...key));
-  return held;
-}
-function pruneHeldRuns(stateFilePath, now = Date.now()) {
-  const folder = engineStorageRoot(stateFilePath);
-  for (const name of listDirectory(folder).filter((n2) => n2.startsWith(HELD_TOOL_RUN_PREFIX))) {
-    const modified = entryInfo(join29(folder, name))?.mtimeMs ?? now;
-    if (now - modified > HELD_TOOL_RUN_MAX_AGE_MS)
-      removeFile2(join29(folder, name));
-  }
-}
-function dropHeld(stateFilePath, sessionId, session) {
-  for (const id of Object.keys(session.held_tool_runs ?? {}))
-    takeHeldRun(stateFilePath, sessionId, id);
-  return { held_tool_runs: void 0 };
-}
-
-// dist/src/hooks/stop.js
-import { randomUUID as randomUUID11 } from "node:crypto";
 
 // dist/src/tracing-policy.js
 import { mkdir as mkdir6 } from "node:fs/promises";
-import { dirname as dirname21 } from "node:path";
+import { dirname as dirname16 } from "node:path";
 
 // dist/src/utils/records.js
+function stringValue(value) {
+  return typeof value === "string" ? value : void 0;
+}
+function jsonField(text, key) {
+  try {
+    return stringValue(JSON.parse(text)[key]);
+  } catch {
+    return void 0;
+  }
+}
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -25708,15 +26083,65 @@ async function setThreadTracingMode(stateFilePath, sessionId, mode) {
     throw new Error("A nonempty session ID and a full/metadata tracing mode are required");
   }
   const path3 = tracingPolicyPath(stateFilePath);
-  await mkdir6(dirname21(path3), { recursive: true });
+  await mkdir6(dirname16(path3), { recursive: true });
   return updatePolicyFile(path3, POLICY_FILE, (policy) => {
     policy.threads = { ...policy.threads, [sessionId]: mode };
   });
 }
 
 // dist/src/transcript.js
-import { existsSync as existsSync4, statSync as statSync8, fstatSync as fstatSync3, openSync as openSync6, readSync, closeSync as closeSync6 } from "node:fs";
+import { existsSync as existsSync6, statSync as statSync9, fstatSync as fstatSync5, openSync as openSync8, readSync as readSync4, closeSync as closeSync8 } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
+
+// dist/src/utils/files.js
+import { lstatSync as lstatSync4, mkdirSync as mkdirSync11, readdirSync as readdirSync4, readFileSync as readFileSync15, renameSync as renameSync8, rmdirSync as rmdirSync2, unlinkSync as unlinkSync4, writeFileSync as writeFileSync5 } from "node:fs";
+import { randomUUID as randomUUID9 } from "node:crypto";
+import { dirname as dirname17 } from "node:path";
+function listDirectory(path3) {
+  try {
+    return readdirSync4(path3).sort();
+  } catch {
+    return [];
+  }
+}
+function entryInfo(path3) {
+  try {
+    return lstatSync4(path3);
+  } catch {
+    return void 0;
+  }
+}
+function removeFile3(path3) {
+  if (!entryInfo(path3)?.isFile())
+    return false;
+  try {
+    unlinkSync4(path3);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function removeEmptyFolder(path3) {
+  try {
+    rmdirSync2(path3);
+  } catch {
+    return;
+  }
+}
+function readText(path3) {
+  try {
+    return readFileSync15(path3, "utf-8");
+  } catch {
+    return "";
+  }
+}
+function readJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return void 0;
+  }
+}
 
 // dist/src/utils/ids/prompt-hash.js
 import { createHash as createHash8 } from "node:crypto";
@@ -25725,7 +26150,7 @@ function hashPrompt(prompt) {
 }
 
 // dist/src/transcript.js
-function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {}) {
+function readTranscript2(filePath, afterLine = -1, cutAt, turn = {}, anchor = {}) {
   const { promptAt, promptHash, nextPromptHash } = turn;
   let promptSeen = turn.promptRead ?? false;
   let ownSeen = false;
@@ -25745,10 +26170,10 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
       if (isInsertedMessage(message) && !ended)
         return false;
       const notification = typeof message.message.content === "string" && message.message.content.startsWith(TASK_NOTIFICATION_OPENING);
-      const earlier = Date.parse(message.timestamp) < Date.parse(promptAt);
-      if (message.promptId === void 0 && (notification || earlier))
+      const earlier2 = Date.parse(message.timestamp) < Date.parse(promptAt);
+      if (message.promptId === void 0 && (notification || earlier2))
         return false;
-      if (promptSeen && !earlier)
+      if (promptSeen && !earlier2)
         return laterPrompt = true;
     }
     ownSeen ||= own;
@@ -25795,10 +26220,10 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
     if (message?.uuid)
       lastAnchor = { last_line_uuid: message.uuid, last_line_at: message.timestamp };
   };
-  const finish = (read) => needle && !anchorFound ? readTranscript(filePath, afterLine, cutAt, turn, { last_line_at: anchor.last_line_at }) : { ...read, anchor: lastAnchor, promptId };
-  if (!existsSync4(filePath))
+  const finish = (read) => needle && !anchorFound ? readTranscript2(filePath, afterLine, cutAt, turn, { last_line_at: anchor.last_line_at }) : { ...read, anchor: lastAnchor, promptId };
+  if (!existsSync6(filePath))
     return { messages: [], lastLine: afterLine, laterPrompt, anchor };
-  const fd = openSync6(filePath, "r");
+  const fd = openSync8(filePath, "r");
   try {
     const chunkSize = 2 * 1024 * 1024;
     const buf = Buffer.alloc(chunkSize);
@@ -25810,7 +26235,7 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
     let pos = 0;
     let cut = false;
     const decoder = new StringDecoder("utf-8");
-    while (!cut && (bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
+    while (!cut && (bytesRead = readSync4(fd, buf, 0, chunkSize, pos)) > 0) {
       const chunk = partial + decoder.write(buf.subarray(0, bytesRead));
       partial = "";
       const lines = chunk.split("\n");
@@ -25842,55 +26267,21 @@ function readTranscript(filePath, afterLine = -1, cutAt, turn = {}, anchor = {})
     }
     return finish({ messages, lastLine, laterPrompt });
   } finally {
-    closeSync6(fd);
-  }
-}
-function getTranscriptEndLine(filePath) {
-  try {
-    const size = statSync8(filePath).size;
-    if (size === 0)
-      return -1;
-    const fd = openSync6(filePath, "r");
-    try {
-      const chunkSize = 1024 * 1024;
-      const buf = Buffer.alloc(chunkSize);
-      let lineCount = 0;
-      let bytesRead;
-      let pos = 0;
-      let partial = "";
-      while ((bytesRead = readSync(fd, buf, 0, chunkSize, pos)) > 0) {
-        const chunk = partial + buf.toString("utf-8", 0, bytesRead);
-        partial = "";
-        const lines = chunk.split("\n");
-        partial = lines.pop() ?? "";
-        for (const line of lines) {
-          if (line.trim() !== "")
-            lineCount++;
-        }
-        pos += bytesRead;
-      }
-      if (partial.trim() !== "")
-        lineCount++;
-      return lineCount > 0 ? lineCount - 1 : -1;
-    } finally {
-      closeSync6(fd);
-    }
-  } catch {
-    return -1;
+    closeSync8(fd);
   }
 }
 function readRuntimeVersion(filePath) {
   let fd;
   try {
-    fd = openSync6(filePath, "r");
-    const size = fstatSync3(fd).size;
+    fd = openSync8(filePath, "r");
+    const size = fstatSync5(fd).size;
     if (size === 0)
       return void 0;
     const window2 = 64 * 1024;
     const start = Math.max(0, size - window2);
     const len = size - start;
     const buf = Buffer.alloc(len);
-    readSync(fd, buf, 0, len, start);
+    readSync4(fd, buf, 0, len, start);
     const text = buf.toString("utf-8");
     const lines = text.split("\n").filter((l) => l.trim() !== "");
     for (let i = lines.length - 1; i >= 0; i--) {
@@ -25905,7 +26296,7 @@ function readRuntimeVersion(filePath) {
   } catch {
   } finally {
     if (fd !== void 0)
-      closeSync6(fd);
+      closeSync8(fd);
   }
   return void 0;
 }
@@ -25928,10 +26319,6 @@ function turnPrompt(session, promptRead = false) {
     promptHash: session.current_turn_prompt_hash,
     promptRead
   };
-}
-function turnOwnsToolUse(path3, session, toolUseId) {
-  const read = readTranscript(path3, session.last_line, void 0, turnPrompt(session), session);
-  return !read.laterPrompt || read.messages.some((msg) => isAssistantMessage(msg) && msg.message.content.some((block) => block.type === "tool_use" && block.id === toolUseId));
 }
 function isToolResult(msg) {
   if (msg.type !== "user" || !Array.isArray(msg.message.content))
@@ -26151,13 +26538,102 @@ function resolveTurnTracingMode(config, sessionId, ...snapshots) {
   const { stateFilePath, defaultMuted, mutedLocked } = typeof config === "string" ? { stateFilePath: config } : config;
   return snapshots.find((mode) => mode !== void 0) ?? (mutedLocked ? "metadata" : getThreadTracingMode(stateFilePath, sessionId, defaultMuted));
 }
-function toolTracingMode(config, sessionId, session, transcriptPath, toolUseId, mode) {
-  if (mode === "metadata")
-    return mode;
-  if (getThreadTracingMode(config.stateFilePath, sessionId, config.defaultMuted) === "full") {
-    return mode;
+function promptTurnMode(config, sessionId, currentTurnMode) {
+  return config.mutedLocked ? "metadata" : resolveTurnTracingMode(config, sessionId, currentTurnMode);
+}
+
+// dist/src/state.js
+import { join as join28 } from "node:path";
+var stores = /* @__PURE__ */ new Map();
+function storeFor(stateFilePath) {
+  let store = stores.get(stateFilePath);
+  if (!store) {
+    store = createStateStore({ path: stateFilePath, warn });
+    stores.set(stateFilePath, store);
   }
-  return transcriptPath && turnOwnsToolUse(transcriptPath, session, toolUseId) ? mode : "metadata";
+  return store;
+}
+async function atomicUpdateState(stateFilePath, fn) {
+  await storeFor(stateFilePath).update(fn);
+}
+function loadState(stateFilePath) {
+  return storeFor(stateFilePath).read();
+}
+function getSessionState(state, sessionId) {
+  return state[sessionId] ?? {
+    last_line: -1,
+    turn_count: 0,
+    updated: "",
+    task_run_map: {}
+  };
+}
+function advanceToolTracingProgress(session, ids, phase) {
+  const modes = { ...session.tool_tracing_modes };
+  const progress = { ...session.tool_tracing_progress };
+  for (const id of ids) {
+    if (!Object.hasOwn(modes, id))
+      continue;
+    if (progress[id] && progress[id] !== phase) {
+      delete modes[id];
+      delete progress[id];
+    } else {
+      progress[id] = phase;
+    }
+  }
+  return { tool_tracing_modes: modes, tool_tracing_progress: progress };
+}
+function pruneOldSessions(state, now = Date.now()) {
+  return pruneStateEntries(state, SESSION_MAX_AGE_MS, now);
+}
+function readPosition(position) {
+  const { last_line, last_line_uuid, last_line_at } = position;
+  return { last_line, last_line_uuid, last_line_at };
+}
+function furtherRead(a, b) {
+  const aAt = Date.parse(a.last_line_at ?? "");
+  const bAt = Date.parse(b.last_line_at ?? "");
+  if (aAt !== bAt && !Number.isNaN(aAt) && !Number.isNaN(bAt)) {
+    return readPosition(aAt > bAt ? a : b);
+  }
+  return readPosition(a.last_line >= b.last_line ? a : b);
+}
+function updateSessionState(state, sessionId, position, turnCount, taskRunMap, currentTurnRunId) {
+  const existingSession = state[sessionId] ?? {
+    last_line: -1,
+    turn_count: 0,
+    updated: "",
+    task_run_map: {}
+  };
+  return {
+    ...state,
+    [sessionId]: {
+      ...existingSession,
+      ...readPosition(position),
+      turn_count: turnCount,
+      updated: (/* @__PURE__ */ new Date()).toISOString(),
+      task_run_map: taskRunMap ?? existingSession.task_run_map,
+      current_turn_run_id: currentTurnRunId !== void 0 ? currentTurnRunId : existingSession.current_turn_run_id
+    }
+  };
+}
+var heldRunPath = (...[stateFilePath, sessionId, toolUseId]) => join28(engineStorageRoot(stateFilePath), `${HELD_TOOL_RUN_PREFIX}${`${sessionId}-${toolUseId}`.replace(UNSAFE_FILE_NAME_CHARS, "_")}.json`);
+function takeHeldRun(...key) {
+  const held = readJson(readText(heldRunPath(...key)));
+  removeFile3(heldRunPath(...key));
+  return held;
+}
+function pruneHeldRuns(stateFilePath, now = Date.now()) {
+  const folder = engineStorageRoot(stateFilePath);
+  for (const name of listDirectory(folder).filter((n2) => n2.startsWith(HELD_TOOL_RUN_PREFIX))) {
+    const modified = entryInfo(join28(folder, name))?.mtimeMs ?? now;
+    if (now - modified > HELD_TOOL_RUN_MAX_AGE_MS)
+      removeFile3(join28(folder, name));
+  }
+}
+function dropHeld(stateFilePath, sessionId, session) {
+  for (const id of Object.keys(session.held_tool_runs ?? {}))
+    takeHeldRun(stateFilePath, sessionId, id);
+  return { held_tool_runs: void 0 };
 }
 
 // dist/src/utils/harness.js
@@ -26214,6 +26690,838 @@ function skillNameFromTool(toolName, toolInput) {
     return void 0;
   const skill = toolInput?.skill;
   return typeof skill === "string" ? skill.trim().replace(SKILL_NAME_LEADING_SLASH, "") || void 0 : void 0;
+}
+
+// dist/src/repo-attribution.js
+import { dirname as dirname22, join as join32 } from "node:path";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/attribution.js
+import { isAbsolute as isAbsolute5 } from "node:path";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/utils/paths.js
+import { statSync as statSync10 } from "node:fs";
+import { dirname as dirname18 } from "node:path";
+function nearestExistingDirectory(path3) {
+  let current = path3;
+  for (; ; ) {
+    const parent = dirname18(current);
+    const reachedFilesystemRoot = parent === current;
+    if (reachedFilesystemRoot)
+      return void 0;
+    try {
+      if (statSync10(current).isDirectory())
+        return current;
+    } catch {
+    }
+    current = parent;
+  }
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/github-login.js
+import { mkdirSync as mkdirSync12, readFileSync as readFileSync16, renameSync as renameSync9, writeFileSync as writeFileSync6 } from "node:fs";
+import { dirname as dirname19 } from "node:path";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/constants.js
+var GIT_LOCATION_ENV_KEYS = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_COMMON_DIR",
+  "GIT_INDEX_FILE",
+  "GIT_CEILING_DIRECTORIES"
+];
+var NOT_A_REPOSITORY = /not a git repository \(or any of the parent directories\)/i;
+var REMOTE_PATH_EDGE_SLASHES = /^\/+|\/+$/g;
+var REMOTE_PATH_TRAILING_SLASHES = /\/+$/;
+var REMOTE_GIT_SUFFIX = /\.git$/;
+var REMOTE_LINE_WHITESPACE = /\s+/;
+var SCP_REMOTE_PATTERN = /^(?:[^@]+@)?([^:]+):\/?(.+)$/;
+var GIT_DIRECTORY_NAME = ".git";
+var GIT_FILE_POINTER = /^gitdir:\s*(.+?)\s*$/m;
+var GIT_MARKERS = {
+  REPOSITORY_ROOT: "repository root",
+  ONLY_GIT_CAN_SAY: "only git can say",
+  NOTHING_HERE: "nothing here"
+};
+var GIT_PROVIDERS = {
+  "github.com": "github",
+  "gitlab.com": "gitlab",
+  "bitbucket.org": "bitbucket",
+  "dev.azure.com": "devAzure"
+};
+var SELF_HOSTED_PROVIDER_HINTS = ["github", "gitlab", "bitbucket"];
+var PROVIDER_HOSTS = {
+  github: "github.com",
+  gitlab: "gitlab.com",
+  bitbucket: "bitbucket.org",
+  devAzure: "dev.azure.com"
+};
+var GIT_COMMAND_TIMEOUT_MS = 5e3;
+var GH_LOGIN_COMMAND = "gh";
+var GIT_COMMAND = "git";
+var GIT_COMMAND_MISSING = "is not installed in an absolute PATH folder";
+var GH_LOGIN_ARGUMENTS = ["api", "user", "--jq", ".login"];
+var GH_LOGIN_TIMEOUT_MS = 5e3;
+var GH_LOGIN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
+var GH_LOGIN_NULL_OUTPUT = "null";
+var GH_LOGIN_RETRY_AFTER_MS = 24 * 60 * 60 * 1e3;
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/repository.js
+import { execFileSync as execFileSync2 } from "node:child_process";
+import { resolve as resolve14 } from "node:path";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/utils/desktop/launch.js
+import { accessSync, constants as constants2, statSync as statSync11 } from "node:fs";
+import { join as join29, posix, win32 } from "node:path";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/utils/desktop/desktop-constants.js
+var DESKTOP_WINDOWS_EXTENSIONS = ".EXE;.CMD;.BAT";
+var DESKTOP_WINDOWS_SEPARATOR = ";";
+var DESKTOP_PATH_SEPARATOR = ":";
+var DESKTOP_PATH_VARIABLES = ["PATH", "Path"];
+var DESKTOP_EXTENSIONS_VARIABLE = "PATHEXT";
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/utils/desktop/launch.js
+function findExecutable(name, env, platform) {
+  const windows = platform === WINDOWS_PLATFORM;
+  const extensions = windows ? (env[DESKTOP_EXTENSIONS_VARIABLE] ?? DESKTOP_WINDOWS_EXTENSIONS).split(DESKTOP_WINDOWS_SEPARATOR) : [""];
+  const path3 = DESKTOP_PATH_VARIABLES.map((variable) => env[variable]).find((value) => value !== void 0);
+  const folders = (path3 ?? "").split(windows ? DESKTOP_WINDOWS_SEPARATOR : DESKTOP_PATH_SEPARATOR);
+  const absolute = windows ? win32.isAbsolute : posix.isAbsolute;
+  for (const folder of folders.filter((entry) => entry !== "" && absolute(entry))) {
+    for (const extension of extensions) {
+      const candidate = join29(folder, `${name}${extension}`);
+      try {
+        accessSync(candidate, constants2.X_OK);
+        if (statSync11(candidate).isFile())
+          return candidate;
+      } catch {
+      }
+    }
+  }
+  return void 0;
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/repository.js
+function parseRepoName(remoteUrl) {
+  const value = remoteUrl.trim();
+  try {
+    const url = new URL(value);
+    const name = url.pathname.replace(REMOTE_PATH_EDGE_SLASHES, "").replace(REMOTE_GIT_SUFFIX, "");
+    const repository = repositoryOnHost(url.hostname, name);
+    if (repository)
+      return repository;
+  } catch {
+  }
+  const scpMatch = value.match(SCP_REMOTE_PATTERN);
+  if (scpMatch) {
+    const host = scpMatch[1];
+    const path3 = scpMatch[2];
+    if (host && path3) {
+      const name = path3.replace(REMOTE_PATH_TRAILING_SLASHES, "").replace(REMOTE_GIT_SUFFIX, "");
+      return repositoryOnHost(host, name);
+    }
+  }
+  return void 0;
+}
+function repositoryOnHost(hostname, name) {
+  const host = hostname.toLowerCase();
+  if (!name)
+    return void 0;
+  const provider2 = GIT_PROVIDERS[host];
+  if (provider2)
+    return { provider: provider2, name };
+  if (!host.includes("."))
+    return void 0;
+  const hinted = SELF_HOSTED_PROVIDER_HINTS.find((hint) => host.includes(hint));
+  return { provider: hinted ?? host, name, host };
+}
+function gitOutput(args, cwd) {
+  const env = { ...process.env, LC_ALL: "C", LANG: "C" };
+  for (const key of GIT_LOCATION_ENV_KEYS)
+    delete env[key];
+  return execFileSync2(installedCommand(GIT_COMMAND), args, {
+    cwd,
+    env,
+    encoding: "utf-8",
+    timeout: GIT_COMMAND_TIMEOUT_MS,
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+}
+function getRepoName(cwd) {
+  try {
+    const output = gitOutput(["remote", "-v"], cwd);
+    const lines = output.trim().split("\n").filter(Boolean);
+    const remotes = [];
+    for (const line of lines) {
+      const parts = line.split(REMOTE_LINE_WHITESPACE);
+      const name = parts[0];
+      const url = parts[1];
+      if (name && url && line.includes("(fetch)"))
+        remotes.push({ name, url });
+    }
+    const origin = remotes.find((remote) => remote.name === "origin");
+    if (origin) {
+      const name = parseRepoName(origin.url);
+      if (name)
+        return name;
+    }
+    for (const remote of remotes) {
+      const name = parseRepoName(remote.url);
+      if (name)
+        return name;
+    }
+  } catch {
+  }
+  return void 0;
+}
+function getRepoUrl(provider2, name) {
+  const host = PROVIDER_HOSTS[provider2];
+  return host ? `https://${host}/${name}` : void 0;
+}
+function getRepoRoot(cwd) {
+  try {
+    const root = gitOutput(["rev-parse", "--show-toplevel"], cwd).trim();
+    return root ? resolve14(root) : void 0;
+  } catch (error2) {
+    const stderr = String(error2?.stderr ?? "");
+    return NOT_A_REPOSITORY.test(stderr) ? null : void 0;
+  }
+}
+function getGitUserName(cwd, options) {
+  try {
+    const name = gitOutput(["config", "user.name"], cwd).trim();
+    if (name)
+      return name;
+  } catch {
+  }
+  return options?.githubLogin?.();
+}
+function getGitInfo(cwd) {
+  const result = {};
+  try {
+    const branch = gitOutput(["rev-parse", "--abbrev-ref", "HEAD"], cwd).trim();
+    if (branch && branch !== "HEAD")
+      result.branch = branch;
+  } catch {
+  }
+  try {
+    const commit = gitOutput(["rev-parse", "HEAD"], cwd).trim();
+    if (commit)
+      result.commit = commit;
+  } catch {
+  }
+  return result;
+}
+function getRepositoryMetadata(cwd) {
+  const metadata = {};
+  const repoName = getRepoName(cwd);
+  if (repoName) {
+    metadata[GIT_METADATA_KEYS.repository] = repoName.name;
+    metadata[GIT_METADATA_KEYS.provider] = repoName.provider;
+    const url = repoName.host ? `https://${repoName.host}/${repoName.name}` : getRepoUrl(repoName.provider, repoName.name);
+    if (url)
+      metadata[GIT_METADATA_KEYS.repositoryUrl] = url;
+  }
+  const gitInfo = getGitInfo(cwd);
+  if (gitInfo.branch)
+    metadata[GIT_METADATA_KEYS.branch] = gitInfo.branch;
+  if (gitInfo.commit)
+    metadata[GIT_METADATA_KEYS.commit] = gitInfo.commit;
+  return withBothGitMetadataNames(metadata);
+}
+function githubLoginLookup() {
+  return execFileSync2(installedCommand(GH_LOGIN_COMMAND), GH_LOGIN_ARGUMENTS, {
+    encoding: "utf-8",
+    timeout: GH_LOGIN_TIMEOUT_MS,
+    stdio: ["ignore", "pipe", "ignore"]
+  }).trim();
+}
+function isGitHubLogin(printed) {
+  return printed !== GH_LOGIN_NULL_OUTPUT && GH_LOGIN_PATTERN.test(printed);
+}
+function installedCommand(name) {
+  const found = findExecutable(name, process.env, process.platform);
+  if (found === void 0)
+    throw new Error(`${name} ${GIT_COMMAND_MISSING}`);
+  return found;
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/github-login.js
+function createGitHubLoginFallback(options) {
+  const now = options.now ?? Date.now;
+  const retryAfterMs = options.retryAfterMs ?? GH_LOGIN_RETRY_AFTER_MS;
+  let alreadyTried = false;
+  let login;
+  function failedRecently() {
+    try {
+      const marker = JSON.parse(readFileSync16(options.markerPath, "utf-8"));
+      const failed = new Date(marker.failed).getTime();
+      const since = now() - failed;
+      return since >= 0 && since < retryAfterMs;
+    } catch {
+      return false;
+    }
+  }
+  function recordFailure2() {
+    try {
+      mkdirSync12(dirname19(options.markerPath), { recursive: true });
+      const partial = `${options.markerPath}.${process.pid}`;
+      const marker = { failed: new Date(now()).toISOString() };
+      writeFileSync6(partial, JSON.stringify(marker));
+      renameSync9(partial, options.markerPath);
+    } catch {
+    }
+  }
+  return () => {
+    if (alreadyTried)
+      return login;
+    alreadyTried = true;
+    if (failedRecently())
+      return void 0;
+    try {
+      const printed = githubLoginLookup();
+      if (isGitHubLogin(printed))
+        login = printed;
+    } catch {
+    }
+    if (login === void 0)
+      recordFailure2();
+    return login;
+  };
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/paths.js
+import { readFileSync as readFileSync17, statSync as statSync12 } from "node:fs";
+import { dirname as dirname20, join as join30, resolve as resolve15 } from "node:path";
+function gitMarkerAt(directory) {
+  const marker = join30(directory, GIT_DIRECTORY_NAME);
+  try {
+    if (statSync12(marker).isDirectory())
+      return GIT_MARKERS.REPOSITORY_ROOT;
+  } catch {
+    return GIT_MARKERS.NOTHING_HERE;
+  }
+  return pointsAtGitDirectory(directory, marker) ? GIT_MARKERS.REPOSITORY_ROOT : GIT_MARKERS.ONLY_GIT_CAN_SAY;
+}
+function pointsAtGitDirectory(directory, marker) {
+  try {
+    const pointer = readFileSync17(marker, "utf-8").match(GIT_FILE_POINTER)?.[1];
+    return pointer !== void 0 && statSync12(resolve15(directory, pointer)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function rootFromGitMarker(directory) {
+  let current = resolve15(directory);
+  for (; ; ) {
+    const marker = gitMarkerAt(current);
+    if (marker === GIT_MARKERS.REPOSITORY_ROOT)
+      return current;
+    if (marker === GIT_MARKERS.ONLY_GIT_CAN_SAY)
+      return void 0;
+    const parent = dirname20(current);
+    const reachedFilesystemRoot = parent === current;
+    if (reachedFilesystemRoot)
+      return null;
+    current = parent;
+  }
+}
+
+// node_modules/.pnpm/@langchain+plugins-base@htt_73341392eff8a5104358f5f2a05e0a91/node_modules/@langchain/plugins-base/dist/git/attribution.js
+function createRepositoryAttributor(options) {
+  const rootByDirectory = /* @__PURE__ */ new Map();
+  const attributionByRoot = /* @__PURE__ */ new Map();
+  const identifierByRoot = /* @__PURE__ */ new Map();
+  const githubLogin = createGitHubLoginFallback({ markerPath: options.githubLoginMarkerPath });
+  function rootForPath(path3) {
+    const directory = nearestExistingDirectory(path3);
+    if (!directory)
+      return void 0;
+    if (rootByDirectory.has(directory))
+      return rootByDirectory.get(directory);
+    const walked = rootFromGitMarker(directory);
+    const onlyGitCanSay = walked === void 0;
+    const root = onlyGitCanSay ? getRepoRoot(directory) : walked;
+    rootByDirectory.set(directory, root);
+    return root;
+  }
+  function isSessionsOwnRepository(sessionCwd, root) {
+    return sessionCwd ? rootForPath(sessionCwd) === root : false;
+  }
+  function identifierForRoot(root) {
+    const cached = identifierByRoot.get(root);
+    if (cached)
+      return cached;
+    const userName = getGitUserName(root, { githubLogin });
+    const identifier = userName ? { ls_attribution_identifier: userName } : {};
+    identifierByRoot.set(root, identifier);
+    return identifier;
+  }
+  function attributionForRoot(root) {
+    const cached = attributionByRoot.get(root);
+    if (cached)
+      return cached;
+    const attribution = {
+      ...identifierForRoot(root),
+      ...getRepositoryMetadata(root)
+    };
+    attributionByRoot.set(root, attribution);
+    return attribution;
+  }
+  function scopedToPath(base, origin, pinned) {
+    const namedSomewhereNothingSits = origin.namedAPath && !origin.path;
+    if (namedSomewhereNothingSits)
+      return base;
+    const path3 = origin.path ?? origin.cwd;
+    if (!path3 || !isAbsolute5(path3))
+      return base;
+    const root = rootForPath(path3);
+    const gitCouldNotAnswer = root === void 0;
+    if (gitCouldNotAnswer)
+      return base;
+    const pathIsInNoRepository = root === null;
+    if (pathIsInNoRepository)
+      return withoutRepositoryKeys(base, pinned);
+    if (isSessionsOwnRepository(origin.cwd, root)) {
+      return { ...base, ...withoutPinnedKeys(identifierForRoot(root), pinned) };
+    }
+    return {
+      ...withoutRepositoryKeys(base, pinned),
+      ...withoutPinnedKeys(attributionForRoot(root), pinned)
+    };
+  }
+  function withSessionRepository(base, sessionCwd) {
+    const sessionRoot = sessionCwd ? rootForPath(sessionCwd) : void 0;
+    if (typeof sessionRoot !== "string")
+      return base;
+    return { ...attributionForRoot(sessionRoot), ...base };
+  }
+  function toolMetadata(base, origin) {
+    const pinned = new Set(REPOSITORY_METADATA_KEYS.filter((key) => base?.[key] !== void 0));
+    return scopedToPath(withSessionRepository(base, origin.cwd), origin, pinned);
+  }
+  function turnMetadata(base, cwd, toolOrigins) {
+    const sessionCwd = cwd ? { cwd } : {};
+    const sessionRoot = cwd ? rootForPath(cwd) : void 0;
+    if (typeof sessionRoot === "string") {
+      return toolMetadata(base, { ...sessionCwd, namedAPath: false });
+    }
+    for (const { path: path3, namedAPath } of toolOrigins) {
+      if (!path3)
+        continue;
+      const landedInRepository = typeof rootForPath(path3) === "string";
+      if (landedInRepository)
+        return toolMetadata(base, { path: path3, namedAPath, ...sessionCwd });
+    }
+    return base;
+  }
+  return { toolMetadata, turnMetadata };
+}
+function withoutPinnedKeys(attribution, pinned) {
+  if (pinned.size === 0)
+    return { ...attribution };
+  return Object.fromEntries(Object.entries(attribution).filter(([key]) => !pinned.has(key)));
+}
+function withoutRepositoryKeys(base, pinned) {
+  const stripped = { ...base };
+  for (const key of REPOSITORY_METADATA_KEYS) {
+    if (!pinned.has(key))
+      delete stripped[key];
+  }
+  return stripped;
+}
+
+// dist/src/config.js
+import { readFileSync as readFileSync18 } from "node:fs";
+import { homedir as homedir3, userInfo as userInfo2 } from "node:os";
+import { join as join31 } from "node:path";
+function readAnthropicUserId() {
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
+  if (!homeDir)
+    return void 0;
+  const configPath = join31(homeDir, ".claude.json");
+  try {
+    const raw = readFileSync18(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    const userId = parsed?.userID;
+    if (typeof userId === "string" && userId.length > 0) {
+      return userId;
+    }
+  } catch (err) {
+    debug(`Could not read Anthropic user ID from ${configPath}: ${err}`);
+  }
+  return void 0;
+}
+function readLocalUsername() {
+  return userInfo2().username;
+}
+function pinnedRepositoryKeys(metadata) {
+  return metadata?.[PINNED_REPOSITORY_KEYS] ?? NO_PINNED_KEYS;
+}
+function envBoolean(field4) {
+  const setting = BOOLEAN_SETTINGS[field4];
+  const env = process.env[setting.env]?.toLowerCase();
+  if (env === void 0)
+    return void 0;
+  if (env === "true")
+    return true;
+  if (env === "false")
+    return false;
+  return setting.restrictive;
+}
+function envCooldown() {
+  const env = process.env.CC_LANGSMITH_NOTICE_COOLDOWN?.trim().toLowerCase();
+  if (!env)
+    return void 0;
+  if (env === NOTICE_COOLDOWN_OFF)
+    return NOTICE_COOLDOWN_OFF;
+  const minutes = Number(env);
+  return Number.isFinite(minutes) && minutes >= 0 ? minutes : void 0;
+}
+function resolveStateFilePath() {
+  return process.env.STATE_FILE ?? join31(homedir3(), ...STATE_FILE_DEFAULT);
+}
+function loadConfig(options) {
+  const cwd = options?.cwd ?? process.cwd();
+  const homeDir = homedir3();
+  const stateFilePath = resolveStateFilePath();
+  const debug2 = (process.env.CC_LANGSMITH_DEBUG ?? "").toLowerCase() === "true";
+  let replicas;
+  const providedReplicas = process.env.CC_LANGSMITH_RUNS_ENDPOINTS;
+  if (providedReplicas !== void 0) {
+    try {
+      replicas = JSON.parse(providedReplicas);
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_RUNS_ENDPOINTS. Please make sure they are valid JSON.");
+    }
+  }
+  const parentDottedOrder = process.env.CC_LANGSMITH_PARENT_DOTTED_ORDER || void 0;
+  let customMetadata;
+  const providedMetadata = process.env.CC_LANGSMITH_METADATA;
+  if (providedMetadata !== void 0) {
+    try {
+      const parsed = JSON.parse(providedMetadata);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        customMetadata = parsed;
+      } else {
+        error("CC_LANGSMITH_METADATA must be a JSON object (not an array or primitive).");
+      }
+    } catch {
+      error("Failed to parse provided CC_LANGSMITH_METADATA. Please make sure it is valid JSON.");
+    }
+  }
+  const redactEnv = (process.env.CC_LANGSMITH_REDACT ?? "").trim().toLowerCase();
+  const redact = !["0", "false", "no", "off"].includes(redactEnv);
+  let redactExtraRules;
+  const providedExtra = process.env.CC_LANGSMITH_REDACT_EXTRA;
+  if (providedExtra !== void 0) {
+    try {
+      const parsed = JSON.parse(providedExtra);
+      if (!Array.isArray(parsed)) {
+        error("CC_LANGSMITH_REDACT_EXTRA must be a JSON array of { pattern, replace }.");
+      } else {
+        const validRules = [];
+        for (const rule of parsed) {
+          if (typeof rule !== "object" || rule === null || typeof rule.pattern !== "string" || rule.replace !== void 0 && typeof rule.replace !== "string") {
+            error(`Skipping invalid CC_LANGSMITH_REDACT_EXTRA rule (expected { pattern: string, replace?: string }): ${JSON.stringify(rule)}`);
+            continue;
+          }
+          try {
+            new RegExp(rule.pattern);
+          } catch {
+            error(`Skipping CC_LANGSMITH_REDACT_EXTRA rule with an invalid regex pattern: ${rule.pattern}`);
+            continue;
+          }
+          validRules.push(rule);
+        }
+        if (validRules.length > 0 || parsed.length === 0)
+          redactExtraRules = validRules;
+      }
+    } catch {
+      error("Failed to parse CC_LANGSMITH_REDACT_EXTRA. Please make sure it is valid JSON.");
+    }
+  }
+  const files = readCommonConfigFiles({ cwd, home: homeDir, harnessDirectory: HARNESS_DIRECTORY });
+  const common = mergeCommonConfig({
+    harness: files.harness.common,
+    root: files.root.common,
+    user: files.user.common,
+    userRoot: files.userRoot.common,
+    env: {
+      enabled: envBoolean("enabled"),
+      defaultMuted: envBoolean("defaultMuted"),
+      strict_auth: envBoolean("strict_auth"),
+      capture_hook_outputs: envBoolean("capture_hook_outputs"),
+      notice_cooldown: envCooldown(),
+      api_key: process.env.CC_LANGSMITH_API_KEY,
+      api_url: process.env.LANGSMITH_ENDPOINT,
+      project: process.env.CC_LANGSMITH_PROJECT,
+      metadata: customMetadata,
+      redact: process.env.CC_LANGSMITH_REDACT === void 0 ? void 0 : redact,
+      redact_extra_rules: redactExtraRules
+    },
+    defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" }
+  }, { envFirst: true });
+  if (replicas === void 0 || common.locked.includes("replicas")) {
+    replicas = toSdkReplicas(common.replicas);
+  }
+  redactExtraRules = common.redact_extra_rules;
+  const credential = resolveUploadCredential({
+    apiKey: common.api_key,
+    apiUrl: common.api_url,
+    apiUrlIsDefault: common.defaulted.includes("api_url"),
+    profile: common.profile,
+    workspaceId: common.workspace_id,
+    agentId: common.agent_id
+  });
+  const unreachable = credential.kind === "login" ? loginReplicaRefusal(uploadReplicas(replicas), credential.apiUrl) : void 0;
+  customMetadata = common.metadata && withBothGitMetadataNames(common.metadata);
+  const anthropicUserId = readAnthropicUserId();
+  const localUsername = readLocalUsername();
+  const identityMetadata = { local_username: localUsername };
+  if (anthropicUserId) {
+    identityMetadata.user_id = anthropicUserId;
+    identityMetadata.anthropic_user_id = anthropicUserId;
+  }
+  const pinned = REPOSITORY_METADATA_KEYS.filter((key) => customMetadata?.[key] !== void 0);
+  customMetadata = { cwd, ...identityMetadata, ...customMetadata };
+  Object.defineProperty(customMetadata, PINNED_REPOSITORY_KEYS, { value: new Set(pinned) });
+  return {
+    enabled: common.enabled,
+    defaultMuted: common.defaultMuted,
+    apiKey: credential.kind === "api-key" && sdkSetting(common.api_key) === void 0 ? credential.apiKey : common.api_key,
+    project: common.project,
+    apiBaseUrl: credential.kind === "login" ? credential.apiUrl : common.api_url,
+    stateFilePath,
+    debug: debug2,
+    parentDottedOrder,
+    replicas,
+    customMetadata,
+    redact: common.redact,
+    redactExtraRules,
+    ...common.managedConfigProblem === void 0 ? {} : { managedConfigProblem: common.managedConfigProblem },
+    ...credential.kind === "login" ? { login: credential.login } : {},
+    ...common.profile === void 0 ? {} : { profile: common.profile },
+    ...common.agent_id === void 0 ? {} : { agentId: common.agent_id },
+    ...credential.kind === "none" ? { credentialProblem: credential.reason } : {},
+    ...unreachable ? { credentialProblem: unreachable } : {},
+    ...common.strict_auth ? { strictAuth: true } : {},
+    ...common.capture_hook_outputs ? { captureHookOutputs: true } : {},
+    ...common.notice_cooldown === void 0 ? {} : { noticeCooldown: common.notice_cooldown },
+    ...common.locked.includes("project") ? { projectLocked: true } : {},
+    ...common.locked.includes("defaultMuted") && common.defaultMuted ? { mutedLocked: true } : {}
+  };
+}
+
+// dist/src/repo-attribution-paths.js
+import { existsSync as existsSync7 } from "node:fs";
+import { dirname as dirname21, isAbsolute as isAbsolute6, resolve as resolve16 } from "node:path";
+function gitCommandFolder(command) {
+  if (typeof command !== "string")
+    return void 0;
+  return GIT_DIR_COMMAND.exec(command)?.[1]?.replace(SURROUNDING_QUOTES, "");
+}
+function globFolder(input, toolName) {
+  const { pattern, path: path3 } = input;
+  if (toolName !== "Glob" || typeof pattern !== "string" || !isAbsolute6(pattern))
+    return void 0;
+  if (path3 !== void 0)
+    return void 0;
+  const folder = dirname21(`${pattern.split(GLOB_CHARACTER)[0]}_`);
+  return existsSync7(folder) ? folder : void 0;
+}
+function toolPathFromInput(toolInput, sessionCwd, toolName) {
+  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
+    return { namedAPath: false };
+  }
+  const named = toolInput;
+  const folder = gitCommandFolder(named.command) || globFolder(named, toolName);
+  const input = folder ? { ...named, path: folder } : named;
+  let namedAPath = false;
+  for (const key of TOOL_PATH_INPUT_KEYS) {
+    const value = input[key];
+    if (typeof value !== "string" || value.length === 0)
+      continue;
+    namedAPath = true;
+    if (isAbsolute6(value))
+      return { path: value, namedAPath };
+    if (!sessionCwd || !isAbsolute6(sessionCwd))
+      continue;
+    const resolved = resolve16(sessionCwd, value);
+    if (existsSync7(resolved))
+      return { path: resolved, namedAPath };
+  }
+  return { namedAPath };
+}
+
+// dist/src/repo-attribution.js
+var attributor;
+function repositoryAttributor() {
+  attributor ??= createRepositoryAttributor({
+    githubLoginMarkerPath: join32(dirname22(resolveStateFilePath()), GH_LOGIN_MARKER_FILE)
+  });
+  return attributor;
+}
+function withoutUnpinnedRepositoryKeys(base) {
+  const pinned = pinnedRepositoryKeys(base);
+  const stripped = { ...base };
+  for (const key of REPOSITORY_METADATA_KEYS) {
+    if (!pinned.has(key))
+      delete stripped[key];
+  }
+  return stripped;
+}
+function withPinsOf(base, scoped) {
+  if (scoped && base) {
+    Object.defineProperty(scoped, PINNED_REPOSITORY_KEYS, { value: pinnedRepositoryKeys(base) });
+  }
+  return scoped;
+}
+function toolOrigin(toolInput, sessionCwd, toolName) {
+  return { cwd: sessionCwd, ...toolPathFromInput(toolInput, sessionCwd, toolName) };
+}
+function sessionScopedMetadata(base, sessionCwd) {
+  return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, []));
+}
+function repoScopedMetadata(base, toolInput, sessionCwd, toolName) {
+  return repositoryAttributor().toolMetadata(withoutUnpinnedRepositoryKeys(base), toolOrigin(toolInput, sessionCwd, toolName));
+}
+function settledRepositoryMetadata(base, origin) {
+  return repositoryAttributor().toolMetadata(base, origin);
+}
+function turnScopedMetadata(base, toolInputs, sessionCwd) {
+  const origins = [...toolInputs].map((input) => toolOrigin(input, sessionCwd));
+  return originScopedMetadata(base, origins, sessionCwd);
+}
+function originScopedMetadata(base, toolOrigins, sessionCwd) {
+  return withPinsOf(base, repositoryAttributor().turnMetadata(base, sessionCwd, toolOrigins));
+}
+function clearRepoAttributionCache() {
+  attributor = void 0;
+}
+
+// dist/src/engine-capture.js
+async function saveOrWarn(runId, save, savedDespite) {
+  try {
+    const result = await save();
+    if (!CAPTURE_SAVED_STATUSES.includes(result.status)) {
+      warn(`Could not save run ${runId} for upload: ${result.status}`);
+    }
+  } catch (err) {
+    if (!await savedDespite(err))
+      throw err;
+    warn(`Saved run ${runId} for upload, but its uploader did not start: ${err}`);
+  }
+}
+async function captureInto(context, run, mode, rootRunId, operation, eventKey = run.id) {
+  const { session, sessionId, store, fingerprint: fingerprint2 } = context;
+  const turnRunId = run.id === rootRunId || await posted(context, rootRunId, rootRunId) ? rootRunId : run.id;
+  const afterPost = operation === "patch" && await posted(context, turnRunId, run.id);
+  const input = captureInput(run, mode, turnRunId, operation, sessionId, afterPost, eventKey);
+  await saveOrWarn(run.id, () => session.capture(input), (err) => readSavedCaptureWake(err, {
+    store,
+    integration: LS_INTEGRATION,
+    sessionId,
+    turnId: turnRunId,
+    eventId: input.eventId,
+    destinationFingerprint: fingerprint2
+  }));
+}
+function captureInput(run, mode, rootRunId, operation, sessionId, afterPost, eventKey = run.id) {
+  const after = [
+    ...afterPost ? [run.id] : [],
+    ...namesItsTurn(run, rootRunId, operation) ? [rootRunId] : []
+  ];
+  return {
+    turnId: rootRunId,
+    eventId: `${RUN_EVENT_PREFIXES[operation]}${eventKey}`,
+    submission: runSubmission(run, mode, operation),
+    turnEvidence: runTurnEvidence(run, rootRunId),
+    ...after.length > 0 ? { dependencies: after.map((runId) => postScope(sessionId, rootRunId, runId)) } : {}
+  };
+}
+function namesItsTurn(run, rootRunId, operation) {
+  return operation === "post" && run.id !== rootRunId && run.parent_run_id === rootRunId;
+}
+function postScope(sessionId, turnId, runId) {
+  return {
+    integration: LS_INTEGRATION,
+    sessionId,
+    turnId,
+    eventId: `${POST_EVENT_PREFIX}${runId}`
+  };
+}
+function runSubmission(run, mode, operation) {
+  const data = cloneJson(run);
+  const pick = (fields) => Object.fromEntries(fields.filter((key) => key in data).map((key) => [key, data[key]]));
+  const status = data.error !== void 0 ? "error" : data.end_time ? "completed" : "running";
+  const patchFields = HOOK_OUTPUTS_KEY2 in (data.inputs ?? {}) ? HOOK_PATCH_FIELDS : RUN_PATCH_FIELDS;
+  const base = { integration: LS_INTEGRATION, privacyMode: mode, metadata: data.metadata };
+  return operation === "post" ? {
+    ...base,
+    operation,
+    run: { inputs: {}, ...pick(RUN_SNAPSHOT_FIELDS) }
+  } : {
+    ...base,
+    operation,
+    run: pick(RUN_CONTEXT_FIELDS),
+    privacyContext: { status },
+    patch: {
+      fields: patchFields.filter((key) => key in data),
+      values: pick(patchFields)
+    }
+  };
+}
+function runTurnEvidence(run, rootRunId) {
+  return run.id === rootRunId ? { rootRunId, childRunIds: [], closureState: run.end_time ? "authoritative" : "open" } : { childRunIds: attributionReady(run.metadata) ? [] : [run.id], closureState: "open" };
+}
+async function posted(context, turnId, runId) {
+  const scope = { integration: LS_INTEGRATION, sessionId: context.sessionId, turnId };
+  return await context.store.read({ ...scope, eventId: `${POST_EVENT_PREFIX}${runId}` }) !== void 0;
+}
+function attributionReady(metadata) {
+  const built = buildCodingAgentMetadata(metadata);
+  return Boolean(built[GIT_METADATA_KEYS.repository] && built[ATTRIBUTION_IDENTIFIER_KEY]);
+}
+
+// dist/src/engine-tool-settlement.js
+async function captureToolRun(context, run, mode, rootRunId, origin) {
+  if (mode !== "full")
+    return captureInto(context, run, mode, rootRunId, "post");
+  const turnRunId = await posted(context, rootRunId, rootRunId) ? rootRunId : run.id;
+  const input = {
+    turnId: turnRunId,
+    eventId: `${TOOL_SETTLEMENT_EVENT_PREFIX}${run.id}`,
+    sourceRefs: [run.id],
+    privacyMode: mode,
+    turnEvidence: turnRunId === rootRunId ? { childRunIds: [run.id], closureState: "open" } : runTurnEvidence(run, turnRunId),
+    sourceSnapshots: [
+      {
+        sourceRef: run.id,
+        submission: runSubmission(run, mode, "post"),
+        sourceAgeStartedAtMs: Date.now(),
+        attributionContext: { toolOrigin: cloneJson(origin) }
+      }
+    ]
+  };
+  await saveOrWarn(run.id, () => context.session.queueReconstruction(input), (err) => context.session.readSavedReconstructionWake(err, input));
+}
+async function settleToolRuns(job) {
+  return {
+    status: "ready",
+    outputs: (job.sourceSnapshots ?? []).map(({ sourceRef, submission, attributionContext }) => ({
+      eventId: `${POST_EVENT_PREFIX}${submission.run.id}`,
+      sourceRef,
+      ...submission.run.parent_run_id === job.turnId ? { dependencies: [postScope(job.sessionId, job.turnId, job.turnId)] } : {},
+      submission: {
+        ...submission,
+        metadata: {
+          ...submission.metadata,
+          base: settledRepositoryMetadata(submission.metadata.base, attributionContext?.toolOrigin ?? { namedAPath: false }) ?? submission.metadata.base
+        }
+      }
+    }))
+  };
 }
 
 // dist/src/engine-session.js
@@ -26300,6 +27608,1053 @@ async function delivered(context, capture) {
   return true;
 }
 
+// dist/src/hooks/stop.js
+import { randomUUID as randomUUID11 } from "node:crypto";
+
+// dist/src/utils/replicas.js
+function hasOwnApiKey(replica) {
+  return !Array.isArray(replica) && sdkSetting(replica.apiKey) !== void 0;
+}
+function hasUsableDestination(config) {
+  return !config.credentialProblem || Boolean(config.replicas?.some(hasOwnApiKey));
+}
+
+// dist/src/utils/hook-init.js
+function initHook(cwd) {
+  const config = loadConfig({ cwd });
+  initLogger(config.debug);
+  if (!config.enabled) {
+    return null;
+  }
+  if (!hasUsableDestination(config)) {
+    error(config.credentialProblem);
+    return null;
+  }
+  return config;
+}
+function expandHome(path3) {
+  return path3?.replace(/^~/, process.env.HOME ?? "");
+}
+
+// dist/src/utils/stdin.js
+function readStdin() {
+  return new Promise((resolve17, reject) => {
+    let data = "";
+    process.stdin.setEncoding("utf-8");
+    process.stdin.on("data", (chunk) => data += chunk);
+    process.stdin.on("end", () => {
+      try {
+        resolve17(JSON.parse(data));
+      } catch (err) {
+        reject(new Error(`Failed to parse hook input: ${err}`));
+      }
+    });
+    process.stdin.on("error", reject);
+  });
+}
+
+// dist/src/background-runs.js
+function withoutTracedAgentPayloads(taskRunMap, tracedAgentIds) {
+  if (!taskRunMap)
+    return taskRunMap;
+  return Object.fromEntries(Object.entries(taskRunMap).map(([id, entry]) => {
+    if (!tracedAgentIds.has(id) || !entry.deferred)
+      return [id, entry];
+    const { inputs: _inputs, outputs: _outputs, ...kept } = entry.deferred;
+    return [id, { ...entry, deferred: kept }];
+  }));
+}
+
+// dist/src/finalize.js
+async function finalizeNotificationChain(opts) {
+  const { stateFilePath, sessionId, customMetadata, runtimeVersion } = opts;
+  let agentId = opts.agentId;
+  let interrupted = opts.interrupted ?? false;
+  while (agentId) {
+    const ss = getSessionState(loadState(stateFilePath), sessionId);
+    const taskRunInfo = ss.task_run_map?.[agentId];
+    if (!taskRunInfo) {
+      debug(`finalizeNotificationChain: no task run for ${agentId}, stopping`);
+      break;
+    }
+    const launchingTurnId = taskRunInfo.deferred?.parent_run_id;
+    const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : void 0;
+    const agentType = taskRunInfo.agent_type ?? "";
+    const settled = await settledFromTurn(customMetadata, launchingTurnId);
+    try {
+      await closeAgentToolRun({
+        tracing: resolveTurnTracingMode(opts, sessionId, taskRunInfo.tracing, launchingTurn?.tracing, launchingTurnId === ss.current_turn_run_id ? ss.current_turn_tracing : void 0),
+        sessionId,
+        agentId,
+        agentType,
+        taskRunInfo,
+        customMetadata: settled,
+        runtimeVersion,
+        turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0,
+        wasOpen: Boolean(taskRunInfo.subagent_done),
+        error: interrupted ? taskRunInfo.is_workflow ? "Workflow killed" : "Subagent killed" : void 0
+      });
+    } catch (err) {
+      error(`Failed to close Agent tool run for ${agentId}: ${err}`);
+    }
+    let toComplete;
+    let nextAgentId;
+    const drainedAgentId = agentId;
+    await atomicUpdateState(stateFilePath, (s) => {
+      const sess = getSessionState(s, sessionId);
+      const openTurns = { ...sess.open_turns };
+      const taskRunMap = { ...sess.task_run_map };
+      delete taskRunMap[drainedAgentId];
+      const entry = launchingTurnId ? openTurns[launchingTurnId] : void 0;
+      if (entry) {
+        const remaining = entry.agent_ids.filter((id) => id !== drainedAgentId);
+        if (remaining.length === 0 && entry.stop_seen) {
+          toComplete = entry;
+          nextAgentId = entry.notification_for_agent_id;
+          if (launchingTurnId)
+            delete openTurns[launchingTurnId];
+        } else {
+          openTurns[launchingTurnId] = { ...entry, agent_ids: remaining };
+        }
+      }
+      return {
+        ...s,
+        [sessionId]: {
+          ...sess,
+          open_turns: openTurns,
+          task_run_map: taskRunMap
+        }
+      };
+    });
+    if (toComplete) {
+      try {
+        await completeTurnRun({
+          ...turnIdentityFromOpenTurn(toComplete, { sessionId, customMetadata: settled }),
+          tracing: resolveTurnTracingMode(opts, sessionId, toComplete.tracing),
+          lastAssistantMessage: toComplete.last_assistant_message
+        });
+        debug(`Completed launching turn ${toComplete.run_id} after notification chain`);
+      } catch (err) {
+        error(`Failed to complete launching turn ${toComplete.run_id}: ${err}`);
+      }
+    }
+    agentId = nextAgentId;
+    interrupted = false;
+  }
+}
+
+// dist/src/closing-queue.js
+import { randomUUID as randomUUID10 } from "node:crypto";
+
+// dist/src/hooks/stop.js
+import { setTimeout as delay7 } from "node:timers/promises";
+async function closeStoppedTurn(_id, closing, config) {
+  const input = closing.input;
+  const startTime = closing.at;
+  const transcriptPath = expandHome(input.transcript_path);
+  initTracing(config, input.cwd, input.session_id);
+  const live = getSessionState(loadState(config.stateFilePath), input.session_id);
+  const sessionState = {
+    ...closing.session,
+    ...furtherRead(closing.session, live),
+    task_run_map: { ...closing.session.task_run_map, ...live.task_run_map },
+    traced_tool_use_ids: [
+      .../* @__PURE__ */ new Set([
+        ...closing.session.traced_tool_use_ids ?? [],
+        ...live.traced_tool_use_ids ?? []
+      ])
+    ]
+  };
+  debug(`Last line: ${sessionState.last_line}, turn count: ${sessionState.turn_count}`);
+  const runtimeVersion = sessionState.runtime_version ?? readRuntimeVersion(transcriptPath);
+  const approvalPolicy = sessionState.approval_policy ?? input.permission_mode;
+  await delay7(Math.max(0, startTime + STOP_FLUSH_WAIT_MS - Date.now()));
+  const { messages, lastLine, laterPrompt, anchor, promptId } = readTranscript2(transcriptPath, sessionState.last_line, closing.cut_at, {
+    ...turnPrompt(sessionState, closing.session.current_turn_run_id !== void 0 && live.read_turn_run_id === closing.session.current_turn_run_id),
+    nextPromptHash: live.current_turn_run_id !== void 0 && live.current_turn_run_id !== closing.session.current_turn_run_id ? live.current_turn_prompt_hash : void 0
+  }, sessionState);
+  const finalMessage = laterPrompt ? void 0 : input.last_assistant_message;
+  if (messages.length === 0 && !sessionState.current_turn_run_id) {
+    debug("No new messages");
+    return;
+  }
+  log(`Found ${messages.length} new messages`);
+  const notifiedBy = sessionState.current_notification_agent_id;
+  const notifiedFrom = notifiedBy ? sessionState.task_run_map?.[notifiedBy]?.deferred?.parent_run_id : void 0;
+  const sessionMetadata = await settledFromTurn(config.customMetadata, notifiedFrom);
+  const continuedRunId = input.stop_hook_active && !sessionState.current_turn_run_id && sessionState.current_dotted_order ? parseDottedOrder(sessionState.current_dotted_order).runId : void 0;
+  const turns = groupIntoTurns(messages);
+  const currentTracing = resolveTurnTracingMode(config, input.session_id, continuedRunId ? sessionState.closed_turn_tracing : sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
+  if (turns.length > 0 && finalMessage) {
+    const lastTurn = turns[turns.length - 1];
+    const lastLlm = lastTurn.llmCalls[lastTurn.llmCalls.length - 1];
+    if (lastLlm && lastLlm.toolCalls.length > 0) {
+      debug("Final LLM response missing from transcript, synthesizing from last_assistant_message");
+      const syntheticStart = sessionState.last_tool_end_time ? new Date(sessionState.last_tool_end_time).toISOString() : lastLlm.toolCalls[lastLlm.toolCalls.length - 1].result?.timestamp ?? lastLlm.endTime;
+      const syntheticEnd = new Date(startTime).toISOString();
+      lastTurn.llmCalls.push({
+        content: [{ type: "text", text: finalMessage }],
+        model: lastLlm.model,
+        // A request setting, so it carries over like the model. service_tier is a
+        // response value with no reading for this call, so it stays absent.
+        effort: lastLlm.effort,
+        usage: { input_tokens: 0, output_tokens: 0 },
+        startTime: syntheticStart,
+        endTime: syntheticEnd,
+        toolCalls: [],
+        synthetic: true
+      });
+    }
+  }
+  let tracedTurns = 0;
+  let allTaskRunMaps = {};
+  const currentRunId = sessionState.current_turn_run_id;
+  const currentTraceId = sessionState.current_trace_id;
+  const currentDottedOrder = sessionState.current_dotted_order;
+  const currentParentRunId = sessionState.current_parent_run_id;
+  for (let i = 0; i < turns.length; i++) {
+    const turn = turns[i];
+    const isLastTurn = i === turns.length - 1;
+    const turnNum = isLastTurn && continuedRunId ? sessionState.current_turn_number ?? sessionState.turn_count : sessionState.turn_count + tracedTurns + 1;
+    const parentRunId = isLastTurn ? currentRunId ?? continuedRunId : void 0;
+    const traceId = isLastTurn ? currentTraceId : void 0;
+    const dottedOrder = isLastTurn ? currentDottedOrder : void 0;
+    const existingTaskRunMap = isLastTurn ? sessionState.task_run_map : void 0;
+    const tracedToolUseIds = isLastTurn ? new Set(sessionState.traced_tool_use_ids ?? []) : void 0;
+    try {
+      const taskRunMap = await traceTurn({
+        // Earlier transcript turns have no original snapshot; never backfill them as full.
+        tracing: isLastTurn ? currentTracing : "metadata",
+        toolTracingModes: sessionState.tool_tracing_modes ?? {},
+        turn,
+        sessionId: input.session_id,
+        turnNum,
+        customMetadata: sessionMetadata,
+        hookCwd: input.cwd,
+        runtimeVersion,
+        approvalPolicy,
+        parentRunId,
+        existingTaskRunMap,
+        tracedToolUseIds,
+        traceId,
+        parentDottedOrder: dottedOrder,
+        captureHookOutputs: config.captureHookOutputs
+      });
+      allTaskRunMaps = { ...allTaskRunMaps, ...taskRunMap };
+      tracedTurns++;
+    } catch (err) {
+      error(`Failed to trace turn ${turnNum}: ${err}`);
+    }
+  }
+  const own = config.captureHookOutputs ? turnHooks(sessionState, { messages, promptId }) : void 0;
+  const earlier2 = continuedRunId ? live.closed_turn_hooks ?? [] : [];
+  const hooks = earlier2.length > 0 ? [...earlier2, ...own ?? []] : own;
+  const freshState = loadState(config.stateFilePath);
+  const freshSession = getSessionState(freshState, input.session_id);
+  const mergedTaskRunMap = withTaskRunHooks({ ...freshSession.task_run_map, ...allTaskRunMaps }, turns);
+  const lastTurnId = turns[turns.length - 1]?.promptId;
+  const closingTurn = turns[turns.length - 1];
+  const closingTurnTools = closingTurn ? turnToolInputs(closingTurn) : [];
+  const turnMetadata = turnScopedMetadata(sessionMetadata, closingTurnTools, input.cwd);
+  const pendingSubagents = sessionState.pending_subagent_traces || [];
+  const processedAgentIds = /* @__PURE__ */ new Set();
+  if (pendingSubagents.length > 0) {
+    debug(`Processing ${pendingSubagents.length} pending subagent trace(s)`);
+    await tracePendingSubagents({
+      tracing: currentTracing,
+      sessionId: input.session_id,
+      pendingSubagents,
+      taskRunMap: mergedTaskRunMap,
+      parentTraceId: sessionState.current_trace_id,
+      customMetadata: sessionMetadata,
+      runtimeVersion,
+      turnId: lastTurnId,
+      turnNumber: sessionState.current_turn_number,
+      captureHookOutputs: config.captureHookOutputs
+    });
+    for (const sa of pendingSubagents)
+      processedAgentIds.add(sa.agent_id);
+  }
+  const savedPosition = tracedTurns > 0 ? { last_line: lastLine, ...anchor } : sessionState;
+  let completeNow = false;
+  let continuedDeferred = false;
+  let notificationToFinalize;
+  let notificationInterrupted = false;
+  const notifiedWithinTurn = /* @__PURE__ */ new Set();
+  const knownAgentIds = Object.keys(sessionState.task_run_map ?? {});
+  if (knownAgentIds.length > 0) {
+    for (const t of turns) {
+      const uc = typeof t.userContent === "string" ? t.userContent : "";
+      for (const id of knownAgentIds) {
+        if (uc.includes(id))
+          notifiedWithinTurn.add(id);
+      }
+    }
+  }
+  let doneAgentsToFinalize = [];
+  await atomicUpdateState(config.stateFilePath, (latestState) => {
+    const latestSession = getSessionState(latestState, input.session_id);
+    const updatedState = updateSessionState(
+      latestState,
+      input.session_id,
+      furtherRead(latestSession, savedPosition),
+      Math.max(latestSession.turn_count, sessionState.turn_count + tracedTurns - (continuedRunId ? 1 : 0)),
+      // Merge any late PostToolUse writes with our traced entries. allTaskRunMaps
+      // wins on conflicts since it has the fully resolved data from traceTurn.
+      withTaskRunHooks({ ...latestSession.task_run_map, ...allTaskRunMaps }, turns)
+    );
+    const s = updatedState[input.session_id];
+    s.closed_turn_hooks = currentTracing === "full" ? hooks : void 0;
+    if (tracedTurns > 0) {
+      Object.assign(s, advanceToolTracingProgress(latestSession, completedToolUseIds(turns), "transcript"));
+    }
+    const notifAgentId = sessionState.current_notification_agent_id;
+    const notifInterrupted = sessionState.current_notification_interrupted ?? false;
+    s.task_run_map = withoutTracedAgentPayloads(s.task_run_map, processedAgentIds);
+    s.pending_subagent_traces = (latestSession.pending_subagent_traces ?? []).filter((sa) => !processedAgentIds.has(sa.agent_id));
+    const openTurns = { ...latestSession.open_turns };
+    const entry = currentRunId ? openTurns[currentRunId] : void 0;
+    if (currentRunId && entry) {
+      const remaining = entry.agent_ids.filter((id) => !processedAgentIds.has(id));
+      doneAgentsToFinalize = remaining.filter((id) => latestSession.task_run_map?.[id]?.subagent_done && notifiedWithinTurn.has(id));
+      if (remaining.length > 0) {
+        openTurns[currentRunId] = {
+          ...entry,
+          agent_ids: remaining,
+          stop_seen: true,
+          tracing: entry.tracing ?? currentTracing,
+          last_assistant_message: (entry.tracing ?? currentTracing) === "metadata" ? MUTED_TRACE_CONTENT : finalMessage,
+          turn_id: lastTurnId,
+          // If this turn is itself a task-notification turn that spawned its own
+          // background subagent, remember the agent to finalize once it drains.
+          notification_for_agent_id: notifAgentId ?? entry.notification_for_agent_id,
+          ...hooks && (entry.tracing ?? currentTracing) === "full" ? { hooks } : {}
+        };
+        debug(`${remaining.length} background subagent(s) in flight, deferring turn completion`);
+      } else {
+        completeNow = true;
+        notificationToFinalize = notifAgentId;
+        notificationInterrupted = notifInterrupted;
+        delete openTurns[currentRunId];
+      }
+    } else if (continuedRunId && openTurns[continuedRunId]) {
+      const waiting = openTurns[continuedRunId];
+      openTurns[continuedRunId] = {
+        ...waiting,
+        last_assistant_message: (waiting.tracing ?? currentTracing) === "metadata" ? MUTED_TRACE_CONTENT : finalMessage
+      };
+      continuedDeferred = true;
+    } else {
+      completeNow = Boolean(currentRunId);
+      if (completeNow) {
+        notificationToFinalize = notifAgentId;
+        notificationInterrupted = notifInterrupted;
+      }
+    }
+    s.open_turns = openTurns;
+    return pruneOldSessions(updatedState);
+  });
+  await flushHeldToolRuns(config, input.session_id, currentRunId, messages);
+  pruneHeldRuns(config.stateFilePath);
+  const turnRunId = completeNow ? currentRunId : continuedDeferred ? void 0 : continuedRunId;
+  if (turnRunId) {
+    debug(`Completing Turn run ${turnRunId}`);
+    try {
+      await completeTurnRun({
+        tracing: currentTracing,
+        sessionId: input.session_id,
+        runId: turnRunId,
+        eventKey: completeNow ? turnRunId : `${turnRunId}:${randomUUID11()}`,
+        traceId: currentTraceId,
+        dottedOrder: currentDottedOrder,
+        parentRunId: currentParentRunId,
+        startTime: sessionState.current_turn_start,
+        lastAssistantMessage: finalMessage,
+        customMetadata: turnMetadata,
+        turnId: lastTurnId,
+        turnNumber: sessionState.current_turn_number,
+        runtimeVersion,
+        approvalPolicy,
+        hooks
+      });
+      debug(`Turn run ${turnRunId} completed`);
+    } catch (err) {
+      error(`Failed to complete turn run: ${err}`);
+    }
+  }
+  for (const doneAgentId of doneAgentsToFinalize) {
+    debug(`Finalizing subagent ${doneAgentId} that finished within its launching turn`);
+    await finalizeNotificationChain({
+      defaultMuted: config.defaultMuted,
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      customMetadata: config.customMetadata,
+      runtimeVersion,
+      agentId: doneAgentId
+    });
+  }
+  if (notificationToFinalize && notificationInterrupted) {
+    await finalizeNotificationChain({
+      defaultMuted: config.defaultMuted,
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      customMetadata: config.customMetadata,
+      runtimeVersion,
+      agentId: notificationToFinalize,
+      interrupted: true
+    });
+  } else if (notificationToFinalize) {
+    let finalizeNow = false;
+    await atomicUpdateState(config.stateFilePath, (s) => {
+      const ss = getSessionState(s, input.session_id);
+      if (ss.task_run_map?.[notificationToFinalize]?.subagent_done) {
+        finalizeNow = true;
+        return s;
+      }
+      return {
+        ...s,
+        [input.session_id]: {
+          ...ss,
+          notification_done_agents: [
+            ...(ss.notification_done_agents ?? []).filter((id) => id !== notificationToFinalize),
+            notificationToFinalize
+          ]
+        }
+      };
+    });
+    if (finalizeNow) {
+      await finalizeNotificationChain({
+        defaultMuted: config.defaultMuted,
+        stateFilePath: config.stateFilePath,
+        sessionId: input.session_id,
+        customMetadata: config.customMetadata,
+        runtimeVersion,
+        agentId: notificationToFinalize
+      });
+    }
+  }
+  const duration = ((Date.now() - startTime) / 1e3).toFixed(1);
+  log(`Processed ${tracedTurns} turns in ${duration}s`);
+  if (Date.now() - startTime > 18e4) {
+    warn(`Hook took ${duration}s (>3min), consider optimizing`);
+  }
+}
+
+// dist/src/hooks/stop-failure.js
+async function closeFailedTurn(_id, closing, config) {
+  const input = closing.input;
+  const sessionState = closing.session;
+  initTracing(config, input.cwd, input.session_id);
+  const errorMessage = input.error_details ? `${input.error}: ${input.error_details}` : input.error;
+  const read = config.captureHookOutputs ? readTranscript2(expandHome(input.transcript_path), sessionState.last_line, void 0, turnPrompt(sessionState), sessionState) : { messages: [] };
+  await flushHeldToolRuns(config, input.session_id, sessionState.current_turn_run_id, read.messages);
+  try {
+    await captureRun(await withTurnHooks(turnHooks(sessionState, read), {
+      name: USER_PROMPT_TURN_NAME,
+      run_type: "chain",
+      id: sessionState.current_turn_run_id,
+      trace_id: sessionState.current_trace_id,
+      dotted_order: sessionState.current_dotted_order,
+      parent_run_id: sessionState.current_parent_run_id,
+      start_time: sessionState.current_turn_start,
+      end_time: new Date(closing.at).toISOString(),
+      error: errorMessage,
+      metadata: codingAgentMetadata({
+        sessionId: input.session_id,
+        base: config.customMetadata,
+        turnNumber: sessionState.current_turn_number,
+        runtimeVersion: sessionState.runtime_version,
+        approvalPolicy: sessionState.approval_policy,
+        agentType: "root"
+      })
+    }), resolveTurnTracingMode(config, input.session_id, sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0), sessionState.current_turn_run_id, "patch");
+    debug(`Closed turn run ${sessionState.current_turn_run_id} with error: ${errorMessage}`);
+  } catch (err) {
+    error(`Failed to close turn run on StopFailure: ${err}`);
+  }
+}
+
+// dist/src/hooks/session-end.js
+async function closeEndedSession(_id, closing, config) {
+  const input = closing.input;
+  const ended = closing.session;
+  const live = getSessionState(loadState(config.stateFilePath), input.session_id);
+  const resumed = live.current_turn_run_id !== ended.current_turn_run_id;
+  const sessionState = {
+    ...live,
+    current_turn_run_id: resumed ? void 0 : live.current_turn_run_id,
+    open_turns: onlyKnown(live.open_turns, ended.open_turns),
+    task_run_map: onlyKnown(live.task_run_map, ended.task_run_map)
+  };
+  const openTurns = sessionState.open_turns ?? {};
+  const openAgentRuns = Object.entries(sessionState.task_run_map ?? {}).filter(([, e]) => e.subagent_done);
+  initTracing(config, input.cwd, input.session_id);
+  const expandedTranscript = expandHome(input.transcript_path);
+  const runtimeVersion = sessionState.runtime_version ?? (expandedTranscript ? readRuntimeVersion(expandedTranscript) : void 0);
+  let position = sessionState;
+  let turnsTraced = 0;
+  if (sessionState.current_turn_run_id) {
+    debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
+    try {
+      const res = await closeInterruptedTurn({
+        defaultMuted: config.defaultMuted,
+        sessionId: input.session_id,
+        sessionState,
+        transcriptPath: expandedTranscript,
+        stateFilePath: config.stateFilePath,
+        customMetadata: config.customMetadata,
+        runtimeVersion,
+        approvalPolicy: sessionState.approval_policy,
+        cutAt: closing.cut_at,
+        captureHookOutputs: config.captureHookOutputs
+      });
+      position = res.position;
+      turnsTraced = res.turnsTraced;
+    } catch (err) {
+      error(`Failed to close interrupted turn on session end: ${err}`);
+    }
+  }
+  for (const [agentId, taskRunInfo] of openAgentRuns) {
+    const launchingTurnId = taskRunInfo.deferred?.parent_run_id;
+    const launchingTurn = launchingTurnId ? openTurns[launchingTurnId] : void 0;
+    try {
+      await closeAgentToolRun({
+        tracing: resolveTurnTracingMode(config, input.session_id, taskRunInfo.tracing, launchingTurn?.tracing, launchingTurnId === sessionState.current_turn_run_id ? sessionState.current_turn_tracing : void 0),
+        sessionId: input.session_id,
+        agentId,
+        agentType: taskRunInfo.agent_type ?? "",
+        taskRunInfo,
+        customMetadata: config.customMetadata,
+        runtimeVersion,
+        wasOpen: true
+        // subagent_done ⇒ SubagentStop posted it open
+      });
+      debug(`Closed open Agent tool run ${agentId} on session end`);
+    } catch (err) {
+      error(`Failed to close Agent tool run ${agentId} on session end: ${err}`);
+    }
+  }
+  for (const [turnRunId, entry] of Object.entries(openTurns)) {
+    if (turnRunId === sessionState.current_turn_run_id)
+      continue;
+    try {
+      if (entry.stop_seen) {
+        await completeTurnRun({
+          ...turnIdentityFromOpenTurn(entry, {
+            sessionId: input.session_id,
+            customMetadata: config.customMetadata
+          }),
+          tracing: resolveTurnTracingMode(config, input.session_id, entry.tracing),
+          lastAssistantMessage: entry.last_assistant_message
+        });
+        debug(`Completed deferred turn ${turnRunId} on session end`);
+      } else {
+        await closeInterruptedTurn({
+          defaultMuted: config.defaultMuted,
+          sessionId: input.session_id,
+          sessionState,
+          transcriptPath: expandedTranscript,
+          stateFilePath: config.stateFilePath,
+          customMetadata: config.customMetadata,
+          runtimeVersion,
+          turn: entry,
+          error: "Session ended before turn completed",
+          captureHookOutputs: config.captureHookOutputs
+        });
+        debug(`Closed interrupted deferred turn ${turnRunId} on session end`);
+      }
+    } catch (err) {
+      error(`Failed to close deferred turn ${turnRunId} on session end: ${err}`);
+    }
+  }
+  await atomicUpdateState(config.stateFilePath, (s) => {
+    const ss = getSessionState(s, input.session_id);
+    const counted = {
+      ...furtherRead(ss, position),
+      turn_count: ss.turn_count + turnsTraced
+    };
+    if (resumed) {
+      return {
+        ...s,
+        [input.session_id]: {
+          ...ss,
+          ...counted,
+          task_run_map: withoutKeys(ss.task_run_map, sessionState.task_run_map),
+          open_turns: withoutKeys(ss.open_turns, sessionState.open_turns)
+        }
+      };
+    }
+    return {
+      ...s,
+      [input.session_id]: {
+        ...ss,
+        ...counted,
+        ...dropHeld(config.stateFilePath, input.session_id, ss),
+        current_turn_tracing: void 0,
+        current_turn_run_id: void 0,
+        current_trace_id: void 0,
+        current_dotted_order: void 0,
+        current_parent_run_id: void 0,
+        task_run_map: {},
+        traced_tool_use_ids: [],
+        tool_start_times: {},
+        tool_tracing_modes: {},
+        tool_tracing_progress: {},
+        pending_subagent_traces: [],
+        open_turns: {},
+        current_notification_agent_id: void 0,
+        current_notification_interrupted: void 0,
+        notification_done_agents: []
+      }
+    };
+  });
+  debug(`Session end cleanup complete (reason=${input.reason})`);
+}
+function onlyKnown(entries, known) {
+  return Object.fromEntries(Object.entries(entries ?? {}).filter(([key]) => key in (known ?? {})));
+}
+function withoutKeys(entries, removed) {
+  return Object.fromEntries(Object.entries(entries ?? {}).filter(([key]) => !(key in removed)));
+}
+
+// dist/src/workflows.js
+function workflowRunIdFromPath(path3) {
+  return /\/workflows\/(wf_[A-Za-z0-9_-]+)\//.exec(path3)?.[1];
+}
+function findWorkflowEntry(taskRunMap, runId) {
+  for (const [taskId, entry] of Object.entries(taskRunMap ?? {})) {
+    if (entry.workflow_run_id === runId)
+      return [taskId, entry];
+  }
+  return void 0;
+}
+async function handleWorkflowSubagentStop(opts) {
+  const runId = workflowRunIdFromPath(opts.agentTranscriptPath);
+  if (!runId) {
+    error(`workflow-subagent ${opts.agentId}: no workflow run_id in ${opts.agentTranscriptPath}`);
+    return;
+  }
+  const ss = getSessionState(loadState(opts.stateFilePath), opts.sessionId);
+  const found = findWorkflowEntry(ss.task_run_map, runId);
+  if (!found) {
+    debug(`No Workflow run recorded for ${runId}; skipping stage ${opts.agentId}`);
+    return;
+  }
+  const [, entry] = found;
+  const deferred = entry.deferred;
+  const launchingTurnId = deferred?.parent_run_id;
+  const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : void 0;
+  const parentTraceId = deferred?.trace_id ?? ss.current_trace_id;
+  try {
+    await traceWorkflowStage({
+      tracing: resolveTurnTracingMode(opts, opts.sessionId, entry.tracing, launchingTurn?.tracing, launchingTurnId === ss.current_turn_run_id ? ss.current_turn_tracing : void 0),
+      sessionId: opts.sessionId,
+      customMetadata: opts.customMetadata,
+      workflowRun: { run_id: entry.run_id, dotted_order: entry.dotted_order },
+      parentTraceId,
+      stageAgentId: opts.agentId,
+      stageType: opts.agentType,
+      transcriptPath: opts.agentTranscriptPath,
+      runtimeVersion: launchingTurn?.runtime_version ?? ss.runtime_version,
+      turnId: launchingTurn?.turn_id,
+      turnNumber: launchingTurn?.turn_number ?? ss.current_turn_number,
+      captureHookOutputs: opts.captureHookOutputs
+    });
+    debug(`Traced workflow stage ${opts.agentId} under Workflow run ${entry.run_id}`);
+  } catch (err) {
+    error(`Failed to trace workflow stage ${opts.agentId}: ${err}`);
+  }
+}
+
+// dist/src/hooks/subagent-stop.js
+async function traceStoppedSubagent(_id, closing, config) {
+  const input = closing.input;
+  const agentTranscriptPath = expandHome(input.agent_transcript_path);
+  initTracing(config, input.cwd, input.session_id);
+  if (input.agent_type === WORKFLOW_SUBAGENT_TYPE) {
+    await handleWorkflowSubagentStop({
+      defaultMuted: config.defaultMuted,
+      sessionId: input.session_id,
+      agentId: input.agent_id,
+      agentType: input.agent_type,
+      agentTranscriptPath,
+      stateFilePath: config.stateFilePath,
+      customMetadata: config.customMetadata,
+      captureHookOutputs: config.captureHookOutputs
+    });
+    return;
+  }
+  const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
+  const taskRunMap = sessionState.task_run_map ?? {};
+  const taskRunInfo = taskRunMap[input.agent_id];
+  if (!taskRunInfo)
+    return;
+  const deferred = taskRunInfo.deferred;
+  const turnRunId = deferred?.parent_run_id ?? sessionState.current_turn_run_id;
+  const turnTraceId = deferred?.trace_id ?? sessionState.current_trace_id;
+  const launchingTurn = turnRunId ? sessionState.open_turns?.[turnRunId] : void 0;
+  if (!turnTraceId) {
+    debug(`No trace context for subagent ${input.agent_id}, cannot trace`);
+    return;
+  }
+  try {
+    await tracePendingSubagents({
+      tracing: resolveTurnTracingMode(config, input.session_id, taskRunInfo.tracing, launchingTurn?.tracing, turnRunId === sessionState.current_turn_run_id ? sessionState.current_turn_tracing : void 0),
+      sessionId: input.session_id,
+      pendingSubagents: [
+        {
+          agent_id: input.agent_id,
+          agent_type: input.agent_type,
+          agent_transcript_path: agentTranscriptPath,
+          session_id: input.session_id
+        }
+      ],
+      taskRunMap,
+      parentTraceId: turnTraceId,
+      customMetadata: config.customMetadata,
+      runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
+      turnId: launchingTurn?.turn_id,
+      turnNumber: launchingTurn?.turn_number ?? sessionState.current_turn_number,
+      // Leave the Agent tool run open — the task-notification turn nests under it.
+      keepAgentToolRunOpen: true,
+      captureHookOutputs: config.captureHookOutputs
+    });
+    debug(`Traced background subagent ${input.agent_type} (${input.agent_id})`);
+  } catch (err) {
+    error(`Failed to trace background subagent: ${err}`);
+  }
+  let finalizeNow = false;
+  await atomicUpdateState(config.stateFilePath, (s) => {
+    const ss = getSessionState(s, input.session_id);
+    const entry = ss.task_run_map?.[input.agent_id];
+    const notifDone = (ss.notification_done_agents ?? []).includes(input.agent_id);
+    if (notifDone)
+      finalizeNow = true;
+    return {
+      ...s,
+      [input.session_id]: {
+        ...ss,
+        task_run_map: entry ? {
+          ...ss.task_run_map,
+          [input.agent_id]: {
+            ...entry,
+            agent_type: input.agent_type || entry.agent_type,
+            subagent_done: true
+          }
+        } : ss.task_run_map,
+        notification_done_agents: notifDone ? (ss.notification_done_agents ?? []).filter((id) => id !== input.agent_id) : ss.notification_done_agents
+      }
+    };
+  });
+  if (finalizeNow) {
+    debug(`Notification already done for ${input.agent_id}; finalizing from SubagentStop`);
+    await finalizeNotificationChain({
+      defaultMuted: config.defaultMuted,
+      stateFilePath: config.stateFilePath,
+      sessionId: input.session_id,
+      customMetadata: config.customMetadata,
+      runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
+      agentId: input.agent_id
+    });
+  } else {
+    debug(`Subagent ${input.agent_id} traced; awaiting task-notification to finalize`);
+  }
+}
+
+// dist/src/utils/ids/run-id.js
+import { createHash as createHash9 } from "node:crypto";
+function stableRunId(time, ...identity) {
+  const stamp = new Date(time).getTime().toString(16).padStart(12, "0");
+  const hash = createHash9("sha256").update(JSON.stringify(identity)).digest("hex");
+  const variant = (8 + Number.parseInt(hash[3], 16) % 4).toString(16);
+  return `${stamp.slice(0, 8)}-${stamp.slice(8)}-7${hash.slice(0, 3)}-${variant}${hash.slice(4, 7)}-${hash.slice(7, 19)}`;
+}
+
+// dist/src/hooks/post-compact.js
+async function traceCompaction(_id, closing, config) {
+  const input = closing.input;
+  const sessionState = closing.session;
+  initTracing(config, input.cwd, input.session_id);
+  const endTime = new Date(closing.at).toISOString();
+  const startTime = sessionState.compaction_start_time ? new Date(sessionState.compaction_start_time).toISOString() : endTime;
+  const runId = stableRunId(startTime, input.session_id, input.trigger);
+  const segment = generateDottedOrderSegment(startTime, runId);
+  const turnDottedOrder = sessionState.current_dotted_order;
+  if (!turnDottedOrder || !sessionState.current_trace_id) {
+    debug(`Skipping compaction run ${runId}: no turn to nest it under`);
+    return;
+  }
+  const parentRunId = sessionState.current_turn_run_id ?? parseDottedOrder(turnDottedOrder).runId;
+  const traceId = sessionState.current_trace_id;
+  const dottedOrder = `${turnDottedOrder}.${segment}`;
+  try {
+    await captureRun({
+      id: runId,
+      name: `Context Compaction (${input.trigger})`,
+      run_type: "chain",
+      inputs: {},
+      outputs: { compact_summary: input.compact_summary },
+      start_time: startTime,
+      end_time: endTime,
+      trace_id: traceId,
+      dotted_order: dottedOrder,
+      parent_run_id: parentRunId,
+      metadata: codingAgentMetadata({
+        sessionId: input.session_id,
+        base: config.customMetadata,
+        turnNumber: sessionState.current_turn_number,
+        runtimeVersion: sessionState.runtime_version,
+        agentType: "compaction",
+        runSpecific: { trigger: input.trigger }
+      })
+    }, resolveTurnTracingMode(config, input.session_id, !sessionState.current_turn_run_id && sessionState.closed_turn_tracing === "metadata" ? "metadata" : void 0, sessionState.compaction_tracing, sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0));
+    debug(`Created compaction run ${runId} (${input.trigger})`);
+  } catch (err) {
+    error(`Failed to create compaction run: ${err}`);
+  }
+}
+
+// dist/src/engine-closings-constants.js
+var CLOSING_HANDLERS = {
+  stop: closeStoppedTurn,
+  "stop-failure": closeFailedTurn,
+  "session-end": closeEndedSession,
+  interrupted: closeInterruptedPrompt,
+  "subagent-stop": traceStoppedSubagent,
+  "post-compact": traceCompaction
+};
+
+// dist/src/engine-closings.js
+function reconstructJob(config) {
+  return (job) => job.eventId.startsWith(CLOSING_EVENT_PREFIX) ? runQueuedClosings(config, job.sessionId) : settleToolRuns(job);
+}
+async function runQueuedClosings(workerConfig, sessionId) {
+  for (; ; ) {
+    const queued = getSessionState(loadState(workerConfig.stateFilePath), sessionId).queued_closings;
+    const next = Object.entries(queued ?? {}).sort(([, a], [, b]) => a.at - b.at)[0];
+    if (!next)
+      return { status: "ready", outputs: [] };
+    const [id, closing] = next;
+    const config = initHook(closing.input.cwd);
+    if (config) {
+      config.customMetadata = sessionScopedMetadata(config.customMetadata, closing.input.cwd);
+    }
+    try {
+      if (config)
+        await CLOSING_HANDLERS[closing.kind](id, closing, config);
+    } catch (err) {
+      error(`Failed to finish the ${closing.kind} hook's work: ${err}`);
+    }
+    await atomicUpdateState(workerConfig.stateFilePath, (state) => {
+      const session = getSessionState(state, sessionId);
+      const { [id]: _done, ...rest } = session.queued_closings ?? {};
+      return { ...state, [sessionId]: { ...session, queued_closings: rest } };
+    });
+  }
+}
+
+// dist/src/legacy-import.js
+import { createHmac } from "node:crypto";
+import { basename as basename6, dirname as dirname23, join as join33 } from "node:path";
+function legacyRuns(config) {
+  const origin = legacyOrigin(config);
+  const root = dirname23(config.stateFilePath);
+  const scan = { runs: [], settled: [], unreadable: [] };
+  const { runs } = scan;
+  for (const [sessionId, file] of legacyFiles(join33(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
+    const entry = readJson(readText(file));
+    if (!entry?.run)
+      scan.unreadable.push(file);
+    if (!entry?.run || entry.origin !== origin)
+      continue;
+    const { extra, ...run } = entry.run;
+    const metadata = withBothGitMetadataNames(extra?.metadata ?? {});
+    const base = entry.where && entry.tracing === "full" ? settledRepositoryMetadata(metadata, entry.where) : metadata;
+    runs.push({
+      sessionId,
+      file,
+      mode: entry.tracing,
+      operation: "post",
+      run: { ...run, metadata: legacyOptions(base ?? {}, sessionId, "tool") }
+    });
+  }
+  for (const [sessionId, file] of legacyFiles(join33(root, TURN_RECORD_DIR_NAME), LEGACY_TURN_FILE)) {
+    const record = readTurnRecord(file);
+    if (!record.root || !record.closed || record.origin !== origin)
+      continue;
+    const filled = turnAttribution(record) ?? {};
+    const open4 = record.children.filter((run) => run.open && record.delivered.has(run.run_id));
+    const before = runs.length;
+    for (const run of [record.root, ...open4]) {
+      if (record.fixed.has(run.run_id) || !run.start_time)
+        continue;
+      runs.push({
+        sessionId,
+        file,
+        mode: run.tracing,
+        operation: "patch",
+        run: {
+          id: run.run_id,
+          name: run.name,
+          run_type: run.run_type,
+          start_time: run.start_time,
+          end_time: run.end_time ?? (/* @__PURE__ */ new Date()).toISOString(),
+          parent_run_id: run.parent_run_id,
+          trace_id: run.trace_id,
+          dotted_order: run.dotted_order,
+          metadata: legacyOptions(metadataAfterFill(run, filled) ?? run.metadata, sessionId, run === record.root ? "root" : run.run_type === "llm" ? "llm" : "tool")
+        }
+      });
+    }
+    if (runs.length === before)
+      scan.settled.push(file);
+  }
+  return scan;
+}
+function legacyOrigin(config) {
+  const identity = JSON.stringify([
+    config.apiBaseUrl,
+    config.replicas ?? null,
+    config.redact ?? false,
+    config.redactExtraRules ?? null
+  ]);
+  return createHmac("sha256", config.apiKey).update(identity).digest("hex").slice(0, QUEUE_ORIGIN_LENGTH);
+}
+function legacyOptions(metadata, sessionId, runType) {
+  const legacy = metadata;
+  return {
+    integration: LS_INTEGRATION,
+    threadId: legacy.thread_id ?? sessionId,
+    agentType: legacy.ls_agent_type ?? "root",
+    runType,
+    base: metadata,
+    turnId: legacy.turn_id,
+    turnNumber: legacy.turn_number,
+    runtimeVersion: legacy.ls_agent_runtime_version,
+    integrationVersion: legacy.ls_integration_version,
+    subagentId: legacy.ls_subagent_id,
+    subagentType: legacy.ls_subagent_type,
+    skillName: legacy.ls_skill_name,
+    modelName: legacy.ls_model_name,
+    usageMetadata: legacy.usage_metadata
+  };
+}
+function legacyFiles(root, pattern) {
+  if (!entryInfo(root)?.isDirectory())
+    return [];
+  return listDirectory(root).filter((sessionId) => entryInfo(join33(root, sessionId))?.isDirectory()).flatMap((sessionId) => listDirectory(join33(root, sessionId)).map((name) => [sessionId, join33(root, sessionId, name)]).filter(([, file]) => pattern.test(basename6(file)) && entryInfo(file)?.isFile()));
+}
+function readTurnRecord(path3) {
+  const record = {
+    path: path3,
+    origin: "",
+    children: [],
+    closed: false,
+    delivered: /* @__PURE__ */ new Set(),
+    fixed: /* @__PURE__ */ new Set()
+  };
+  const children = /* @__PURE__ */ new Map();
+  for (const line of readText(path3).split("\n")) {
+    const parsed = readJson(line);
+    if (parsed?.k === TURN_RECORD_LINE.run && typeof parsed.run?.run_id === "string") {
+      if (parsed.root)
+        record.root = parsed.run;
+      else
+        children.set(parsed.run.run_id, parsed.run);
+      if (parsed.origin)
+        record.origin = parsed.origin;
+    } else if (parsed?.k === TURN_RECORD_LINE.closed) {
+      record.closed = true;
+    } else if (parsed?.k === TURN_RECORD_LINE.delivered) {
+      record.delivered.add(parsed.id);
+    } else if (parsed?.k === TURN_RECORD_LINE.reconciled) {
+      record.fixed.add(parsed.id);
+    }
+  }
+  record.children = [...children.values()];
+  return record;
+}
+
+// dist/src/legacy-sweep.js
+import { join as join34, dirname as dirname24 } from "node:path";
+function idleMs(info, now) {
+  return info ? now - info.mtimeMs : 0;
+}
+function removeIfOld(path3, now) {
+  const info = entryInfo(path3);
+  return info?.isFile() === true && idleMs(info, now) >= LEGACY_MAX_AGE_MS && removeFile3(path3);
+}
+function mayAgeOut(name, path3, removable) {
+  if (LEGACY_QUEUE_TEMP_FILE.test(name))
+    return true;
+  return (LEGACY_QUEUE_FILE.test(name) || LEGACY_TURN_FILE.test(name)) && removable.has(path3);
+}
+function sweepSession(path3, removable, now) {
+  const aged = listDirectory(path3).filter((name) => {
+    const entry = join34(path3, name);
+    return mayAgeOut(name, entry, removable) && removeIfOld(entry, now);
+  }).length;
+  if (aged > 0 || idleMs(entryInfo(path3), now) >= LEGACY_EMPTY_FOLDER_IDLE_MS) {
+    removeEmptyFolder(path3);
+  }
+  return aged;
+}
+function sweepFolder(path3, removable, now) {
+  if (!entryInfo(path3)?.isDirectory())
+    return 0;
+  let aged = 0;
+  for (const name of listDirectory(path3)) {
+    const entry = join34(path3, name);
+    if (entryInfo(entry)?.isDirectory())
+      aged += sweepSession(entry, removable, now);
+    else if (LEGACY_FLUSH_LOCK_FILE.test(name))
+      removeIfOld(entry, now);
+  }
+  removeEmptyFolder(path3);
+  return aged;
+}
+function sweepLegacyLeftovers(stateFilePath, removable, now = Date.now()) {
+  const root = dirname24(stateFilePath);
+  return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join34(root, folder), removable, now), 0);
+}
+
+// dist/src/engine-legacy.js
+async function importLegacyRuns(config, cwd) {
+  const sessions = /* @__PURE__ */ new Map();
+  const failed = /* @__PURE__ */ new Set();
+  const { runs, settled, unreadable } = legacyRuns(config);
+  for (const { sessionId, file, mode, operation, run } of runs) {
+    try {
+      const context = sessions.get(sessionId) ?? openSession(config, cwd, sessionId);
+      sessions.set(sessionId, context);
+      await captureInto(context, run, mode, run.id, operation);
+    } catch (err) {
+      failed.add(file);
+      warn(`Could not move ${file} to the new uploader: ${err}`);
+    }
+  }
+  for (const file of /* @__PURE__ */ new Set([...settled, ...runs.map((legacy) => legacy.file)])) {
+    if (!failed.has(file))
+      removeFile3(file);
+  }
+  const aged = sweepLegacyLeftovers(config.stateFilePath, new Set(unreadable));
+  if (aged > 0) {
+    warn(`Removed ${aged} ${LEGACY_SWEEP_WARNING}`);
+  }
+}
+
+// dist/src/engine-worker.js
+async function runEngineWorker(cwd, sessionId) {
+  const config = initHook(cwd);
+  if (!config || !sessionId)
+    return;
+  const result = await openSession(config, cwd, sessionId, reconstructJob(config)).session.drain();
+  if (WORKER_STOP_STATUSES.includes(result)) {
+    warn(`The uploader for ${sessionId} stopped with ${result}`);
+  }
+  await importLegacyRuns(config, cwd);
+}
+
 // dist/src/tracing-engine.js
 var active;
 function started() {
@@ -26322,10 +28677,6 @@ async function captureRun(run, mode = "full", rootRunId = run.id, operation = "p
 async function captureToolRun2(run, mode, rootRunId, origin) {
   await captureToolRun(started(), run, mode, rootRunId, origin);
 }
-async function queueJob(input) {
-  const { session } = started();
-  await saveOrWarn(input.eventId, () => session.queueReconstruction(input), (err) => session.readSavedReconstructionWake(err, input));
-}
 async function settledFromTurn(base, turnRunId) {
   const turn = active && turnRunId ? await readEngineTurn(active, turnRunId) : void 0;
   return turn?.landed ? settledTurnMetadata(base, turn.record) ?? base : base;
@@ -26340,23 +28691,14 @@ async function turnFiller(turnRunId) {
   };
 }
 
-// dist/src/utils/ids/run-id.js
-import { createHash as createHash9 } from "node:crypto";
-function stableRunId(time, ...identity) {
-  const stamp = new Date(time).getTime().toString(16).padStart(12, "0");
-  const hash = createHash9("sha256").update(JSON.stringify(identity)).digest("hex");
-  const variant = (8 + Number.parseInt(hash[3], 16) % 4).toString(16);
-  return `${stamp.slice(0, 8)}-${stamp.slice(8)}-7${hash.slice(0, 3)}-${variant}${hash.slice(4, 7)}-${hash.slice(7, 19)}`;
-}
-
 // dist/src/langsmith.js
 var hooksFiring = (hooks, direction) => (hooks ?? []).filter((hook) => hookPlacement(hook.name).direction === direction);
 function withHooks(content, hooks, direction) {
   return { ...content, ...hookOutputs(hooksFiring(hooks, direction)) };
 }
 function generateDottedOrderSegment(time, runId) {
-  const iso = typeof time === "string" ? time : new Date(time).toISOString();
-  const isoWithMicroseconds = `${iso.slice(0, -1)}000Z`;
+  const iso2 = typeof time === "string" ? time : new Date(time).toISOString();
+  const isoWithMicroseconds = `${iso2.slice(0, -1)}000Z`;
   const stripped = isoWithMicroseconds.replace(/[-:.]/g, "");
   return stripped + runId;
 }
@@ -26721,7 +29063,7 @@ async function closeInterruptedTurn(options) {
   const turnNumber = sessionState.current_turn_number;
   if (transcriptPath) {
     try {
-      const { messages, lastLine, anchor, promptId } = readTranscript(transcriptPath, sessionState.last_line, options.cutAt, { ...turnPrompt(sessionState), nextPromptHash: options.nextPromptHash }, sessionState);
+      const { messages, lastLine, anchor, promptId } = readTranscript2(transcriptPath, sessionState.last_line, options.cutAt, { ...turnPrompt(sessionState), nextPromptHash: options.nextPromptHash }, sessionState);
       read = { messages, promptId };
       if (messages.length > 0) {
         const turns = groupIntoTurns(messages);
@@ -26812,7 +29154,7 @@ async function tracePendingSubagents(options) {
       const rootRunId = deferred?.parent_run_id ?? parentTraceId;
       const filledForTheTurn = await turnFiller(rootRunId);
       debug(`Processing subagent ${toolName} (${subagent.agent_id}) under run ${parentToolRunId}`);
-      const { messages: subagentMessages } = readTranscript(subagent.agent_transcript_path, -1);
+      const { messages: subagentMessages } = readTranscript2(subagent.agent_transcript_path, -1);
       const subagentTurns = subagentMessages.length > 0 ? groupIntoTurns(subagentMessages) : [];
       if (subagentTurns.length === 0) {
         debug(`Empty/unreadable subagent transcript: ${subagent.agent_transcript_path}`);
@@ -26937,7 +29279,7 @@ async function traceWorkflowStage(opts) {
     warn(`Cannot trace workflow stage ${opts.stageAgentId}: no parent trace ID`);
     return;
   }
-  const { messages } = readTranscript(opts.transcriptPath, -1);
+  const { messages } = readTranscript2(opts.transcriptPath, -1);
   const turns = messages.length > 0 ? groupIntoTurns(messages) : [];
   if (turns.length === 0) {
     debug(`Empty/unreadable workflow stage transcript: ${opts.transcriptPath}`);
@@ -26999,762 +29341,6 @@ async function closeAgentToolRun(options) {
       }
     })
   }, options.taskRunInfo.tracing ?? options.tracing, options.taskRunInfo.run_id, options.wasOpen ? "patch" : "post");
-}
-
-// dist/src/utils/replicas.js
-function hasOwnApiKey(replica) {
-  return !Array.isArray(replica) && sdkSetting(replica.apiKey) !== void 0;
-}
-function hasUsableDestination(config) {
-  return !config.credentialProblem || Boolean(config.replicas?.some(hasOwnApiKey));
-}
-
-// dist/src/utils/hook-init.js
-function initHook(cwd) {
-  const config = loadConfig({ cwd });
-  initLogger(config.debug);
-  if (!config.enabled) {
-    return null;
-  }
-  if (!hasUsableDestination(config)) {
-    error(config.credentialProblem);
-    return null;
-  }
-  return config;
-}
-function expandHome(path3) {
-  return path3?.replace(/^~/, process.env.HOME ?? "");
-}
-
-// dist/src/utils/stdin.js
-function readStdin() {
-  return new Promise((resolve17, reject) => {
-    let data = "";
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => data += chunk);
-    process.stdin.on("end", () => {
-      try {
-        resolve17(JSON.parse(data));
-      } catch (err) {
-        reject(new Error(`Failed to parse hook input: ${err}`));
-      }
-    });
-    process.stdin.on("error", reject);
-  });
-}
-
-// dist/src/background-runs.js
-function recordBackgroundRun(session, turn, backgroundId, entry) {
-  const existing = session.open_turns?.[turn.run_id];
-  return {
-    task_run_map: {
-      ...session.task_run_map,
-      [backgroundId]: entry
-    },
-    open_turns: {
-      ...session.open_turns,
-      [turn.run_id]: {
-        ...existing,
-        tracing: existing?.tracing ?? turn.tracing,
-        run_id: turn.run_id,
-        trace_id: turn.trace_id,
-        dotted_order: turn.dotted_order,
-        parent_run_id: turn.parent_run_id,
-        start_time: turn.start_time,
-        turn_number: turn.turn_number,
-        runtime_version: turn.runtime_version,
-        approval_policy: turn.approval_policy,
-        stop_seen: existing?.stop_seen ?? false,
-        agent_ids: [
-          ...(existing?.agent_ids ?? []).filter((id) => id !== backgroundId),
-          backgroundId
-        ]
-      }
-    }
-  };
-}
-function withoutTracedAgentPayloads(taskRunMap, tracedAgentIds) {
-  if (!taskRunMap)
-    return taskRunMap;
-  return Object.fromEntries(Object.entries(taskRunMap).map(([id, entry]) => {
-    if (!tracedAgentIds.has(id) || !entry.deferred)
-      return [id, entry];
-    const { inputs: _inputs, outputs: _outputs, ...kept } = entry.deferred;
-    return [id, { ...entry, deferred: kept }];
-  }));
-}
-
-// dist/src/finalize.js
-async function finalizeNotificationChain(opts) {
-  const { stateFilePath, sessionId, customMetadata, runtimeVersion } = opts;
-  let agentId = opts.agentId;
-  let interrupted = opts.interrupted ?? false;
-  while (agentId) {
-    const ss = getSessionState(loadState(stateFilePath), sessionId);
-    const taskRunInfo = ss.task_run_map?.[agentId];
-    if (!taskRunInfo) {
-      debug(`finalizeNotificationChain: no task run for ${agentId}, stopping`);
-      break;
-    }
-    const launchingTurnId = taskRunInfo.deferred?.parent_run_id;
-    const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : void 0;
-    const agentType = taskRunInfo.agent_type ?? "";
-    const settled = await settledFromTurn(customMetadata, launchingTurnId);
-    try {
-      await closeAgentToolRun({
-        tracing: resolveTurnTracingMode(opts, sessionId, taskRunInfo.tracing, launchingTurn?.tracing, launchingTurnId === ss.current_turn_run_id ? ss.current_turn_tracing : void 0),
-        sessionId,
-        agentId,
-        agentType,
-        taskRunInfo,
-        customMetadata: settled,
-        runtimeVersion,
-        turnNumber: launchingTurnId ? ss.open_turns?.[launchingTurnId]?.turn_number : void 0,
-        wasOpen: Boolean(taskRunInfo.subagent_done),
-        error: interrupted ? taskRunInfo.is_workflow ? "Workflow killed" : "Subagent killed" : void 0
-      });
-    } catch (err) {
-      error(`Failed to close Agent tool run for ${agentId}: ${err}`);
-    }
-    let toComplete;
-    let nextAgentId;
-    const drainedAgentId = agentId;
-    await atomicUpdateState(stateFilePath, (s) => {
-      const sess = getSessionState(s, sessionId);
-      const openTurns = { ...sess.open_turns };
-      const taskRunMap = { ...sess.task_run_map };
-      delete taskRunMap[drainedAgentId];
-      const entry = launchingTurnId ? openTurns[launchingTurnId] : void 0;
-      if (entry) {
-        const remaining = entry.agent_ids.filter((id) => id !== drainedAgentId);
-        if (remaining.length === 0 && entry.stop_seen) {
-          toComplete = entry;
-          nextAgentId = entry.notification_for_agent_id;
-          if (launchingTurnId)
-            delete openTurns[launchingTurnId];
-        } else {
-          openTurns[launchingTurnId] = { ...entry, agent_ids: remaining };
-        }
-      }
-      return {
-        ...s,
-        [sessionId]: {
-          ...sess,
-          open_turns: openTurns,
-          task_run_map: taskRunMap
-        }
-      };
-    });
-    if (toComplete) {
-      try {
-        await completeTurnRun({
-          ...turnIdentityFromOpenTurn(toComplete, { sessionId, customMetadata: settled }),
-          tracing: resolveTurnTracingMode(opts, sessionId, toComplete.tracing),
-          lastAssistantMessage: toComplete.last_assistant_message
-        });
-        debug(`Completed launching turn ${toComplete.run_id} after notification chain`);
-      } catch (err) {
-        error(`Failed to complete launching turn ${toComplete.run_id}: ${err}`);
-      }
-    }
-    agentId = nextAgentId;
-    interrupted = false;
-  }
-}
-
-// dist/src/closing-queue.js
-import { randomUUID as randomUUID10 } from "node:crypto";
-async function queueClosing(config, kind, input, options = {}) {
-  const id = randomUUID10();
-  const at = Date.now();
-  let queued = false;
-  await atomicUpdateState(config.stateFilePath, (state) => {
-    const session = getSessionState(state, input.session_id);
-    if (options.skip?.(session))
-      return state;
-    queued = true;
-    const { queued_closings: earlier, ...snapshot } = session;
-    const closing = {
-      kind,
-      at,
-      ...options.transcriptCut ? { cut_at: new Date(at).toISOString() } : {},
-      input,
-      session: snapshot
-    };
-    return {
-      ...state,
-      [input.session_id]: {
-        ...session,
-        ...options.reset?.(session),
-        updated: new Date(at).toISOString(),
-        queued_closings: { ...earlier, [id]: closing }
-      }
-    };
-  });
-  if (!queued)
-    return;
-  initTracing(config, input.cwd, input.session_id);
-  await queueJob({
-    turnId: id,
-    eventId: `${CLOSING_EVENT_PREFIX}${id}`,
-    sourceRefs: [id],
-    privacyMode: CLOSING_PRIVACY_MODE,
-    turnEvidence: { childRunIds: [], closureState: "open" }
-  });
-}
-function turnClosedReset(session) {
-  return {
-    current_turn_run_id: void 0,
-    current_turn_tracing: void 0,
-    closed_turn_tracing: session.current_turn_tracing ?? session.closed_turn_tracing,
-    current_notification_agent_id: void 0,
-    current_notification_interrupted: void 0,
-    traced_tool_use_ids: [],
-    tool_start_times: {},
-    turn_count: Math.max(session.turn_count, session.current_turn_number ?? 0)
-  };
-}
-
-// dist/src/hooks/stop.js
-import { setTimeout as delay5 } from "node:timers/promises";
-async function main() {
-  const input = await readStdin();
-  if (!isPayloadForHook(input, "Stop"))
-    return;
-  const config = initHook(input.cwd);
-  if (!config)
-    return;
-  debug(`Stop hook started, session=${input.session_id}`);
-  const transcriptPath = expandHome(input.transcript_path);
-  if (!input.session_id || !transcriptPath) {
-    warn(`Invalid input: session=${input.session_id}, transcript=${transcriptPath}`);
-    return;
-  }
-  await queueClosing(config, "stop", input, { reset: turnClosedReset, transcriptCut: true });
-}
-async function closeStoppedTurn(_id, closing, config) {
-  const input = closing.input;
-  const startTime = closing.at;
-  const transcriptPath = expandHome(input.transcript_path);
-  initTracing(config, input.cwd, input.session_id);
-  const live = getSessionState(loadState(config.stateFilePath), input.session_id);
-  const sessionState = {
-    ...closing.session,
-    ...furtherRead(closing.session, live),
-    task_run_map: { ...closing.session.task_run_map, ...live.task_run_map },
-    traced_tool_use_ids: [
-      .../* @__PURE__ */ new Set([
-        ...closing.session.traced_tool_use_ids ?? [],
-        ...live.traced_tool_use_ids ?? []
-      ])
-    ]
-  };
-  debug(`Last line: ${sessionState.last_line}, turn count: ${sessionState.turn_count}`);
-  const runtimeVersion = sessionState.runtime_version ?? readRuntimeVersion(transcriptPath);
-  const approvalPolicy = sessionState.approval_policy ?? input.permission_mode;
-  await delay5(Math.max(0, startTime + STOP_FLUSH_WAIT_MS - Date.now()));
-  const { messages, lastLine, laterPrompt, anchor, promptId } = readTranscript(transcriptPath, sessionState.last_line, closing.cut_at, {
-    ...turnPrompt(sessionState, closing.session.current_turn_run_id !== void 0 && live.read_turn_run_id === closing.session.current_turn_run_id),
-    nextPromptHash: live.current_turn_run_id !== void 0 && live.current_turn_run_id !== closing.session.current_turn_run_id ? live.current_turn_prompt_hash : void 0
-  }, sessionState);
-  const finalMessage = laterPrompt ? void 0 : input.last_assistant_message;
-  if (messages.length === 0 && !sessionState.current_turn_run_id) {
-    debug("No new messages");
-    return;
-  }
-  log(`Found ${messages.length} new messages`);
-  const notifiedBy = sessionState.current_notification_agent_id;
-  const notifiedFrom = notifiedBy ? sessionState.task_run_map?.[notifiedBy]?.deferred?.parent_run_id : void 0;
-  const sessionMetadata = await settledFromTurn(config.customMetadata, notifiedFrom);
-  const continuedRunId = input.stop_hook_active && !sessionState.current_turn_run_id && sessionState.current_dotted_order ? parseDottedOrder(sessionState.current_dotted_order).runId : void 0;
-  const turns = groupIntoTurns(messages);
-  const currentTracing = resolveTurnTracingMode(config, input.session_id, continuedRunId ? sessionState.closed_turn_tracing : sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
-  if (turns.length > 0 && finalMessage) {
-    const lastTurn = turns[turns.length - 1];
-    const lastLlm = lastTurn.llmCalls[lastTurn.llmCalls.length - 1];
-    if (lastLlm && lastLlm.toolCalls.length > 0) {
-      debug("Final LLM response missing from transcript, synthesizing from last_assistant_message");
-      const syntheticStart = sessionState.last_tool_end_time ? new Date(sessionState.last_tool_end_time).toISOString() : lastLlm.toolCalls[lastLlm.toolCalls.length - 1].result?.timestamp ?? lastLlm.endTime;
-      const syntheticEnd = new Date(startTime).toISOString();
-      lastTurn.llmCalls.push({
-        content: [{ type: "text", text: finalMessage }],
-        model: lastLlm.model,
-        // A request setting, so it carries over like the model. service_tier is a
-        // response value with no reading for this call, so it stays absent.
-        effort: lastLlm.effort,
-        usage: { input_tokens: 0, output_tokens: 0 },
-        startTime: syntheticStart,
-        endTime: syntheticEnd,
-        toolCalls: [],
-        synthetic: true
-      });
-    }
-  }
-  let tracedTurns = 0;
-  let allTaskRunMaps = {};
-  const currentRunId = sessionState.current_turn_run_id;
-  const currentTraceId = sessionState.current_trace_id;
-  const currentDottedOrder = sessionState.current_dotted_order;
-  const currentParentRunId = sessionState.current_parent_run_id;
-  for (let i = 0; i < turns.length; i++) {
-    const turn = turns[i];
-    const isLastTurn = i === turns.length - 1;
-    const turnNum = isLastTurn && continuedRunId ? sessionState.current_turn_number ?? sessionState.turn_count : sessionState.turn_count + tracedTurns + 1;
-    const parentRunId = isLastTurn ? currentRunId ?? continuedRunId : void 0;
-    const traceId = isLastTurn ? currentTraceId : void 0;
-    const dottedOrder = isLastTurn ? currentDottedOrder : void 0;
-    const existingTaskRunMap = isLastTurn ? sessionState.task_run_map : void 0;
-    const tracedToolUseIds = isLastTurn ? new Set(sessionState.traced_tool_use_ids ?? []) : void 0;
-    try {
-      const taskRunMap = await traceTurn({
-        // Earlier transcript turns have no original snapshot; never backfill them as full.
-        tracing: isLastTurn ? currentTracing : "metadata",
-        toolTracingModes: sessionState.tool_tracing_modes ?? {},
-        turn,
-        sessionId: input.session_id,
-        turnNum,
-        customMetadata: sessionMetadata,
-        hookCwd: input.cwd,
-        runtimeVersion,
-        approvalPolicy,
-        parentRunId,
-        existingTaskRunMap,
-        tracedToolUseIds,
-        traceId,
-        parentDottedOrder: dottedOrder,
-        captureHookOutputs: config.captureHookOutputs
-      });
-      allTaskRunMaps = { ...allTaskRunMaps, ...taskRunMap };
-      tracedTurns++;
-    } catch (err) {
-      error(`Failed to trace turn ${turnNum}: ${err}`);
-    }
-  }
-  const own = config.captureHookOutputs ? turnHooks(sessionState, { messages, promptId }) : void 0;
-  const earlier = continuedRunId ? live.closed_turn_hooks ?? [] : [];
-  const hooks = earlier.length > 0 ? [...earlier, ...own ?? []] : own;
-  const freshState = loadState(config.stateFilePath);
-  const freshSession = getSessionState(freshState, input.session_id);
-  const mergedTaskRunMap = withTaskRunHooks({ ...freshSession.task_run_map, ...allTaskRunMaps }, turns);
-  const lastTurnId = turns[turns.length - 1]?.promptId;
-  const closingTurn = turns[turns.length - 1];
-  const closingTurnTools = closingTurn ? turnToolInputs(closingTurn) : [];
-  const turnMetadata = turnScopedMetadata(sessionMetadata, closingTurnTools, input.cwd);
-  const pendingSubagents = sessionState.pending_subagent_traces || [];
-  const processedAgentIds = /* @__PURE__ */ new Set();
-  if (pendingSubagents.length > 0) {
-    debug(`Processing ${pendingSubagents.length} pending subagent trace(s)`);
-    await tracePendingSubagents({
-      tracing: currentTracing,
-      sessionId: input.session_id,
-      pendingSubagents,
-      taskRunMap: mergedTaskRunMap,
-      parentTraceId: sessionState.current_trace_id,
-      customMetadata: sessionMetadata,
-      runtimeVersion,
-      turnId: lastTurnId,
-      turnNumber: sessionState.current_turn_number,
-      captureHookOutputs: config.captureHookOutputs
-    });
-    for (const sa of pendingSubagents)
-      processedAgentIds.add(sa.agent_id);
-  }
-  const savedPosition = tracedTurns > 0 ? { last_line: lastLine, ...anchor } : sessionState;
-  let completeNow = false;
-  let continuedDeferred = false;
-  let notificationToFinalize;
-  let notificationInterrupted = false;
-  const notifiedWithinTurn = /* @__PURE__ */ new Set();
-  const knownAgentIds = Object.keys(sessionState.task_run_map ?? {});
-  if (knownAgentIds.length > 0) {
-    for (const t of turns) {
-      const uc = typeof t.userContent === "string" ? t.userContent : "";
-      for (const id of knownAgentIds) {
-        if (uc.includes(id))
-          notifiedWithinTurn.add(id);
-      }
-    }
-  }
-  let doneAgentsToFinalize = [];
-  await atomicUpdateState(config.stateFilePath, (latestState) => {
-    const latestSession = getSessionState(latestState, input.session_id);
-    const updatedState = updateSessionState(
-      latestState,
-      input.session_id,
-      furtherRead(latestSession, savedPosition),
-      Math.max(latestSession.turn_count, sessionState.turn_count + tracedTurns - (continuedRunId ? 1 : 0)),
-      // Merge any late PostToolUse writes with our traced entries. allTaskRunMaps
-      // wins on conflicts since it has the fully resolved data from traceTurn.
-      withTaskRunHooks({ ...latestSession.task_run_map, ...allTaskRunMaps }, turns)
-    );
-    const s = updatedState[input.session_id];
-    s.closed_turn_hooks = currentTracing === "full" ? hooks : void 0;
-    if (tracedTurns > 0) {
-      Object.assign(s, advanceToolTracingProgress(latestSession, completedToolUseIds(turns), "transcript"));
-    }
-    const notifAgentId = sessionState.current_notification_agent_id;
-    const notifInterrupted = sessionState.current_notification_interrupted ?? false;
-    s.task_run_map = withoutTracedAgentPayloads(s.task_run_map, processedAgentIds);
-    s.pending_subagent_traces = (latestSession.pending_subagent_traces ?? []).filter((sa) => !processedAgentIds.has(sa.agent_id));
-    const openTurns = { ...latestSession.open_turns };
-    const entry = currentRunId ? openTurns[currentRunId] : void 0;
-    if (currentRunId && entry) {
-      const remaining = entry.agent_ids.filter((id) => !processedAgentIds.has(id));
-      doneAgentsToFinalize = remaining.filter((id) => latestSession.task_run_map?.[id]?.subagent_done && notifiedWithinTurn.has(id));
-      if (remaining.length > 0) {
-        openTurns[currentRunId] = {
-          ...entry,
-          agent_ids: remaining,
-          stop_seen: true,
-          tracing: entry.tracing ?? currentTracing,
-          last_assistant_message: (entry.tracing ?? currentTracing) === "metadata" ? MUTED_TRACE_CONTENT : finalMessage,
-          turn_id: lastTurnId,
-          // If this turn is itself a task-notification turn that spawned its own
-          // background subagent, remember the agent to finalize once it drains.
-          notification_for_agent_id: notifAgentId ?? entry.notification_for_agent_id,
-          ...hooks && (entry.tracing ?? currentTracing) === "full" ? { hooks } : {}
-        };
-        debug(`${remaining.length} background subagent(s) in flight, deferring turn completion`);
-      } else {
-        completeNow = true;
-        notificationToFinalize = notifAgentId;
-        notificationInterrupted = notifInterrupted;
-        delete openTurns[currentRunId];
-      }
-    } else if (continuedRunId && openTurns[continuedRunId]) {
-      const waiting = openTurns[continuedRunId];
-      openTurns[continuedRunId] = {
-        ...waiting,
-        last_assistant_message: (waiting.tracing ?? currentTracing) === "metadata" ? MUTED_TRACE_CONTENT : finalMessage
-      };
-      continuedDeferred = true;
-    } else {
-      completeNow = Boolean(currentRunId);
-      if (completeNow) {
-        notificationToFinalize = notifAgentId;
-        notificationInterrupted = notifInterrupted;
-      }
-    }
-    s.open_turns = openTurns;
-    return pruneOldSessions(updatedState);
-  });
-  await flushHeldToolRuns(config, input.session_id, currentRunId, messages);
-  pruneHeldRuns(config.stateFilePath);
-  const turnRunId = completeNow ? currentRunId : continuedDeferred ? void 0 : continuedRunId;
-  if (turnRunId) {
-    debug(`Completing Turn run ${turnRunId}`);
-    try {
-      await completeTurnRun({
-        tracing: currentTracing,
-        sessionId: input.session_id,
-        runId: turnRunId,
-        eventKey: completeNow ? turnRunId : `${turnRunId}:${randomUUID11()}`,
-        traceId: currentTraceId,
-        dottedOrder: currentDottedOrder,
-        parentRunId: currentParentRunId,
-        startTime: sessionState.current_turn_start,
-        lastAssistantMessage: finalMessage,
-        customMetadata: turnMetadata,
-        turnId: lastTurnId,
-        turnNumber: sessionState.current_turn_number,
-        runtimeVersion,
-        approvalPolicy,
-        hooks
-      });
-      debug(`Turn run ${turnRunId} completed`);
-    } catch (err) {
-      error(`Failed to complete turn run: ${err}`);
-    }
-  }
-  for (const doneAgentId of doneAgentsToFinalize) {
-    debug(`Finalizing subagent ${doneAgentId} that finished within its launching turn`);
-    await finalizeNotificationChain({
-      defaultMuted: config.defaultMuted,
-      stateFilePath: config.stateFilePath,
-      sessionId: input.session_id,
-      customMetadata: config.customMetadata,
-      runtimeVersion,
-      agentId: doneAgentId
-    });
-  }
-  if (notificationToFinalize && notificationInterrupted) {
-    await finalizeNotificationChain({
-      defaultMuted: config.defaultMuted,
-      stateFilePath: config.stateFilePath,
-      sessionId: input.session_id,
-      customMetadata: config.customMetadata,
-      runtimeVersion,
-      agentId: notificationToFinalize,
-      interrupted: true
-    });
-  } else if (notificationToFinalize) {
-    let finalizeNow = false;
-    await atomicUpdateState(config.stateFilePath, (s) => {
-      const ss = getSessionState(s, input.session_id);
-      if (ss.task_run_map?.[notificationToFinalize]?.subagent_done) {
-        finalizeNow = true;
-        return s;
-      }
-      return {
-        ...s,
-        [input.session_id]: {
-          ...ss,
-          notification_done_agents: [
-            ...(ss.notification_done_agents ?? []).filter((id) => id !== notificationToFinalize),
-            notificationToFinalize
-          ]
-        }
-      };
-    });
-    if (finalizeNow) {
-      await finalizeNotificationChain({
-        defaultMuted: config.defaultMuted,
-        stateFilePath: config.stateFilePath,
-        sessionId: input.session_id,
-        customMetadata: config.customMetadata,
-        runtimeVersion,
-        agentId: notificationToFinalize
-      });
-    }
-  }
-  const duration = ((Date.now() - startTime) / 1e3).toFixed(1);
-  log(`Processed ${tracedTurns} turns in ${duration}s`);
-  if (Date.now() - startTime > 18e4) {
-    warn(`Hook took ${duration}s (>3min), consider optimizing`);
-  }
-}
-
-// dist/src/hooks/stop-failure.js
-async function main2() {
-  const input = await readStdin();
-  if (!isPayloadForHook(input, "StopFailure"))
-    return;
-  const config = initHook(input.cwd);
-  if (!config)
-    return;
-  debug(`StopFailure hook: session=${input.session_id}, error=${input.error}`);
-  await queueClosing(config, "stop-failure", input, {
-    skip: (session) => !session.current_turn_run_id,
-    reset: () => ({
-      current_turn_tracing: void 0,
-      current_turn_run_id: void 0,
-      current_trace_id: void 0,
-      current_dotted_order: void 0,
-      current_parent_run_id: void 0
-    })
-  });
-}
-async function closeFailedTurn(_id, closing, config) {
-  const input = closing.input;
-  const sessionState = closing.session;
-  initTracing(config, input.cwd, input.session_id);
-  const errorMessage = input.error_details ? `${input.error}: ${input.error_details}` : input.error;
-  const read = config.captureHookOutputs ? readTranscript(expandHome(input.transcript_path), sessionState.last_line, void 0, turnPrompt(sessionState), sessionState) : { messages: [] };
-  await flushHeldToolRuns(config, input.session_id, sessionState.current_turn_run_id, read.messages);
-  try {
-    await captureRun(await withTurnHooks(turnHooks(sessionState, read), {
-      name: USER_PROMPT_TURN_NAME,
-      run_type: "chain",
-      id: sessionState.current_turn_run_id,
-      trace_id: sessionState.current_trace_id,
-      dotted_order: sessionState.current_dotted_order,
-      parent_run_id: sessionState.current_parent_run_id,
-      start_time: sessionState.current_turn_start,
-      end_time: new Date(closing.at).toISOString(),
-      error: errorMessage,
-      metadata: codingAgentMetadata({
-        sessionId: input.session_id,
-        base: config.customMetadata,
-        turnNumber: sessionState.current_turn_number,
-        runtimeVersion: sessionState.runtime_version,
-        approvalPolicy: sessionState.approval_policy,
-        agentType: "root"
-      })
-    }), resolveTurnTracingMode(config, input.session_id, sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0), sessionState.current_turn_run_id, "patch");
-    debug(`Closed turn run ${sessionState.current_turn_run_id} with error: ${errorMessage}`);
-  } catch (err) {
-    error(`Failed to close turn run on StopFailure: ${err}`);
-  }
-}
-
-// dist/src/hooks/session-end.js
-async function main3() {
-  const input = await readStdin();
-  if (!isPayloadForHook(input, "SessionEnd"))
-    return;
-  const config = initHook(input.cwd);
-  if (!config)
-    return;
-  debug(`SessionEnd hook: session=${input.session_id}, reason=${input.reason}`);
-  const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
-  if (sessionState.closed_turn_hooks)
-    await atomicUpdateState(config.stateFilePath, (s) => ({
-      ...s,
-      [input.session_id]: { ...s[input.session_id], closed_turn_hooks: void 0 }
-    }));
-  if (hasOpenWork(sessionState)) {
-    await queueClosing(config, "session-end", input, { transcriptCut: true });
-    return;
-  }
-  debug("No open turn run \u2014 nothing to close");
-  await atomicUpdateState(config.stateFilePath, (s) => {
-    const ss = s[input.session_id];
-    if (!ss)
-      return s;
-    return {
-      ...s,
-      [input.session_id]: {
-        ...ss,
-        ...dropHeld(config.stateFilePath, input.session_id, ss),
-        tool_tracing_modes: {},
-        tool_tracing_progress: {}
-      }
-    };
-  });
-}
-function hasOpenWork(sessionState) {
-  return Boolean(Object.keys(sessionState.queued_closings ?? {}).length > 0 || sessionState.current_turn_run_id || Object.keys(sessionState.open_turns ?? {}).length > 0 || Object.values(sessionState.task_run_map ?? {}).some((e) => e.subagent_done));
-}
-async function closeEndedSession(_id, closing, config) {
-  const input = closing.input;
-  const ended = closing.session;
-  const live = getSessionState(loadState(config.stateFilePath), input.session_id);
-  const resumed = live.current_turn_run_id !== ended.current_turn_run_id;
-  const sessionState = {
-    ...live,
-    current_turn_run_id: resumed ? void 0 : live.current_turn_run_id,
-    open_turns: onlyKnown(live.open_turns, ended.open_turns),
-    task_run_map: onlyKnown(live.task_run_map, ended.task_run_map)
-  };
-  const openTurns = sessionState.open_turns ?? {};
-  const openAgentRuns = Object.entries(sessionState.task_run_map ?? {}).filter(([, e]) => e.subagent_done);
-  initTracing(config, input.cwd, input.session_id);
-  const expandedTranscript = expandHome(input.transcript_path);
-  const runtimeVersion = sessionState.runtime_version ?? (expandedTranscript ? readRuntimeVersion(expandedTranscript) : void 0);
-  let position = sessionState;
-  let turnsTraced = 0;
-  if (sessionState.current_turn_run_id) {
-    debug(`Closing interrupted turn run ${sessionState.current_turn_run_id} on session end`);
-    try {
-      const res = await closeInterruptedTurn({
-        defaultMuted: config.defaultMuted,
-        sessionId: input.session_id,
-        sessionState,
-        transcriptPath: expandedTranscript,
-        stateFilePath: config.stateFilePath,
-        customMetadata: config.customMetadata,
-        runtimeVersion,
-        approvalPolicy: sessionState.approval_policy,
-        cutAt: closing.cut_at,
-        captureHookOutputs: config.captureHookOutputs
-      });
-      position = res.position;
-      turnsTraced = res.turnsTraced;
-    } catch (err) {
-      error(`Failed to close interrupted turn on session end: ${err}`);
-    }
-  }
-  for (const [agentId, taskRunInfo] of openAgentRuns) {
-    const launchingTurnId = taskRunInfo.deferred?.parent_run_id;
-    const launchingTurn = launchingTurnId ? openTurns[launchingTurnId] : void 0;
-    try {
-      await closeAgentToolRun({
-        tracing: resolveTurnTracingMode(config, input.session_id, taskRunInfo.tracing, launchingTurn?.tracing, launchingTurnId === sessionState.current_turn_run_id ? sessionState.current_turn_tracing : void 0),
-        sessionId: input.session_id,
-        agentId,
-        agentType: taskRunInfo.agent_type ?? "",
-        taskRunInfo,
-        customMetadata: config.customMetadata,
-        runtimeVersion,
-        wasOpen: true
-        // subagent_done ⇒ SubagentStop posted it open
-      });
-      debug(`Closed open Agent tool run ${agentId} on session end`);
-    } catch (err) {
-      error(`Failed to close Agent tool run ${agentId} on session end: ${err}`);
-    }
-  }
-  for (const [turnRunId, entry] of Object.entries(openTurns)) {
-    if (turnRunId === sessionState.current_turn_run_id)
-      continue;
-    try {
-      if (entry.stop_seen) {
-        await completeTurnRun({
-          ...turnIdentityFromOpenTurn(entry, {
-            sessionId: input.session_id,
-            customMetadata: config.customMetadata
-          }),
-          tracing: resolveTurnTracingMode(config, input.session_id, entry.tracing),
-          lastAssistantMessage: entry.last_assistant_message
-        });
-        debug(`Completed deferred turn ${turnRunId} on session end`);
-      } else {
-        await closeInterruptedTurn({
-          defaultMuted: config.defaultMuted,
-          sessionId: input.session_id,
-          sessionState,
-          transcriptPath: expandedTranscript,
-          stateFilePath: config.stateFilePath,
-          customMetadata: config.customMetadata,
-          runtimeVersion,
-          turn: entry,
-          error: "Session ended before turn completed",
-          captureHookOutputs: config.captureHookOutputs
-        });
-        debug(`Closed interrupted deferred turn ${turnRunId} on session end`);
-      }
-    } catch (err) {
-      error(`Failed to close deferred turn ${turnRunId} on session end: ${err}`);
-    }
-  }
-  await atomicUpdateState(config.stateFilePath, (s) => {
-    const ss = getSessionState(s, input.session_id);
-    const counted = {
-      ...furtherRead(ss, position),
-      turn_count: ss.turn_count + turnsTraced
-    };
-    if (resumed) {
-      return {
-        ...s,
-        [input.session_id]: {
-          ...ss,
-          ...counted,
-          task_run_map: withoutKeys(ss.task_run_map, sessionState.task_run_map),
-          open_turns: withoutKeys(ss.open_turns, sessionState.open_turns)
-        }
-      };
-    }
-    return {
-      ...s,
-      [input.session_id]: {
-        ...ss,
-        ...counted,
-        ...dropHeld(config.stateFilePath, input.session_id, ss),
-        current_turn_tracing: void 0,
-        current_turn_run_id: void 0,
-        current_trace_id: void 0,
-        current_dotted_order: void 0,
-        current_parent_run_id: void 0,
-        task_run_map: {},
-        traced_tool_use_ids: [],
-        tool_start_times: {},
-        tool_tracing_modes: {},
-        tool_tracing_progress: {},
-        pending_subagent_traces: [],
-        open_turns: {},
-        current_notification_agent_id: void 0,
-        current_notification_interrupted: void 0,
-        notification_done_agents: []
-      }
-    };
-  });
-  debug(`Session end cleanup complete (reason=${input.reason})`);
-}
-function onlyKnown(entries, known) {
-  return Object.fromEntries(Object.entries(entries ?? {}).filter(([key]) => key in (known ?? {})));
-}
-function withoutKeys(entries, removed) {
-  return Object.fromEntries(Object.entries(entries ?? {}).filter(([key]) => !(key in removed)));
 }
 
 // dist/src/tracing-commands.js
@@ -27943,19 +29529,7 @@ var COMMAND_HANDLERS = {
 };
 
 // dist/src/hooks/user-prompt-submit.js
-function readStartBeforeOwnPrompt(filePath, promptText) {
-  const { messages, lastLine } = readTranscript(filePath);
-  if (!messages.some((m) => m.type === "user"))
-    return -1;
-  const prompt = messages.filter(isHumanMessage).at(-1);
-  const replied = messages.map((m) => m.type === "assistant").lastIndexOf(true);
-  const content = prompt?.message.content ?? "";
-  const text = typeof content === "string" ? content : content.map((b) => b.text ?? "").join("");
-  const age = Date.now() - Date.parse(prompt?.timestamp ?? "");
-  const own = text === promptText && age <= OWN_PROMPT_LINE_MAX_AGE_MS;
-  return lastLine - (own ? messages.length - 1 - replied : 0);
-}
-async function main4() {
+async function answerPrompt(beginTurn) {
   const input = await readStdin();
   if (!isPayloadForHook(input, "UserPromptSubmit"))
     return;
@@ -27964,7 +29538,7 @@ async function main4() {
   const reply = command ? await runPromptCommand(command, COMMAND_HANDLERS, input) : void 0;
   const output = {};
   try {
-    await startTurn(input, output, currentTurnMode);
+    await beginTurn(input, output, currentTurnMode);
   } catch (err) {
     error(TURN_START_FAILED.replace("{error}", () => String(err)));
   }
@@ -27987,8 +29561,7 @@ function threadModeBeforeCommand(input) {
     return void 0;
   }
 }
-async function startTurn(input, output, currentTurnMode) {
-  const hookStartTime = Date.now();
+async function promptTracingConfig(input, output) {
   const config = initHook(input.cwd);
   if (!config) {
     const setup = loadConfig({ cwd: input.cwd });
@@ -28007,11 +29580,7 @@ async function startTurn(input, output, currentTurnMode) {
     debug("Skipping UserPromptSubmit for subagent \u2014 Stop hook handles tracing");
     return;
   }
-  initTracing(config, input.cwd, input.session_id);
-  const state = loadState(config.stateFilePath);
-  const sessionState = getSessionState(state, input.session_id);
   const { loginNotice, credentialNotice } = readUploadNotices(config);
-  const turnMode = config.mutedLocked ? "metadata" : resolveTurnTracingMode(config, input.session_id, currentTurnMode);
   if (loginNotice && config.strictAuth) {
     Object.assign(output, { decision: "block", reason: loginNotice });
     return;
@@ -28019,126 +29588,7 @@ async function startTurn(input, output, currentTurnMode) {
   if (!await showNotice(LOGIN_NOTICE_KIND, loginNotice, config, output)) {
     await showNotice(NOTICE_KINDS.credential, credentialNotice, config, output);
   }
-  const expandedTranscript = expandHome(input.transcript_path);
-  const runtimeVersion = (expandedTranscript ? readRuntimeVersion(expandedTranscript) : void 0) ?? sessionState.runtime_version;
-  const approvalPolicy = input.permission_mode;
-  let interruptedLastLine = sessionState.last_line;
-  const awaitingUploader = Boolean(sessionState.current_turn_run_id) || Object.keys(sessionState.queued_closings ?? {}).length > 0;
-  if (interruptedLastLine === -1 && !awaitingUploader && input.transcript_path) {
-    const transcriptPath = expandHome(input.transcript_path);
-    const endLine = getTranscriptEndLine(transcriptPath);
-    if (endLine > 0) {
-      debug(`Fresh state but transcript has ${endLine + 1} lines \u2014 skipping to end`);
-      interruptedLastLine = config.captureHookOutputs ? readStartBeforeOwnPrompt(transcriptPath, input.prompt) : endLine;
-    }
-  }
-  let countedTurns = sessionState.turn_count;
-  if (sessionState.current_turn_run_id) {
-    const supersededNotificationAgentId = sessionState.current_notification_agent_id;
-    debug(`Closing stale turn ${sessionState.current_turn_run_id}` + (supersededNotificationAgentId ? " (superseded task-notification)" : " (interrupted)"));
-    const { prompt: _prompt, ...closingInput } = input;
-    await queueClosing(config, "interrupted", {
-      ...closingInput,
-      error: supersededNotificationAgentId ? "Superseded by a newer task-notification" : "User interrupt",
-      next_prompt_hash: hashPrompt(input.prompt)
-    }, { transcriptCut: true });
-    countedTurns = Math.max(countedTurns, sessionState.current_turn_number ?? 0);
-  }
-  const turnNum = countedTurns + 1;
-  const startTime = (/* @__PURE__ */ new Date()).toISOString();
-  const runId = stableRunId(startTime, input.session_id, turnNum);
-  const segment = generateDottedOrderSegment(startTime, runId);
-  let traceId;
-  let parentRunId;
-  let dottedOrder;
-  const notifAgentId = Object.keys(sessionState.task_run_map ?? {}).find((id) => input.prompt.includes(id));
-  const agentToolRun = notifAgentId ? sessionState.task_run_map?.[notifAgentId] : void 0;
-  const notificationAgentId = agentToolRun ? notifAgentId : void 0;
-  const notificationStatus = notificationAgentId ? /<status>([^<]+)<\/status>/.exec(input.prompt)?.[1] : void 0;
-  const notificationInterrupted = notificationStatus?.toLowerCase() === KILLED_NOTIFICATION_STATUS;
-  if (agentToolRun) {
-    traceId = parseDottedOrder(agentToolRun.dotted_order).traceId;
-    parentRunId = agentToolRun.run_id;
-    dottedOrder = `${agentToolRun.dotted_order}.${segment}`;
-    debug(`Task-notification for agent ${notifAgentId}, nesting turn under Agent run ${parentRunId}`);
-  } else if (config.parentDottedOrder) {
-    const parsed = parseDottedOrder(config.parentDottedOrder);
-    traceId = parsed.traceId;
-    parentRunId = parsed.runId;
-    dottedOrder = `${config.parentDottedOrder}.${segment}`;
-    debug(`Nesting under parent run ${parentRunId} (trace ${traceId})`);
-  } else {
-    traceId = runId;
-    parentRunId = void 0;
-    dottedOrder = segment;
-  }
-  const launchingTurnId = agentToolRun?.deferred?.parent_run_id;
-  const inherited = await settledFromTurn(config.customMetadata, launchingTurnId);
-  await captureRun({
-    id: runId,
-    name: USER_PROMPT_TURN_NAME,
-    run_type: "chain",
-    inputs: {
-      messages: [{ role: "user", content: stripHarnessMarkup(input.prompt) || input.prompt }]
-    },
-    start_time: startTime,
-    trace_id: traceId,
-    dotted_order: dottedOrder,
-    ...parentRunId ? { parent_run_id: parentRunId } : {},
-    metadata: codingAgentMetadata({
-      sessionId: input.session_id,
-      base: inherited,
-      turnNumber: turnNum,
-      runtimeVersion,
-      approvalPolicy,
-      agentType: "root"
-    })
-  }, turnMode);
-  debug(`Created initial run ${runId} for turn ${turnNum}`);
-  await atomicUpdateState(config.stateFilePath, (s) => {
-    const ss = getSessionState(s, input.session_id);
-    const inflightAgentIds = new Set(Object.values(ss.open_turns ?? {}).flatMap((t) => t.agent_ids));
-    const preservedTaskRunMap = Object.fromEntries(Object.entries(ss.task_run_map ?? {}).filter(([id]) => inflightAgentIds.has(id)));
-    const preservedOpenTurns = { ...ss.open_turns };
-    if (sessionState.current_turn_run_id) {
-      delete preservedOpenTurns[sessionState.current_turn_run_id];
-    }
-    return {
-      ...s,
-      [input.session_id]: {
-        ...ss,
-        updated: (/* @__PURE__ */ new Date()).toISOString(),
-        current_turn_tracing: turnMode,
-        current_turn_run_id: runId,
-        current_trace_id: traceId,
-        current_dotted_order: dottedOrder,
-        current_parent_run_id: parentRunId,
-        current_turn_number: turnNum,
-        current_turn_start: startTime,
-        current_turn_prompt_hash: hashPrompt(input.prompt),
-        // If this is a task-notification turn, record the agent it's for so Stop
-        // closes that agent's tool run + launching turn once this turn completes.
-        current_notification_agent_id: notificationAgentId,
-        current_notification_interrupted: notificationInterrupted,
-        // Persisted so the closing hooks can stamp them onto their runs.
-        approval_policy: approvalPolicy,
-        ...runtimeVersion ? { runtime_version: runtimeVersion } : {},
-        ...furtherRead(ss, { ...sessionState, last_line: interruptedLastLine }),
-        turn_count: Math.max(ss.turn_count, countedTurns),
-        // Clear this turn's stale data, but keep still-running background subagents
-        // and any Agent tool runs left open awaiting their task-notification.
-        task_run_map: preservedTaskRunMap,
-        traced_tool_use_ids: [],
-        tool_start_times: {},
-        closed_turn_hooks: void 0,
-        pending_subagent_traces: [],
-        open_turns: preservedOpenTurns,
-        notification_done_agents: ss.notification_done_agents
-      }
-    };
-  });
-  const duration = ((Date.now() - hookStartTime) / 1e3).toFixed(1);
-  debug(`UserPromptSubmit hook completed in ${duration}s`);
+  return config;
 }
 async function showNotice(kind, notice, config, output) {
   const options = {
@@ -28207,729 +29657,919 @@ async function closeInterruptedPrompt(_id, closing, config) {
   }
 }
 
-// dist/src/workflows.js
-function detectWorkflowLaunch(toolName, toolResponse) {
-  if (toolName !== WORKFLOW_TOOL_NAME)
-    return void 0;
-  const r = toolResponse;
-  if (!r || r.status !== "async_launched" || !r.taskId || !r.runId)
-    return void 0;
-  return { taskId: r.taskId, runId: r.runId, workflowName: r.workflowName };
+// dist/src/tracer-builder/tracer-builder.js
+import { readFileSync as readFileSync20 } from "node:fs";
+import { basename as basename8 } from "node:path";
+
+// dist/src/utils/times.js
+var iso = (time) => new Date(time).toISOString();
+var later = (a, b) => a === void 0 || b !== void 0 && Date.parse(b) > Date.parse(a) ? b : a;
+var earlier = (a, b) => Date.parse(b) < Date.parse(a) ? b : a;
+
+// dist/src/tracer-builder/subagent-files.js
+import { readFileSync as readFileSync19 } from "node:fs";
+import { basename as basename7, dirname as dirname25, join as join35 } from "node:path";
+function subagentTranscriptPath(mainPath, sessionId, agentId) {
+  return join35(dirname25(mainPath), sessionId, SUBAGENTS_FOLDER, subagentFileName(agentId));
 }
-function workflowRunIdFromPath(path3) {
-  return /\/workflows\/(wf_[A-Za-z0-9_-]+)\//.exec(path3)?.[1];
+function subagentIdOf(path3) {
+  return SUBAGENT_FILE.exec(basename7(path3))?.[1];
 }
-function findWorkflowEntry(taskRunMap, runId) {
-  for (const [taskId, entry] of Object.entries(taskRunMap ?? {})) {
-    if (entry.workflow_run_id === runId)
-      return [taskId, entry];
+function lastLineUuid(path3) {
+  try {
+    for (const line of readFileSync19(path3, "utf8").split("\n").reverse()) {
+      const uuid = jsonField(line, "uuid");
+      if (uuid !== void 0)
+        return uuid;
+    }
+  } catch {
   }
   return void 0;
 }
-async function handleWorkflowSubagentStop(opts) {
-  const runId = workflowRunIdFromPath(opts.agentTranscriptPath);
-  if (!runId) {
-    error(`workflow-subagent ${opts.agentId}: no workflow run_id in ${opts.agentTranscriptPath}`);
-    return;
-  }
-  const ss = getSessionState(loadState(opts.stateFilePath), opts.sessionId);
-  const found = findWorkflowEntry(ss.task_run_map, runId);
-  if (!found) {
-    debug(`No Workflow run recorded for ${runId}; skipping stage ${opts.agentId}`);
-    return;
-  }
-  const [, entry] = found;
-  const deferred = entry.deferred;
-  const launchingTurnId = deferred?.parent_run_id;
-  const launchingTurn = launchingTurnId ? ss.open_turns?.[launchingTurnId] : void 0;
-  const parentTraceId = deferred?.trace_id ?? ss.current_trace_id;
+function metaToolUseId(mainPath, sessionId, agentId) {
+  const path3 = join35(dirname25(mainPath), sessionId, SUBAGENTS_FOLDER, subagentMetaFileName(agentId));
   try {
-    await traceWorkflowStage({
-      tracing: resolveTurnTracingMode(opts, opts.sessionId, entry.tracing, launchingTurn?.tracing, launchingTurnId === ss.current_turn_run_id ? ss.current_turn_tracing : void 0),
-      sessionId: opts.sessionId,
-      customMetadata: opts.customMetadata,
-      workflowRun: { run_id: entry.run_id, dotted_order: entry.dotted_order },
-      parentTraceId,
-      stageAgentId: opts.agentId,
-      stageType: opts.agentType,
-      transcriptPath: opts.agentTranscriptPath,
-      runtimeVersion: launchingTurn?.runtime_version ?? ss.runtime_version,
-      turnId: launchingTurn?.turn_id,
-      turnNumber: launchingTurn?.turn_number ?? ss.current_turn_number,
-      captureHookOutputs: opts.captureHookOutputs
-    });
-    debug(`Traced workflow stage ${opts.agentId} under Workflow run ${entry.run_id}`);
-  } catch (err) {
-    error(`Failed to trace workflow stage ${opts.agentId}: ${err}`);
+    return jsonField(readFileSync19(path3, "utf8"), "toolUseId");
+  } catch {
+    return void 0;
   }
 }
 
-// dist/src/hooks/subagent-stop.js
-async function main5() {
-  const input = await readStdin();
-  if (!isPayloadForHook(input, "SubagentStop"))
-    return;
-  const config = initHook(input.cwd);
-  if (!config)
-    return;
-  debug(`SubagentStop hook: agent_id=${input.agent_id}, type=${input.agent_type}`);
-  const agentTranscriptPath = expandHome(input.agent_transcript_path);
-  if (!agentTranscriptPath) {
-    debug("No agent_transcript_path provided, skipping");
-    return;
-  }
-  if (input.agent_type === WORKFLOW_SUBAGENT_TYPE) {
-    await queueClosing(config, "subagent-stop", input);
-    return;
-  }
-  const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
-  const taskRunMap = sessionState.task_run_map ?? {};
-  const taskRunInfo = taskRunMap[input.agent_id];
-  if (!taskRunInfo) {
-    await atomicUpdateState(config.stateFilePath, (s) => {
-      const ss = getSessionState(s, input.session_id);
-      return {
-        ...s,
-        [input.session_id]: {
-          ...ss,
-          pending_subagent_traces: [
-            ...ss.pending_subagent_traces || [],
-            {
-              agent_id: input.agent_id,
-              agent_type: input.agent_type,
-              agent_transcript_path: agentTranscriptPath,
-              session_id: input.session_id
-            }
-          ]
-        }
-      };
-    });
-    debug(`Queued subagent ${input.agent_id} for Stop hook (Agent tool run not recorded yet)`);
-    return;
-  }
-  await queueClosing(config, "subagent-stop", input);
+// dist/src/tracer-builder/tracer-builder.js
+function childPlace(parent, id, start) {
+  const segment = generateDottedOrderSegment(start, id);
+  return { id, traceId: parent.traceId, dottedOrder: `${parent.dottedOrder}.${segment}` };
 }
-async function traceStoppedSubagent(_id, closing, config) {
-  const input = closing.input;
-  const agentTranscriptPath = expandHome(input.agent_transcript_path);
-  initTracing(config, input.cwd, input.session_id);
-  if (input.agent_type === WORKFLOW_SUBAGENT_TYPE) {
-    await handleWorkflowSubagentStop({
-      defaultMuted: config.defaultMuted,
-      sessionId: input.session_id,
-      agentId: input.agent_id,
-      agentType: input.agent_type,
-      agentTranscriptPath,
-      stateFilePath: config.stateFilePath,
-      customMetadata: config.customMetadata,
-      captureHookOutputs: config.captureHookOutputs
-    });
-    return;
-  }
-  const sessionState = getSessionState(loadState(config.stateFilePath), input.session_id);
-  const taskRunMap = sessionState.task_run_map ?? {};
-  const taskRunInfo = taskRunMap[input.agent_id];
-  if (!taskRunInfo)
-    return;
-  const deferred = taskRunInfo.deferred;
-  const turnRunId = deferred?.parent_run_id ?? sessionState.current_turn_run_id;
-  const turnTraceId = deferred?.trace_id ?? sessionState.current_trace_id;
-  const launchingTurn = turnRunId ? sessionState.open_turns?.[turnRunId] : void 0;
-  if (!turnTraceId) {
-    debug(`No trace context for subagent ${input.agent_id}, cannot trace`);
-    return;
-  }
-  try {
-    await tracePendingSubagents({
-      tracing: resolveTurnTracingMode(config, input.session_id, taskRunInfo.tracing, launchingTurn?.tracing, turnRunId === sessionState.current_turn_run_id ? sessionState.current_turn_tracing : void 0),
-      sessionId: input.session_id,
-      pendingSubagents: [
-        {
-          agent_id: input.agent_id,
-          agent_type: input.agent_type,
-          agent_transcript_path: agentTranscriptPath,
-          session_id: input.session_id
-        }
-      ],
-      taskRunMap,
-      parentTraceId: turnTraceId,
-      customMetadata: config.customMetadata,
-      runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
-      turnId: launchingTurn?.turn_id,
-      turnNumber: launchingTurn?.turn_number ?? sessionState.current_turn_number,
-      // Leave the Agent tool run open — the task-notification turn nests under it.
-      keepAgentToolRunOpen: true,
-      captureHookOutputs: config.captureHookOutputs
-    });
-    debug(`Traced background subagent ${input.agent_type} (${input.agent_id})`);
-  } catch (err) {
-    error(`Failed to trace background subagent: ${err}`);
-  }
-  let finalizeNow = false;
-  await atomicUpdateState(config.stateFilePath, (s) => {
-    const ss = getSessionState(s, input.session_id);
-    const entry = ss.task_run_map?.[input.agent_id];
-    const notifDone = (ss.notification_done_agents ?? []).includes(input.agent_id);
-    if (notifDone)
-      finalizeNow = true;
-    return {
-      ...s,
-      [input.session_id]: {
-        ...ss,
-        task_run_map: entry ? {
-          ...ss.task_run_map,
-          [input.agent_id]: {
-            ...entry,
-            agent_type: input.agent_type || entry.agent_type,
-            subagent_done: true
-          }
-        } : ss.task_run_map,
-        notification_done_agents: notifDone ? (ss.notification_done_agents ?? []).filter((id) => id !== input.agent_id) : ss.notification_done_agents
-      }
-    };
-  });
-  if (finalizeNow) {
-    debug(`Notification already done for ${input.agent_id}; finalizing from SubagentStop`);
-    await finalizeNotificationChain({
-      defaultMuted: config.defaultMuted,
-      stateFilePath: config.stateFilePath,
-      sessionId: input.session_id,
-      customMetadata: config.customMetadata,
-      runtimeVersion: launchingTurn?.runtime_version ?? sessionState.runtime_version,
-      agentId: input.agent_id
-    });
-  } else {
-    debug(`Subagent ${input.agent_id} traced; awaiting task-notification to finalize`);
-  }
+function outsideParent(dottedOrder) {
+  if (dottedOrder === void 0)
+    return void 0;
+  const { traceId, runId } = parseDottedOrder(dottedOrder);
+  return { id: runId, traceId, dottedOrder };
 }
-
-// dist/src/hooks/post-compact.js
-async function main6() {
-  const input = await readStdin();
-  if (!isPayloadForHook(input, "PostCompact"))
-    return;
-  const config = initHook(input.cwd);
-  if (!config)
-    return;
-  debug(`PostCompact hook started, session=${input.session_id}, trigger=${input.trigger}`);
-  await queueClosing(config, "post-compact", input, {
-    reset: () => ({ compaction_start_time: void 0, compaction_tracing: void 0 })
-  });
+function stricterMode(mode, other = mode) {
+  const rank = (candidate) => TRACING_MODE_STRICTNESS.indexOf(candidate);
+  return rank(other) > rank(mode) ? other : mode;
 }
-async function traceCompaction(_id, closing, config) {
-  const input = closing.input;
-  const sessionState = closing.session;
-  initTracing(config, input.cwd, input.session_id);
-  const endTime = new Date(closing.at).toISOString();
-  const startTime = sessionState.compaction_start_time ? new Date(sessionState.compaction_start_time).toISOString() : endTime;
-  const runId = stableRunId(startTime, input.session_id, input.trigger);
-  const segment = generateDottedOrderSegment(startTime, runId);
-  const turnDottedOrder = sessionState.current_dotted_order;
-  if (!turnDottedOrder || !sessionState.current_trace_id) {
-    debug(`Skipping compaction run ${runId}: no turn to nest it under`);
-    return;
-  }
-  const parentRunId = sessionState.current_turn_run_id ?? parseDottedOrder(turnDottedOrder).runId;
-  const traceId = sessionState.current_trace_id;
-  const dottedOrder = `${turnDottedOrder}.${segment}`;
-  try {
-    await captureRun({
-      id: runId,
-      name: `Context Compaction (${input.trigger})`,
-      run_type: "chain",
-      inputs: {},
-      outputs: { compact_summary: input.compact_summary },
-      start_time: startTime,
-      end_time: endTime,
-      trace_id: traceId,
-      dotted_order: dottedOrder,
-      parent_run_id: parentRunId,
-      metadata: codingAgentMetadata({
-        sessionId: input.session_id,
-        base: config.customMetadata,
-        turnNumber: sessionState.current_turn_number,
-        runtimeVersion: sessionState.runtime_version,
-        agentType: "compaction",
-        runSpecific: { trigger: input.trigger }
-      })
-    }, resolveTurnTracingMode(config, input.session_id, !sessionState.current_turn_run_id && sessionState.closed_turn_tracing === "metadata" ? "metadata" : void 0, sessionState.compaction_tracing, sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0));
-    debug(`Created compaction run ${runId} (${input.trigger})`);
-  } catch (err) {
-    error(`Failed to create compaction run: ${err}`);
-  }
+function blocksOf(line, type) {
+  const content = line.message?.content;
+  return Array.isArray(content) ? content.filter((block) => block?.type === type) : [];
 }
-
-// dist/src/engine-closings-constants.js
-var CLOSING_HANDLERS = {
-  stop: closeStoppedTurn,
-  "stop-failure": closeFailedTurn,
-  "session-end": closeEndedSession,
-  interrupted: closeInterruptedPrompt,
-  "subagent-stop": traceStoppedSubagent,
-  "post-compact": traceCompaction
-};
-
-// dist/src/engine-closings.js
-function reconstructJob(config) {
-  return (job) => job.eventId.startsWith(CLOSING_EVENT_PREFIX) ? runQueuedClosings(config, job.sessionId) : settleToolRuns(job);
+function textOf(content) {
+  if (typeof content === "string")
+    return content;
+  if (!Array.isArray(content))
+    return "";
+  return content.filter((block) => block?.type === "text" && typeof block.text === "string").map((block) => block.text).join("\n");
 }
-async function runQueuedClosings(workerConfig, sessionId) {
-  for (; ; ) {
-    const queued = getSessionState(loadState(workerConfig.stateFilePath), sessionId).queued_closings;
-    const next = Object.entries(queued ?? {}).sort(([, a], [, b]) => a.at - b.at)[0];
-    if (!next)
-      return { status: "ready", outputs: [] };
-    const [id, closing] = next;
-    const config = initHook(closing.input.cwd);
-    if (config) {
-      config.customMetadata = sessionScopedMetadata(config.customMetadata, closing.input.cwd);
-    }
-    try {
-      if (config)
-        await CLOSING_HANDLERS[closing.kind](id, closing, config);
-    } catch (err) {
-      error(`Failed to finish the ${closing.kind} hook's work: ${err}`);
-    }
-    await atomicUpdateState(workerConfig.stateFilePath, (state) => {
-      const session = getSessionState(state, sessionId);
-      const { [id]: _done, ...rest } = session.queued_closings ?? {};
-      return { ...state, [sessionId]: { ...session, queued_closings: rest } };
-    });
-  }
+function freshThread(mode, agentType) {
+  return { mode, agentType, llmIndex: 0, endTurnSeen: false, messages: [], lastText: "" };
 }
-
-// dist/src/legacy-import.js
-import { createHmac } from "node:crypto";
-import { basename as basename4, dirname as dirname22, join as join30 } from "node:path";
-function legacyRuns(config) {
-  const origin = legacyOrigin(config);
-  const root = dirname22(config.stateFilePath);
-  const scan = { runs: [], settled: [], unreadable: [] };
-  const { runs } = scan;
-  for (const [sessionId, file] of legacyFiles(join30(root, QUEUE_DIR_NAME), LEGACY_QUEUE_FILE)) {
-    const entry = readJson(readText(file));
-    if (!entry?.run)
-      scan.unreadable.push(file);
-    if (!entry?.run || entry.origin !== origin)
-      continue;
-    const { extra, ...run } = entry.run;
-    const metadata = withBothGitMetadataNames(extra?.metadata ?? {});
-    const base = entry.where && entry.tracing === "full" ? settledRepositoryMetadata(metadata, entry.where) : metadata;
-    runs.push({
-      sessionId,
-      file,
-      mode: entry.tracing,
-      operation: "post",
-      run: { ...run, metadata: legacyOptions(base ?? {}, sessionId, "tool") }
-    });
-  }
-  for (const [sessionId, file] of legacyFiles(join30(root, TURN_RECORD_DIR_NAME), LEGACY_TURN_FILE)) {
-    const record = readTurnRecord(file);
-    if (!record.root || !record.closed || record.origin !== origin)
-      continue;
-    const filled = turnAttribution(record) ?? {};
-    const open4 = record.children.filter((run) => run.open && record.delivered.has(run.run_id));
-    const before = runs.length;
-    for (const run of [record.root, ...open4]) {
-      if (record.fixed.has(run.run_id) || !run.start_time)
-        continue;
-      runs.push({
-        sessionId,
-        file,
-        mode: run.tracing,
-        operation: "patch",
-        run: {
-          id: run.run_id,
-          name: run.name,
-          run_type: run.run_type,
-          start_time: run.start_time,
-          end_time: run.end_time ?? (/* @__PURE__ */ new Date()).toISOString(),
-          parent_run_id: run.parent_run_id,
-          trace_id: run.trace_id,
-          dotted_order: run.dotted_order,
-          metadata: legacyOptions(metadataAfterFill(run, filled) ?? run.metadata, sessionId, run === record.root ? "root" : run.run_type === "llm" ? "llm" : "tool")
-        }
-      });
-    }
-    if (runs.length === before)
-      scan.settled.push(file);
-  }
-  return scan;
-}
-function legacyOrigin(config) {
-  const identity = JSON.stringify([
-    config.apiBaseUrl,
-    config.replicas ?? null,
-    config.redact ?? false,
-    config.redactExtraRules ?? null
-  ]);
-  return createHmac("sha256", config.apiKey).update(identity).digest("hex").slice(0, QUEUE_ORIGIN_LENGTH);
-}
-function legacyOptions(metadata, sessionId, runType) {
-  const legacy = metadata;
+function restoredState(saved, mode = "full") {
+  const candidate = saved;
+  if (candidate?.version === BUILDER_STATE_VERSION)
+    return candidate;
   return {
-    integration: LS_INTEGRATION,
-    threadId: legacy.thread_id ?? sessionId,
-    agentType: legacy.ls_agent_type ?? "root",
-    runType,
-    base: metadata,
-    turnId: legacy.turn_id,
-    turnNumber: legacy.turn_number,
-    runtimeVersion: legacy.ls_agent_runtime_version,
-    integrationVersion: legacy.ls_integration_version,
-    subagentId: legacy.ls_subagent_id,
-    subagentType: legacy.ls_subagent_type,
-    skillName: legacy.ls_skill_name,
-    modelName: legacy.ls_model_name,
-    usageMetadata: legacy.usage_metadata
+    version: BUILDER_STATE_VERSION,
+    sessionMode: mode,
+    turnCount: 0,
+    turns: {},
+    threads: { [MAIN_THREAD]: freshThread(mode, "root") },
+    tools: {},
+    hookTimes: {}
   };
 }
-function legacyFiles(root, pattern) {
-  if (!entryInfo(root)?.isDirectory())
-    return [];
-  return listDirectory(root).filter((sessionId) => entryInfo(join30(root, sessionId))?.isDirectory()).flatMap((sessionId) => listDirectory(join30(root, sessionId)).map((name) => [sessionId, join30(root, sessionId, name)]).filter(([, file]) => pattern.test(basename4(file)) && entryInfo(file)?.isFile()));
+function promptAnchor(transcriptPath, promptStart) {
+  try {
+    const lines = readFileSync20(transcriptPath, "utf8").split("\n").slice(0, -1);
+    const parsed = lines.map((line) => JSON.parse(line));
+    const isPrompt = (line) => isHumanMessage(line) && (line.timestamp ?? "") <= promptStart;
+    const prompt = parsed.map(isPrompt).lastIndexOf(true);
+    if (prompt < 0)
+      return void 0;
+    const ids = parsed.slice(0, prompt).flatMap((line) => line.uuid ?? []);
+    return ids.length === 0 ? { fromStart: true } : { afterLineId: ids[ids.length - 1] };
+  } catch {
+    return void 0;
+  }
 }
-function readTurnRecord(path3) {
-  const record = {
-    path: path3,
-    origin: "",
-    children: [],
-    closed: false,
-    delivered: /* @__PURE__ */ new Set(),
-    fixed: /* @__PURE__ */ new Set()
+function legacyOpenTurn(session, path3) {
+  const { current_turn_run_id: id, current_trace_id: traceId } = session;
+  const { current_dotted_order: dottedOrder, current_turn_start: start } = session;
+  if (!id || !traceId || !dottedOrder || !start)
+    return void 0;
+  const anchor = promptAnchor(path3, start);
+  if (anchor === void 0)
+    return void 0;
+  const builderState = restoredState(void 0, session.current_turn_tracing);
+  builderState.turnCount = (session.current_turn_number ?? 1) - 1;
+  builderState.seededRoot = { id, traceId, dottedOrder };
+  return { rootRunId: id, ...anchor, builderState };
+}
+var createTranscriptBuilder = (context) => {
+  const { sessionId, savedState, sink, tracingMode } = context;
+  const state = restoredState(savedState, tracingMode);
+  const main = () => state.threads[MAIN_THREAD];
+  const metadata = (options) => {
+    const { runtimeVersion, baseMetadata } = state;
+    const base = { ...baseMetadata, ...options.base };
+    return codingAgentMetadata({ sessionId, runtimeVersion, ...options, base });
   };
-  const children = /* @__PURE__ */ new Map();
-  for (const line of readText(path3).split("\n")) {
-    const parsed = readJson(line);
-    if (parsed?.k === TURN_RECORD_LINE.run && typeof parsed.run?.run_id === "string") {
-      if (parsed.root)
-        record.root = parsed.run;
-      else
-        children.set(parsed.run.run_id, parsed.run);
-      if (parsed.origin)
-        record.origin = parsed.origin;
-    } else if (parsed?.k === TURN_RECORD_LINE.closed) {
-      record.closed = true;
-    } else if (parsed?.k === TURN_RECORD_LINE.delivered) {
-      record.delivered.add(parsed.id);
-    } else if (parsed?.k === TURN_RECORD_LINE.reconciled) {
-      record.fixed.add(parsed.id);
+  function runIdentity(run) {
+    return {
+      id: run.id,
+      name: run.name,
+      run_type: run.runType,
+      trace_id: run.traceId,
+      dotted_order: run.dottedOrder,
+      ...run.parentId === void 0 ? {} : { parent_run_id: run.parentId },
+      tracingMode: run.mode
+    };
+  }
+  function postRun(run, content) {
+    sink.post({
+      ...runIdentity(run),
+      start_time: run.start,
+      ...run.end === void 0 ? {} : { end_time: run.end },
+      ...content,
+      metadata: run.metadata
+    });
+  }
+  function patchRun(run, end, content) {
+    sink.patch({
+      ...runIdentity(run),
+      end_time: later(run.start, end),
+      ...content,
+      metadata: content.metadata ?? run.metadata
+    });
+  }
+  function openRun(place, parent, fields) {
+    return { ...place, ...fields, ...parent === void 0 ? {} : { parentId: parent.id } };
+  }
+  function openTurn(time) {
+    const pendingPrompt = state.pendingPrompt;
+    const start = state.pendingStart;
+    const turnNumber = ++state.turnCount;
+    const promptId = pendingPrompt?.promptId;
+    const lineTime = pendingPrompt?.time ?? time;
+    if (start && pendingPrompt)
+      state.hookClockOffset = Date.parse(start.time) - Date.parse(lineTime);
+    const seeded = state.seededRoot;
+    state.seededRoot = void 0;
+    const startTime = start?.time ?? iso(Date.parse(lineTime) + (state.hookClockOffset ?? 0));
+    const id = start ? stableRunId(startTime, sessionId, turnNumber) : stableRunId(startTime, sessionId, promptId, turnNumber);
+    const notifiedTool = state.tools[pendingPrompt?.notificationOf ?? ""];
+    const parent = notifiedTool?.run ?? outsideParent(start?.parentDottedOrder);
+    const newPlace = parent ? childPlace(parent, id, startTime) : { id, traceId: id, dottedOrder: generateDottedOrderSegment(startTime, id) };
+    const place = seeded ?? newPlace;
+    const mode = stricterMode(start?.mode ?? state.sessionMode, notifiedTool?.run?.mode);
+    const approvalPolicy = start?.approvalPolicy ?? pendingPrompt?.approvalPolicy;
+    const content = pendingPrompt?.content;
+    const run = openRun(place, parent, {
+      name: USER_PROMPT_TURN_NAME,
+      runType: "chain",
+      start: startTime,
+      mode,
+      metadata: metadata({ turnNumber, approvalPolicy, agentType: "root" })
+    });
+    const userContent = content === void 0 ? void 0 : textBlocks(stripContentMarkup(content) ?? content);
+    const messages = userContent ? [{ role: "user", content: userContent }] : [];
+    if (seeded === void 0)
+      postRun(run, { inputs: { messages } });
+    state.turns[place.id] = {
+      run,
+      promptId,
+      turnNumber,
+      approvalPolicy,
+      typedSkill: content === void 0 ? void 0 : typedSkillName(content),
+      stopped: false,
+      toolOrigins: []
+    };
+    if (notifiedTool?.launch)
+      notifiedTool.launch.notificationTurn = place.id;
+    state.currentTurn = place.id;
+    state.lastTurnPlace = place;
+    state.pendingStart = void 0;
+    state.pendingPrompt = void 0;
+    state.hookTimes = {};
+    clearRepoAttributionCache();
+    state.threads[MAIN_THREAD] = {
+      ...freshThread(mode, "root"),
+      parent: place,
+      ownerId: place.id,
+      promptId,
+      turnNumber,
+      messages: [...messages, ...main().messages],
+      lastTime: startTime
+    };
+  }
+  function stopTurn(turnId, outcome) {
+    const turn = state.turns[turnId];
+    if (turn === void 0)
+      return;
+    if (state.currentTurn === turnId) {
+      finishCall(MAIN_THREAD);
+      main().messages = [];
+      turn.text = outcome.text ?? main().lastText;
+      turn.run.end = later(turn.run.end, main().lastTime);
+      state.currentTurn = void 0;
+    }
+    turn.stopped = true;
+    turn.error = outcome.error;
+    for (const tool of Object.values(state.tools)) {
+      if (tool.turnId !== turnId || tool.launch)
+        continue;
+      const time = tool.result?.time ?? turn.run.end ?? turn.run.start;
+      const error2 = outcome.error && TOOL_INTERRUPTED_ERROR;
+      closeToolNow(tool, { output: NO_TOOL_RESULT, time, error: error2 });
+    }
+    maybeCloseTurn(turnId);
+  }
+  function maybeCloseTurn(turnId) {
+    const turn = turnId === void 0 ? void 0 : state.turns[turnId];
+    if (turn === void 0 || !turn.stopped)
+      return;
+    if (Object.values(state.tools).some((tool) => tool.turnId === turnId))
+      return;
+    delete state.turns[turnId];
+    const messages = turn.text ? [{ role: "assistant", content: turn.text }] : [];
+    const { promptId, turnNumber, approvalPolicy, gitMetadata: base } = turn;
+    patchRun(turn.run, turn.run.end ?? turn.run.start, {
+      outputs: { messages },
+      ...turn.error ? { error: turn.error } : {},
+      metadata: metadata({ base, turnId: promptId, turnNumber, approvalPolicy, agentType: "root" })
+    });
+    const notified = Object.values(state.tools).find((t) => t.launch?.notificationTurn === turnId);
+    if (notified?.launch) {
+      notified.launch.notified = true;
+      notified.run.end = later(notified.run.end, turn.run.end);
+      maybeCloseAgentTool(notified);
     }
   }
-  record.children = [...children.values()];
-  return record;
-}
-
-// dist/src/legacy-sweep.js
-import { join as join31, dirname as dirname23 } from "node:path";
-function idleMs(info, now) {
-  return info ? now - info.mtimeMs : 0;
-}
-function removeIfOld(path3, now) {
-  const info = entryInfo(path3);
-  return info?.isFile() === true && idleMs(info, now) >= LEGACY_MAX_AGE_MS && removeFile2(path3);
-}
-function mayAgeOut(name, path3, removable) {
-  if (LEGACY_QUEUE_TEMP_FILE.test(name))
-    return true;
-  return (LEGACY_QUEUE_FILE.test(name) || LEGACY_TURN_FILE.test(name)) && removable.has(path3);
-}
-function sweepSession(path3, removable, now) {
-  const aged = listDirectory(path3).filter((name) => {
-    const entry = join31(path3, name);
-    return mayAgeOut(name, entry, removable) && removeIfOld(entry, now);
-  }).length;
-  if (aged > 0 || idleMs(entryInfo(path3), now) >= LEGACY_EMPTY_FOLDER_IDLE_MS) {
-    removeEmptyFolder(path3);
-  }
-  return aged;
-}
-function sweepFolder(path3, removable, now) {
-  if (!entryInfo(path3)?.isDirectory())
-    return 0;
-  let aged = 0;
-  for (const name of listDirectory(path3)) {
-    const entry = join31(path3, name);
-    if (entryInfo(entry)?.isDirectory())
-      aged += sweepSession(entry, removable, now);
-    else if (LEGACY_FLUSH_LOCK_FILE.test(name))
-      removeIfOld(entry, now);
-  }
-  removeEmptyFolder(path3);
-  return aged;
-}
-function sweepLegacyLeftovers(stateFilePath, removable, now = Date.now()) {
-  const root = dirname23(stateFilePath);
-  return [QUEUE_DIR_NAME, TURN_RECORD_DIR_NAME].reduce((aged, folder) => aged + sweepFolder(join31(root, folder), removable, now), 0);
-}
-
-// dist/src/engine-legacy.js
-async function importLegacyRuns(config, cwd) {
-  const sessions = /* @__PURE__ */ new Map();
-  const failed = /* @__PURE__ */ new Set();
-  const { runs, settled, unreadable } = legacyRuns(config);
-  for (const { sessionId, file, mode, operation, run } of runs) {
-    try {
-      const context = sessions.get(sessionId) ?? openSession(config, cwd, sessionId);
-      sessions.set(sessionId, context);
-      await captureInto(context, run, mode, run.id, operation);
-    } catch (err) {
-      failed.add(file);
-      warn(`Could not move ${file} to the new uploader: ${err}`);
-    }
-  }
-  for (const file of /* @__PURE__ */ new Set([...settled, ...runs.map((legacy) => legacy.file)])) {
-    if (!failed.has(file))
-      removeFile2(file);
-  }
-  const aged = sweepLegacyLeftovers(config.stateFilePath, new Set(unreadable));
-  if (aged > 0) {
-    warn(`Removed ${aged} ${LEGACY_SWEEP_WARNING}`);
-  }
-}
-
-// dist/src/engine-worker.js
-async function runEngineWorker(cwd, sessionId) {
-  const config = initHook(cwd);
-  if (!config || !sessionId)
-    return;
-  const result = await openSession(config, cwd, sessionId, reconstructJob(config)).session.drain();
-  if (WORKER_STOP_STATUSES.includes(result)) {
-    warn(`The uploader for ${sessionId} stopped with ${result}`);
-  }
-  await importLegacyRuns(config, cwd);
-}
-
-// dist/src/hooks/post-tool-use.js
-async function main7() {
-  const input = await readStdin();
-  if (!isPayloadForHook(input, "PostToolUse"))
-    return;
-  const config = initHook(input.cwd);
-  if (!config)
-    return;
-  if (input.agent_id) {
-    debug("Skipping PostToolUse for subagent tool \u2014 Stop hook handles tracing");
-    return;
-  }
-  const state = loadState(config.stateFilePath);
-  const sessionState = getSessionState(state, input.session_id);
-  const turnTracing = resolveTurnTracingMode(config, input.session_id, sessionState.tool_tracing_modes?.[input.tool_use_id], sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0);
-  const tracing = toolTracingMode(config, input.session_id, sessionState, expandHome(input.transcript_path), input.tool_use_id, turnTracing);
-  const parentRunId = sessionState.current_turn_run_id;
-  const traceId = sessionState.current_trace_id;
-  const parentDottedOrder = sessionState.current_dotted_order;
-  if (!parentRunId || !traceId || !parentDottedOrder) {
-    error("No current_turn_run_id or trace_id in state - UserPromptSubmit hook may not have run");
-    return;
-  }
-  const startTime = sessionState.tool_start_times?.[input.tool_use_id] ?? Date.now();
-  const toolRunId = stableRunId(startTime, input.session_id, input.tool_use_id);
-  const toolEndTime = Date.now();
-  const startTimeIso = new Date(startTime).toISOString();
-  const toolEndTimeIso = new Date(toolEndTime).toISOString();
-  const toolDottedOrderSegment = generateDottedOrderSegment(startTime, toolRunId);
-  const toolDottedOrder = `${parentDottedOrder}.${toolDottedOrderSegment}`;
-  const agentId = input.tool_response.agentId;
-  const workflow = !agentId ? detectWorkflowLaunch(input.tool_name, input.tool_response) : void 0;
-  const origin = toolOrigin(input.tool_input, input.cwd, input.tool_name);
-  let held = false;
-  const heldKey = [config.stateFilePath, input.session_id, input.tool_use_id];
-  const hold = async (run, mode, _parent, from) => {
-    const content = mode === "full" ? run : { ...run, inputs: {}, outputs: {} };
-    saveHeldRun({ run: content, tracing: mode, origin: from }, ...heldKey);
-    held = true;
-  };
-  if (agentId) {
-    debug(`Agent tool detected, deferring run creation for ${agentId} -> ${toolRunId}`);
-  } else if (workflow) {
-    debug(`Workflow tool detected, posting open run for ${workflow.runId} (task ${workflow.taskId}) -> ${toolRunId}`);
-    initTracing(config, input.cwd, input.session_id);
-    await captureToolRun2({
-      id: toolRunId,
-      name: "Workflow",
-      run_type: "tool",
-      inputs: { input: input.tool_input },
-      start_time: startTimeIso,
-      // No end_time — left open until finalizeNotificationChain closes it.
-      parent_run_id: parentRunId,
-      trace_id: traceId,
-      dotted_order: toolDottedOrder,
-      metadata: codingAgentMetadata({
-        sessionId: input.session_id,
-        base: config.customMetadata,
-        turnNumber: sessionState.current_turn_number,
-        runtimeVersion: sessionState.runtime_version,
-        agentType: "root",
-        toolName: "Workflow",
-        runName: "Workflow"
-      })
-    }, tracing, parentRunId, origin);
-  } else {
-    initTracing(config, input.cwd, input.session_id);
-    await (config.captureHookOutputs ? hold : captureToolRun2)({
-      id: toolRunId,
-      name: input.tool_name,
-      run_type: "tool",
-      inputs: { input: input.tool_input },
-      outputs: { output: input.tool_response },
-      start_time: startTimeIso,
-      end_time: toolEndTimeIso,
-      parent_run_id: parentRunId,
-      trace_id: traceId,
-      dotted_order: toolDottedOrder,
-      metadata: codingAgentMetadata({
-        sessionId: input.session_id,
-        base: config.customMetadata,
-        turnNumber: sessionState.current_turn_number,
-        runtimeVersion: sessionState.runtime_version,
-        agentType: "root",
-        toolName: input.tool_name,
-        runName: input.tool_name,
-        skillName: skillNameFromTool(input.tool_name, input.tool_input)
-      })
-    }, tracing, parentRunId, origin);
-  }
-  let kept = false;
-  await atomicUpdateState(config.stateFilePath, (freshState) => {
-    const freshSession = getSessionState(freshState, input.session_id);
-    const closings = Object.values(freshSession.queued_closings ?? {}).map((c) => c.session);
-    kept = held && [freshSession, ...closings].some((s) => s.current_turn_run_id === parentRunId);
-    let backgroundUpdate;
-    if (agentId || workflow) {
-      const deferred = {
-        trace_id: traceId,
-        parent_run_id: parentRunId,
-        start_time: startTimeIso,
-        end_time: toolEndTimeIso,
-        ...tracing === "full" ? { inputs: input.tool_input, outputs: input.tool_response } : {}
+  function readAssistant(threadKey, line, time) {
+    const thread = state.threads[threadKey];
+    const messageId = line.message?.id ?? NO_MESSAGE_ID;
+    if (thread.call && thread.call.messageId !== messageId)
+      finishCall(threadKey);
+    const raw = line.message?.content;
+    const content = Array.isArray(raw) ? raw : [];
+    thread.call ??= {
+      messageId,
+      index: thread.llmIndex++,
+      start: time,
+      end: time,
+      content: [],
+      model: stripModelDateSuffix(line.message?.model ?? ""),
+      usage: line.message?.usage ?? { input_tokens: 0, output_tokens: 0 },
+      inputs: [...thread.messages],
+      historyIndex: thread.messages.length
+    };
+    const call = thread.call;
+    call.end = time;
+    call.content.push(...content);
+    if (line.message?.usage)
+      call.usage = line.message.usage;
+    call.effort ??= line.effort;
+    if (line.message?.stop_reason === END_TURN)
+      thread.endTurnSeen = true;
+    const text = textOf(mergeAdjacentTextBlocks(call.content));
+    if (text)
+      thread.lastText = text;
+    for (const use of content.filter((block) => block.type === "tool_use")) {
+      const toolUseId = use.id;
+      const tool = {
+        toolUseId,
+        toolName: use.name,
+        thread: threadKey,
+        turnId: threadKey === MAIN_THREAD ? state.currentTurn : void 0,
+        input: use.input,
+        cwd: line.cwd,
+        callMessageId: messageId
       };
-      const launchingTurn = {
-        tracing: resolveTurnTracingMode(config, input.session_id, sessionState.current_turn_tracing, sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0),
-        run_id: parentRunId,
-        trace_id: traceId,
-        dotted_order: parentDottedOrder,
-        parent_run_id: sessionState.current_parent_run_id,
-        start_time: sessionState.current_turn_start,
-        turn_number: sessionState.current_turn_number,
-        runtime_version: sessionState.runtime_version,
-        approval_policy: sessionState.approval_policy
-      };
-      backgroundUpdate = recordBackgroundRun(freshSession, launchingTurn, agentId ?? workflow.taskId, {
-        tracing,
-        run_id: toolRunId,
-        dotted_order: toolDottedOrder,
-        deferred,
-        ...config.captureHookOutputs ? { tool_use_id: input.tool_use_id } : {},
-        ...workflow ? { workflow_run_id: workflow.runId, is_workflow: true, subagent_done: true } : {}
-      });
+      state.tools[toolUseId] = tool;
+      if (tool.turnId)
+        state.turns[tool.turnId]?.toolOrigins.push(toolOrigin(tool.input, state.cwd));
+      const hook = threadKey === MAIN_THREAD ? state.hookTimes[toolUseId] : void 0;
+      if (hook)
+        applyHookTime(tool, hook.time, hook.mode);
     }
-    return {
-      ...freshState,
-      [input.session_id]: {
-        ...freshSession,
-        // Don't resurrect a snapshot reclaimed while this hook awaited the SDK
-        // (notably by definitive SessionEnd). The local mode still protects this post.
-        ...sessionState.tool_tracing_modes?.[input.tool_use_id] !== void 0 && freshSession.tool_tracing_modes?.[input.tool_use_id] === void 0 ? {} : advanceToolTracingProgress({
-          ...freshSession,
-          tool_tracing_modes: {
-            ...freshSession.tool_tracing_modes,
-            [input.tool_use_id]: tracing
-          }
-        }, [input.tool_use_id], "post"),
-        last_tool_end_time: toolEndTime,
-        ...kept ? { held_tool_runs: { ...freshSession.held_tool_runs, [input.tool_use_id]: parentRunId } } : {},
-        ...backgroundUpdate,
-        // Mark the tool_use_id traced so traceTurn (Stop) skips re-tracing this
-        // tool call from the transcript. A deferred Agent tool is skipped there
-        // via its agentId link instead, so it's the one case we don't record —
-        // but a Workflow tool call has no agentId, so without this it would get a
-        // duplicate "Workflow" tool run next to the open one posted above.
-        ...agentId ? {} : {
-          traced_tool_use_ids: [...freshSession.traced_tool_use_ids ?? [], input.tool_use_id]
+  }
+  function finishCall(threadKey) {
+    const thread = state.threads[threadKey];
+    const call = thread?.call;
+    if (call === void 0 || thread.parent === void 0)
+      return;
+    thread.call = void 0;
+    const id = stableRunId(call.start, thread.ownerId, thread.promptId, call.index);
+    const merged = mergeAdjacentTextBlocks(call.content);
+    const hasTools = merged.some((block) => block.type === "tool_use");
+    const usage = buildUsageMetadata(call.usage);
+    const firstMainCall = threadKey === MAIN_THREAD && call.index === 0 && call.inputs.length > 1;
+    const typedSkill = firstMainCall ? state.turns[thread.ownerId]?.typedSkill : void 0;
+    const run = openRun(childPlace(thread.parent, id, call.start), thread.parent, {
+      name: ASSISTANT_RUN_NAME,
+      runType: "llm",
+      start: call.start,
+      mode: thread.mode,
+      metadata: metadata({
+        turnId: thread.promptId,
+        turnNumber: thread.turnNumber,
+        agentType: thread.agentType,
+        modelName: call.model,
+        skillName: typedSkill,
+        usageMetadata: usage,
+        runSpecific: {
+          ls_provider: resolveProvider(call.model),
+          ls_model_name: call.model,
+          ls_invocation_params: {
+            model: call.model,
+            ...call.effort ? { effort: call.effort } : {},
+            ...call.usage.service_tier ? { service_tier: call.usage.service_tier } : {}
+          },
+          usage_metadata: usage
         }
-      }
+      })
+    });
+    run.end = hasTools ? later(call.end, call.toolEnd) ?? call.end : call.end;
+    const outputs = assistantMessages(merged);
+    postRun(run, { inputs: { messages: call.inputs }, outputs: { messages: outputs } });
+    thread.messages.splice(call.historyIndex, 0, ...outputs);
+    for (const tool of Object.values(state.tools)) {
+      if (tool.thread !== threadKey || tool.callMessageId !== call.messageId || tool.run)
+        continue;
+      tool.callEnd = call.end;
+      if (tool.result)
+        postTool(tool, earlier(call.end, tool.result.time));
+      else if (threadKey !== MAIN_THREAD)
+        postTool(tool, call.end);
+    }
+  }
+  function toolParent(tool) {
+    if (tool.thread !== MAIN_THREAD)
+      return state.threads[tool.thread]?.parent;
+    return tool.turnId === void 0 ? void 0 : state.turns[tool.turnId]?.run;
+  }
+  function toolMode(tool) {
+    if (tool.thread !== MAIN_THREAD)
+      return state.threads[tool.thread]?.mode ?? state.sessionMode;
+    const turnMode = state.turns[tool.turnId ?? ""]?.run.mode ?? state.sessionMode;
+    return turnMode === "full" ? tool.hookMode ?? turnMode : turnMode;
+  }
+  function applyHookTime(tool, time, mode) {
+    delete state.hookTimes[tool.toolUseId];
+    if (tool.run)
+      return;
+    tool.hookMode = mode;
+    postTool(tool, time);
+  }
+  function postTool(tool, start) {
+    const parent = toolParent(tool);
+    if (parent === void 0)
+      return;
+    const thread = state.threads[tool.thread];
+    const id = stableRunId(start, sessionId, tool.toolUseId);
+    const isAgent = AGENT_TOOL_NAMES.has(tool.toolName);
+    const name = isAgent ? AGENT_RUN_NAME : tool.toolName;
+    tool.run = openRun(childPlace(parent, id, start), parent, {
+      name,
+      runType: "tool",
+      start: iso(start),
+      mode: toolMode(tool),
+      metadata: metadata({
+        base: repoScopedMetadata(state.baseMetadata, tool.input, tool.cwd ?? state.cwd, tool.toolName),
+        turnId: thread?.promptId,
+        turnNumber: thread?.turnNumber,
+        agentType: thread?.agentType ?? "root",
+        toolName: isAgent ? AGENT_NATIVE_TOOL_NAME : tool.toolName,
+        runName: name,
+        skillName: skillNameFromTool(tool.toolName, tool.input)
+      })
+    });
+    postRun(tool.run, { inputs: { input: tool.input } });
+    if (!isAgent)
+      tool.input = void 0;
+    if (tool.result)
+      finishTool(tool, tool.result);
+  }
+  function readToolResult(key, line, block, time) {
+    const thread = state.threads[key];
+    thread.messages.push({
+      role: "tool",
+      tool_call_id: block.tool_use_id,
+      content: toolResultBlocks(block.content)
+    });
+    const tool = state.tools[block.tool_use_id];
+    if (tool === void 0)
+      return;
+    const result = {
+      time,
+      output: line.toolUseResult ?? block.content,
+      ...block.is_error ? { error: textOf(block.content) || TOOL_INTERRUPTED_ERROR } : {},
+      agentId: stringValue(line.toolUseResult?.agentId),
+      agentType: stringValue(line.toolUseResult?.agentType),
+      launched: line.toolUseResult?.status === ASYNC_LAUNCHED_STATUS
     };
-  });
-  if (held && !kept)
-    takeHeldRun(...heldKey);
-}
-
-// dist/src/hooks/pre-compact.js
-async function main8() {
-  const input = await readStdin();
-  if (!isPayloadForHook(input, "PreCompact"))
-    return;
-  const config = initHook(input.cwd);
-  if (!config)
-    return;
-  debug(`PreCompact hook started, session=${input.session_id}, trigger=${input.trigger}`);
-  await atomicUpdateState(config.stateFilePath, (state) => {
-    const sessionState = getSessionState(state, input.session_id);
-    return {
-      ...state,
-      [input.session_id]: {
-        ...sessionState,
-        compaction_start_time: Date.now(),
-        compaction_tracing: resolveTurnTracingMode(config, input.session_id, input.trigger === "manual" ? void 0 : sessionState.current_turn_tracing, input.trigger !== "manual" && sessionState.current_turn_run_id ? sessionState.open_turns?.[sessionState.current_turn_run_id]?.tracing : void 0)
+    const call = state.threads[tool.thread]?.call;
+    if (call?.messageId === tool.callMessageId)
+      call.toolEnd = later(call.toolEnd, time);
+    if (tool.run)
+      finishTool(tool, result);
+    else if (tool.callEnd !== void 0) {
+      tool.result = result;
+      postTool(tool, earlier(tool.callEnd, time));
+    } else
+      tool.result = result;
+  }
+  function finishTool(tool, result) {
+    tool.result = void 0;
+    if (result.agentId && AGENT_TOOL_NAMES.has(tool.toolName)) {
+      linkAgent(tool, result.agentId, result.agentType);
+      if (result.launched) {
+        const chainClosed = !state.threads[result.agentId];
+        tool.launch = { output: result.output, chainClosed, notified: false };
+        tool.run.end = result.time;
+        maybeCloseAgentTool(tool);
+        return;
       }
+    }
+    closeToolNow(tool, result);
+  }
+  function closeToolNow(tool, outcome) {
+    if (tool.agentId && !tool.launch)
+      finishAgent(tool.agentId);
+    if (!tool.run)
+      postTool(tool, tool.callEnd ?? outcome.time);
+    delete state.tools[tool.toolUseId];
+    if (!tool.run)
+      return;
+    const runSpecific = { agent_type: tool.subagentType ?? AGENT_RUN_NAME, agent_id: tool.agentId };
+    patchRun(tool.run, outcome.time, {
+      outputs: { output: outcome.output },
+      ...outcome.error ? { error: outcome.error } : {},
+      ...AGENT_TOOL_NAMES.has(tool.toolName) ? { metadata: { ...tool.run.metadata, runSpecific } } : {}
+    });
+    const turn = state.turns[tool.turnId ?? ""];
+    if (turn)
+      turn.run.end = later(turn.run.end, outcome.time);
+    maybeCloseTurn(tool.turnId);
+  }
+  function linkAgent(tool, agentId, agentType) {
+    if (state.threads[agentId] || tool.agentId || !tool.run)
+      return;
+    const input = tool.input;
+    const subagentType = agentType ?? stringValue(input?.subagent_type) ?? DEFAULT_SUBAGENT_TYPE;
+    const id = stableRunId(tool.run.start, tool.run.id, agentId);
+    const parentThread = state.threads[tool.thread];
+    const chain = openRun(childPlace(tool.run, id, tool.run.start), tool.run, {
+      name: `${subagentType}${SUBAGENT_CHAIN_SUFFIX}`,
+      runType: "chain",
+      start: tool.run.start,
+      mode: tool.run.mode,
+      metadata: metadata({
+        turnId: parentThread?.promptId,
+        turnNumber: parentThread?.turnNumber,
+        agentType: "subagent",
+        subagentId: agentId,
+        subagentType
+      })
+    });
+    postRun(chain, { inputs: tool.input ?? {} });
+    tool.agentId = agentId;
+    tool.subagentType = subagentType;
+    state.threads[agentId] = {
+      ...freshThread(tool.run.mode, "subagent"),
+      parent: chain,
+      ownerId: id,
+      chain,
+      toolUseId: tool.toolUseId,
+      turnNumber: 0,
+      lastTime: tool.run.start
     };
-  });
-  debug(`Recorded compaction start time for session ${input.session_id}`);
-}
-
-// dist/src/hooks/pre-tool-use.js
-async function main9() {
-  const input = await readStdin();
-  if (!isPayloadForHook(input, "PreToolUse"))
-    return;
-  const config = initHook(input.cwd);
-  if (!config)
-    return;
-  const startTime = Date.now();
-  debug(`PreToolUse hook: tool=${input.tool_name}, id=${input.tool_use_id}`);
-  await atomicUpdateState(config.stateFilePath, (state) => {
-    const ss = getSessionState(state, input.session_id);
-    return {
-      ...state,
-      [input.session_id]: {
-        ...ss,
-        tool_tracing_modes: {
-          ...ss.tool_tracing_modes,
-          [input.tool_use_id]: resolveTurnTracingMode(config, input.session_id, ss.tool_tracing_modes?.[input.tool_use_id], ss.current_turn_tracing, ss.current_turn_run_id ? ss.open_turns?.[ss.current_turn_run_id]?.tracing : void 0)
-        },
-        tool_start_times: {
-          ...ss.tool_start_times,
-          [input.tool_use_id]: startTime
-        }
+  }
+  function linkFromMeta(agentId) {
+    if (state.threads[agentId] || state.mainPath === void 0)
+      return;
+    const toolUseId = metaToolUseId(state.mainPath, sessionId, agentId);
+    const tool = toolUseId === void 0 ? void 0 : state.tools[toolUseId];
+    if (tool && AGENT_TOOL_NAMES.has(tool.toolName))
+      linkAgent(tool, agentId, void 0);
+  }
+  function finishAgent(agentId) {
+    const thread = state.threads[agentId];
+    if (thread === void 0 || state.mainPath === void 0)
+      return;
+    const last = lastLineUuid(subagentTranscriptPath(state.mainPath, sessionId, agentId));
+    if (last === void 0 || last === thread.lastLineId)
+      closeSubagent(agentId);
+    else
+      thread.closeAtLineId = last;
+  }
+  function closeSubagent(agentId) {
+    const thread = state.threads[agentId];
+    if (thread?.chain === void 0)
+      return;
+    finishCall(agentId);
+    const end = thread.lastTime ?? thread.chain.start;
+    for (const tool2 of Object.values(state.tools)) {
+      if (tool2.thread !== agentId)
+        continue;
+      tool2.launch = void 0;
+      const time = tool2.result?.time ?? end;
+      closeToolNow(tool2, { output: NO_TOOL_RESULT, time, error: TOOL_INTERRUPTED_ERROR });
+    }
+    delete state.threads[agentId];
+    patchRun(thread.chain, end, { outputs: { output: thread.lastText } });
+    const tool = state.tools[thread.toolUseId ?? ""];
+    if (tool?.launch) {
+      tool.launch.chainClosed = true;
+      tool.run.end = later(tool.run.end, end);
+      maybeCloseAgentTool(tool);
+    }
+  }
+  function maybeCloseAgentTool(tool) {
+    const launch = tool.launch;
+    if (!launch.chainClosed || !launch.notified)
+      return;
+    closeToolNow(tool, { output: launch.output, time: tool.run.end ?? tool.run.start });
+  }
+  function closeLostLaunches(now) {
+    for (const tool of Object.values(state.tools)) {
+      const turn = state.turns[tool.turnId ?? ""];
+      const since = turn?.stopped ? turn.run.end ?? turn.run.start : now;
+      if (!tool.launch || Date.parse(now) - Date.parse(since) <= BACKGROUND_AGENT_WAIT_MS)
+        continue;
+      tool.launch = void 0;
+      closeToolNow(tool, { output: NO_TOOL_RESULT, time: tool.run.end ?? since });
+    }
+  }
+  function notificationTarget(content) {
+    const text = textOf(content);
+    return Object.values(state.tools).find((tool) => tool.launch && (text.includes(tool.agentId) || text.includes(tool.toolUseId)));
+  }
+  function startsNewTurn(thread, line, hasTurn) {
+    if (!hasTurn)
+      return true;
+    const sameTurn = line.promptId !== void 0 && line.promptId === thread.promptId;
+    const inserted = isInsertedMessage(line) && !thread.endTurnSeen;
+    return !sameTurn && !inserted;
+  }
+  function readMainHuman(line, time) {
+    const thread = main();
+    const pending = state.pendingPrompt;
+    const promptId = state.currentTurn ? thread.promptId : pending?.promptId;
+    const hasTurn = state.currentTurn !== void 0 || pending !== void 0;
+    const target = notificationTarget(line.message?.content);
+    const endTurnSeen = state.currentTurn ? thread.endTurnSeen : false;
+    if (target?.launch)
+      finishAgent(target.agentId);
+    if (!startsNewTurn({ ...thread, promptId, endTurnSeen }, line, hasTurn)) {
+      thread.messages.push({ role: "user", content: line.message?.content });
+      if (target?.launch) {
+        target.launch.notified = true;
+        maybeCloseAgentTool(target);
       }
+      return;
+    }
+    if (state.currentTurn)
+      stopTurn(state.currentTurn, { error: thread.endTurnSeen ? void 0 : USER_INTERRUPT_ERROR });
+    thread.messages = [];
+    state.pendingPrompt = {
+      time,
+      promptId: line.promptId,
+      content: line.message?.content,
+      approvalPolicy: line.permissionMode,
+      ...target ? { notificationOf: target.toolUseId } : {}
     };
-  });
-}
-
-// dist/src/hooks/registry.js
-var HOOK_HANDLERS = {
-  UserPromptSubmit: main4,
-  PreToolUse: main9,
-  PostToolUse: main7,
-  Stop: main,
-  StopFailure: main2,
-  SubagentStop: main5,
-  PreCompact: main8,
-  PostCompact: main6,
-  SessionEnd: main3
+    if (state.pendingStart)
+      openTurn(time);
+  }
+  function readThreadHuman(threadKey, line) {
+    const thread = state.threads[threadKey];
+    if (!startsNewTurn(thread, line, thread.prompted === true)) {
+      thread.messages.push({ role: "user", content: line.message?.content });
+      return;
+    }
+    finishCall(threadKey);
+    const prompt = line.message?.content;
+    thread.promptId = line.promptId;
+    thread.prompted = true;
+    thread.turnNumber = (thread.turnNumber ?? 0) + 1;
+    thread.llmIndex = 0;
+    thread.endTurnSeen = false;
+    thread.messages = [{ role: "user", content: textBlocks(stripContentMarkup(prompt) ?? prompt) }];
+  }
+  function readCompaction(line, time) {
+    if (line.subtype === COMPACT_BOUNDARY_SUBTYPE) {
+      flushCompaction(void 0);
+      const trigger = line.compactMetadata?.trigger ?? DEFAULT_COMPACT_TRIGGER;
+      const start = state.preCompact?.time ?? time;
+      state.compaction = { start, end: time, trigger, mode: state.preCompact?.mode };
+      state.preCompact = void 0;
+      return true;
+    }
+    flushCompaction(line.isCompactSummary ? textOf(line.message?.content) : void 0);
+    return false;
+  }
+  function flushCompaction(summary) {
+    const compaction = state.compaction;
+    if (compaction === void 0)
+      return;
+    state.compaction = void 0;
+    const turn = state.turns[state.currentTurn ?? ""];
+    const parent = turn?.run ?? state.lastTurnPlace;
+    if (parent === void 0)
+      return;
+    const id = stableRunId(compaction.start, sessionId, compaction.trigger);
+    const run = openRun(childPlace(parent, id, compaction.start), parent, {
+      name: COMPACTION_RUN_NAME(compaction.trigger),
+      runType: "chain",
+      start: compaction.start,
+      mode: compaction.mode ?? turn?.run.mode ?? state.sessionMode,
+      metadata: metadata({
+        turnNumber: turn?.turnNumber,
+        agentType: "compaction",
+        runSpecific: { trigger: compaction.trigger }
+      })
+    });
+    run.end = compaction.end;
+    postRun(run, { inputs: {}, outputs: { compact_summary: summary } });
+  }
+  function readMainLine(line, time) {
+    if (typeof line.cwd === "string")
+      state.cwd = line.cwd;
+    if (readCompaction(line, time))
+      return;
+    if (line.isSidechain)
+      return;
+    if (line.type === "assistant") {
+      if (state.currentTurn === void 0)
+        openTurn(time);
+      readAssistant(MAIN_THREAD, line, time);
+    } else if (line.type === "user")
+      readUserLine(MAIN_THREAD, line, time);
+    main().lastTime = later(main().lastTime, time);
+    closeLostLaunches(time);
+  }
+  function readSubagentLine(agentId, line, time) {
+    const thread = state.threads[agentId];
+    thread.lastTime = later(thread.lastTime, time);
+    const kind = line.type === "assistant" ? "tool_use" : "tool_result";
+    const blocks = blocksOf(line, kind);
+    if (blocks.some((block) => (block.id ?? block.tool_use_id) === thread.toolUseId))
+      return;
+    if (line.type === "assistant") {
+      if (thread.turnNumber === 0)
+        thread.turnNumber = 1;
+      readAssistant(agentId, line, time);
+    } else if (line.type === "user")
+      readUserLine(agentId, line, time);
+  }
+  function readUserLine(threadKey, line, time) {
+    if (!isHumanMessage(line)) {
+      for (const block of blocksOf(line, "tool_result"))
+        readToolResult(threadKey, line, block, time);
+    } else if (threadKey === MAIN_THREAD)
+      readMainHuman(line, time);
+    else
+      readThreadHuman(threadKey, line);
+  }
+  function readLine(transcriptPath, transcriptLine) {
+    const line = transcriptLine;
+    if (typeof line.version === "string" && line.version)
+      state.runtimeVersion = line.version;
+    const isMain = basename8(transcriptPath) === `${sessionId}${TRANSCRIPT_EXTENSION}`;
+    if (state.mainPath === void 0 && isMain)
+      state.mainPath = transcriptPath;
+    const time = line.timestamp;
+    if (typeof time === "string")
+      state.lastTime = later(state.lastTime, time);
+    if (transcriptPath === state.mainPath && typeof time === "string")
+      readMainLine(line, time);
+    const agentId = subagentIdOf(transcriptPath);
+    const thread = agentId === void 0 ? void 0 : state.threads[agentId];
+    if (thread === void 0)
+      return;
+    if (typeof time === "string")
+      readSubagentLine(agentId, line, time);
+    if (line.uuid !== void 0)
+      thread.lastLineId = line.uuid;
+    if (thread.closeAtLineId !== void 0 && thread.closeAtLineId === line.uuid)
+      closeSubagent(agentId);
+  }
+  function endSession() {
+    flushCompaction(void 0);
+    for (const agentId of Object.keys(state.threads))
+      closeSubagent(agentId);
+    if (state.currentTurn)
+      stopTurn(state.currentTurn, { error: SESSION_ENDED_ERROR });
+    for (const tool of Object.values(state.tools)) {
+      const time = tool.run?.end ?? state.lastTime ?? tool.run?.start ?? "";
+      if (tool.launch)
+        closeToolNow(tool, { output: tool.launch.output, time });
+    }
+    for (const [turnId, turn] of Object.entries(state.turns)) {
+      turn.stopped = true;
+      maybeCloseTurn(turnId);
+    }
+  }
+  function receiveNote(note) {
+    const details = note.details ?? {};
+    const time = details.time === void 0 ? state.lastTime ?? iso(Date.now()) : iso(details.time);
+    if (details.metadata)
+      state.baseMetadata = details.metadata;
+    if (details.cwd)
+      state.cwd = details.cwd;
+    if (state.mainPath === void 0 && note.transcriptPath && !note.agentId)
+      state.mainPath = note.transcriptPath;
+    const toolUseId = details.toolUseId;
+    switch (note.event) {
+      case HOOK_EVENTS.userPromptSubmit:
+        if (note.agentId)
+          return;
+        state.sessionMode = note.tracingMode ?? state.sessionMode;
+        const approvalPolicy = details.permissionMode;
+        const parentDottedOrder = details.parentDottedOrder;
+        state.pendingStart = { time, mode: state.sessionMode, approvalPolicy, parentDottedOrder };
+        return;
+      case HOOK_EVENTS.preToolUse:
+        if (note.agentId || toolUseId === void 0 || details.time === void 0)
+          return;
+        if (state.tools[toolUseId])
+          applyHookTime(state.tools[toolUseId], details.time, note.tracingMode);
+        else
+          state.hookTimes[toolUseId] = { time: details.time, mode: note.tracingMode };
+        return;
+      case HOOK_EVENTS.stop: {
+        const turn = state.turns[state.currentTurn ?? ""];
+        if (note.agentId || turn === void 0)
+          return;
+        state.pendingStart = void 0;
+        clearRepoAttributionCache();
+        turn.gitMetadata = originScopedMetadata(state.baseMetadata, turn.toolOrigins, state.cwd);
+        stopTurn(state.currentTurn, { text: details.lastAssistantMessage });
+        return;
+      }
+      case HOOK_EVENTS.stopFailure: {
+        if (note.agentId || state.currentTurn === void 0)
+          return;
+        state.pendingStart = void 0;
+        const { error: error2, errorDetails } = details;
+        stopTurn(state.currentTurn, { error: errorDetails ? `${error2}: ${errorDetails}` : error2 });
+        return;
+      }
+      case HOOK_EVENTS.subagentStop:
+        if (note.agentId === void 0)
+          return;
+        linkFromMeta(note.agentId);
+        finishAgent(note.agentId);
+        return;
+      case HOOK_EVENTS.preCompact:
+        state.preCompact = { time, mode: note.tracingMode };
+        return;
+      case HOOK_EVENTS.sessionEnd:
+        endSession();
+        return;
+    }
+  }
+  function transcripts() {
+    const mainPath = state.mainPath;
+    if (mainPath === void 0)
+      return [];
+    const agents = Object.keys(state.threads).filter((key) => key !== MAIN_THREAD);
+    return [mainPath, ...agents.map((id) => subagentTranscriptPath(mainPath, sessionId, id))];
+  }
+  return {
+    lineId: (line) => typeof line.uuid === "string" ? line.uuid : void 0,
+    readLine,
+    receiveNote,
+    transcripts,
+    state: () => state
+  };
 };
+
+// dist/src/tracer-hooks/legacy-sessions.js
+import { closeSync as closeSync9, existsSync as existsSync8, openSync as openSync9, readdirSync as readdirSync5, readSync as readSync5 } from "node:fs";
+import { homedir as homedir5 } from "node:os";
+import { join as join36 } from "node:path";
+function projectFolders() {
+  const projects = join36(homedir5(), ...CLAUDE_PROJECTS_PATH);
+  try {
+    return readdirSync5(projects).map((folder) => join36(projects, folder));
+  } catch {
+    return [];
+  }
+}
+function transcriptCwd(path3) {
+  const head = Buffer.alloc(TRANSCRIPT_HEAD_BYTES);
+  const file = openSync9(path3, "r");
+  const size = readSync5(file, head, 0, head.length, 0);
+  closeSync9(file);
+  const lines = head.subarray(0, size).toString("utf8").split("\n");
+  return lines.map((line) => jsonField(line, "cwd")).find((cwd) => cwd !== void 0);
+}
+function sessionWriter(cwd) {
+  const config = cwd === void 0 ? null : initHook(cwd);
+  return config ? writerOptions(config) : void 0;
+}
+function readLegacySessions(stateFile) {
+  const folders = projectFolders();
+  return Object.entries(loadState(stateFile)).flatMap(([sessionId, session]) => {
+    const transcriptPath = folders.map((folder) => join36(folder, `${sessionId}${TRANSCRIPT_EXTENSION}`)).find((path3) => existsSync8(path3));
+    if (transcriptPath === void 0)
+      return [];
+    const cwd = transcriptCwd(transcriptPath);
+    return [
+      {
+        sessionId,
+        transcriptPath,
+        updatedAt: Date.parse(session.updated),
+        tracingMode: session.current_turn_tracing,
+        writer: sessionWriter(cwd),
+        ...cwd === void 0 ? {} : { recover: () => runEngineWorker(cwd, sessionId) },
+        openTurn: legacyOpenTurn(session, transcriptPath)
+      }
+    ];
+  });
+}
+
+// dist/src/tracer-hooks/tracer-hooks.js
+async function sendTracerNote(event, input, config, tracingMode = resolveTurnTracingMode(config, input.session_id)) {
+  const paths = tracerPaths(dirname26(config.stateFilePath));
+  let launch;
+  sendHookNote({
+    integration: LS_INTEGRATION,
+    event,
+    sessionId: input.session_id,
+    ...input.transcript_path ? { transcriptPath: expandHome(input.transcript_path) } : {},
+    ...input.agent_id ? { agentId: input.agent_id } : {},
+    tracingMode,
+    details: {
+      time: Date.now(),
+      cwd: input.cwd,
+      toolUseId: input.tool_use_id,
+      permissionMode: input.permission_mode,
+      lastAssistantMessage: input.last_assistant_message,
+      error: input.error,
+      errorDetails: input.error_details,
+      metadata: config.customMetadata,
+      parentDottedOrder: config.parentDottedOrder
+    },
+    writer: writerOptions(config)
+  }, {
+    paths,
+    version: PLUGIN_VERSION,
+    startWorker: () => {
+      launch = launchDetachedWorker([ENGINE_WORKER_ARG, input.cwd], {
+        storageRoot: paths.folder
+      }).catch((err) => warn(`Could not start the tracing worker: ${err}`));
+    }
+  });
+  await launch;
+}
+function noteHandler(event) {
+  return async () => {
+    const input = await readStdin();
+    if (!isPayloadForHook(input, event))
+      return;
+    const config = initHook(input.cwd);
+    if (config)
+      await sendTracerNote(event, input, config);
+  };
+}
+var sendPromptNote = async (input, output, currentTurnMode) => {
+  const config = await promptTracingConfig(input, output);
+  if (!config)
+    return;
+  const mode = promptTurnMode(config, input.session_id, currentTurnMode);
+  await sendTracerNote("UserPromptSubmit", input, config, mode);
+};
+var NOTE_HANDLERS = {
+  ...Object.fromEntries(HOOK_EVENT_NAMES.map((event) => [event, noteHandler(event)])),
+  UserPromptSubmit: () => answerPrompt(sendPromptNote),
+  Stop: () => sleep3(STOP_FLUSH_WAIT_MS).then(noteHandler("Stop"))
+};
+async function runTracerWorker(cwd) {
+  const config = initHook(cwd);
+  if (!config)
+    return;
+  await startTracerWorker({
+    agentStateFolder: dirname26(config.stateFilePath),
+    integration: LS_INTEGRATION,
+    version: PLUGIN_VERSION,
+    createBuilder: createTranscriptBuilder,
+    readLegacySessions
+  });
+}
 
 // dist/src/hooks/dispatch.js
 var EXECUTABLE_NAME = binary.target.executableName;
 var USAGE = USAGE_TEMPLATE.replaceAll("{name}", EXECUTABLE_NAME);
 void dispatchHookCommand(process.argv.slice(2), {
   usage: USAGE,
-  version: LS_INTEGRATION_VERSION ?? "development",
-  hooks: HOOK_HANDLERS,
+  version: PLUGIN_VERSION,
+  hooks: NOTE_HANDLERS,
   worker: {
     command: ENGINE_WORKER_ARG,
-    run: ([cwd, sessionId]) => runEngineWorker(cwd ?? process.cwd(), sessionId)
+    run: ([cwd]) => runTracerWorker(cwd ?? process.cwd())
   },
   onHookError: (name, err) => {
     try {

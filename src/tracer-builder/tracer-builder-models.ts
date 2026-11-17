@@ -1,5 +1,5 @@
 import type { CodingAgentMetadataOptions } from "@langchain/plugins-base/metadata";
-import type { ContentBlock, Usage } from "../types.js";
+import type { ContentBlock, ToolOrigin, Usage } from "../types.js";
 import type { TracingMode } from "@langchain/plugins-base/tracer";
 
 export type Message = Record<string, unknown>;
@@ -12,6 +12,8 @@ export interface NoteDetails {
   metadata?: Record<string, unknown>;
   error?: string;
   errorDetails?: string;
+  parentDottedOrder?: string;
+  cwd?: string;
 }
 
 export interface RunPlace {
@@ -56,6 +58,16 @@ export interface ToolResult {
   time: string;
   output: unknown;
   error?: string;
+  agentId?: string;
+  agentType?: string;
+  launched: boolean;
+}
+
+export interface BackgroundLaunch {
+  output: unknown;
+  chainClosed: boolean;
+  notified: boolean;
+  notificationTurn?: string;
 }
 
 export interface OpenTool {
@@ -64,19 +76,24 @@ export interface OpenTool {
   thread: string;
   turnId?: string;
   input?: unknown;
+  cwd?: string;
   callMessageId: string;
   callEnd?: string;
   hookMode?: TracingMode;
   result?: ToolResult;
   run?: OpenRun;
+  agentId?: string;
+  subagentType?: string;
+  launch?: BackgroundLaunch;
 }
 
 export interface Thread {
   parent?: RunPlace;
   ownerId?: string;
   mode: TracingMode;
-  agentType: "root";
+  agentType: "root" | "subagent";
   promptId?: string;
+  prompted?: boolean;
   turnNumber?: number;
   llmIndex: number;
   endTurnSeen: boolean;
@@ -84,6 +101,10 @@ export interface Thread {
   messages: Message[];
   lastText: string;
   lastTime?: string;
+  lastLineId?: string;
+  closeAtLineId?: string;
+  chain?: OpenRun;
+  toolUseId?: string;
 }
 
 export interface OpenTurn {
@@ -95,12 +116,15 @@ export interface OpenTurn {
   stopped: boolean;
   error?: string;
   text?: string;
+  toolOrigins: ToolOrigin[];
+  gitMetadata?: Record<string, unknown>;
 }
 
 export interface PendingStart {
   time: string;
   mode: TracingMode;
   approvalPolicy?: string;
+  parentDottedOrder?: string;
 }
 
 export interface PendingPrompt {
@@ -108,6 +132,7 @@ export interface PendingPrompt {
   promptId?: string;
   content: string | Message[];
   approvalPolicy?: string;
+  notificationOf?: string;
 }
 
 export interface BuilderState {
@@ -126,6 +151,7 @@ export interface BuilderState {
   compaction?: { start: string; end: string; trigger: string; mode?: TracingMode };
   lastTime?: string;
   hookClockOffset?: number;
+  cwd?: string;
   turns: Record<string, OpenTurn>;
   threads: Record<string, Thread>;
   tools: Record<string, OpenTool>;
@@ -137,6 +163,7 @@ export interface ClaudeLine {
   subtype?: string;
   uuid?: string;
   timestamp?: string;
+  cwd?: string;
   promptId?: string;
   isCompactSummary?: boolean;
   isSidechain?: boolean;

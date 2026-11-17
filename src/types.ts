@@ -9,7 +9,7 @@ import type {
   CodingAgentMetadataOptions,
 } from "@langchain/plugins-base/metadata";
 import type { UploadLogin } from "@langchain/plugins-base/auth";
-import type { PluginSession } from "@langchain/plugins-base/plugin";
+import type { PluginSession, PromptCommandResponse } from "@langchain/plugins-base/plugin";
 import type { LifecycleCaptureInput } from "@langchain/plugins-base/tracing/lifecycle";
 import type { RecordedRun, TurnRecord } from "@langchain/plugins-base/tracing/settlement";
 import type { HookOutput } from "@langchain/plugins-base/tracing";
@@ -667,6 +667,12 @@ export interface UserPromptSubmitHookInput {
   agent_type?: string;
 }
 
+export type TurnStarter = (
+  input: UserPromptSubmitHookInput,
+  output: PromptCommandResponse,
+  currentTurnMode: TracingMode | undefined,
+) => Promise<void>;
+
 export type TracingCommand = (typeof TRACING_COMMAND_ENTRIES)[number]["name"];
 
 export interface UploadNotices {
@@ -753,4 +759,17 @@ export interface LegacyRunMetadata {
   ls_skill_name?: string;
   ls_model_name?: string;
   usage_metadata?: Record<string, unknown>;
+}
+
+export interface TracerHookInput {
+  session_id: string;
+  cwd: string;
+  hook_event_name?: string;
+  transcript_path?: string;
+  agent_id?: string;
+  tool_use_id?: string;
+  permission_mode?: string;
+  last_assistant_message?: string;
+  error?: string;
+  error_details?: string;
 }

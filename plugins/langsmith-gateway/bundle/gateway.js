@@ -667,6 +667,7 @@ var LEGACY_QUEUE_FILE = new RegExp(`^${LEGACY_QUEUE_ID}\\.queue\\.json$`);
 var LEGACY_QUEUE_TEMP_FILE = new RegExp(`^${LEGACY_QUEUE_ID}\\.queue\\.json\\.${LEGACY_UUID}\\.queue\\.tmp$`);
 var LEGACY_TURN_FILE = new RegExp(`^${LEGACY_UUID}\\.turn\\.jsonl$`);
 var LEGACY_FLUSH_LOCK_FILE = new RegExp(`^[\\w.-]+\\.flush\\.lock(\\.${LEGACY_UUID}\\.lock\\.staging)?$`);
+var BACKGROUND_AGENT_WAIT_MS = 4 * 60 * 60 * 1e3;
 
 // dist/src/integration-version.js
 var LS_INTEGRATION_VERSION = typeof __LS_INTEGRATION_VERSION__ !== "undefined" ? __LS_INTEGRATION_VERSION__ : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
