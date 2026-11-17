@@ -49,6 +49,7 @@ export interface ModelCall {
   usage: Usage;
   effort?: string;
   inputs: Message[];
+  historyIndex: number;
 }
 
 export interface ToolResult {

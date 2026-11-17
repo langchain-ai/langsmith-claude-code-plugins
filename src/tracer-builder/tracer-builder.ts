@@ -105,14 +105,18 @@ function restoredState(saved: unknown, mode: TracingMode = "full"): BuilderState
 }
 
 function promptAnchor(transcriptPath: string, promptStart: string) {
-  const lines = readFileSync(transcriptPath, "utf8").split("\n").slice(0, -1);
-  const parsed = lines.map((line) => JSON.parse(line) as TranscriptMessage & ClaudeLine);
-  const isPrompt = (line: TranscriptMessage & ClaudeLine) =>
-    isHumanMessage(line) && (line.timestamp ?? "") <= promptStart;
-  const prompt = parsed.map(isPrompt).lastIndexOf(true);
-  if (prompt < 0) return undefined;
-  const ids = parsed.slice(0, prompt).flatMap((line) => line.uuid ?? []);
-  return ids.length === 0 ? { fromStart: true } : { afterLineId: ids[ids.length - 1] };
+  try {
+    const lines = readFileSync(transcriptPath, "utf8").split("\n").slice(0, -1);
+    const parsed = lines.map((line) => JSON.parse(line) as TranscriptMessage & ClaudeLine);
+    const isPrompt = (line: TranscriptMessage & ClaudeLine) =>
+      isHumanMessage(line) && (line.timestamp ?? "") <= promptStart;
+    const prompt = parsed.map(isPrompt).lastIndexOf(true);
+    if (prompt < 0) return undefined;
+    const ids = parsed.slice(0, prompt).flatMap((line) => line.uuid ?? []);
+    return ids.length === 0 ? { fromStart: true } : { afterLineId: ids[ids.length - 1] };
+  } catch {
+    return undefined;
+  }
 }
 
 export function legacyOpenTurn(session: SessionState, path: string): LegacyOpenTurn | undefined {
@@ -232,6 +236,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     if (turn === undefined) return;
     if (state.currentTurn === turnId) {
       finishCall(MAIN_THREAD);
+      main().messages = [];
       turn.text = outcome.text ?? main().lastText;
       turn.run.end = later(turn.run.end, main().lastTime);
       state.currentTurn = undefined;
@@ -276,6 +281,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       model: stripModelDateSuffix(line.message?.model ?? ""),
       usage: line.message?.usage ?? { input_tokens: 0, output_tokens: 0 },
       inputs: [...thread.messages],
+      historyIndex: thread.messages.length,
     };
     const call = thread.call;
     call.end = time;
@@ -283,7 +289,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     if (line.message?.usage) call.usage = line.message.usage;
     call.effort ??= line.effort;
     if (line.message?.stop_reason === END_TURN) thread.endTurnSeen = true;
-    const text = textOf(content);
+    const text = textOf(mergeAdjacentTextBlocks(call.content));
     if (text) thread.lastText = text;
     for (const use of content.filter((block) => block.type === "tool_use")) {
       const toolUseId = (use as { id: string }).id;
@@ -339,7 +345,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     run.end = hasTools ? (later(call.end, call.toolEnd) ?? call.end) : call.end;
     const outputs = assistantMessages(merged);
     postRun(run, { inputs: { messages: call.inputs }, outputs: { messages: outputs } });
-    thread.messages = [];
+    thread.messages.splice(call.historyIndex, 0, ...outputs);
     for (const tool of Object.values(state.tools)) {
       if (tool.thread !== threadKey || tool.callMessageId !== call.messageId || tool.run) continue;
       tool.callEnd = call.end;
@@ -555,11 +561,13 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       case HOOK_EVENTS.stop: {
         const turn = state.turns[state.currentTurn ?? ""];
         if (note.agentId || turn === undefined) return;
+        state.pendingStart = undefined;
         stopTurn(state.currentTurn!, { text: details.lastAssistantMessage });
         return;
       }
       case HOOK_EVENTS.stopFailure: {
         if (note.agentId || state.currentTurn === undefined) return;
+        state.pendingStart = undefined;
         const { error, errorDetails } = details;
         stopTurn(state.currentTurn, { error: errorDetails ? `${error}: ${errorDetails}` : error });
         return;

@@ -62,13 +62,44 @@ describe("hook notes", () => {
   });
 
   it("closes a failed turn with the API error", () => {
-    const { patches, main, send } = fakeSession();
+    const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });
     main(prompt("p1", 0, "hi"), assistant("a1", 1, [toolUse("t1")]));
+    send("UserPromptSubmit", {}, { time: ms(2) });
     send("StopFailure", {}, { error: "rate_limit", errorDetails: "429 Too Many Requests" });
+    main(assistant("a2", 9, [{ type: "text", text: "later" }], "end_turn"));
 
     const turn = patches.find((r) => r.name === "Claude Code Turn");
     expect(turn?.error).toBe("rate_limit: 429 Too Many Requests");
+    expect(posts.filter((r) => r.name === "Claude Code Turn")[1].start_time).toBe(at(9));
+  });
+
+  it("gives each model call its turn's conversation and each turn its whole reply", () => {
+    const { posts, patches, main, send } = fakeSession();
+    const text = (said: string) => [{ type: "text", text: said }];
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 0, "list files"), assistant("a1", 1, [toolUse("t1")]));
+    const sameCall = { ...assistant("a1", 2, text("checking")), uuid: "a1-more" };
+    const rest = { ...assistant("a2", 3, text("world"), "end_turn"), uuid: "a2-more" };
+    main(toolResult("r1", 2, "t1"), sameCall, assistant("a2", 3, text("Hello ")), rest);
+    send("UserPromptSubmit", {}, { time: ms(4) });
+    send("Stop");
+    main(assistant("a3", 8, text("agent finished"), "end_turn"));
+    send("Stop");
+
+    const turns = posts.filter((r) => r.name === "Claude Code Turn");
+    const calls = posts.filter((r) => r.name === "Claude");
+    const roles = (input: unknown) =>
+      (input as { messages: { role: string }[] }).messages.map((m) => m.role);
+    expect(calls.map((r) => roles(r.inputs))).toEqual([
+      ["user"],
+      ["user", "assistant", "tool"],
+      [],
+    ]);
+    expect(turns.map((r) => r.start_time)).toEqual([at(0), at(8)]);
+    expect(calls[2].parent_run_id).toBe(turns[1].id);
+    const reply = { messages: [{ role: "assistant", content: "Hello world" }] };
+    expect(patches.find((r) => r.name === "Claude Code Turn")?.outputs).toEqual(reply);
   });
 
   it("puts a turn that has no prompt hook on the hook clock in the saved mode", () => {
@@ -94,9 +125,10 @@ describe("hook notes", () => {
     writeFileSync(transcript, `${text.join("\n")}\n{"type":"us`);
     const root = { current_turn_run_id: "root", current_trace_id: "t", current_dotted_order: "1" };
     const session = { ...root, current_turn_number: 2, current_turn_tracing: "metadata" };
-    const openTurn = (start: number) =>
-      legacyOpenTurn({ ...session, current_turn_start: at(start) } as SessionState, transcript);
+    const openTurn = (start: number, path = transcript) =>
+      legacyOpenTurn({ ...session, current_turn_start: at(start) } as SessionState, path);
     expect(openTurn(0)).toMatchObject({ fromStart: true });
+    expect(openTurn(10, join(tmpdir(), "missing.jsonl"))).toBeUndefined();
     const turn = openTurn(10);
     expect(turn).toMatchObject({ rootRunId: "root", afterLineId: "a1" });
 
