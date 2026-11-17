@@ -10,6 +10,7 @@ export interface NoteDetails {
   permissionMode?: string;
   lastAssistantMessage?: string;
   metadata?: Record<string, unknown>;
+  pinnedRepositoryKeys?: string[];
   error?: string;
   errorDetails?: string;
   parentDottedOrder?: string;
@@ -140,6 +141,7 @@ export interface BuilderState {
   mainPath?: string;
   sessionMode: TracingMode;
   baseMetadata?: Record<string, unknown>;
+  pinnedRepositoryKeys?: string[];
   runtimeVersion?: string;
   turnCount: number;
   currentTurn?: string;

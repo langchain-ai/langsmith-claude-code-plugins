@@ -9,7 +9,8 @@ import {
   LS_INTEGRATION,
   STOP_FLUSH_WAIT_MS,
 } from "../constants.js";
-import { writerOptions } from "../engine-writer.js";
+import { pinnedRepositoryKeys } from "../config.js";
+import { tracerWriter } from "../engine-writer.js";
 import { answerPrompt, promptTracingConfig } from "../hooks/user-prompt-submit.js";
 import { PLUGIN_VERSION } from "../integration-version.js";
 import { warn } from "../logger.js";
@@ -48,9 +49,10 @@ export async function sendTracerNote(
         error: input.error,
         errorDetails: input.error_details,
         metadata: config.customMetadata,
+        pinnedRepositoryKeys: [...pinnedRepositoryKeys(config.customMetadata)],
         parentDottedOrder: config.parentDottedOrder,
       } satisfies NoteDetails,
-      writer: writerOptions(config),
+      writer: tracerWriter(config),
     },
     {
       paths,

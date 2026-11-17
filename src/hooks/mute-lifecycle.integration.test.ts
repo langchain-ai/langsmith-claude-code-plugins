@@ -71,7 +71,7 @@ vi.mock("@langchain/plugins-base/auth", async (original) => ({
     profile?: string,
   ) => {
     h.noticeProfiles.push(profile);
-    return root !== "/langsmith_engine"
+    return root !== "/langsmith_plugins_base"
       ? undefined
       : rejected === undefined
         ? h.loginNotice
@@ -594,7 +594,7 @@ describe("closing hooks hand their work to the uploader", () => {
       plugin: "claude-code",
       kind: "managed-invalid",
       cooldown: 7,
-      storageRoot: "/langsmith_engine",
+      storageRoot: "/langsmith_plugins_base",
     });
     expect(h.operations).toEqual([]);
     output.mockRestore();
@@ -614,7 +614,7 @@ describe("closing hooks hand their work to the uploader", () => {
       plugin: "claude-code",
       kind: "login-expired",
       cooldown: 7,
-      storageRoot: "/langsmith_engine",
+      storageRoot: "/langsmith_plugins_base",
     });
     expect(h.operations).toHaveLength(2);
     output.mockRestore();
