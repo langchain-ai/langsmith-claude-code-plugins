@@ -658,7 +658,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     if (line.subtype === COMPACT_BOUNDARY_SUBTYPE) {
       flushCompaction(undefined);
       const trigger = line.compactMetadata?.trigger ?? DEFAULT_COMPACT_TRIGGER;
-      const start = state.preCompact?.time ?? time;
+      const start = earlier(state.preCompact?.time ?? time, time);
       state.compaction = { start, end: time, trigger, mode: state.preCompact?.mode };
       state.preCompact = undefined;
       return true;
@@ -821,6 +821,10 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     readLine,
     receiveNote,
     transcripts,
+    turnOpen: () =>
+      Object.keys(state.turns).length > 0 ||
+      state.pendingStart !== undefined ||
+      state.compaction !== undefined,
     state: () => state,
   };
 };

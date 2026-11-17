@@ -79,6 +79,27 @@ describe("hook notes", () => {
     expect(run("Grep").tracingMode).toBe("off");
   });
 
+  it("starts a compaction no later than its boundary line when the hook clock runs ahead", () => {
+    const { main, send, run } = fakeSession();
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "hi"));
+    send("PreCompact", {}, { time: ms(30) });
+    const boundary = { type: "system", subtype: "compact_boundary", uuid: "c1", timestamp: at(5) };
+    main(boundary, prompt("s1", 6, "summary"));
+    const compaction = run("Context Compaction (auto)");
+    expect(compaction.start_time).toBe(at(5));
+  });
+
+  it("reports a turn open from its prompt until it stops", () => {
+    const { builder, main, send } = fakeSession();
+    expect(builder.turnOpen()).toBe(false);
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "hi"), assistant("a1", 2, [{ type: "text", text: "ok" }], "end_turn"));
+    expect(builder.turnOpen()).toBe(true);
+    send("Stop");
+    expect(builder.turnOpen()).toBe(false);
+  });
+
   it("closes a failed turn with the API error", () => {
     const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });
