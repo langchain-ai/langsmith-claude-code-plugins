@@ -24614,6 +24614,7 @@ var TOOL_INTERRUPTED_ERROR = "Interrupted";
 var SESSION_ENDED_ERROR = "Session ended before turn completed";
 var SUBAGENTS_FOLDER = "subagents";
 var SUBAGENT_FILE = /^agent-(.+)\.jsonl$/;
+var SUBAGENT_META_FILE = /^agent-(.+)\.meta\.json$/;
 var subagentFileName = (agentId) => `agent-${agentId}.jsonl`;
 var subagentMetaFileName = (agentId) => `agent-${agentId}.meta.json`;
 var TRANSCRIPT_EXTENSION = ".jsonl";
@@ -29682,7 +29683,7 @@ var later = (a, b) => a === void 0 || b !== void 0 && Date.parse(b) > Date.parse
 var earlier = (a, b) => Date.parse(b) < Date.parse(a) ? b : a;
 
 // dist/src/tracer-builder/subagent-files.js
-import { readFileSync as readFileSync19 } from "node:fs";
+import { readdirSync as readdirSync5, readFileSync as readFileSync19 } from "node:fs";
 import { basename as basename7, dirname as dirname25, join as join35 } from "node:path";
 function subagentTranscriptPath(mainPath, sessionId, agentId) {
   return join35(dirname25(mainPath), sessionId, SUBAGENTS_FOLDER, subagentFileName(agentId));
@@ -29705,6 +29706,13 @@ function metaToolUseId(mainPath, sessionId, agentId) {
   const path3 = join35(dirname25(mainPath), sessionId, SUBAGENTS_FOLDER, subagentMetaFileName(agentId));
   try {
     return jsonField(readFileSync19(path3, "utf8"), "toolUseId");
+  } catch {
+    return void 0;
+  }
+}
+function metaAgentId(mainPath, sessionId, toolUseId) {
+  try {
+    return readdirSync5(join35(dirname25(mainPath), sessionId, SUBAGENTS_FOLDER)).map((name) => SUBAGENT_META_FILE.exec(name)?.[1]).find((id) => id !== void 0 && metaToolUseId(mainPath, sessionId, id) === toolUseId);
   } catch {
     return void 0;
   }
@@ -30076,13 +30084,14 @@ var createTranscriptBuilder = (context) => {
     const tool = state.tools[block.tool_use_id];
     if (tool === void 0)
       return;
+    const nested = line.toolUseResult === void 0 && tool.thread !== MAIN_THREAD && AGENT_TOOL_NAMES.has(tool.toolName);
     const result = {
       time,
       output: line.toolUseResult ?? block.content,
       ...block.is_error ? { error: textOf(block.content) || TOOL_INTERRUPTED_ERROR } : {},
-      agentId: stringValue(line.toolUseResult?.agentId),
+      agentId: stringValue(line.toolUseResult?.agentId) ?? (nested && state.mainPath ? metaAgentId(state.mainPath, sessionId, tool.toolUseId) : void 0),
       agentType: stringValue(line.toolUseResult?.agentType),
-      launched: line.toolUseResult?.status === ASYNC_LAUNCHED_STATUS
+      launched: line.toolUseResult?.status === ASYNC_LAUNCHED_STATUS || nested
     };
     const call = state.threads[tool.thread]?.call;
     if (call?.messageId === tool.callMessageId)
@@ -30101,7 +30110,7 @@ var createTranscriptBuilder = (context) => {
       linkAgent(tool, result.agentId, result.agentType);
       if (result.launched) {
         const chainClosed = !state.threads[result.agentId];
-        tool.launch = { output: result.output, chainClosed, notified: false };
+        tool.launch = { output: result.output, chainClosed, notified: tool.thread !== MAIN_THREAD };
         tool.run.end = result.time;
         maybeCloseAgentTool(tool);
         return;
@@ -30186,9 +30195,8 @@ var createTranscriptBuilder = (context) => {
     finishCall(agentId);
     const end = thread.lastTime ?? thread.chain.start;
     for (const tool2 of Object.values(state.tools)) {
-      if (tool2.thread !== agentId)
+      if (tool2.thread !== agentId || tool2.launch)
         continue;
-      tool2.launch = void 0;
       const time = tool2.result?.time ?? end;
       closeToolNow(tool2, { output: NO_TOOL_RESULT, time, error: TOOL_INTERRUPTED_ERROR });
     }
@@ -30487,13 +30495,13 @@ var createTranscriptBuilder = (context) => {
 };
 
 // dist/src/tracer-hooks/legacy-sessions.js
-import { closeSync as closeSync9, existsSync as existsSync8, openSync as openSync9, readdirSync as readdirSync5, readSync as readSync5 } from "node:fs";
+import { closeSync as closeSync9, existsSync as existsSync8, openSync as openSync9, readdirSync as readdirSync6, readSync as readSync5 } from "node:fs";
 import { homedir as homedir5 } from "node:os";
 import { join as join36 } from "node:path";
 function projectFolders() {
   const projects = join36(homedir5(), ...CLAUDE_PROJECTS_PATH);
   try {
-    return readdirSync5(projects).map((folder) => join36(projects, folder));
+    return readdirSync6(projects).map((folder) => join36(projects, folder));
   } catch {
     return [];
   }

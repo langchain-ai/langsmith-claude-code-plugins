@@ -369,6 +369,7 @@ export const SESSION_ENDED_ERROR = "Session ended before turn completed";
 
 export const SUBAGENTS_FOLDER = "subagents";
 export const SUBAGENT_FILE = /^agent-(.+)\.jsonl$/;
+export const SUBAGENT_META_FILE = /^agent-(.+)\.meta\.json$/;
 export const subagentFileName = (agentId: string) => `agent-${agentId}.jsonl`;
 export const subagentMetaFileName = (agentId: string) => `agent-${agentId}.meta.json`;
 export const TRANSCRIPT_EXTENSION = ".jsonl";

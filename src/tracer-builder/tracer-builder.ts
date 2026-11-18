@@ -39,6 +39,7 @@ import type {
 } from "../types.js";
 import {
   lastLineUuid,
+  metaAgentId,
   metaToolUseId,
   subagentIdOf,
   subagentTranscriptPath,
@@ -462,13 +463,21 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     });
     const tool = state.tools[block.tool_use_id];
     if (tool === undefined) return;
+    const nested =
+      line.toolUseResult === undefined &&
+      tool.thread !== MAIN_THREAD &&
+      AGENT_TOOL_NAMES.has(tool.toolName);
     const result: ToolResult = {
       time,
       output: line.toolUseResult ?? block.content,
       ...(block.is_error ? { error: textOf(block.content) || TOOL_INTERRUPTED_ERROR } : {}),
-      agentId: stringValue(line.toolUseResult?.agentId),
+      agentId:
+        stringValue(line.toolUseResult?.agentId) ??
+        (nested && state.mainPath
+          ? metaAgentId(state.mainPath, sessionId, tool.toolUseId)
+          : undefined),
       agentType: stringValue(line.toolUseResult?.agentType),
-      launched: line.toolUseResult?.status === ASYNC_LAUNCHED_STATUS,
+      launched: line.toolUseResult?.status === ASYNC_LAUNCHED_STATUS || nested,
     };
     const call = state.threads[tool.thread]?.call;
     if (call?.messageId === tool.callMessageId) call.toolEnd = later(call.toolEnd, time);
@@ -485,7 +494,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       linkAgent(tool, result.agentId, result.agentType);
       if (result.launched) {
         const chainClosed = !state.threads[result.agentId];
-        tool.launch = { output: result.output, chainClosed, notified: false };
+        tool.launch = { output: result.output, chainClosed, notified: tool.thread !== MAIN_THREAD };
         tool.run!.end = result.time;
         maybeCloseAgentTool(tool);
         return;
@@ -566,8 +575,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     finishCall(agentId);
     const end = thread.lastTime ?? thread.chain.start;
     for (const tool of Object.values(state.tools)) {
-      if (tool.thread !== agentId) continue;
-      tool.launch = undefined;
+      if (tool.thread !== agentId || tool.launch) continue;
       const time = tool.result?.time ?? end;
       closeToolNow(tool, { output: NO_TOOL_RESULT, time, error: TOOL_INTERRUPTED_ERROR });
     }

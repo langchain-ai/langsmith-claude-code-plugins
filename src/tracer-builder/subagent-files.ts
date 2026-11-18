@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { jsonField } from "../utils/records.js";
 import {
   SUBAGENT_FILE,
+  SUBAGENT_META_FILE,
   SUBAGENTS_FOLDER,
   subagentFileName,
   subagentMetaFileName,
@@ -30,6 +31,16 @@ export function metaToolUseId(mainPath: string, sessionId: string, agentId: stri
   const path = join(dirname(mainPath), sessionId, SUBAGENTS_FOLDER, subagentMetaFileName(agentId));
   try {
     return jsonField(readFileSync(path, "utf8"), "toolUseId");
+  } catch {
+    return undefined;
+  }
+}
+
+export function metaAgentId(mainPath: string, sessionId: string, toolUseId: string) {
+  try {
+    return readdirSync(join(dirname(mainPath), sessionId, SUBAGENTS_FOLDER))
+      .map((name) => SUBAGENT_META_FILE.exec(name)?.[1])
+      .find((id) => id !== undefined && metaToolUseId(mainPath, sessionId, id) === toolUseId);
   } catch {
     return undefined;
   }

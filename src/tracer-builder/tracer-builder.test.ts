@@ -307,6 +307,40 @@ describe("subagents", () => {
     expect(lastLineUuid(path)).toBe("long");
   });
 
+  it("keeps a subagent's background agent tracing past its result and past the subagent's own end", () => {
+    const { posts, patches, main, subagent, meta, send, run } = fakeSession();
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "go"), assistant("a1", 2, [toolUse("t1", "Agent")]));
+    send("PreToolUse", {}, { time: ms(3), toolUseId: "t1" });
+    main(toolResult("r1", 3, "t1", { status: "async_launched", agentId: "outer" }));
+    const outer = subagent("outer", [
+      prompt("o1", 4, "outer task"),
+      assistant("o2", 5, [toolUse("t2", "Agent", { subagent_type: "inner" })]),
+      toolResult("o3", 6, "t2"),
+      assistant("o4", 7, [{ type: "text", text: "waiting" }]),
+    ]);
+    const innerStart = subagent("inner", [prompt("i1", 6, "inner task")]);
+    meta("inner", "t2");
+    outer();
+    innerStart();
+    send("SubagentStop", { agentId: "outer" });
+    const inner = subagent("inner", [
+      prompt("i1", 6, "inner task"),
+      assistant("i2", 8, [toolUse("t3")]),
+      toolResult("i3", 9, "t3"),
+      assistant("i4", 10, [{ type: "text", text: "inner done" }], "end_turn"),
+    ]);
+    inner();
+    send("SubagentStop", { agentId: "inner" });
+
+    const innerTool = posts.find((r) => r.name === "Agent" && r.start_time === at(5))!;
+    const innerChain = run("inner Subagent");
+    expect(innerChain.parent_run_id).toBe(innerTool.id);
+    expect(run("Bash").parent_run_id).toBe(innerChain.id);
+    expect(patches.find((r) => r.id === innerTool.id)?.error).toBeUndefined();
+    expect(patches.map((r) => r.id)).toContain(innerTool.id);
+  });
+
   it("nests an agent launched by a subagent, posting the outer one once when it stops early", () => {
     const { posts, patches, builder, main, subagent, meta, send, run } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });
