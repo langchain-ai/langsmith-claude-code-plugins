@@ -358,6 +358,7 @@ export const SUBAGENT_CHAIN_SUFFIX = " Subagent";
 export const NO_MESSAGE_ID = "__no_id__";
 export const NO_TOOL_RESULT = "No result";
 export const END_TURN = "end_turn";
+export const HOOK_BLOCKING_ATTACHMENT = "hook_blocking_error";
 export const COMPACT_BOUNDARY_SUBTYPE = "compact_boundary";
 export const DEFAULT_COMPACT_TRIGGER = "auto";
 export const COMPACTION_RUN_NAME = (trigger: string) => `Context Compaction (${trigger})`;
@@ -373,6 +374,7 @@ export const SESSION_ENDED_ERROR = "Session ended before turn completed";
 
 export const SUBAGENTS_FOLDER = "subagents";
 export const SUBAGENT_FILE = /^agent-(.+)\.jsonl$/;
+export const SUBAGENT_META_FILE = /^agent-(.+)\.meta\.json$/;
 export const TRANSCRIPT_EXTENSION = ".jsonl";
 export const TRACING_MODE_STRICTNESS = ["full", "metadata", "off"];
 

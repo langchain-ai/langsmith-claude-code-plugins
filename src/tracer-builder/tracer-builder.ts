@@ -40,6 +40,7 @@ import type {
 } from "../types.js";
 import {
   lastLineUuid,
+  metaAgentId,
   metaToolUseId,
   subagentIdOf,
   subagentTranscriptPath,
@@ -56,6 +57,7 @@ import {
   DEFAULT_COMPACT_TRIGGER,
   DEFAULT_SUBAGENT_TYPE,
   END_TURN,
+  HOOK_BLOCKING_ATTACHMENT,
   HOOK_EVENTS,
   MAIN_THREAD,
   MODEL_HISTORY_RESULT_LIMIT_BYTES,
@@ -283,6 +285,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     };
     if (notifiedTool?.launch) notifiedTool.launch.notificationTurn = place.id;
     state.currentTurn = place.id;
+    state.stoppedTurn = undefined;
     state.lastTurnPlace = place;
     state.pendingStart = undefined;
     state.pendingPrompt = undefined;
@@ -494,13 +497,21 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     ]);
     const tool = state.tools[block.tool_use_id];
     if (tool === undefined) return;
+    const nested =
+      line.toolUseResult === undefined &&
+      tool.thread !== MAIN_THREAD &&
+      AGENT_TOOL_NAMES.has(tool.toolName);
     const result: ToolResult = {
       time,
       output: line.toolUseResult ?? block.content,
       ...(block.is_error ? { error: textOf(block.content) || TOOL_INTERRUPTED_ERROR } : {}),
-      agentId: stringValue(line.toolUseResult?.agentId),
+      agentId:
+        stringValue(line.toolUseResult?.agentId) ??
+        (nested && state.mainPath
+          ? metaAgentId(state.mainPath, sessionId, tool.toolUseId)
+          : undefined),
       agentType: stringValue(line.toolUseResult?.agentType),
-      launched: line.toolUseResult?.status === ASYNC_LAUNCHED_STATUS,
+      launched: line.toolUseResult?.status === ASYNC_LAUNCHED_STATUS || nested,
     };
     const call = state.threads[tool.thread]?.call;
     if (call?.messageId === tool.callMessageId) call.toolEnd = later(call.toolEnd, time);
@@ -515,7 +526,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       linkAgent(tool, result.agentId, result.agentType);
       if (result.launched) {
         const chainClosed = !state.threads[result.agentId];
-        tool.launch = { output: result.output, chainClosed, notified: false };
+        tool.launch = { output: result.output, chainClosed, notified: tool.thread !== MAIN_THREAD };
         tool.run!.end = result.time;
         maybeCloseAgentTool(tool);
         return;
@@ -596,8 +607,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     finishCall(agentId);
     const end = thread.lastTime ?? thread.chain.start;
     for (const tool of Object.values(state.tools)) {
-      if (tool.thread !== agentId) continue;
-      tool.launch = undefined;
+      if (tool.thread !== agentId || tool.launch) continue;
       const time = tool.result?.time ?? end;
       closeToolNow(tool, { output: NO_TOOL_RESULT, time, error: TOOL_INTERRUPTED_ERROR });
     }
@@ -646,7 +656,14 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     const pending = state.pendingPrompt;
     const promptId = state.currentTurn ? thread.promptId : pending?.promptId;
     const hasTurn = state.currentTurn !== undefined || pending !== undefined;
-    if (!hasTurn && line.promptId !== undefined && line.promptId === thread.promptId) return;
+    if (
+      !hasTurn &&
+      !state.pendingStart &&
+      line.promptId !== undefined &&
+      line.promptId === thread.promptId
+    )
+      return;
+    if (!hasTurn && line.turnCompanion === true) return;
     const target = notificationTarget(line.message?.content);
     const endTurnSeen = state.currentTurn ? thread.endTurnSeen : false;
     if (target?.launch) finishAgent(target.agentId!);
@@ -734,9 +751,22 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     postRun(run, { inputs: {}, outputs: { compact_summary: summary } });
   }
 
+  function reopenBlockedTurn(line: ClaudeLine) {
+    const turn = state.stoppedTurn;
+    const { type, hookEvent } = line.attachment ?? {};
+    if (type !== HOOK_BLOCKING_ATTACHMENT || hookEvent !== HOOK_EVENTS.stop) return;
+    if (turn === undefined || state.currentTurn !== undefined || state.pendingPrompt) return;
+    state.stoppedTurn = undefined;
+    state.turns[turn.run.id] ??= turn;
+    state.turns[turn.run.id].stopped = false;
+    state.currentTurn = turn.run.id;
+    main().endTurnSeen = false;
+  }
+
   function readMainLine(line: ClaudeLine, time: string) {
     if (typeof line.cwd === "string") state.cwd = line.cwd;
     if (readCompaction(line, time)) return;
+    reopenBlockedTurn(line);
     if (line.isSidechain) return;
     if (line.type === "assistant") {
       if (state.currentTurn === undefined) openTurn(time);
@@ -829,6 +859,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
         state.pendingStart = undefined;
         clearRepoAttributionCache();
         turn.gitMetadata = originScopedMetadata(state.baseMetadata, turn.toolOrigins, state.cwd);
+        state.stoppedTurn = turn;
         stopTurn(state.currentTurn!, { text: details.lastAssistantMessage });
         return;
       }

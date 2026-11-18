@@ -86,6 +86,43 @@ describe("hook notes", () => {
     expect(builder.state()).toMatchObject({ compaction: { start: at(5) } });
   });
 
+  it("keeps the prompt of a turn that reuses the previous turn's prompt id", () => {
+    const { posts, main, send } = fakeSession();
+    const said = (text: string) => [{ type: "text", text }];
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "first"), assistant("a1", 2, said("ok"), "end_turn"));
+    send("Stop");
+    send("UserPromptSubmit", {}, { time: ms(3) });
+    main(prompt("p2", 4, "second", "p1"), assistant("a2", 5, said("done"), "end_turn"));
+    send("Stop");
+
+    const turns = posts.filter((r) => r.name === "Claude Code Turn");
+    expect(JSON.stringify(turns[1]?.inputs)).toContain("second");
+  });
+
+  it("keeps a blocked Stop's continuation in the same turn and closes it at the final Stop", () => {
+    const { posts, patches, main, send } = fakeSession();
+    const said = (text: string) => [{ type: "text", text }];
+    const blocked = { hookEvent: "Stop", type: "hook_blocking_error" };
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "first"), assistant("a1", 2, said("draft"), "end_turn"));
+    send("Stop", {}, { lastAssistantMessage: "draft" });
+    main({ ...prompt("f1", 3, "Stop hook feedback: retry", "p1"), isMeta: true });
+    main({ type: "attachment", uuid: "b1", timestamp: at(3), attachment: blocked });
+    main(assistant("a2", 4, said("final"), "end_turn"));
+    send("Stop", {}, { lastAssistantMessage: "final" });
+    main({ ...prompt("c1", 5, "<system-reminder>x</system-reminder>", "p2"), turnCompanion: true });
+    send("UserPromptSubmit", {}, { time: ms(6) });
+    main(prompt("p2", 6, "<task-notification>done</task-notification>"));
+    main(assistant("a3", 7, said("noted"), "end_turn"));
+
+    const turns = posts.filter((r) => r.name === "Claude Code Turn");
+    expect(turns.length).toBe(2);
+    const closes = patches.filter((r) => r.id === turns[0]?.id);
+    expect(JSON.stringify(closes.at(-1)?.outputs)).toContain("final");
+    expect(JSON.stringify(turns[1]?.inputs)).toContain("task-notification");
+  });
+
   it("closes a failed turn with the API error", () => {
     const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });
@@ -285,6 +322,40 @@ describe("subagents", () => {
     expect(lastLineUuid(path)).toBe("outer");
     writeFileSync(path, `${JSON.stringify({ text: "x".repeat(100_000), uuid: "long" })}\n`);
     expect(lastLineUuid(path)).toBe("long");
+  });
+
+  it("keeps a subagent's background agent tracing past its result and past the subagent's own end", () => {
+    const { posts, patches, main, subagent, meta, send, run } = fakeSession();
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "go"), assistant("a1", 2, [toolUse("t1", "Agent")]));
+    send("PreToolUse", {}, { time: ms(3), toolUseId: "t1" });
+    main(toolResult("r1", 3, "t1", { status: "async_launched", agentId: "outer" }));
+    const outer = subagent("outer", [
+      prompt("o1", 4, "outer task"),
+      assistant("o2", 5, [toolUse("t2", "Agent", { subagent_type: "inner" })]),
+      toolResult("o3", 6, "t2"),
+      assistant("o4", 7, [{ type: "text", text: "waiting" }]),
+    ]);
+    const innerStart = subagent("inner", [prompt("i1", 6, "inner task")]);
+    meta("inner", "t2");
+    outer();
+    innerStart();
+    send("SubagentStop", { agentId: "outer" });
+    const inner = subagent("inner", [
+      prompt("i1", 6, "inner task"),
+      assistant("i2", 8, [toolUse("t3")]),
+      toolResult("i3", 9, "t3"),
+      assistant("i4", 10, [{ type: "text", text: "inner done" }], "end_turn"),
+    ]);
+    inner();
+    send("SubagentStop", { agentId: "inner" });
+
+    const innerTool = posts.find((r) => r.name === "Agent" && r.start_time === at(5))!;
+    const innerChain = run("inner Subagent");
+    expect(innerChain.parent_run_id).toBe(innerTool.id);
+    expect(run("Bash").parent_run_id).toBe(innerChain.id);
+    expect(patches.find((r) => r.id === innerTool.id)?.error).toBeUndefined();
+    expect(patches.map((r) => r.id)).toContain(innerTool.id);
   });
 
   it("nests an agent launched by a subagent, posting the outer one once when it stops early", () => {
