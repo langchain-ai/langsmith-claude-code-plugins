@@ -59,6 +59,7 @@ import {
   END_TURN,
   HOOK_BLOCKING_ATTACHMENT,
   HOOK_EVENTS,
+  LATE_REPLY_WINDOW_MS,
   MAIN_THREAD,
   MODEL_HISTORY_RESULT_LIMIT_BYTES,
   MODEL_HISTORY_STUB,
@@ -763,13 +764,34 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     main().endTurnSeen = false;
   }
 
+  function reopenForLateReply(line: ClaudeLine, time: string): boolean {
+    const late = state.lateReply;
+    if (late === undefined || state.pendingStart || state.pendingPrompt) return false;
+    if (Date.parse(time) - late.stoppedAt > LATE_REPLY_WINDOW_MS) return false;
+    late.messageId = line.message?.id;
+    state.turns[late.turn.run.id] ??= late.turn;
+    state.turns[late.turn.run.id].stopped = false;
+    state.currentTurn = late.turn.run.id;
+    return true;
+  }
+
+  function closeLateReply(line?: ClaudeLine) {
+    const late = state.lateReply;
+    if (late?.messageId === undefined) return;
+    if (line?.type === "assistant" && line.message?.id === late.messageId) return;
+    state.lateReply = undefined;
+    if (state.currentTurn === late.turn.run.id)
+      stopTurn(late.turn.run.id, { text: late.turn.text });
+  }
+
   function readMainLine(line: ClaudeLine, time: string) {
     if (typeof line.cwd === "string") state.cwd = line.cwd;
+    closeLateReply(line);
     if (readCompaction(line, time)) return;
     reopenBlockedTurn(line);
     if (line.isSidechain) return;
     if (line.type === "assistant") {
-      if (state.currentTurn === undefined) openTurn(time);
+      if (state.currentTurn === undefined && !reopenForLateReply(line, time)) openTurn(time);
       readAssistant(MAIN_THREAD, line, time);
     } else if (line.type === "user") readUserLine(MAIN_THREAD, line, time);
     main().lastTime = later(main().lastTime, time);
@@ -828,6 +850,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
   }
 
   function receiveNote(note: HookNote) {
+    closeLateReply();
     const details = (note.details ?? {}) as NoteDetails;
     const time =
       details.time === undefined ? (state.lastTime ?? iso(Date.now())) : iso(details.time);
@@ -860,6 +883,8 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
         clearRepoAttributionCache();
         turn.gitMetadata = originScopedMetadata(state.baseMetadata, turn.toolOrigins, state.cwd);
         state.stoppedTurn = turn;
+        const stoppedAt = Date.parse(time) - (state.hookClockOffset ?? 0);
+        state.lateReply = main().endTurnSeen ? undefined : { turn, stoppedAt };
         stopTurn(state.currentTurn!, { text: details.lastAssistantMessage });
         return;
       }

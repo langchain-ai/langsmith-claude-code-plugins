@@ -137,6 +137,12 @@ export interface PendingPrompt {
   notificationOf?: string;
 }
 
+export interface LateReply {
+  turn: OpenTurn;
+  stoppedAt: number;
+  messageId?: string;
+}
+
 export interface BuilderState {
   version: number;
   mainPath?: string;
@@ -147,6 +153,7 @@ export interface BuilderState {
   turnCount: number;
   currentTurn?: string;
   stoppedTurn?: OpenTurn;
+  lateReply?: LateReply;
   lastTurnPlace?: RunPlace;
   seededRoot?: RunPlace;
   pendingStart?: PendingStart;

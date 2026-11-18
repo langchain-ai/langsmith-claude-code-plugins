@@ -358,6 +358,7 @@ export const SUBAGENT_CHAIN_SUFFIX = " Subagent";
 export const NO_MESSAGE_ID = "__no_id__";
 export const NO_TOOL_RESULT = "No result";
 export const END_TURN = "end_turn";
+export const LATE_REPLY_WINDOW_MS = 10_000;
 export const HOOK_BLOCKING_ATTACHMENT = "hook_blocking_error";
 export const COMPACT_BOUNDARY_SUBTYPE = "compact_boundary";
 export const DEFAULT_COMPACT_TRIGGER = "auto";

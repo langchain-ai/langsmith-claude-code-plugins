@@ -24605,6 +24605,7 @@ var SUBAGENT_CHAIN_SUFFIX = " Subagent";
 var NO_MESSAGE_ID = "__no_id__";
 var NO_TOOL_RESULT = "No result";
 var END_TURN = "end_turn";
+var LATE_REPLY_WINDOW_MS = 1e4;
 var HOOK_BLOCKING_ATTACHMENT = "hook_blocking_error";
 var COMPACT_BOUNDARY_SUBTYPE = "compact_boundary";
 var DEFAULT_COMPACT_TRIGGER = "auto";
@@ -30373,16 +30374,39 @@ var createTranscriptBuilder = (context) => {
     state.currentTurn = turn.run.id;
     main().endTurnSeen = false;
   }
+  function reopenForLateReply(line, time) {
+    const late = state.lateReply;
+    if (late === void 0 || state.pendingStart || state.pendingPrompt)
+      return false;
+    if (Date.parse(time) - late.stoppedAt > LATE_REPLY_WINDOW_MS)
+      return false;
+    late.messageId = line.message?.id;
+    state.turns[late.turn.run.id] ??= late.turn;
+    state.turns[late.turn.run.id].stopped = false;
+    state.currentTurn = late.turn.run.id;
+    return true;
+  }
+  function closeLateReply(line) {
+    const late = state.lateReply;
+    if (late?.messageId === void 0)
+      return;
+    if (line?.type === "assistant" && line.message?.id === late.messageId)
+      return;
+    state.lateReply = void 0;
+    if (state.currentTurn === late.turn.run.id)
+      stopTurn(late.turn.run.id, { text: late.turn.text });
+  }
   function readMainLine(line, time) {
     if (typeof line.cwd === "string")
       state.cwd = line.cwd;
+    closeLateReply(line);
     if (readCompaction(line, time))
       return;
     reopenBlockedTurn(line);
     if (line.isSidechain)
       return;
     if (line.type === "assistant") {
-      if (state.currentTurn === void 0)
+      if (state.currentTurn === void 0 && !reopenForLateReply(line, time))
         openTurn(time);
       readAssistant(MAIN_THREAD, line, time);
     } else if (line.type === "user")
@@ -30453,6 +30477,7 @@ var createTranscriptBuilder = (context) => {
     }
   }
   function receiveNote(note) {
+    closeLateReply();
     const details = note.details ?? {};
     const time = details.time === void 0 ? state.lastTime ?? iso(Date.now()) : iso(details.time);
     if (details.metadata) {
@@ -30489,6 +30514,8 @@ var createTranscriptBuilder = (context) => {
         clearRepoAttributionCache();
         turn.gitMetadata = originScopedMetadata(state.baseMetadata, turn.toolOrigins, state.cwd);
         state.stoppedTurn = turn;
+        const stoppedAt = Date.parse(time) - (state.hookClockOffset ?? 0);
+        state.lateReply = main().endTurnSeen ? void 0 : { turn, stoppedAt };
         stopTurn(state.currentTurn, { text: details.lastAssistantMessage });
         return;
       }

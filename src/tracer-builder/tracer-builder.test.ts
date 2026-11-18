@@ -123,6 +123,68 @@ describe("hook notes", () => {
     expect(JSON.stringify(turns[1]?.inputs)).toContain("task-notification");
   });
 
+  it("keeps a reply written after its Stop in the turn that Stop closed", () => {
+    const { posts, main, send } = fakeSession();
+    const said = (text: string) => [{ type: "text", text }];
+    const thought = [{ type: "thinking", thinking: "wrap up" }];
+    send("UserPromptSubmit", {}, { time: ms(-99) });
+    main(prompt("p1", 1, "first"), assistant("a1", 2, [toolUse("t1")]), toolResult("r1", 3, "t1"));
+    send("Stop", {}, { time: ms(-96), lastAssistantMessage: "final" });
+    main(assistant("a2", 4, thought, "end_turn"), {
+      ...assistant("a2", 4, said("final"), "end_turn"),
+      uuid: "a2-text",
+    });
+    send("UserPromptSubmit", {}, { time: ms(-95) });
+    main(prompt("p2", 5, "second"), assistant("a3", 6, said("ok"), "end_turn"));
+    send("Stop", {}, { lastAssistantMessage: "ok" });
+
+    const turns = posts.filter((r) => r.name === "Claude Code Turn");
+    const calls = posts.filter((r) => r.name === "Claude");
+    expect(turns).toHaveLength(2);
+    expect(calls.map((call) => call.parent_run_id)).toEqual([
+      turns[0].id,
+      turns[0].id,
+      turns[1].id,
+    ]);
+  });
+
+  it("starts a new turn for model work after a later turn ended normally", () => {
+    const { posts, main, send } = fakeSession();
+    const said = (text: string) => [{ type: "text", text }];
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "first"), assistant("a1", 2, [toolUse("t1")]), toolResult("r1", 3, "t1"));
+    send("Stop");
+    send("UserPromptSubmit", {}, { time: ms(4) });
+    main(prompt("p2", 4, "second"), assistant("a2", 5, said("ok"), "end_turn"));
+    send("Stop");
+    main(assistant("a3", 6, said("background work done"), "end_turn"));
+
+    const turns = posts.filter((r) => r.name === "Claude Code Turn");
+    expect(turns).toHaveLength(3);
+  });
+
+  it("starts a new turn for model work long after a Stop that had no reply", () => {
+    const { posts, main, send } = fakeSession();
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "first"), assistant("a1", 2, [toolUse("t1")]), toolResult("r1", 3, "t1"));
+    send("Stop");
+    main(assistant("a2", 60, [{ type: "text", text: "background work done" }], "end_turn"));
+
+    expect(posts.filter((r) => r.name === "Claude Code Turn")).toHaveLength(2);
+  });
+
+  it("closes a reply written after its Stop without an error when the session ends next", () => {
+    const { posts, patches, main, send } = fakeSession();
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "first"));
+    send("Stop", {}, { lastAssistantMessage: "final" });
+    main(assistant("a1", 2, [{ type: "text", text: "final" }], "end_turn"));
+    send("SessionEnd");
+
+    const turn = posts.find((r) => r.name === "Claude Code Turn")!;
+    expect(patches.filter((r) => r.id === turn.id).at(-1)?.error).toBeUndefined();
+  });
+
   it("closes a failed turn with the API error", () => {
     const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });
