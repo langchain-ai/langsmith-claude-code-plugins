@@ -112,6 +112,7 @@ const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /** Argument that runs the background uploader instead of a hook handler. */
 const ENGINE_WORKER_ARG = "--engine-worker";
+const LEGACY_TRACING_ENV = "CC_LANGSMITH_LEGACY_TRACING";
 const DEVELOPMENT_VERSION = "development";
 
 const PLUGIN_FLAG = "--plugin";
@@ -340,6 +341,7 @@ export {
   GH_LOGIN_MARKER_FILE,
   SESSION_MAX_AGE_MS,
   ENGINE_WORKER_ARG,
+  LEGACY_TRACING_ENV,
   DEVELOPMENT_VERSION,
   PLUGIN_FLAG,
   GATEWAY_PLUGIN,
