@@ -113,6 +113,54 @@ describe("hook notes", () => {
     expect(patches.find((r) => r.name === "Claude Code Turn")?.outputs).toEqual(reply);
   });
 
+  it("keeps a big tool output on its own run and a stub in the model history", () => {
+    const { posts, patches, main, send } = fakeSession();
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 0, "read it"), assistant("a1", 1, [toolUse("t1")]));
+    main(toolResult("r1", 2, "t1", undefined, "x".repeat(9000)));
+    main(assistant("a2", 3, [{ type: "text", text: "ok" }], "end_turn"));
+    send("Stop");
+
+    expect(patches.find((r) => r.name === "Bash")?.outputs).toEqual({ output: "x".repeat(9000) });
+    const inputs = posts.filter((r) => r.name === "Claude")[1].inputs as { messages: unknown[] };
+    const stub = "[9027 bytes left out here, the full content is on the run that made it]";
+    expect(inputs.messages[2]).toEqual({ role: "tool", tool_call_id: "t1", content: stub });
+  });
+
+  it("stubs a turn's oldest model history past the cap, even from a snapshot without a total", () => {
+    const first = fakeSession();
+    const ask = "y".repeat(1000);
+    const uses = Array.from({ length: 523 }, (_, i) => toolUse(`t${i}`));
+    const results = uses.map((use, i) =>
+      toolResult(`r${i}`, 2, use.id, undefined, i === 0 ? "done" : "x".repeat(8000)),
+    );
+    first.send("UserPromptSubmit", {}, { time: ms(0) });
+    first.main(prompt("p1", 0, ask), assistant("a1", 1, uses), ...results.slice(0, 500));
+    const saved = JSON.parse(JSON.stringify(first.builder.state()));
+    delete saved.threads.main.historyBytes;
+
+    const { builder, posts, main, send } = fakeSession(undefined, saved);
+    main(...results.slice(500), assistant("a2", 3, [{ type: "text", text: "ok" }], "end_turn"));
+    send("Stop");
+
+    const inputs = posts.find((r) => r.name === "Claude" && r.start_time === at(3))!.inputs;
+    const contents = (inputs as { messages: { content: unknown }[] }).messages.map(
+      (m) => m.content,
+    );
+    const stub = (bytes: number) =>
+      `[${bytes} bytes left out here, the full content is on the run that made it]`;
+    expect(contents.slice(0, 7)).toEqual([
+      [{ type: "text", text: ask }],
+      stub(37024),
+      [{ type: "text", text: "done" }],
+      stub(8027),
+      stub(8027),
+      stub(8027),
+      [{ type: "text", text: "x".repeat(8000) }],
+    ]);
+    expect(builder.state()).toMatchObject({ threads: { main: { messages: [], historyBytes: 0 } } });
+  });
+
   it("puts a turn that has no prompt hook on the hook clock in the saved mode", () => {
     const { posts, main, send } = fakeSession("metadata");
     const replayShift = 86_400_000;

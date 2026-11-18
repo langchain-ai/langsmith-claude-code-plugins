@@ -39,13 +39,19 @@ export const toolUse = (id: string, name = "Bash", input: unknown = { command: "
   input,
 });
 
-export const toolResult = (uuid: string, second: number, toolUseId: string, result?: unknown) => ({
+export const toolResult = (
+  uuid: string,
+  second: number,
+  toolUseId: string,
+  result?: unknown,
+  content = "done",
+) => ({
   type: "user",
   uuid,
   timestamp: at(second),
   message: {
     role: "user",
-    content: [{ type: "tool_result", tool_use_id: toolUseId, content: "done" }],
+    content: [{ type: "tool_result", tool_use_id: toolUseId, content }],
   },
   ...(result === undefined ? {} : { toolUseResult: result }),
 });

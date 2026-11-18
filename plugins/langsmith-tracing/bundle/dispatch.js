@@ -24583,6 +24583,8 @@ var LEGACY_QUEUE_FILE = new RegExp(`^${LEGACY_QUEUE_ID}\\.queue\\.json$`);
 var LEGACY_QUEUE_TEMP_FILE = new RegExp(`^${LEGACY_QUEUE_ID}\\.queue\\.json\\.${LEGACY_UUID}\\.queue\\.tmp$`);
 var LEGACY_TURN_FILE = new RegExp(`^${LEGACY_UUID}\\.turn\\.jsonl$`);
 var LEGACY_FLUSH_LOCK_FILE = new RegExp(`^[\\w.-]+\\.flush\\.lock(\\.${LEGACY_UUID}\\.lock\\.staging)?$`);
+var MODEL_HISTORY_RESULT_LIMIT_BYTES = 8 * 1024;
+var MODEL_HISTORY_TURN_LIMIT_BYTES = 4 * 1024 * 1024;
 
 // dist/src/integration-version.js
 var LS_INTEGRATION_VERSION = true ? "0.6.6" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;

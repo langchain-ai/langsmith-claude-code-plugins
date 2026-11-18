@@ -82,6 +82,7 @@ export interface Thread {
   endTurnSeen: boolean;
   call?: ModelCall;
   messages: Message[];
+  historyBytes?: number;
   lastText: string;
   lastTime?: string;
 }

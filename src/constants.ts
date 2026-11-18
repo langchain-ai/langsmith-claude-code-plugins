@@ -355,6 +355,11 @@ export const END_TURN = "end_turn";
 export const COMPACT_BOUNDARY_SUBTYPE = "compact_boundary";
 export const DEFAULT_COMPACT_TRIGGER = "auto";
 export const COMPACTION_RUN_NAME = (trigger: string) => `Context Compaction (${trigger})`;
+export const MODEL_HISTORY_RESULT_LIMIT_BYTES = 8 * 1024;
+export const MODEL_HISTORY_TURN_LIMIT_BYTES = 4 * 1024 * 1024;
+export const MODEL_HISTORY_STUB_ENDING =
+  " bytes left out here, the full content is on the run that made it]";
+export const MODEL_HISTORY_STUB = (bytes: number) => `[${bytes}${MODEL_HISTORY_STUB_ENDING}`;
 
 export const USER_INTERRUPT_ERROR = "User interrupt";
 export const TOOL_INTERRUPTED_ERROR = "Interrupted";

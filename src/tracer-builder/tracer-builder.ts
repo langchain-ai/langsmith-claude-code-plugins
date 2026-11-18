@@ -16,6 +16,7 @@ import {
   resolveProvider,
   stripModelDateSuffix,
 } from "../transcript.js";
+import { jsonBytes } from "../utils/bytes.js";
 import { stripContentMarkup, typedSkillName } from "../utils/harness.js";
 import { stableRunId } from "../utils/ids/run-id.js";
 import { earlier, iso, later } from "../utils/times.js";
@@ -39,6 +40,10 @@ import {
   END_TURN,
   HOOK_EVENTS,
   MAIN_THREAD,
+  MODEL_HISTORY_RESULT_LIMIT_BYTES,
+  MODEL_HISTORY_STUB,
+  MODEL_HISTORY_STUB_ENDING,
+  MODEL_HISTORY_TURN_LIMIT_BYTES,
   NO_MESSAGE_ID,
   NO_TOOL_RESULT,
   SESSION_ENDED_ERROR,
@@ -88,6 +93,31 @@ function textOf(content: unknown): string {
 
 function freshThread(mode: TracingMode, agentType: Thread["agentType"]): Thread {
   return { mode, agentType, llmIndex: 0, endTurnSeen: false, messages: [], lastText: "" };
+}
+
+function historyBytes(messages: Message[]): number {
+  return messages.reduce((sum, message) => sum + jsonBytes(message), 0);
+}
+
+function stubbedContent(content: unknown, limit: number): unknown {
+  const bytes = jsonBytes(content);
+  return bytes > limit ? MODEL_HISTORY_STUB(bytes) : content;
+}
+
+function changeHistory(thread: Thread, start: number, removeCount: number, added: Message[] = []) {
+  const before = thread.historyBytes ?? historyBytes(thread.messages);
+  const removed = thread.messages.splice(start, removeCount, ...added);
+  thread.historyBytes = before - historyBytes(removed) + historyBytes(added);
+  for (let i = 1; i < thread.messages.length; i++) {
+    if (thread.historyBytes <= MODEL_HISTORY_TURN_LIMIT_BYTES) return;
+    const message = thread.messages[i];
+    if (String(message.content).endsWith(MODEL_HISTORY_STUB_ENDING)) continue;
+    const stubbed = { ...message, content: stubbedContent(message.content, 0) };
+    const saved = jsonBytes(message) - jsonBytes(stubbed);
+    if (saved <= 0) continue;
+    thread.messages[i] = stubbed;
+    thread.historyBytes -= saved;
+  }
 }
 
 function restoredState(saved: unknown, mode: TracingMode = "full"): BuilderState {
@@ -220,15 +250,16 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     state.pendingStart = undefined;
     state.pendingPrompt = undefined;
     state.hookTimes = {};
+    const carried = main().messages;
     state.threads[MAIN_THREAD] = {
       ...freshThread(mode, "root"),
       parent: place,
       ownerId: place.id,
       promptId,
       turnNumber,
-      messages: [...messages, ...main().messages],
       lastTime: startTime,
     };
+    changeHistory(main(), 0, 0, [...messages, ...carried]);
   }
 
   function stopTurn(turnId: string, outcome: { error?: string; text?: string }) {
@@ -236,7 +267,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     if (turn === undefined) return;
     if (state.currentTurn === turnId) {
       finishCall(MAIN_THREAD);
-      main().messages = [];
+      changeHistory(main(), 0, main().messages.length);
       turn.text = outcome.text ?? main().lastText;
       turn.run.end = later(turn.run.end, main().lastTime);
       state.currentTurn = undefined;
@@ -345,7 +376,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     run.end = hasTools ? (later(call.end, call.toolEnd) ?? call.end) : call.end;
     const outputs = assistantMessages(merged);
     postRun(run, { inputs: { messages: call.inputs }, outputs: { messages: outputs } });
-    thread.messages.splice(call.historyIndex, 0, ...outputs);
+    changeHistory(thread, call.historyIndex, 0, outputs);
     for (const tool of Object.values(state.tools)) {
       if (tool.thread !== threadKey || tool.callMessageId !== call.messageId || tool.run) continue;
       tool.callEnd = call.end;
@@ -393,11 +424,14 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
 
   function readToolResult(key: string, line: ClaudeLine, block: ToolResultBlock, time: string) {
     const thread = state.threads[key];
-    thread.messages.push({
-      role: "tool",
-      tool_call_id: block.tool_use_id,
-      content: toolResultBlocks(block.content as ToolResultContent | undefined),
-    });
+    const content = toolResultBlocks(block.content as ToolResultContent | undefined);
+    changeHistory(thread, thread.messages.length, 0, [
+      {
+        role: "tool",
+        tool_call_id: block.tool_use_id,
+        content: stubbedContent(content, MODEL_HISTORY_RESULT_LIMIT_BYTES),
+      },
+    ]);
     const tool = state.tools[block.tool_use_id];
     if (tool === undefined) return;
     const result: ToolResult = {
@@ -445,12 +479,14 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     if (!hasTurn && line.promptId !== undefined && line.promptId === thread.promptId) return;
     const endTurnSeen = state.currentTurn ? thread.endTurnSeen : false;
     if (!startsNewTurn({ ...thread, promptId, endTurnSeen }, line, hasTurn)) {
-      thread.messages.push({ role: "user", content: line.message?.content });
+      changeHistory(thread, thread.messages.length, 0, [
+        { role: "user", content: line.message?.content },
+      ]);
       return;
     }
     if (state.currentTurn)
       stopTurn(state.currentTurn, { error: thread.endTurnSeen ? undefined : USER_INTERRUPT_ERROR });
-    thread.messages = [];
+    changeHistory(thread, 0, thread.messages.length);
     state.pendingPrompt = {
       time,
       promptId: line.promptId,
