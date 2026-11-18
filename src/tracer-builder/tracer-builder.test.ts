@@ -113,6 +113,20 @@ describe("hook notes", () => {
     expect(patches.find((r) => r.name === "Claude Code Turn")?.outputs).toEqual(reply);
   });
 
+  it("strips harness markup from messages added mid-turn and drops ones left empty", () => {
+    const { posts, main, send } = fakeSession();
+    const reminder = "<system-reminder>be careful</system-reminder>";
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 0, "hi"), assistant("a1", 1, [{ type: "text", text: "on it" }]));
+    main(prompt("m1", 2, `${reminder}keep going`, "p1"), prompt("m2", 3, reminder, "p1"));
+    main(assistant("a2", 4, [{ type: "text", text: "done" }], "end_turn"));
+    send("Stop");
+
+    const inputs = posts.filter((r) => r.name === "Claude")[1].inputs as { messages: unknown[] };
+    const added = { role: "user", content: [{ type: "text", text: "keep going" }] };
+    expect(inputs.messages.slice(2)).toEqual([added]);
+  });
+
   it("keeps a big tool output on its own run and a stub in the model history", () => {
     const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });

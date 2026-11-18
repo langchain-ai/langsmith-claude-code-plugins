@@ -479,9 +479,11 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     if (!hasTurn && line.promptId !== undefined && line.promptId === thread.promptId) return;
     const endTurnSeen = state.currentTurn ? thread.endTurnSeen : false;
     if (!startsNewTurn({ ...thread, promptId, endTurnSeen }, line, hasTurn)) {
-      changeHistory(thread, thread.messages.length, 0, [
-        { role: "user", content: line.message?.content },
-      ]);
+      const shown = stripContentMarkup(line.message?.content as Turn["userContent"]);
+      if (shown)
+        changeHistory(thread, thread.messages.length, 0, [
+          { role: "user", content: textBlocks(shown) },
+        ]);
       return;
     }
     if (state.currentTurn)
