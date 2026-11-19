@@ -27688,7 +27688,7 @@ function stripContentMarkup(content) {
 }
 
 // dist/src/integration-version.js
-var LS_INTEGRATION_VERSION = true ? "0.6.6" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
+var LS_INTEGRATION_VERSION = true ? "0.7.0" : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;
 var PLUGIN_VERSION = LS_INTEGRATION_VERSION ?? DEVELOPMENT_VERSION;
 
 // dist/src/metadata.js
