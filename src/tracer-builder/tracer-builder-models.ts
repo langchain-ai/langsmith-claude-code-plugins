@@ -1,3 +1,4 @@
+import type { HookOutput } from "@langchain/plugins-base/tracing";
 import type { CodingAgentMetadataOptions } from "@langchain/plugins-base/metadata";
 import type { ContentBlock, ToolOrigin, Usage } from "../types.js";
 import type { TracingMode } from "@langchain/plugins-base/tracer";
@@ -15,6 +16,7 @@ export interface NoteDetails {
   errorDetails?: string;
   parentDottedOrder?: string;
   cwd?: string;
+  captureHookOutputs?: boolean;
 }
 
 export interface RunPlace {
@@ -86,6 +88,8 @@ export interface OpenTool {
   agentId?: string;
   subagentType?: string;
   launch?: BackgroundLaunch;
+  hooks?: HookOutput[];
+  held?: ToolResult;
 }
 
 export interface Thread {
@@ -120,6 +124,8 @@ export interface OpenTurn {
   text?: string;
   toolOrigins: ToolOrigin[];
   gitMetadata?: Record<string, unknown>;
+  prompt?: Message[];
+  hooks?: HookOutput[];
 }
 
 export interface PendingStart {
@@ -153,6 +159,8 @@ export interface BuilderState {
   turnCount: number;
   currentTurn?: string;
   stoppedTurn?: OpenTurn;
+  captureHookOutputs?: boolean;
+  promptHooks?: HookOutput[];
   lateReply?: LateReply;
   lastTurnPlace?: RunPlace;
   seededRoot?: RunPlace;

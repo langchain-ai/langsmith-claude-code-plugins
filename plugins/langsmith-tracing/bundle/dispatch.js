@@ -30435,8 +30435,11 @@ var createTranscriptBuilder = (context) => {
       approvalPolicy,
       typedSkill: content === void 0 ? void 0 : typedSkillName(content),
       stopped: false,
-      toolOrigins: []
+      toolOrigins: [],
+      ...state.captureHookOutputs ? { prompt: messages } : {},
+      ...state.promptHooks ? { hooks: state.promptHooks } : {}
     };
+    state.promptHooks = void 0;
     if (notifiedTool?.launch)
       notifiedTool.launch.notificationTurn = place.id;
     state.currentTurn = place.id;
@@ -30470,6 +30473,7 @@ var createTranscriptBuilder = (context) => {
     }
     turn.stopped = true;
     turn.error = outcome.error;
+    releaseHeldTools();
     for (const tool of Object.values(state.tools)) {
       if (tool.turnId !== turnId || tool.launch)
         continue;
@@ -30489,7 +30493,8 @@ var createTranscriptBuilder = (context) => {
     const messages = turn.text ? [{ role: "assistant", content: turn.text }] : [];
     const { promptId, turnNumber, approvalPolicy, gitMetadata: base } = turn;
     patchRun(turn.run, turn.run.end ?? turn.run.start, {
-      outputs: { messages },
+      ...withHookInputs({ messages: turn.prompt ?? [] }, turn.hooks),
+      outputs: withHooks({ messages }, turn.hooks, "output"),
       ...turn.error ? { error: turn.error } : {},
       metadata: metadata({ base, turnId: promptId, turnNumber, approvalPolicy, agentType: "root" })
     });
@@ -30640,10 +30645,10 @@ var createTranscriptBuilder = (context) => {
       })
     });
     postRun(tool.run, { inputs: { input: tool.input } });
-    if (!isAgent)
+    if (!isAgent && !state.captureHookOutputs)
       tool.input = void 0;
     if (tool.result)
-      finishTool(tool, tool.result);
+      settleTool(tool, tool.result);
   }
   function readToolResult(key, line, block, time) {
     const thread = state.threads[key];
@@ -30671,10 +30676,25 @@ var createTranscriptBuilder = (context) => {
     if (call?.messageId === tool.callMessageId)
       call.toolEnd = later(call.toolEnd, time);
     if (tool.run)
-      return finishTool(tool, result);
+      return settleTool(tool, result);
     tool.result = result;
     if (tool.callEnd !== void 0)
       postTool(tool, earlier(tool.callEnd, time));
+  }
+  function settleTool(tool, result) {
+    if (!state.captureHookOutputs)
+      return finishTool(tool, result);
+    tool.result = void 0;
+    tool.held = result;
+  }
+  function releaseHeldTools() {
+    for (const tool of Object.values(state.tools)) {
+      const held = tool.held;
+      if (held === void 0)
+        continue;
+      tool.held = void 0;
+      finishTool(tool, held);
+    }
   }
   function finishTool(tool, result) {
     tool.result = void 0;
@@ -30700,7 +30720,8 @@ var createTranscriptBuilder = (context) => {
       return;
     const runSpecific = { agent_type: tool.subagentType ?? AGENT_RUN_NAME, agent_id: tool.agentId };
     patchRun(tool.run, outcome.time, {
-      outputs: { output: outcome.output },
+      ...withHookInputs({ input: tool.input }, tool.hooks),
+      outputs: withHooks({ output: outcome.output }, tool.hooks, "output"),
       ...outcome.error ? { error: outcome.error } : {},
       ...AGENT_TOOL_NAMES.has(tool.toolName) ? { metadata: { ...tool.run.metadata, runSpecific } } : {}
     });
@@ -30939,9 +30960,30 @@ var createTranscriptBuilder = (context) => {
     if (state.currentTurn === late.turn.run.id)
       stopTurn(late.turn.run.id, { text: late.turn.text });
   }
+  function withHookInputs(inputs, hooks) {
+    return hooksFiring(hooks, "input").length > 0 ? { inputs: withHooks(inputs, hooks, "input") } : {};
+  }
+  function collectHooks(line, onMainThread) {
+    if (!state.captureHookOutputs)
+      return;
+    const entry = line;
+    const tool = state.tools[hookToolUseId(entry) ?? ""];
+    const turn = onMainThread ? state.turns[state.currentTurn ?? ""] : void 0;
+    for (const hook of transcriptHooks(entry)) {
+      const owner = tool && hookPlacement(hook.name).scope === "tool" ? tool : turn;
+      if (owner)
+        (owner.hooks ??= []).push(hook);
+      else if (onMainThread && hookPlacement(hook.name).direction === "input")
+        (state.promptHooks ??= []).push(hook);
+    }
+  }
   function readMainLine(line, time) {
     if (typeof line.cwd === "string")
       state.cwd = line.cwd;
+    if (line.type === HOOK_ENTRY_TYPE)
+      collectHooks(line, true);
+    else
+      releaseHeldTools();
     closeLateReply(line);
     if (readCompaction(line, time))
       return;
@@ -30958,6 +31000,10 @@ var createTranscriptBuilder = (context) => {
     closeLostLaunches(time);
   }
   function readSubagentLine(agentId, line, time) {
+    if (line.type === HOOK_ENTRY_TYPE)
+      collectHooks(line, false);
+    else
+      releaseHeldTools();
     const thread = state.threads[agentId];
     thread.lastTime = later(thread.lastTime, time);
     const kind = line.type === "assistant" ? "tool_use" : "tool_result";
@@ -31021,6 +31067,8 @@ var createTranscriptBuilder = (context) => {
   }
   function receiveNote(note) {
     closeLateReply();
+    if (note.details && "captureHookOutputs" in note.details)
+      state.captureHookOutputs = note.details.captureHookOutputs === true;
     const details = note.details ?? {};
     const time = details.time === void 0 ? state.lastTime ?? iso(Date.now()) : iso(details.time);
     if (details.metadata) {
@@ -31175,7 +31223,8 @@ async function sendTracerNote(event, input, config, tracingMode = resolveTurnTra
       errorDetails: input.error_details,
       metadata: config.customMetadata,
       pinnedRepositoryKeys: [...pinnedRepositoryKeys(config.customMetadata)],
-      parentDottedOrder: config.parentDottedOrder
+      parentDottedOrder: config.parentDottedOrder,
+      captureHookOutputs: config.captureHookOutputs
     },
     writer: tracerWriter(config)
   }, {

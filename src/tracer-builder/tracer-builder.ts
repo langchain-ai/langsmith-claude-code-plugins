@@ -4,9 +4,11 @@ import {
   assistantMessages,
   buildUsageMetadata,
   generateDottedOrderSegment,
+  hooksFiring,
   parseDottedOrder,
   textBlocks,
   toolResultBlocks,
+  withHooks,
 } from "../langsmith.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "../constants.js";
 import { withPinnedRepositoryKeys } from "../config.js";
@@ -18,11 +20,14 @@ import {
   toolOrigin,
 } from "../repo-attribution.js";
 import {
+  hookPlacement,
+  hookToolUseId,
   isHumanMessage,
   isInsertedMessage,
   mergeAdjacentTextBlocks,
   resolveProvider,
   stripModelDateSuffix,
+  transcriptHooks,
 } from "../transcript.js";
 import { jsonBytes } from "../utils/bytes.js";
 import { stripContentMarkup, typedSkillName } from "../utils/harness.js";
@@ -32,6 +37,7 @@ import { earlier, iso, later } from "../utils/times.js";
 import type {
   ClaudeMetadataOptions,
   ContentBlock,
+  HookEntry,
   SessionState,
   ToolResultBlock,
   ToolResultContent,
@@ -45,6 +51,7 @@ import {
   subagentIdOf,
   subagentTranscriptPath,
 } from "./subagent-files.js";
+import type { HookOutput } from "@langchain/plugins-base/tracing";
 import {
   AGENT_NATIVE_TOOL_NAME,
   AGENT_RUN_NAME,
@@ -58,6 +65,7 @@ import {
   DEFAULT_SUBAGENT_TYPE,
   END_TURN,
   HOOK_BLOCKING_ATTACHMENT,
+  HOOK_ENTRY_TYPE,
   HOOK_EVENTS,
   LATE_REPLY_WINDOW_MS,
   MAIN_THREAD,
@@ -283,7 +291,10 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       typedSkill: content === undefined ? undefined : typedSkillName(content),
       stopped: false,
       toolOrigins: [],
+      ...(state.captureHookOutputs ? { prompt: messages } : {}),
+      ...(state.promptHooks ? { hooks: state.promptHooks } : {}),
     };
+    state.promptHooks = undefined;
     if (notifiedTool?.launch) notifiedTool.launch.notificationTurn = place.id;
     state.currentTurn = place.id;
     state.stoppedTurn = undefined;
@@ -316,6 +327,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     }
     turn.stopped = true;
     turn.error = outcome.error;
+    releaseHeldTools();
     for (const tool of Object.values(state.tools)) {
       if (tool.turnId !== turnId || tool.launch) continue;
       const time = tool.result?.time ?? turn.run.end ?? turn.run.start;
@@ -333,7 +345,8 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     const messages = turn.text ? [{ role: "assistant", content: turn.text }] : [];
     const { promptId, turnNumber, approvalPolicy, gitMetadata: base } = turn;
     patchRun(turn.run, turn.run.end ?? turn.run.start, {
-      outputs: { messages },
+      ...withHookInputs({ messages: turn.prompt ?? [] }, turn.hooks),
+      outputs: withHooks({ messages }, turn.hooks, "output"),
       ...(turn.error ? { error: turn.error } : {}),
       metadata: metadata({ base, turnId: promptId, turnNumber, approvalPolicy, agentType: "root" }),
     });
@@ -482,8 +495,8 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       }),
     });
     postRun(tool.run, { inputs: { input: tool.input } });
-    if (!isAgent) tool.input = undefined;
-    if (tool.result) finishTool(tool, tool.result);
+    if (!isAgent && !state.captureHookOutputs) tool.input = undefined;
+    if (tool.result) settleTool(tool, tool.result);
   }
 
   function readToolResult(key: string, line: ClaudeLine, block: ToolResultBlock, time: string) {
@@ -516,9 +529,24 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     };
     const call = state.threads[tool.thread]?.call;
     if (call?.messageId === tool.callMessageId) call.toolEnd = later(call.toolEnd, time);
-    if (tool.run) return finishTool(tool, result);
+    if (tool.run) return settleTool(tool, result);
     tool.result = result;
     if (tool.callEnd !== undefined) postTool(tool, earlier(tool.callEnd, time));
+  }
+
+  function settleTool(tool: OpenTool, result: ToolResult) {
+    if (!state.captureHookOutputs) return finishTool(tool, result);
+    tool.result = undefined;
+    tool.held = result;
+  }
+
+  function releaseHeldTools() {
+    for (const tool of Object.values(state.tools)) {
+      const held = tool.held;
+      if (held === undefined) continue;
+      tool.held = undefined;
+      finishTool(tool, held);
+    }
   }
 
   function finishTool(tool: OpenTool, result: ToolResult) {
@@ -543,7 +571,8 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     if (!tool.run) return;
     const runSpecific = { agent_type: tool.subagentType ?? AGENT_RUN_NAME, agent_id: tool.agentId };
     patchRun(tool.run, outcome.time, {
-      outputs: { output: outcome.output },
+      ...withHookInputs({ input: tool.input }, tool.hooks),
+      outputs: withHooks({ output: outcome.output }, tool.hooks, "output"),
       ...(outcome.error ? { error: outcome.error } : {}),
       ...(AGENT_TOOL_NAMES.has(tool.toolName)
         ? { metadata: { ...tool.run.metadata, runSpecific } }
@@ -784,8 +813,29 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       stopTurn(late.turn.run.id, { text: late.turn.text });
   }
 
+  function withHookInputs(inputs: object, hooks: HookOutput[] | undefined) {
+    return hooksFiring(hooks, "input").length > 0
+      ? { inputs: withHooks(inputs, hooks, "input") }
+      : {};
+  }
+
+  function collectHooks(line: ClaudeLine, onMainThread: boolean) {
+    if (!state.captureHookOutputs) return;
+    const entry = line as unknown as HookEntry;
+    const tool = state.tools[hookToolUseId(entry) ?? ""];
+    const turn = onMainThread ? state.turns[state.currentTurn ?? ""] : undefined;
+    for (const hook of transcriptHooks(entry)) {
+      const owner = tool && hookPlacement(hook.name).scope === "tool" ? tool : turn;
+      if (owner) (owner.hooks ??= []).push(hook);
+      else if (onMainThread && hookPlacement(hook.name).direction === "input")
+        (state.promptHooks ??= []).push(hook);
+    }
+  }
+
   function readMainLine(line: ClaudeLine, time: string) {
     if (typeof line.cwd === "string") state.cwd = line.cwd;
+    if (line.type === HOOK_ENTRY_TYPE) collectHooks(line, true);
+    else releaseHeldTools();
     closeLateReply(line);
     if (readCompaction(line, time)) return;
     reopenBlockedTurn(line);
@@ -799,6 +849,8 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
   }
 
   function readSubagentLine(agentId: string, line: ClaudeLine, time: string) {
+    if (line.type === HOOK_ENTRY_TYPE) collectHooks(line, false);
+    else releaseHeldTools();
     const thread = state.threads[agentId];
     thread.lastTime = later(thread.lastTime, time);
     const kind = line.type === "assistant" ? "tool_use" : "tool_result";
@@ -851,6 +903,8 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
 
   function receiveNote(note: HookNote) {
     closeLateReply();
+    if (note.details && "captureHookOutputs" in note.details)
+      state.captureHookOutputs = (note.details as NoteDetails).captureHookOutputs === true;
     const details = (note.details ?? {}) as NoteDetails;
     const time =
       details.time === undefined ? (state.lastTime ?? iso(Date.now())) : iso(details.time);

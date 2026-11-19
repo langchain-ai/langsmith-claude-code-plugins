@@ -51,6 +51,7 @@ export async function sendTracerNote(
         metadata: config.customMetadata,
         pinnedRepositoryKeys: [...pinnedRepositoryKeys(config.customMetadata)],
         parentDottedOrder: config.parentDottedOrder,
+        captureHookOutputs: config.captureHookOutputs,
       } satisfies NoteDetails,
       writer: tracerWriter(config),
     },

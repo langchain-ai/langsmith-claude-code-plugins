@@ -50,11 +50,12 @@ async function runHook(event: keyof typeof NOTE_HANDLERS, payload: Record<string
 describe("hook notes", () => {
   it("sends a tool note with the thread's mode, a pinned repository and the sign-in folder", async () => {
     vi.stubEnv("CC_LANGSMITH_METADATA", '{"ls_git_repo":"acme/pinned"}');
+    vi.stubEnv("CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS", "true");
     await setThreadTracingMode(stateFile, "s1", "metadata");
     const [note] = await runHook("PreToolUse", { tool_use_id: "t1", transcript_path: "~/t.jsonl" });
     const transcript = join(home, "t.jsonl");
     expect(note).toMatchObject({ tracingMode: "metadata", transcriptPath: transcript });
-    expect(note.details).toMatchObject({ toolUseId: "t1", cwd: home });
+    expect(note.details).toMatchObject({ toolUseId: "t1", cwd: home, captureHookOutputs: true });
     expect(note.writer.storageRoot).toBe(join(home, ".claude", "state", "langsmith_plugins_base"));
 
     const { posts, sink } = recordingSink();

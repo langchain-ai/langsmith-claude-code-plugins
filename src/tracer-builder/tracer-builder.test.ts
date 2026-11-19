@@ -185,6 +185,118 @@ describe("hook notes", () => {
     expect(patches.filter((r) => r.id === turn.id).at(-1)?.error).toBeUndefined();
   });
 
+  it("adds hook output to its tool, or to the turn when it names no tool, only when capture is on", () => {
+    const hookLine = (second: number, hookEvent: string, text: string, toolUseID?: string) => ({
+      type: "attachment",
+      uuid: `h-${second}`,
+      timestamp: at(second),
+      attachment: { type: "hook_additional_context", hookEvent, content: [text], toolUseID },
+    });
+    const traced = (captureHookOutputs: boolean) => {
+      const { patches, main, send, run } = fakeSession();
+      send("UserPromptSubmit", {}, { time: ms(0), captureHookOutputs });
+      main(prompt("p1", 1, "go"), hookLine(1, "UserPromptSubmit", "prompt note"));
+      main(assistant("a1", 2, [toolUse("t1")]));
+      send("PreToolUse", {}, { time: ms(2), toolUseId: "t1" });
+      main(hookLine(2, "PreToolUse", "pre note", "t1"));
+      main(toolResult("r1", 3, "t1"));
+      main(hookLine(3, "PostToolUse", "tool note", "t1"), hookLine(3, "PostToolUse", "turn note"));
+      main(assistant("a2", 4, [{ type: "text", text: "done" }], "end_turn"));
+      send("Stop");
+      const closed = (name: string) => patches.filter((r) => r.id === run(name).id).at(-1);
+      const [tool, turn] = [closed("Bash"), closed("Claude Code Turn")];
+      return {
+        toolIn: tool?.inputs,
+        tool: tool?.outputs,
+        turnIn: turn?.inputs,
+        turn: turn?.outputs,
+      };
+    };
+
+    expect(traced(true)).toMatchObject({
+      toolIn: { input: { command: "ls" }, hooks: [{ name: "PreToolUse", output: "pre note" }] },
+      tool: { hooks: [{ name: "PostToolUse", output: "tool note" }] },
+      turnIn: {
+        messages: [{ role: "user" }],
+        hooks: [{ name: "UserPromptSubmit", output: "prompt note" }],
+      },
+      turn: { hooks: [{ name: "PostToolUse", output: "turn note" }] },
+    });
+    expect(JSON.stringify(traced(false))).not.toMatch(/note/);
+  });
+
+  it("adds session and prompt hook output written before the turn opens to that turn only", () => {
+    const { posts, patches, main, send } = fakeSession();
+    const hookLine = (uuid: string, second: number, hookEvent: string) => ({
+      type: "attachment",
+      uuid,
+      timestamp: at(second),
+      attachment: { type: "hook_additional_context", hookEvent, content: [`${hookEvent} note`] },
+    });
+    send("SessionStart", {}, { captureHookOutputs: true });
+    main(
+      hookLine("h0", 0, "SessionStart"),
+      prompt("p1", 1, "go"),
+      hookLine("h1", 1, "UserPromptSubmit"),
+    );
+    send("UserPromptSubmit", {}, { time: ms(1) });
+    main(assistant("a1", 2, [{ type: "text", text: "done" }], "end_turn"));
+    send("Stop");
+    main(hookLine("h2", 2, "Stop"), prompt("p2", 3, "again"));
+    send("UserPromptSubmit", {}, { time: ms(3) });
+    main(assistant("a2", 4, [{ type: "text", text: "ok" }], "end_turn"));
+    send("Stop");
+    const turns = posts.filter((r) => r.name === "Claude Code Turn");
+    const closed = turns.map((turn) => patches.filter((r) => r.id === turn.id).at(-1));
+    expect(closed.map((turn) => turn?.inputs)).toEqual([
+      {
+        messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+        hooks: [
+          { name: "SessionStart", output: "SessionStart note" },
+          { name: "UserPromptSubmit", output: "UserPromptSubmit note" },
+        ],
+      },
+      undefined,
+    ]);
+    expect(JSON.stringify(closed[1]?.outputs)).not.toContain("Stop note");
+  });
+
+  it("adds an Agent tool's own hook output to that tool", () => {
+    const { patches, main, send, run } = fakeSession();
+    send("UserPromptSubmit", {}, { time: ms(0), captureHookOutputs: true });
+    main(prompt("p1", 1, "go"), assistant("a1", 2, [toolUse("t1", "Agent", { prompt: "count" })]));
+    send("PreToolUse", {}, { time: ms(2), toolUseId: "t1" });
+    main(toolResult("r1", 3, "t1", { agentId: "x1", status: "completed" }), {
+      type: "attachment",
+      uuid: "h1",
+      timestamp: at(3),
+      attachment: {
+        type: "hook_additional_context",
+        hookEvent: "PostToolUse",
+        content: ["agent note"],
+        toolUseID: "t1",
+      },
+    });
+    main(assistant("a2", 4, [{ type: "text", text: "done" }], "end_turn"));
+    send("Stop");
+    const agent = patches.filter((r) => r.id === run("Agent").id).at(-1);
+    expect(agent?.outputs).toMatchObject({
+      hooks: [{ name: "PostToolUse", output: "agent note" }],
+    });
+  });
+
+  it("keeps a held tool's result when the turn stops right after it", () => {
+    const { patches, main, send, run } = fakeSession();
+    send("UserPromptSubmit", {}, { time: ms(0), captureHookOutputs: true });
+    main(prompt("p1", 1, "go"), assistant("a1", 2, [toolUse("t1")]));
+    send("PreToolUse", {}, { time: ms(2), toolUseId: "t1" });
+    main(toolResult("r1", 3, "t1", "listed"));
+    send("Stop");
+    expect(patches.filter((r) => r.id === run("Bash").id).at(-1)?.outputs).toEqual({
+      output: "listed",
+    });
+  });
+
   it("closes a failed turn with the API error", () => {
     const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });
