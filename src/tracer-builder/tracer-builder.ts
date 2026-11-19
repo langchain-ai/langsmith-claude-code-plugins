@@ -4,25 +4,40 @@ import {
   assistantMessages,
   buildUsageMetadata,
   generateDottedOrderSegment,
+  hooksFiring,
+  parseDottedOrder,
   textBlocks,
   toolResultBlocks,
+  withHooks,
 } from "../langsmith.js";
 import { ASSISTANT_RUN_NAME, USER_PROMPT_TURN_NAME } from "../constants.js";
+import { withPinnedRepositoryKeys } from "../config.js";
 import { codingAgentMetadata, skillNameFromTool } from "../metadata.js";
 import {
+  clearRepoAttributionCache,
+  originScopedMetadata,
+  repoScopedMetadata,
+  toolOrigin,
+} from "../repo-attribution.js";
+import {
+  hookPlacement,
+  hookToolUseId,
   isHumanMessage,
   isInsertedMessage,
   mergeAdjacentTextBlocks,
   resolveProvider,
   stripModelDateSuffix,
+  transcriptHooks,
 } from "../transcript.js";
 import { jsonBytes } from "../utils/bytes.js";
 import { stripContentMarkup, typedSkillName } from "../utils/harness.js";
 import { stableRunId } from "../utils/ids/run-id.js";
+import { stringValue } from "../utils/records.js";
 import { earlier, iso, later } from "../utils/times.js";
 import type {
   ClaudeMetadataOptions,
   ContentBlock,
+  HookEntry,
   SessionState,
   ToolResultBlock,
   ToolResultContent,
@@ -30,15 +45,30 @@ import type {
   Turn,
 } from "../types.js";
 import {
+  lastLineUuid,
+  metaAgentId,
+  metaToolUseId,
+  subagentIdOf,
+  subagentTranscriptPath,
+} from "./subagent-files.js";
+import type { HookOutput } from "@langchain/plugins-base/tracing";
+import {
   AGENT_NATIVE_TOOL_NAME,
   AGENT_RUN_NAME,
   AGENT_TOOL_NAMES,
+  ASYNC_LAUNCHED_STATUS,
+  BACKGROUND_AGENT_WAIT_MS,
   BUILDER_STATE_VERSION,
   COMPACT_BOUNDARY_SUBTYPE,
   COMPACTION_RUN_NAME,
   DEFAULT_COMPACT_TRIGGER,
+  DEFAULT_SUBAGENT_TYPE,
   END_TURN,
+  HOOK_BLOCKING_ATTACHMENT,
+  HOOK_CONTEXT_ATTACHMENT,
+  HOOK_ENTRY_TYPE,
   HOOK_EVENTS,
+  LATE_REPLY_WINDOW_MS,
   MAIN_THREAD,
   MODEL_HISTORY_RESULT_LIMIT_BYTES,
   MODEL_HISTORY_STUB,
@@ -48,7 +78,9 @@ import {
   NO_TOOL_RESULT,
   SESSION_ENDED_ERROR,
   TRANSCRIPT_EXTENSION,
+  SUBAGENT_CHAIN_SUFFIX,
   TOOL_INTERRUPTED_ERROR,
+  TRACING_MODE_STRICTNESS,
   USER_INTERRUPT_ERROR,
 } from "../constants.js";
 import type {
@@ -75,6 +107,17 @@ import type {
 function childPlace(parent: RunPlace, id: string, start: string | number): RunPlace {
   const segment = generateDottedOrderSegment(start, id);
   return { id, traceId: parent.traceId, dottedOrder: `${parent.dottedOrder}.${segment}` };
+}
+
+function outsideParent(dottedOrder: string | undefined): RunPlace | undefined {
+  if (dottedOrder === undefined) return undefined;
+  const { traceId, runId } = parseDottedOrder(dottedOrder);
+  return { id: runId, traceId, dottedOrder };
+}
+
+function stricterMode(mode: TracingMode, other: TracingMode = mode): TracingMode {
+  const rank = (candidate: TracingMode) => TRACING_MODE_STRICTNESS.indexOf(candidate);
+  return rank(other) > rank(mode) ? other : mode;
 }
 
 function blocksOf<T>(line: ClaudeLine, type: string): T[] {
@@ -221,12 +264,16 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     const id = start
       ? stableRunId(startTime, sessionId, turnNumber)
       : stableRunId(startTime, sessionId, promptId, turnNumber);
-    const newPlace = { id, traceId: id, dottedOrder: generateDottedOrderSegment(startTime, id) };
+    const notifiedTool = state.tools[pendingPrompt?.notificationOf ?? ""];
+    const parent = notifiedTool?.run ?? outsideParent(start?.parentDottedOrder);
+    const newPlace = parent
+      ? childPlace(parent, id, startTime)
+      : { id, traceId: id, dottedOrder: generateDottedOrderSegment(startTime, id) };
     const place = seeded ?? newPlace;
-    const mode = start?.mode ?? state.sessionMode;
+    const mode = stricterMode(start?.mode ?? state.sessionMode, notifiedTool?.run?.mode);
     const approvalPolicy = start?.approvalPolicy ?? pendingPrompt?.approvalPolicy;
     const content = pendingPrompt?.content as Turn["userContent"] | undefined;
-    const run = openRun(place, undefined, {
+    const run = openRun(place, parent, {
       name: USER_PROMPT_TURN_NAME,
       runType: "chain",
       start: startTime,
@@ -244,12 +291,19 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       approvalPolicy,
       typedSkill: content === undefined ? undefined : typedSkillName(content),
       stopped: false,
+      toolOrigins: [],
+      ...(state.captureHookOutputs ? { prompt: messages } : {}),
+      ...(state.promptHooks ? { hooks: state.promptHooks } : {}),
     };
+    state.promptHooks = undefined;
+    if (notifiedTool?.launch) notifiedTool.launch.notificationTurn = place.id;
     state.currentTurn = place.id;
+    state.stoppedTurn = undefined;
     state.lastTurnPlace = place;
     state.pendingStart = undefined;
     state.pendingPrompt = undefined;
     state.hookTimes = {};
+    clearRepoAttributionCache();
     const carried = main().messages;
     state.threads[MAIN_THREAD] = {
       ...freshThread(mode, "root"),
@@ -274,8 +328,9 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     }
     turn.stopped = true;
     turn.error = outcome.error;
+    releaseHeldTools();
     for (const tool of Object.values(state.tools)) {
-      if (tool.turnId !== turnId) continue;
+      if (tool.turnId !== turnId || tool.launch) continue;
       const time = tool.result?.time ?? turn.run.end ?? turn.run.start;
       const error = outcome.error && TOOL_INTERRUPTED_ERROR;
       closeToolNow(tool, { output: NO_TOOL_RESULT, time, error });
@@ -289,12 +344,19 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     if (Object.values(state.tools).some((tool) => tool.turnId === turnId)) return;
     delete state.turns[turnId!];
     const messages = turn.text ? [{ role: "assistant", content: turn.text }] : [];
-    const { promptId, turnNumber, approvalPolicy } = turn;
+    const { promptId, turnNumber, approvalPolicy, gitMetadata: base } = turn;
     patchRun(turn.run, turn.run.end ?? turn.run.start, {
-      outputs: { messages },
+      ...withHookInputs({ messages: turn.prompt ?? [] }, turn.hooks),
+      outputs: withHooks({ messages }, turn.hooks, "output"),
       ...(turn.error ? { error: turn.error } : {}),
-      metadata: metadata({ turnId: promptId, turnNumber, approvalPolicy, agentType: "root" }),
+      metadata: metadata({ base, turnId: promptId, turnNumber, approvalPolicy, agentType: "root" }),
     });
+    const notified = Object.values(state.tools).find((t) => t.launch?.notificationTurn === turnId);
+    if (notified?.launch) {
+      notified.launch.notified = true;
+      notified.run!.end = later(notified.run!.end, turn.run.end);
+      maybeCloseAgentTool(notified);
+    }
   }
 
   function readAssistant(threadKey: string, line: ClaudeLine, time: string) {
@@ -330,9 +392,12 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
         thread: threadKey,
         turnId: threadKey === MAIN_THREAD ? state.currentTurn : undefined,
         input: (use as { input?: unknown }).input,
+        cwd: line.cwd,
         callMessageId: messageId,
       };
       state.tools[toolUseId] = tool;
+      if (tool.turnId)
+        state.turns[tool.turnId]?.toolOrigins.push(toolOrigin(tool.input, state.cwd));
       const hook = threadKey === MAIN_THREAD ? state.hookTimes[toolUseId] : undefined;
       if (hook) applyHookTime(tool, hook.time, hook.mode);
     }
@@ -381,10 +446,17 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       if (tool.thread !== threadKey || tool.callMessageId !== call.messageId || tool.run) continue;
       tool.callEnd = call.end;
       if (tool.result) postTool(tool, earlier(call.end, tool.result.time));
+      else if (threadKey !== MAIN_THREAD) postTool(tool, call.end);
     }
   }
 
+  function toolParent(tool: OpenTool): RunPlace | undefined {
+    if (tool.thread !== MAIN_THREAD) return state.threads[tool.thread]?.parent;
+    return tool.turnId === undefined ? undefined : state.turns[tool.turnId]?.run;
+  }
+
   function toolMode(tool: OpenTool): TracingMode {
+    if (tool.thread !== MAIN_THREAD) return state.threads[tool.thread]?.mode ?? state.sessionMode;
     const turnMode = state.turns[tool.turnId ?? ""]?.run.mode ?? state.sessionMode;
     return turnMode === "full" ? (tool.hookMode ?? turnMode) : turnMode;
   }
@@ -397,7 +469,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
   }
 
   function postTool(tool: OpenTool, start: string | number) {
-    const parent = state.turns[tool.turnId ?? ""]?.run;
+    const parent = toolParent(tool);
     if (parent === undefined) return;
     const thread = state.threads[tool.thread];
     const id = stableRunId(start, sessionId, tool.toolUseId);
@@ -409,6 +481,12 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       start: iso(start),
       mode: toolMode(tool),
       metadata: metadata({
+        base: repoScopedMetadata(
+          withPinnedRepositoryKeys(state.baseMetadata, state.pinnedRepositoryKeys),
+          tool.input,
+          tool.cwd ?? state.cwd,
+          tool.toolName,
+        ),
         turnId: thread?.promptId,
         turnNumber: thread?.turnNumber,
         agentType: thread?.agentType ?? "root",
@@ -418,8 +496,8 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       }),
     });
     postRun(tool.run, { inputs: { input: tool.input } });
-    if (!isAgent) tool.input = undefined;
-    if (tool.result) finishTool(tool, tool.result);
+    if (!isAgent && !state.captureHookOutputs) tool.input = undefined;
+    if (tool.result) settleTool(tool, tool.result);
   }
 
   function readToolResult(key: string, line: ClaudeLine, block: ToolResultBlock, time: string) {
@@ -434,34 +512,167 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     ]);
     const tool = state.tools[block.tool_use_id];
     if (tool === undefined) return;
+    const nested =
+      line.toolUseResult === undefined &&
+      tool.thread !== MAIN_THREAD &&
+      AGENT_TOOL_NAMES.has(tool.toolName);
     const result: ToolResult = {
       time,
       output: line.toolUseResult ?? block.content,
       ...(block.is_error ? { error: textOf(block.content) || TOOL_INTERRUPTED_ERROR } : {}),
+      agentId:
+        stringValue(line.toolUseResult?.agentId) ??
+        (nested && state.mainPath
+          ? metaAgentId(state.mainPath, sessionId, tool.toolUseId)
+          : undefined),
+      agentType: stringValue(line.toolUseResult?.agentType),
+      launched: line.toolUseResult?.status === ASYNC_LAUNCHED_STATUS || nested,
     };
     const call = state.threads[tool.thread]?.call;
     if (call?.messageId === tool.callMessageId) call.toolEnd = later(call.toolEnd, time);
-    if (tool.run) return finishTool(tool, result);
+    if (tool.run) return settleTool(tool, result);
     tool.result = result;
     if (tool.callEnd !== undefined) postTool(tool, earlier(tool.callEnd, time));
   }
 
+  function settleTool(tool: OpenTool, result: ToolResult) {
+    if (!state.captureHookOutputs) return finishTool(tool, result);
+    tool.result = undefined;
+    tool.held = result;
+  }
+
+  function releaseHeldTools() {
+    for (const tool of Object.values(state.tools)) {
+      const held = tool.held;
+      if (held === undefined) continue;
+      tool.held = undefined;
+      finishTool(tool, held);
+    }
+  }
+
   function finishTool(tool: OpenTool, result: ToolResult) {
     tool.result = undefined;
+    if (result.agentId && AGENT_TOOL_NAMES.has(tool.toolName)) {
+      linkAgent(tool, result.agentId, result.agentType);
+      if (result.launched) {
+        const chainClosed = !state.threads[result.agentId];
+        tool.launch = { output: result.output, chainClosed, notified: tool.thread !== MAIN_THREAD };
+        tool.run!.end = result.time;
+        maybeCloseAgentTool(tool);
+        return;
+      }
+    }
     closeToolNow(tool, result);
   }
 
-  function closeToolNow(tool: OpenTool, outcome: ToolResult) {
+  function closeToolNow(tool: OpenTool, outcome: Pick<ToolResult, "output" | "error" | "time">) {
+    if (tool.agentId && !tool.launch) finishAgent(tool.agentId);
     if (!tool.run) postTool(tool, tool.callEnd ?? outcome.time);
     delete state.tools[tool.toolUseId];
     if (!tool.run) return;
+    const runSpecific = { agent_type: tool.subagentType ?? AGENT_RUN_NAME, agent_id: tool.agentId };
     patchRun(tool.run, outcome.time, {
-      outputs: { output: outcome.output },
+      ...withHookInputs({ input: tool.input }, tool.hooks),
+      outputs: withHooks({ output: outcome.output }, tool.hooks, "output"),
       ...(outcome.error ? { error: outcome.error } : {}),
+      ...(AGENT_TOOL_NAMES.has(tool.toolName)
+        ? { metadata: { ...tool.run.metadata, runSpecific } }
+        : {}),
     });
     const turn = state.turns[tool.turnId ?? ""];
     if (turn) turn.run.end = later(turn.run.end, outcome.time);
     maybeCloseTurn(tool.turnId);
+  }
+
+  function linkAgent(tool: OpenTool, agentId: string, agentType: string | undefined) {
+    if (state.threads[agentId] || tool.agentId || !tool.run) return;
+    const input = tool.input as { subagent_type?: unknown } | undefined;
+    const subagentType = agentType ?? stringValue(input?.subagent_type) ?? DEFAULT_SUBAGENT_TYPE;
+    const id = stableRunId(tool.run.start, tool.run.id, agentId);
+    const parentThread = state.threads[tool.thread];
+    const chain = openRun(childPlace(tool.run, id, tool.run.start), tool.run, {
+      name: `${subagentType}${SUBAGENT_CHAIN_SUFFIX}`,
+      runType: "chain",
+      start: tool.run.start,
+      mode: tool.run.mode,
+      metadata: metadata({
+        turnId: parentThread?.promptId,
+        turnNumber: parentThread?.turnNumber,
+        agentType: "subagent",
+        subagentId: agentId,
+        subagentType,
+      }),
+    });
+    postRun(chain, { inputs: tool.input ?? {} });
+    tool.agentId = agentId;
+    tool.subagentType = subagentType;
+    state.threads[agentId] = {
+      ...freshThread(tool.run.mode, "subagent"),
+      parent: chain,
+      ownerId: id,
+      chain,
+      toolUseId: tool.toolUseId,
+      turnNumber: 0,
+      lastTime: tool.run.start,
+    };
+  }
+
+  function linkFromMeta(agentId: string) {
+    if (state.threads[agentId] || state.mainPath === undefined) return;
+    const toolUseId = metaToolUseId(state.mainPath, sessionId, agentId);
+    const tool = toolUseId === undefined ? undefined : state.tools[toolUseId];
+    if (tool && AGENT_TOOL_NAMES.has(tool.toolName)) linkAgent(tool, agentId, undefined);
+  }
+
+  function finishAgent(agentId: string) {
+    const thread = state.threads[agentId];
+    if (thread === undefined || state.mainPath === undefined) return;
+    const last = lastLineUuid(subagentTranscriptPath(state.mainPath, sessionId, agentId));
+    if (last === undefined || last === thread.lastLineId) closeSubagent(agentId);
+    else thread.closeAtLineId = last;
+  }
+
+  function closeSubagent(agentId: string) {
+    const thread = state.threads[agentId];
+    if (thread?.chain === undefined) return;
+    finishCall(agentId);
+    const end = thread.lastTime ?? thread.chain.start;
+    for (const tool of Object.values(state.tools)) {
+      if (tool.thread !== agentId || tool.launch) continue;
+      const time = tool.result?.time ?? end;
+      closeToolNow(tool, { output: NO_TOOL_RESULT, time, error: TOOL_INTERRUPTED_ERROR });
+    }
+    delete state.threads[agentId];
+    patchRun(thread.chain, end, { outputs: { output: thread.lastText } });
+    const tool = state.tools[thread.toolUseId ?? ""];
+    if (tool?.launch) {
+      tool.launch.chainClosed = true;
+      tool.run!.end = later(tool.run!.end, end);
+      maybeCloseAgentTool(tool);
+    }
+  }
+
+  function maybeCloseAgentTool(tool: OpenTool) {
+    const launch = tool.launch!;
+    if (!launch.chainClosed || !launch.notified) return;
+    closeToolNow(tool, { output: launch.output, time: tool.run!.end ?? tool.run!.start });
+  }
+
+  function closeLostLaunches(now: string) {
+    for (const tool of Object.values(state.tools)) {
+      const turn = state.turns[tool.turnId ?? ""];
+      const since = turn?.stopped ? (turn.run.end ?? turn.run.start) : now;
+      if (!tool.launch || Date.parse(now) - Date.parse(since) <= BACKGROUND_AGENT_WAIT_MS) continue;
+      tool.launch = undefined;
+      closeToolNow(tool, { output: NO_TOOL_RESULT, time: tool.run!.end ?? since });
+    }
+  }
+
+  function notificationTarget(content: unknown): OpenTool | undefined {
+    const text = textOf(content);
+    return Object.values(state.tools).find(
+      (tool) => tool.launch && (text.includes(tool.agentId!) || text.includes(tool.toolUseId)),
+    );
   }
 
   function startsNewTurn(thread: Thread, line: ClaudeLine, hasTurn: boolean): boolean {
@@ -476,14 +687,28 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     const pending = state.pendingPrompt;
     const promptId = state.currentTurn ? thread.promptId : pending?.promptId;
     const hasTurn = state.currentTurn !== undefined || pending !== undefined;
-    if (!hasTurn && line.promptId !== undefined && line.promptId === thread.promptId) return;
+    if (
+      !hasTurn &&
+      !state.pendingStart &&
+      line.promptId !== undefined &&
+      line.promptId === thread.promptId
+    )
+      return;
+    if (!hasTurn && line.turnCompanion === true) return;
+    const target = notificationTarget(line.message?.content);
     const endTurnSeen = state.currentTurn ? thread.endTurnSeen : false;
-    if (!startsNewTurn({ ...thread, promptId, endTurnSeen }, line, hasTurn)) {
+    if (target?.launch) finishAgent(target.agentId!);
+    const transcriptOnly = line.queueTranscriptOnly === true;
+    if (transcriptOnly || !startsNewTurn({ ...thread, promptId, endTurnSeen }, line, hasTurn)) {
       const shown = stripContentMarkup(line.message?.content as Turn["userContent"]);
-      if (shown)
+      if (!transcriptOnly && shown)
         changeHistory(thread, thread.messages.length, 0, [
           { role: "user", content: textBlocks(shown) },
         ]);
+      if (target?.launch) {
+        target.launch.notified = true;
+        maybeCloseAgentTool(target);
+      }
       return;
     }
     if (state.currentTurn)
@@ -494,8 +719,31 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       promptId: line.promptId,
       content: line.message?.content as string | Message[],
       approvalPolicy: line.permissionMode,
+      ...(target ? { notificationOf: target.toolUseId } : {}),
     };
     if (state.pendingStart) openTurn(time);
+  }
+
+  function readThreadHuman(threadKey: string, line: ClaudeLine) {
+    const thread = state.threads[threadKey];
+    if (!startsNewTurn(thread, line, thread.prompted === true)) {
+      const shown = stripContentMarkup(line.message?.content as Turn["userContent"]);
+      if (shown)
+        changeHistory(thread, thread.messages.length, 0, [
+          { role: "user", content: textBlocks(shown) },
+        ]);
+      return;
+    }
+    finishCall(threadKey);
+    const prompt = line.message?.content as Turn["userContent"];
+    thread.promptId = line.promptId;
+    thread.prompted = true;
+    thread.turnNumber = (thread.turnNumber ?? 0) + 1;
+    thread.llmIndex = 0;
+    thread.endTurnSeen = false;
+    changeHistory(thread, 0, thread.messages.length, [
+      { role: "user", content: textBlocks(stripContentMarkup(prompt) ?? prompt) },
+    ]);
   }
 
   function readCompaction(line: ClaudeLine, time: string) {
@@ -534,21 +782,106 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     postRun(run, { inputs: {}, outputs: { compact_summary: summary } });
   }
 
+  function reopenBlockedTurn(line: ClaudeLine) {
+    const turn = state.stoppedTurn;
+    const { type, hookEvent } = line.attachment ?? {};
+    const continues = type === HOOK_BLOCKING_ATTACHMENT || type === HOOK_CONTEXT_ATTACHMENT;
+    if (!continues || hookEvent !== HOOK_EVENTS.stop) return;
+    if (
+      state.lateReply?.messageId !== undefined &&
+      state.currentTurn === state.lateReply.turn.run.id
+    ) {
+      state.lateReply = undefined;
+      main().endTurnSeen = false;
+      return;
+    }
+    if (state.currentTurn !== undefined) {
+      state.stopContinues = true;
+      return;
+    }
+    if (turn === undefined || state.pendingPrompt) return;
+    state.stoppedTurn = undefined;
+    state.turns[turn.run.id] ??= turn;
+    state.turns[turn.run.id].stopped = false;
+    state.currentTurn = turn.run.id;
+    main().endTurnSeen = false;
+  }
+
+  function reopenForLateReply(line: ClaudeLine, time: string): boolean {
+    const late = state.lateReply;
+    if (late === undefined || state.pendingStart || state.pendingPrompt) return false;
+    if (Date.parse(time) - late.stoppedAt > LATE_REPLY_WINDOW_MS) return false;
+    late.messageId = line.message?.id;
+    state.turns[late.turn.run.id] ??= late.turn;
+    state.turns[late.turn.run.id].stopped = false;
+    state.currentTurn = late.turn.run.id;
+    return true;
+  }
+
+  function closeLateReply(line?: ClaudeLine) {
+    const late = state.lateReply;
+    if (late?.messageId === undefined) return;
+    if (line?.type === "assistant" && line.message?.id === late.messageId) return;
+    state.lateReply = undefined;
+    if (state.currentTurn === late.turn.run.id)
+      stopTurn(late.turn.run.id, { text: late.turn.text });
+  }
+
+  function withHookInputs(inputs: object, hooks: HookOutput[] | undefined) {
+    return hooksFiring(hooks, "input").length > 0
+      ? { inputs: withHooks(inputs, hooks, "input") }
+      : {};
+  }
+
+  function collectHooks(line: ClaudeLine, onMainThread: boolean) {
+    if (!state.captureHookOutputs) return;
+    const entry = line as unknown as HookEntry;
+    const tool = state.tools[hookToolUseId(entry) ?? ""];
+    const turn = onMainThread ? state.turns[state.currentTurn ?? ""] : undefined;
+    for (const hook of transcriptHooks(entry)) {
+      const owner = tool && hookPlacement(hook.name).scope === "tool" ? tool : turn;
+      if (owner) (owner.hooks ??= []).push(hook);
+      else if (onMainThread && hookPlacement(hook.name).direction === "input")
+        (state.promptHooks ??= []).push(hook);
+    }
+  }
+
   function readMainLine(line: ClaudeLine, time: string) {
+    if (typeof line.cwd === "string") state.cwd = line.cwd;
+    reopenBlockedTurn(line);
+    if (line.type === HOOK_ENTRY_TYPE) collectHooks(line, true);
+    else releaseHeldTools();
+    closeLateReply(line);
     if (readCompaction(line, time)) return;
     if (line.isSidechain) return;
     if (line.type === "assistant") {
-      if (state.currentTurn === undefined) openTurn(time);
+      if (state.currentTurn === undefined && !reopenForLateReply(line, time)) openTurn(time);
       readAssistant(MAIN_THREAD, line, time);
     } else if (line.type === "user") readUserLine(MAIN_THREAD, line, time);
     main().lastTime = later(main().lastTime, time);
+    closeLostLaunches(time);
+  }
+
+  function readSubagentLine(agentId: string, line: ClaudeLine, time: string) {
+    if (line.type === HOOK_ENTRY_TYPE) collectHooks(line, false);
+    else releaseHeldTools();
+    const thread = state.threads[agentId];
+    thread.lastTime = later(thread.lastTime, time);
+    const kind = line.type === "assistant" ? "tool_use" : "tool_result";
+    const blocks = blocksOf<{ id?: string; tool_use_id?: string }>(line, kind);
+    if (blocks.some((block) => (block.id ?? block.tool_use_id) === thread.toolUseId)) return;
+    if (line.type === "assistant") {
+      if (thread.turnNumber === 0) thread.turnNumber = 1;
+      readAssistant(agentId, line, time);
+    } else if (line.type === "user") readUserLine(agentId, line, time);
   }
 
   function readUserLine(threadKey: string, line: ClaudeLine, time: string) {
     if (!isHumanMessage(line as TranscriptMessage)) {
       for (const block of blocksOf<ToolResultBlock>(line, "tool_result"))
         readToolResult(threadKey, line, block, time);
-    } else if (!line.queueTranscriptOnly) readMainHuman(line, time);
+    } else if (threadKey === MAIN_THREAD) readMainHuman(line, time);
+    else readThreadHuman(threadKey, line);
   }
 
   function readLine(transcriptPath: string, transcriptLine: TranscriptLine) {
@@ -559,11 +892,23 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     const time = line.timestamp;
     if (typeof time === "string") state.lastTime = later(state.lastTime, time);
     if (transcriptPath === state.mainPath && typeof time === "string") readMainLine(line, time);
+    const agentId = subagentIdOf(transcriptPath);
+    const thread = agentId === undefined ? undefined : state.threads[agentId];
+    if (thread === undefined) return;
+    if (typeof time === "string") readSubagentLine(agentId!, line, time);
+    if (line.uuid !== undefined) thread.lastLineId = line.uuid;
+    if (thread.closeAtLineId !== undefined && thread.closeAtLineId === line.uuid)
+      closeSubagent(agentId!);
   }
 
   function endSession() {
     flushCompaction(undefined);
+    for (const agentId of Object.keys(state.threads)) closeSubagent(agentId);
     if (state.currentTurn) stopTurn(state.currentTurn, { error: SESSION_ENDED_ERROR });
+    for (const tool of Object.values(state.tools)) {
+      const time = tool.run?.end ?? state.lastTime ?? tool.run?.start ?? "";
+      if (tool.launch) closeToolNow(tool, { output: tool.launch.output, time });
+    }
     for (const [turnId, turn] of Object.entries(state.turns)) {
       turn.stopped = true;
       maybeCloseTurn(turnId);
@@ -571,10 +916,17 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
   }
 
   function receiveNote(note: HookNote) {
+    closeLateReply();
+    if (note.details && "captureHookOutputs" in note.details)
+      state.captureHookOutputs = (note.details as NoteDetails).captureHookOutputs === true;
     const details = (note.details ?? {}) as NoteDetails;
     const time =
       details.time === undefined ? (state.lastTime ?? iso(Date.now())) : iso(details.time);
-    if (details.metadata) state.baseMetadata = details.metadata;
+    if (details.metadata) {
+      state.baseMetadata = details.metadata;
+      state.pinnedRepositoryKeys = details.pinnedRepositoryKeys;
+    }
+    if (details.cwd) state.cwd = details.cwd;
     if (state.mainPath === undefined && note.transcriptPath && !note.agentId)
       state.mainPath = note.transcriptPath;
     const toolUseId = details.toolUseId;
@@ -583,7 +935,8 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
         if (note.agentId) return;
         state.sessionMode = note.tracingMode ?? state.sessionMode;
         const approvalPolicy = details.permissionMode;
-        state.pendingStart = { time, mode: state.sessionMode, approvalPolicy };
+        const parentDottedOrder = details.parentDottedOrder;
+        state.pendingStart = { time, mode: state.sessionMode, approvalPolicy, parentDottedOrder };
         return;
       case HOOK_EVENTS.preToolUse:
         if (note.agentId || toolUseId === undefined || details.time === undefined) return;
@@ -594,7 +947,17 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       case HOOK_EVENTS.stop: {
         const turn = state.turns[state.currentTurn ?? ""];
         if (note.agentId || turn === undefined) return;
+        if (state.stopContinues) {
+          state.stopContinues = undefined;
+          main().endTurnSeen = false;
+          return;
+        }
         state.pendingStart = undefined;
+        clearRepoAttributionCache();
+        turn.gitMetadata = originScopedMetadata(state.baseMetadata, turn.toolOrigins, state.cwd);
+        state.stoppedTurn = turn;
+        const stoppedAt = Date.parse(time) - (state.hookClockOffset ?? 0);
+        state.lateReply = main().endTurnSeen ? undefined : { turn, stoppedAt };
         stopTurn(state.currentTurn!, { text: details.lastAssistantMessage });
         return;
       }
@@ -605,6 +968,11 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
         stopTurn(state.currentTurn, { error: errorDetails ? `${error}: ${errorDetails}` : error });
         return;
       }
+      case HOOK_EVENTS.subagentStop:
+        if (note.agentId === undefined) return;
+        linkFromMeta(note.agentId);
+        finishAgent(note.agentId);
+        return;
       case HOOK_EVENTS.preCompact:
         state.preCompact = { time, mode: note.tracingMode };
         return;
@@ -615,7 +983,10 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
   }
 
   function transcripts(): string[] {
-    return state.mainPath === undefined ? [] : [state.mainPath];
+    const mainPath = state.mainPath;
+    if (mainPath === undefined) return [];
+    const agents = Object.keys(state.threads).filter((key) => key !== MAIN_THREAD);
+    return [mainPath, ...agents.map((id) => subagentTranscriptPath(mainPath, sessionId, id))];
   }
 
   return {

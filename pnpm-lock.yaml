@@ -16,8 +16,8 @@ importers:
         version: 0.11.6
     devDependencies:
       '@langchain/plugins-base':
-        specifier: github:langchain-ai/langsmith-plugins-base#51ff5860c0f3ade2bbc2427a04c852b48f2c8e8e
-        version: https://codeload.github.com/langchain-ai/langsmith-plugins-base/tar.gz/51ff5860c0f3ade2bbc2427a04c852b48f2c8e8e(langsmith@0.11.6)
+        specifier: github:langchain-ai/langsmith-plugins-base#1aa1b6816bd1e7d7e0fc7153fc2ba0b5947ae54e
+        version: https://codeload.github.com/langchain-ai/langsmith-plugins-base/tar.gz/1aa1b6816bd1e7d7e0fc7153fc2ba0b5947ae54e(langsmith@0.11.6)
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
@@ -211,9 +211,9 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugins-base/tar.gz/51ff5860c0f3ade2bbc2427a04c852b48f2c8e8e':
-    resolution: {tarball: https://codeload.github.com/langchain-ai/langsmith-plugins-base/tar.gz/51ff5860c0f3ade2bbc2427a04c852b48f2c8e8e}
-    version: 0.6.5
+  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugins-base/tar.gz/1aa1b6816bd1e7d7e0fc7153fc2ba0b5947ae54e':
+    resolution: {tarball: https://codeload.github.com/langchain-ai/langsmith-plugins-base/tar.gz/1aa1b6816bd1e7d7e0fc7153fc2ba0b5947ae54e}
+    version: 0.7.0
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
@@ -1129,7 +1129,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugins-base/tar.gz/51ff5860c0f3ade2bbc2427a04c852b48f2c8e8e(langsmith@0.11.6)':
+  '@langchain/plugins-base@https://codeload.github.com/langchain-ai/langsmith-plugins-base/tar.gz/1aa1b6816bd1e7d7e0fc7153fc2ba0b5947ae54e(langsmith@0.11.6)':
     dependencies:
       langsmith: 0.11.6
 

@@ -8,23 +8,28 @@
 
 import { dispatchHookCommand } from "@langchain/plugins-base/plugin";
 import { binary } from "../binary-target.js";
-import { ENGINE_WORKER_ARG, USAGE_TEMPLATE } from "../constants.js";
-import { LS_INTEGRATION_VERSION } from "../integration-version.js";
-import { error, initLogger } from "../logger.js";
+import { ENGINE_WORKER_ARG, LEGACY_TRACING_ENV, USAGE_TEMPLATE } from "../constants.js";
 import { runEngineWorker } from "../engine-worker.js";
+import { PLUGIN_VERSION } from "../integration-version.js";
+import { error, initLogger } from "../logger.js";
+import { NOTE_HANDLERS, runTracerWorker } from "../tracer-hooks/tracer-hooks.js";
 import { HOOK_HANDLERS } from "./registry.js";
 
 const EXECUTABLE_NAME = binary.target.executableName;
 
 const USAGE = USAGE_TEMPLATE.replaceAll("{name}", EXECUTABLE_NAME);
+const legacyTracing = process.env[LEGACY_TRACING_ENV] === "true";
 
 void dispatchHookCommand(process.argv.slice(2), {
   usage: USAGE,
-  version: LS_INTEGRATION_VERSION ?? "development",
-  hooks: HOOK_HANDLERS,
+  version: PLUGIN_VERSION,
+  hooks: legacyTracing ? HOOK_HANDLERS : NOTE_HANDLERS,
   worker: {
     command: ENGINE_WORKER_ARG,
-    run: ([cwd, sessionId]) => runEngineWorker(cwd ?? process.cwd(), sessionId),
+    run: ([cwd, sessionId]) =>
+      legacyTracing
+        ? runEngineWorker(cwd ?? process.cwd(), sessionId)
+        : runTracerWorker(cwd ?? process.cwd()),
   },
   onHookError: (name, err) => {
     try {

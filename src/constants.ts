@@ -112,6 +112,8 @@ const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /** Argument that runs the background uploader instead of a hook handler. */
 const ENGINE_WORKER_ARG = "--engine-worker";
+const LEGACY_TRACING_ENV = "CC_LANGSMITH_LEGACY_TRACING";
+const DEVELOPMENT_VERSION = "development";
 
 const PLUGIN_FLAG = "--plugin";
 const GATEWAY_PLUGIN = "gateway";
@@ -339,6 +341,8 @@ export {
   GH_LOGIN_MARKER_FILE,
   SESSION_MAX_AGE_MS,
   ENGINE_WORKER_ARG,
+  LEGACY_TRACING_ENV,
+  DEVELOPMENT_VERSION,
   PLUGIN_FLAG,
   GATEWAY_PLUGIN,
   BUNDLE_USAGE,
@@ -349,9 +353,15 @@ export const MAIN_THREAD = "main";
 export const AGENT_RUN_NAME = "Agent";
 export const AGENT_NATIVE_TOOL_NAME = "Task";
 export const AGENT_TOOL_NAMES: ReadonlySet<string> = new Set(["Agent", "Task"]);
+export const ASYNC_LAUNCHED_STATUS = "async_launched";
+export const BACKGROUND_AGENT_WAIT_MS = 4 * 60 * 60 * 1000;
+export const DEFAULT_SUBAGENT_TYPE = "general-purpose";
+export const SUBAGENT_CHAIN_SUFFIX = " Subagent";
 export const NO_MESSAGE_ID = "__no_id__";
 export const NO_TOOL_RESULT = "No result";
 export const END_TURN = "end_turn";
+export const LATE_REPLY_WINDOW_MS = 10_000;
+export const HOOK_BLOCKING_ATTACHMENT = "hook_blocking_error";
 export const COMPACT_BOUNDARY_SUBTYPE = "compact_boundary";
 export const DEFAULT_COMPACT_TRIGGER = "auto";
 export const COMPACTION_RUN_NAME = (trigger: string) => `Context Compaction (${trigger})`;
@@ -365,13 +375,21 @@ export const USER_INTERRUPT_ERROR = "User interrupt";
 export const TOOL_INTERRUPTED_ERROR = "Interrupted";
 export const SESSION_ENDED_ERROR = "Session ended before turn completed";
 
+export const SUBAGENTS_FOLDER = "subagents";
+export const SUBAGENT_FILE = /^agent-(.+)\.jsonl$/;
+export const SUBAGENT_META_FILE = /^agent-(.+)\.meta\.json$/;
 export const TRANSCRIPT_EXTENSION = ".jsonl";
+export const TRACING_MODE_STRICTNESS = ["full", "metadata", "off"];
 
 export const HOOK_EVENTS = {
   userPromptSubmit: "UserPromptSubmit",
   preToolUse: "PreToolUse",
   stop: "Stop",
   stopFailure: "StopFailure",
+  subagentStop: "SubagentStop",
   preCompact: "PreCompact",
   sessionEnd: "SessionEnd",
 } as const;
+
+export const CLAUDE_PROJECTS_PATH = [".claude", "projects"];
+export const TRANSCRIPT_HEAD_BYTES = 65_536;

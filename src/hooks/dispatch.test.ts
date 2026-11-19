@@ -6,9 +6,10 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { binary } from "../binary-target.js";
-import { HOOK_EVENT_NAMES } from "../constants.js";
+import { HOOK_EVENT_NAMES, LEGACY_TRACING_ENV } from "../constants.js";
 import cursorHooks from "../fixtures/cursor-hooks.json" with { type: "json" };
 import { noManagedConfigEnv } from "../fixtures/no-managed-config-env.js";
+import { tracerPaths } from "@langchain/plugins-base/tracer";
 
 const EXECUTABLE_NAME = binary.target.executableName;
 
@@ -200,6 +201,21 @@ describe("bundle/dispatch.js", () => {
     expect(result.stdout).toContain("--help, -h");
     expect(result.stdout).toContain("--version, -v");
     expect(existsSync(logDir())).toBe(false);
+  });
+
+  it.each([
+    ["the new worker", "false", true],
+    ["the old path", "true", false],
+  ])("traces through %s when the emergency switch is %s", (_path, legacy, writesNote) => {
+    const tracing = {
+      TRACE_TO_LANGSMITH: "true",
+      CC_LANGSMITH_API_KEY: "test-key",
+      LANGSMITH_ENDPOINT: "http://127.0.0.1:1",
+      [LEGACY_TRACING_ENV]: legacy,
+    };
+    const result = dispatchPayload("PostToolUse", claudePayload("PostToolUse"), tracing);
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(tracerPaths(home).notes)).toBe(writesNote);
   });
 
   it("names every hook event and flag it accepts in the usage", () => {

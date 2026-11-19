@@ -70,6 +70,13 @@ export function pinnedRepositoryKeys(
   return (metadata as MetadataWithPins | undefined)?.[PINNED_REPOSITORY_KEYS] ?? NO_PINNED_KEYS;
 }
 
+export function withPinnedRepositoryKeys(
+  metadata: Record<string, unknown> | undefined,
+  keys: readonly string[] = [],
+): Record<string, unknown> {
+  return Object.defineProperty({ ...metadata }, PINNED_REPOSITORY_KEYS, { value: new Set(keys) });
+}
+
 /** Preserve Claude environment boolean parsing; the shared helper receives parsed values. */
 function envBoolean(field: BooleanSetting): boolean | undefined {
   const setting = BOOLEAN_SETTINGS[field];

@@ -300,7 +300,7 @@ export function isToolResult(msg: TranscriptMessage): msg is ToolResultMessage {
   return msg.message.content.some((b: { type: string }) => b.type === "tool_result");
 }
 
-function transcriptHooks({ attachment }: HookEntry): HookOutput[] {
+export function transcriptHooks({ attachment }: HookEntry): HookOutput[] {
   const late =
     attachment?.type === ASYNC_HOOK_ATTACHMENT
       ? attachment.response?.hookSpecificOutput?.additionalContext
@@ -333,7 +333,7 @@ export function hookPlacement(name: string): HookPlacement {
   return HOOK_PLACEMENTS.get(name) ?? TURN_INPUT_HOOK;
 }
 
-const hookToolUseId = (entry: HookEntry) =>
+export const hookToolUseId = (entry: HookEntry) =>
   entry.attachment?.toolUseID?.replace(PLUGIN_CONTEXT_SUFFIX, "");
 
 export function windowHooks(messages: TranscriptMessage[], toolUseId?: string): HookOutput[] {

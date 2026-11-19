@@ -44,7 +44,7 @@ The plugin only trusts the file when:
 
 Set `workspace_id` as well when your users sign in with the LangSmith CLI. Each user's sign-in may default to a different workspace, so setting it here keeps everyone's traces in one place. API keys ignore this setting so use one scoped to a workspace.
 
-If the file is broken or fails these checks then tracing stops and Claude Code explains why. See [the settings guide](https://github.com/langchain-ai/langsmith-plugin-binary/blob/main/docs/settings.md) to set it up.
+If the file is broken or fails these checks then tracing stops and Claude Code explains why. See [the settings guide](https://github.com/langchain-ai/langsmith-plugins-base/blob/main/docs/settings.md) to set it up.
 
 ## Authenticate
 
@@ -153,6 +153,8 @@ Each setting has a config file key and an environment variable. The environment 
 `profile` is personal so the managed file can't lock it. `LANGSMITH_PROFILE` and `LANGSMITH_WORKSPACE_ID` are only used when no `profile` or `workspace_id` is set in a settings file.
 
 Set `capture_hook_outputs` (`CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS`) to `true` to add the text your own hooks give Claude to the turn or tool call it belongs to, which is off by default.
+
+If the new tracing worker misbehaves, set `CC_LANGSMITH_LEGACY_TRACING=true` and restart Claude Code to trace the way earlier versions did until a fix ships.
 
 ## More
 

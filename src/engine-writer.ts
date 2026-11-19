@@ -1,5 +1,6 @@
 import { RunTree } from "langsmith";
 import { readLoginNotice, refusedLoginReplicas, sdkSetting } from "@langchain/plugins-base/auth";
+import { tracerPaths } from "@langchain/plugins-base/tracer";
 import type {
   LangSmithUploadReplicaConfig,
   LangSmithUploadWriterOptions,
@@ -36,6 +37,14 @@ export function engineStorageRoot(stateFilePath: string): string {
   return join(dirname(stateFilePath), ENGINE_STORAGE_DIR_NAME);
 }
 
+export function tracerStorageRoot(stateFilePath: string): string {
+  return tracerPaths(dirname(stateFilePath)).folder;
+}
+
+export function tracerWriter(config: Config): LangSmithUploadWriterOptions {
+  return { ...writerOptions(config), storageRoot: tracerStorageRoot(config.stateFilePath) };
+}
+
 export function uploadReplicas(replicas: Config["replicas"]): LangSmithUploadReplicaConfig[] {
   return (replicas ?? replicasFromEnvironment() ?? []).map(writerReplica);
 }
@@ -56,7 +65,7 @@ export function writerReplica(
 export function readUploadNotices(config: Config): UploadNotices {
   const apiKey = sdkSetting(config.apiKey);
   const loginNotice = readLoginNotice(
-    engineStorageRoot(config.stateFilePath),
+    tracerStorageRoot(config.stateFilePath),
     process.env,
     config.login || apiKey === undefined ? undefined : { apiKey, apiUrl: config.apiBaseUrl },
     config.profile,
