@@ -189,6 +189,22 @@ describe("hook notes", () => {
     expect(posts.filter((r) => r.name === "Claude Code Turn")).toHaveLength(2);
   });
 
+  it("keeps a turn whose only reply is a synthetic error written before its prompt hook", () => {
+    const { posts, main } = fakeSession();
+    const failed = assistant(
+      "a1",
+      2,
+      [{ type: "text", text: "Prompt is too long" }],
+      "stop_sequence",
+    );
+    main(prompt("p1", 1, "first"), {
+      ...failed,
+      message: { ...failed.message, model: "<synthetic>" },
+    });
+
+    expect(posts.filter((r) => r.name === "Claude Code Turn")).toHaveLength(1);
+  });
+
   it("closes a reply written after its Stop without an error when the session ends next", () => {
     const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });

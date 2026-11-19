@@ -855,8 +855,9 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     closeLateReply(line);
     if (readCompaction(line, time)) return;
     if (line.isSidechain) return;
-    const strayPlaceholder =
-      state.currentTurn === undefined && line.message?.model === SYNTHETIC_MODEL;
+    const awaitingReply =
+      state.currentTurn !== undefined || !!state.pendingPrompt || !!state.pendingStart;
+    const strayPlaceholder = !awaitingReply && line.message?.model === SYNTHETIC_MODEL;
     if (line.type === "assistant" && !strayPlaceholder) {
       if (state.currentTurn === undefined && !reopenForLateReply(line, time)) openTurn(time);
       readAssistant(MAIN_THREAD, line, time);
