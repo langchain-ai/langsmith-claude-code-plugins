@@ -30928,9 +30928,19 @@ var createTranscriptBuilder = (context) => {
   function reopenBlockedTurn(line) {
     const turn = state.stoppedTurn;
     const { type, hookEvent } = line.attachment ?? {};
-    if (type !== HOOK_BLOCKING_ATTACHMENT || hookEvent !== HOOK_EVENTS.stop)
+    const continues = type === HOOK_BLOCKING_ATTACHMENT || type === HOOK_CONTEXT_ATTACHMENT;
+    if (!continues || hookEvent !== HOOK_EVENTS.stop)
       return;
-    if (turn === void 0 || state.currentTurn !== void 0 || state.pendingPrompt)
+    if (state.lateReply?.messageId !== void 0 && state.currentTurn === state.lateReply.turn.run.id) {
+      state.lateReply = void 0;
+      main10().endTurnSeen = false;
+      return;
+    }
+    if (state.currentTurn !== void 0) {
+      state.stopContinues = true;
+      return;
+    }
+    if (turn === void 0 || state.pendingPrompt)
       return;
     state.stoppedTurn = void 0;
     state.turns[turn.run.id] ??= turn;
@@ -30980,6 +30990,7 @@ var createTranscriptBuilder = (context) => {
   function readMainLine(line, time) {
     if (typeof line.cwd === "string")
       state.cwd = line.cwd;
+    reopenBlockedTurn(line);
     if (line.type === HOOK_ENTRY_TYPE)
       collectHooks(line, true);
     else
@@ -30987,7 +30998,6 @@ var createTranscriptBuilder = (context) => {
     closeLateReply(line);
     if (readCompaction(line, time))
       return;
-    reopenBlockedTurn(line);
     if (line.isSidechain)
       return;
     if (line.type === "assistant") {
@@ -31101,6 +31111,11 @@ var createTranscriptBuilder = (context) => {
         const turn = state.turns[state.currentTurn ?? ""];
         if (note.agentId || turn === void 0)
           return;
+        if (state.stopContinues) {
+          state.stopContinues = void 0;
+          main10().endTurnSeen = false;
+          return;
+        }
         state.pendingStart = void 0;
         clearRepoAttributionCache();
         turn.gitMetadata = originScopedMetadata(state.baseMetadata, turn.toolOrigins, state.cwd);

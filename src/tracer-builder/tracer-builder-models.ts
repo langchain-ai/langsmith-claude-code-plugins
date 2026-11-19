@@ -159,6 +159,7 @@ export interface BuilderState {
   turnCount: number;
   currentTurn?: string;
   stoppedTurn?: OpenTurn;
+  stopContinues?: boolean;
   captureHookOutputs?: boolean;
   promptHooks?: HookOutput[];
   lateReply?: LateReply;

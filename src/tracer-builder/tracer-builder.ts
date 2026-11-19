@@ -65,6 +65,7 @@ import {
   DEFAULT_SUBAGENT_TYPE,
   END_TURN,
   HOOK_BLOCKING_ATTACHMENT,
+  HOOK_CONTEXT_ATTACHMENT,
   HOOK_ENTRY_TYPE,
   HOOK_EVENTS,
   LATE_REPLY_WINDOW_MS,
@@ -784,8 +785,21 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
   function reopenBlockedTurn(line: ClaudeLine) {
     const turn = state.stoppedTurn;
     const { type, hookEvent } = line.attachment ?? {};
-    if (type !== HOOK_BLOCKING_ATTACHMENT || hookEvent !== HOOK_EVENTS.stop) return;
-    if (turn === undefined || state.currentTurn !== undefined || state.pendingPrompt) return;
+    const continues = type === HOOK_BLOCKING_ATTACHMENT || type === HOOK_CONTEXT_ATTACHMENT;
+    if (!continues || hookEvent !== HOOK_EVENTS.stop) return;
+    if (
+      state.lateReply?.messageId !== undefined &&
+      state.currentTurn === state.lateReply.turn.run.id
+    ) {
+      state.lateReply = undefined;
+      main().endTurnSeen = false;
+      return;
+    }
+    if (state.currentTurn !== undefined) {
+      state.stopContinues = true;
+      return;
+    }
+    if (turn === undefined || state.pendingPrompt) return;
     state.stoppedTurn = undefined;
     state.turns[turn.run.id] ??= turn;
     state.turns[turn.run.id].stopped = false;
@@ -834,11 +848,11 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
 
   function readMainLine(line: ClaudeLine, time: string) {
     if (typeof line.cwd === "string") state.cwd = line.cwd;
+    reopenBlockedTurn(line);
     if (line.type === HOOK_ENTRY_TYPE) collectHooks(line, true);
     else releaseHeldTools();
     closeLateReply(line);
     if (readCompaction(line, time)) return;
-    reopenBlockedTurn(line);
     if (line.isSidechain) return;
     if (line.type === "assistant") {
       if (state.currentTurn === undefined && !reopenForLateReply(line, time)) openTurn(time);
@@ -933,6 +947,11 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
       case HOOK_EVENTS.stop: {
         const turn = state.turns[state.currentTurn ?? ""];
         if (note.agentId || turn === undefined) return;
+        if (state.stopContinues) {
+          state.stopContinues = undefined;
+          main().endTurnSeen = false;
+          return;
+        }
         state.pendingStart = undefined;
         clearRepoAttributionCache();
         turn.gitMetadata = originScopedMetadata(state.baseMetadata, turn.toolOrigins, state.cwd);

@@ -297,6 +297,68 @@ describe("hook notes", () => {
     });
   });
 
+  it("keeps a Stop hook's added context and Claude's continuation in the same turn", () => {
+    const { posts, patches, main, send } = fakeSession();
+    const said = (text: string) => [{ type: "text", text }];
+    const stopNote = (uuid: string, second: number) => ({
+      type: "attachment",
+      uuid,
+      timestamp: at(second),
+      attachment: { type: "hook_additional_context", hookEvent: "Stop", content: ["keep going"] },
+    });
+    send("UserPromptSubmit", {}, { time: ms(0), captureHookOutputs: true });
+    main(prompt("p1", 1, "go"), assistant("a1", 2, said("first"), "end_turn"));
+    send("Stop", {}, { lastAssistantMessage: "first" });
+    main(stopNote("s1", 3), assistant("a2", 4, said("second"), "end_turn"));
+    send("Stop", {}, { lastAssistantMessage: "second" });
+
+    const turns = posts.filter((r) => r.name === "Claude Code Turn");
+    expect(turns).toHaveLength(1);
+    expect(patches.filter((r) => r.id === turns[0]!.id).at(-1)?.outputs).toMatchObject({
+      messages: [{ role: "assistant", content: "second" }],
+      hooks: [{ name: "Stop", output: "keep going" }],
+    });
+  });
+
+  it("keeps a Stop hook's continuation in the turn when Stop arrives before the reply line", () => {
+    const { posts, main, send } = fakeSession();
+    const said = (text: string) => [{ type: "text", text }];
+    const stopNote = (uuid: string, second: number) => ({
+      type: "attachment",
+      uuid,
+      timestamp: at(second),
+      attachment: { type: "hook_additional_context", hookEvent: "Stop", content: ["keep going"] },
+    });
+    send("UserPromptSubmit", {}, { time: ms(0), captureHookOutputs: true });
+    main(prompt("p1", 1, "go"));
+    send("Stop", {}, { time: ms(2), lastAssistantMessage: "first" });
+    main(assistant("a1", 2, said("first"), "end_turn"), stopNote("s1", 3));
+    send("Stop", {}, { time: ms(4), lastAssistantMessage: "second" });
+    main(assistant("a2", 4, said("second"), "end_turn"));
+    send("SessionEnd");
+
+    expect(posts.filter((r) => r.name === "Claude Code Turn")).toHaveLength(1);
+  });
+
+  it("keeps a Stop hook's continuation in the turn when Stop arrives after the hook's line", () => {
+    const { builder, posts, main, send } = fakeSession();
+    const said = (text: string) => [{ type: "text", text }];
+    const stopNote = (uuid: string, second: number) => ({
+      type: "attachment",
+      uuid,
+      timestamp: at(second),
+      attachment: { type: "hook_additional_context", hookEvent: "Stop", content: ["keep going"] },
+    });
+    send("UserPromptSubmit", {}, { time: ms(0), captureHookOutputs: true });
+    main(prompt("p1", 1, "go"), assistant("a1", 2, said("first"), "end_turn"), stopNote("s1", 3));
+    send("Stop", {}, { time: ms(3), lastAssistantMessage: "first" });
+    main(assistant("a2", 4, said("second"), "end_turn"));
+    send("Stop", {}, { time: ms(4), lastAssistantMessage: "second" });
+    expect(builder.turnOpen()).toBe(false);
+
+    expect(posts.filter((r) => r.name === "Claude Code Turn")).toHaveLength(1);
+  });
+
   it("closes a failed turn with the API error", () => {
     const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });
