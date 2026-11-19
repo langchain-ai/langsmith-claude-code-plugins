@@ -23,6 +23,7 @@ const OWN_PROMPT_LINE_MAX_AGE_MS = 5_000;
 const HOOK_ENTRY_TYPE = "attachment";
 const HOOK_CONTEXT_ATTACHMENT = "hook_additional_context";
 const ASYNC_HOOK_ATTACHMENT = "async_hook_response";
+const SYNTHETIC_MODEL = "<synthetic>";
 const PLUGIN_CONTEXT_SUFFIX = /-context$/;
 const HELD_TOOL_RUN_PREFIX = "held-tool-run-";
 const HELD_TOOL_RUN_MAX_AGE_MS = 6 * 60 * 60 * 1000;
@@ -316,6 +317,7 @@ export {
   HOOK_ENTRY_TYPE,
   HOOK_CONTEXT_ATTACHMENT,
   ASYNC_HOOK_ATTACHMENT,
+  SYNTHETIC_MODEL,
   PLUGIN_CONTEXT_SUFFIX,
   HELD_TOOL_RUN_PREFIX,
   HELD_TOOL_RUN_MAX_AGE_MS,

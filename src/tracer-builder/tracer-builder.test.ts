@@ -173,6 +173,22 @@ describe("hook notes", () => {
     expect(posts.filter((r) => r.name === "Claude Code Turn")).toHaveLength(2);
   });
 
+  it("does not start a turn for the placeholder reply Claude Code writes on resume", () => {
+    const { posts, main, send } = fakeSession();
+    const said = (text: string) => [{ type: "text", text }];
+    send("UserPromptSubmit", {}, { time: ms(0) });
+    main(prompt("p1", 1, "first"), assistant("a1", 2, said("ok"), "end_turn"));
+    send("Stop");
+    send("SessionEnd");
+    const placeholder = assistant("a2", 3, said("No response requested."), "stop_sequence");
+    main({ ...placeholder, message: { ...placeholder.message, model: "<synthetic>" } });
+    send("UserPromptSubmit", {}, { time: ms(4) });
+    main(prompt("p2", 4, "second"), assistant("a3", 5, said("done"), "end_turn"));
+    send("Stop");
+
+    expect(posts.filter((r) => r.name === "Claude Code Turn")).toHaveLength(2);
+  });
+
   it("closes a reply written after its Stop without an error when the session ends next", () => {
     const { posts, patches, main, send } = fakeSession();
     send("UserPromptSubmit", {}, { time: ms(0) });
