@@ -31001,7 +31001,7 @@ var createTranscriptBuilder = (context) => {
       return;
     if (line.isSidechain)
       return;
-    const awaitingReply = state.currentTurn !== void 0 || !!state.pendingPrompt || !!state.pendingStart;
+    const awaitingReply = state.currentTurn !== void 0 || !!state.pendingPrompt;
     const strayPlaceholder = !awaitingReply && line.message?.model === SYNTHETIC_MODEL;
     if (line.type === "assistant" && !strayPlaceholder) {
       if (state.currentTurn === void 0 && !reopenForLateReply(line, time))
