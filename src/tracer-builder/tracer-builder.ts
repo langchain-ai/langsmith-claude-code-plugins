@@ -79,6 +79,7 @@ import {
   SESSION_ENDED_ERROR,
   TRANSCRIPT_EXTENSION,
   SUBAGENT_CHAIN_SUFFIX,
+  SYNTHETIC_MODEL,
   TOOL_INTERRUPTED_ERROR,
   TRACING_MODE_STRICTNESS,
   USER_INTERRUPT_ERROR,
@@ -854,7 +855,9 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     closeLateReply(line);
     if (readCompaction(line, time)) return;
     if (line.isSidechain) return;
-    if (line.type === "assistant") {
+    const awaitingReply = state.currentTurn !== undefined || !!state.pendingPrompt;
+    const strayPlaceholder = !awaitingReply && line.message?.model === SYNTHETIC_MODEL;
+    if (line.type === "assistant" && !strayPlaceholder) {
       if (state.currentTurn === undefined && !reopenForLateReply(line, time)) openTurn(time);
       readAssistant(MAIN_THREAD, line, time);
     } else if (line.type === "user") readUserLine(MAIN_THREAD, line, time);
