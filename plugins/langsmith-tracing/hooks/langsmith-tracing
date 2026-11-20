@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-RAN_CODES="0"
+UNSTARTED_CODES="126 127"
 
 root="${CLAUDE_PLUGIN_ROOT:-}"
 if [ -z "$root" ]; then
@@ -25,10 +25,10 @@ case "$(uname -s)-$(uname -m)" in
 esac
 
 ran() {
-  case " $RAN_CODES " in
-    *" $1 "*) return 0 ;;
+  case " $UNSTARTED_CODES " in
+    *" $1 "*) return 1 ;;
   esac
-  return 1
+  return 0
 }
 
 first=""
