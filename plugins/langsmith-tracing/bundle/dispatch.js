@@ -24431,6 +24431,7 @@ var OWN_PROMPT_LINE_MAX_AGE_MS = 5e3;
 var HOOK_ENTRY_TYPE = "attachment";
 var HOOK_CONTEXT_ATTACHMENT = "hook_additional_context";
 var ASYNC_HOOK_ATTACHMENT = "async_hook_response";
+var SYNTHETIC_MODEL = "<synthetic>";
 var PLUGIN_CONTEXT_SUFFIX = /-context$/;
 var HELD_TOOL_RUN_PREFIX = "held-tool-run-";
 var HELD_TOOL_RUN_MAX_AGE_MS = 6 * 60 * 60 * 1e3;
@@ -31000,7 +31001,9 @@ var createTranscriptBuilder = (context) => {
       return;
     if (line.isSidechain)
       return;
-    if (line.type === "assistant") {
+    const awaitingReply = state.currentTurn !== void 0 || !!state.pendingPrompt;
+    const strayPlaceholder = !awaitingReply && line.message?.model === SYNTHETIC_MODEL;
+    if (line.type === "assistant" && !strayPlaceholder) {
       if (state.currentTurn === void 0 && !reopenForLateReply(line, time))
         openTurn(time);
       readAssistant(MAIN_THREAD, line, time);
