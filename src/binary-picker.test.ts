@@ -34,7 +34,6 @@ const body = {
   stopsWithThree: () => "#!/bin/sh\nexit 3\n",
   stopsWithTheHighestCode: () => "#!/bin/sh\nexit 255\n",
   countsItsInput: (build: string) => `#!/bin/sh\necho "${build} $(wc -c | tr -d ' ') bytes"\n`,
-  diesPartWayThroughTheEvent: () => "#!/bin/sh\nhead -c 10 >/dev/null\nkill -9 $$\n",
   outlastsTheTimeout: () => "#!/bin/sh\nhead -c 10 >/dev/null\nsleep 30\nexit 127\n",
   readsOffTheSpoolPermissions: () => '#!/bin/sh\nset -- "$TMPDIR"/*\nls -l "$1" | cut -c1-10\n',
 };
@@ -230,17 +229,36 @@ describe("the build picker", () => {
 
   it.each([
     ["is too broken to start", "unreadableToTheKernel"],
-    ["is killed the moment it starts", "killedOnTheSpot"],
     ["reports it could not be started", "reportsItCouldNotStart"],
-    ["stops with 1, as a failed start does under /bin/sh", "stopsWithOne"],
-    ["stops with 2, as unreadable bytes read as a script do", "stopsWithTwo"],
-    ["stops with 3, as a build that crashed after starting does", "stopsWithThree"],
-    ["stops with the highest code a shell can report", "stopsWithTheHighestCode"],
   ] as const)("falls back to Node when a build %s", (_, shaped) => {
     inSandbox(
       ["darwin-arm64", "darwin-x64"],
       (dir) => {
         expect(pick(dir)).toBe("node Stop");
+      },
+      { shaped },
+    );
+  });
+
+  it.each([
+    ["is killed", "killedOnTheSpot", 137],
+    ["stops with 1", "stopsWithOne", 1],
+    ["stops with 2", "stopsWithTwo", 2],
+    ["stops with 3", "stopsWithThree", 3],
+    ["stops with the highest code a shell can report", "stopsWithTheHighestCode", 255],
+  ] as const)("runs the event no further when a build that started %s", (_, shaped, code) => {
+    inSandbox(
+      ["darwin-arm64"],
+      (dir) => {
+        const intel = join(dir, "binary", `${executable}-darwin-x64`);
+        writeFileSync(intel, body.works("darwin-x64"));
+        chmodSync(intel, 0o755);
+        const result = run(dir);
+        expect({ status: result.status, stdout: result.stdout }).toEqual({
+          status: 0,
+          stdout: "",
+        });
+        expect(result.stderr).toContain(`exited ${code}`);
       },
       { shaped },
     );
@@ -255,13 +273,13 @@ describe("the build picker", () => {
     });
   });
 
-  it("lets a build that already answered answer twice when it then fails", () => {
+  it("lets a build that already answered answer only once when it then fails", () => {
     inSandbox(
       ["darwin-arm64"],
       (dir) => {
         const result = run(dir);
         expect(result.status, result.stderr).toBe(0);
-        expect(result.stdout.trim().split("\n")).toEqual(["darwin-arm64 refused", "node Stop"]);
+        expect(result.stdout.trim().split("\n")).toEqual(["darwin-arm64 refused"]);
       },
       { shaped: "failsForItsOwnReason" },
     );
@@ -277,9 +295,9 @@ describe("the build picker", () => {
           .split("\n")
           .filter((line) => line.includes("carried build did not run"));
         expect(said).toHaveLength(1);
-        expect(said[0]).toContain("exited 3");
+        expect(said[0]).toContain("exited 127");
       },
-      { shaped: "stopsWithThree" },
+      { shaped: "reportsItCouldNotStart" },
     );
   });
 
@@ -304,7 +322,7 @@ describe("the build picker", () => {
   });
 
   it.each(interpreters)(
-    "keeps the turn and exits 0 under %s when a build stops with its own code",
+    "keeps the turn and exits 0 under %s when a build cannot start",
     (interpreter) => {
       inSandbox(
         ["darwin-arm64"],
@@ -313,7 +331,7 @@ describe("the build picker", () => {
           expect(result.status, result.stderr).toBe(0);
           expect(result.stdout.trim()).toBe("node Stop");
         },
-        { shaped: "stopsWithThree" },
+        { shaped: "reportsItCouldNotStart" },
       );
     },
   );
@@ -328,7 +346,7 @@ describe("the build picker", () => {
           expect(result.status, result.stdout).toBe(0);
           expect(result.stdout.trim()).toBe("node Stop");
         },
-        { shaped: "stopsWithThree" },
+        { shaped: "reportsItCouldNotStart" },
       );
     },
   );
@@ -352,7 +370,7 @@ describe("the build picker", () => {
         expect(result.status, result.stdout).toBe(0);
         expect(result.stdout.trim()).toBe("node Stop");
       },
-      { shaped: "stopsWithThree" },
+      { shaped: "reportsItCouldNotStart" },
     );
   });
 
@@ -367,20 +385,6 @@ describe("the build picker", () => {
         expect(pick(dir, { input: "x".repeat(1_048_576) })).toBe("node 1048576");
       },
       { shaped: "unreadableToTheKernel" },
-    );
-  });
-
-  it("hands Node the whole event when a build dies part way through reading it", () => {
-    inSandbox(
-      ["darwin-arm64"],
-      (dir) => {
-        writeFileSync(
-          join(dir, "bundle/dispatch.js"),
-          'let n=0;process.stdin.on("data",(c)=>{n+=c.length});process.stdin.on("end",()=>console.log("node "+n));\n',
-        );
-        expect(pick(dir, { input: "x".repeat(200_000) })).toBe("node 200000");
-      },
-      { shaped: "diesPartWayThroughTheEvent" },
     );
   });
 
