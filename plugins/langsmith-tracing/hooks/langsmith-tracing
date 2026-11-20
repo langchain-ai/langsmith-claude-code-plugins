@@ -74,7 +74,10 @@ for candidate in "$preferred" "$alternate"; do
     wait "$child" || code=$?
     child=""
     if ran "$code"; then
-      exit "$code"
+      if [ "$code" -ne 0 ]; then
+        ( printf '%s\n' "langsmith tracing: $candidate exited $code" >&2 ) || :
+      fi
+      exit 0
     fi
     unstarted="$candidate exited $code"
   fi

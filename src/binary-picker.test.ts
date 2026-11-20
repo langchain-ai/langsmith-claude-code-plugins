@@ -255,9 +255,10 @@ describe("the build picker", () => {
         chmodSync(intel, 0o755);
         const result = run(dir);
         expect({ status: result.status, stdout: result.stdout }).toEqual({
-          status: code,
+          status: 0,
           stdout: "",
         });
+        expect(result.stderr).toContain(`exited ${code}`);
       },
       { shaped },
     );
@@ -277,7 +278,7 @@ describe("the build picker", () => {
       ["darwin-arm64"],
       (dir) => {
         const result = run(dir);
-        expect(result.status, result.stderr).toBe(3);
+        expect(result.status, result.stderr).toBe(0);
         expect(result.stdout.trim().split("\n")).toEqual(["darwin-arm64 refused"]);
       },
       { shaped: "failsForItsOwnReason" },
