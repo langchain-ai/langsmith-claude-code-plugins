@@ -30322,7 +30322,7 @@ function changeHistory(thread, start, removeCount, added = []) {
     thread.historyBytes -= saved;
   }
 }
-function restoredState(saved, mode = "full") {
+function restoredState(saved, mode = "metadata") {
   const candidate = saved;
   if (candidate?.version === BUILDER_STATE_VERSION)
     return candidate;

@@ -164,7 +164,7 @@ function changeHistory(thread: Thread, start: number, removeCount: number, added
   }
 }
 
-function restoredState(saved: unknown, mode: TracingMode = "full"): BuilderState {
+function restoredState(saved: unknown, mode: TracingMode = "metadata"): BuilderState {
   const candidate = saved as Partial<BuilderState> | undefined;
   if (candidate?.version === BUILDER_STATE_VERSION) return candidate as BuilderState;
   return {
