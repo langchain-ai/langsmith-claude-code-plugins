@@ -528,6 +528,23 @@ describe("hook notes", () => {
     expect(posts.every((r) => r.tracingMode === "metadata")).toBe(true);
   });
 
+  it("uploads a resumed session's earlier turns without their content", () => {
+    const { posts, patches, main, send } = fakeSession();
+    main(
+      prompt("p1", 0, "earlier"),
+      assistant("a1", 1, [toolUse("t1")]),
+      toolResult("r1", 2, "t1"),
+    );
+    main(assistant("a2", 3, [{ type: "text", text: "earlier reply" }], "end_turn"));
+    send("UserPromptSubmit", { tracingMode: "metadata" }, { time: ms(10) });
+    main(prompt("p2", 11, "now"), assistant("a3", 12, [{ type: "text", text: "ok" }]));
+    send("Stop");
+
+    const turns = posts.filter((r) => r.name === "Claude Code Turn");
+    expect(turns.map((r) => r.start_time)).toEqual([at(0), at(10)]);
+    expect([...posts, ...patches].map((r) => r.tracingMode)).toEqual(Array(9).fill("metadata"));
+  });
+
   it("continues an old engine's open turn from its prompt under the old root", () => {
     const transcript = join(mkdtempSync(join(tmpdir(), "open turn ")), "session.jsonl");
     const done = [prompt("p1", 0, "hi"), assistant("a1", 1, [], "end_turn")];
