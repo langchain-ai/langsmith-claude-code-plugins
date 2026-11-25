@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +21,7 @@ import {
 import { createGitSandbox } from "../fixtures/git-sandbox.js";
 import { runEngineWorker } from "../engine-worker.js";
 import { createTranscriptBuilder } from "../tracer-builder/tracer-builder.js";
+import type { HookContent } from "../tracer-builder/tracer-builder-models.js";
 import { setThreadTracingMode } from "../tracing-policy.js";
 import { readStdin } from "../utils/stdin.js";
 import { readLegacySessions } from "./legacy-sessions.js";
@@ -97,6 +98,23 @@ describe("sessions without a transcript", () => {
     });
   });
 
+  it("sends no note for a hook that only counts without a transcript, unless the path is empty and the switch is on", async () => {
+    const send = async (switchValue: string, transcript_path: string) => {
+      vi.stubEnv("CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT", switchValue);
+      vi.mocked(readStdin).mockResolvedValue({ session_id: "s1", cwd: home, transcript_path });
+      await NOTE_HANDLERS.MessageDisplay();
+    };
+    await send("true", "~/t.jsonl");
+    await send("false", "~/t.jsonl");
+    await send("false", "");
+    expect(
+      existsSync(join(home, ".claude", "state", "langsmith_plugins_base", "notes.jsonl")),
+    ).toBe(false);
+    vi.stubEnv("CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT", "true");
+    const [note] = await runHook("MessageDisplay", { transcript_path: "", delta: "hi" });
+    expect(note.details).toMatchObject({ hookContent: { text: "hi" } });
+  });
+
   describe("with a large tool value", () => {
     const LIMIT = 1024 * 1024;
     const sentHookContent = async (extra: Record<string, unknown>) => {
@@ -115,7 +133,11 @@ describe("sessions without a transcript", () => {
       expect(await sentContent(object)).toEqual(object);
     });
 
-    it("cuts a value over the limit to 1 MB plus a marker with the original size", async () => {
+    it("cuts a response or an input over the limit to 1 MB plus a marker with the original size", async () => {
+      const { toolInput } = await sentHookContent({ tool_input: "b".repeat(LIMIT + 1) });
+      expect(toolInput).toBe(
+        `${"b".repeat(LIMIT)}\n[Cut to 1 MB, original size ${LIMIT + 1} bytes]`,
+      );
       const cut = await sentContent("a".repeat(LIMIT + 5));
       expect(cut).toBe(`${"a".repeat(LIMIT)}\n[Cut to 1 MB, original size ${LIMIT + 5} bytes]`);
       const objectCut = await sentContent({ out: "a".repeat(LIMIT) });
@@ -125,11 +147,20 @@ describe("sessions without a transcript", () => {
       );
     });
 
-    it("cuts a tool's input the same way", async () => {
-      const { toolInput } = await sentHookContent({ tool_input: "b".repeat(LIMIT + 1) });
-      expect(toolInput).toBe(
-        `${"b".repeat(LIMIT)}\n[Cut to 1 MB, original size ${LIMIT + 1} bytes]`,
-      );
+    it("attaches each batched tool's response, cut the same way, without its input", async () => {
+      vi.stubEnv("CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT", "true");
+      const call = {
+        tool_use_id: "t1",
+        tool_input: { command: "ls" },
+        tool_response: "c".repeat(LIMIT + 1),
+      };
+      const [note] = await runHook("PostToolBatch", { transcript_path: "", tool_calls: [call] });
+      expect((note.details as { hookContent: HookContent }).hookContent.toolCalls).toEqual([
+        {
+          toolUseId: "t1",
+          toolResponse: `${"c".repeat(LIMIT)}\n[Cut to 1 MB, original size ${LIMIT + 1} bytes]`,
+        },
+      ]);
     });
 
     it("does not split a multi-byte character at the cut", async () => {

@@ -14,6 +14,12 @@ export interface HookContent {
   messageId?: string;
   index?: number;
   text?: string;
+  toolCalls?: HookToolCall[];
+}
+
+export interface HookToolCall {
+  toolUseId: string;
+  toolResponse?: unknown;
 }
 
 export interface TextChunk {
@@ -25,7 +31,7 @@ export interface TextChunk {
 export interface HookRound {
   number: number;
   chunks: TextChunk[];
-  firstToolTime?: number;
+  toolCalled?: boolean;
 }
 
 export interface HookRoundText {

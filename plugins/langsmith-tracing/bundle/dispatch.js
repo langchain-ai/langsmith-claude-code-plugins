@@ -24648,6 +24648,11 @@ var HOOK_EVENTS = {
   preCompact: "PreCompact",
   sessionEnd: "SessionEnd"
 };
+var NO_TRANSCRIPT_ONLY_EVENTS = [
+  HOOK_EVENTS.postToolUseFailure,
+  HOOK_EVENTS.postToolBatch,
+  HOOK_EVENTS.messageDisplay
+];
 var CLAUDE_PROJECTS_PATH = [".claude", "projects"];
 var TRANSCRIPT_HEAD_BYTES = 65536;
 var HOOK_ROUND_ID_PREFIX = "hook-round-";
@@ -30780,7 +30785,7 @@ var createTranscriptBuilder = (context) => {
   }
   function finishTool(tool, result) {
     tool.result = void 0;
-    if (result.agentId && AGENT_TOOL_NAMES.has(tool.toolName)) {
+    if (state.mainPath !== void 0 && result.agentId && AGENT_TOOL_NAMES.has(tool.toolName)) {
       linkAgent(tool, result.agentId, result.agentType);
       if (result.launched) {
         const chainClosed = !state.threads[result.agentId];
@@ -31172,11 +31177,17 @@ var createTranscriptBuilder = (context) => {
   function receiveHookNote(note, details) {
     const time = noteTime(details);
     const round = state.hookRound ??= { number: 0, chunks: [] };
-    const feed = (text) => {
+    const feed = (text, event = note.event, lineDetails = details) => {
       const id = `${HOOK_ROUND_ID_PREFIX}${round.number}`;
-      const line = hookLine(note.event, details, time, { id, text });
+      const line = hookLine(event, lineDetails, time, { id, text });
       if (line)
         readMainLine(line, time);
+    };
+    const feedBufferedText = () => {
+      const text = joinedText(round.chunks);
+      if (text && state.currentTurn !== void 0)
+        feed(text, HOOK_EVENTS.messageDisplay);
+      round.chunks = [];
     };
     const content = details.hookContent;
     switch (note.event) {
@@ -31186,19 +31197,29 @@ var createTranscriptBuilder = (context) => {
           index: content.index ?? 0,
           text: content.text ?? ""
         };
-        const isLate = chunk.text !== "" && round.firstToolTime !== void 0 && details.time !== void 0 && details.time < round.firstToolTime;
-        if (isLate)
+        if (chunk.text !== "" && round.toolCalled)
           feed(joinedText([chunk]));
         else
           round.chunks.push(chunk);
         return;
       }
       case HOOK_EVENTS.postToolBatch:
+        for (const call of content.toolCalls ?? []) {
+          const tool = state.tools[call.toolUseId];
+          if (call.toolResponse === void 0 || !tool || tool.result || tool.held)
+            continue;
+          const resultDetails = {
+            ...details,
+            toolUseId: call.toolUseId,
+            hookContent: { toolResponse: call.toolResponse }
+          };
+          feed("", HOOK_EVENTS.postToolUse, resultDetails);
+        }
         round.number++;
-        round.firstToolTime = void 0;
+        round.toolCalled = false;
         return;
       case HOOK_EVENTS.preToolUse:
-        round.firstToolTime ??= details.time;
+        round.toolCalled = true;
         applyNote(note);
         feed(joinedText(round.chunks));
         round.chunks = [];
@@ -31209,19 +31230,27 @@ var createTranscriptBuilder = (context) => {
           feed(text);
         round.chunks = [];
         round.number++;
-        round.firstToolTime = void 0;
+        round.toolCalled = false;
         applyNote({ ...note, details: { ...details, lastAssistantMessage: text } });
         return;
       }
       case HOOK_EVENTS.userPromptSubmit:
-        round.chunks = [];
+        feedBufferedText();
+        round.toolCalled = false;
         applyNote(note);
         feed("");
         return;
       case HOOK_EVENTS.postToolUse:
       case HOOK_EVENTS.postToolUseFailure:
+        if (!state.tools[details.toolUseId ?? ""])
+          return;
         applyNote(note);
         feed("");
+        return;
+      case HOOK_EVENTS.stopFailure:
+      case HOOK_EVENTS.sessionEnd:
+        feedBufferedText();
+        applyNote(note);
         return;
       default:
         applyNote(note);
@@ -31339,7 +31368,11 @@ function hookContentOf(input) {
     toolResponse: cappedToolValue(input.tool_response),
     messageId: input.message_id,
     index: input.index,
-    text: input.delta
+    text: input.delta,
+    toolCalls: input.tool_calls?.map((call) => ({
+      toolUseId: call.tool_use_id,
+      toolResponse: cappedToolValue(call.tool_response)
+    }))
   };
 }
 
@@ -31443,6 +31476,16 @@ function noteHandler(event) {
       await sendTracerNote(event, input, config);
   };
 }
+function noTranscriptHandler(event) {
+  return async () => {
+    const input = await readStdin();
+    if (!isPayloadForHook(input, event) || input.transcript_path)
+      return;
+    const config = initHook(input.cwd);
+    if (config?.traceWithoutTranscript)
+      await sendTracerNote(event, input, config);
+  };
+}
 var sendPromptNote = async (input, output, currentTurnMode) => {
   const config = await promptTracingConfig(input, output);
   if (!config)
@@ -31452,6 +31495,7 @@ var sendPromptNote = async (input, output, currentTurnMode) => {
 };
 var NOTE_HANDLERS = {
   ...Object.fromEntries(HOOK_EVENT_NAMES.map((event) => [event, noteHandler(event)])),
+  ...Object.fromEntries(NO_TRANSCRIPT_ONLY_EVENTS.map((event) => [event, noTranscriptHandler(event)])),
   UserPromptSubmit: () => answerPrompt(sendPromptNote),
   Stop: () => sleep3(STOP_FLUSH_WAIT_MS).then(noteHandler("Stop"))
 };

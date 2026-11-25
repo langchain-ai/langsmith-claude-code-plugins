@@ -23,5 +23,9 @@ export function hookContentOf(input: TracerHookInput): HookContent {
     messageId: input.message_id,
     index: input.index,
     text: input.delta,
+    toolCalls: input.tool_calls?.map((call) => ({
+      toolUseId: call.tool_use_id,
+      toolResponse: cappedToolValue(call.tool_response),
+    })),
   };
 }

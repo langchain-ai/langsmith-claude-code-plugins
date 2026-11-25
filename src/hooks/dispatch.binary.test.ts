@@ -52,7 +52,7 @@ function dispatch(args: string[], prompt = "ordinary prompt", timeout = 10000) {
     },
     input: JSON.stringify({
       session_id: "dispatch-binary-test",
-      transcript_path: join(home, "missing.jsonl"),
+      transcript_path: "",
       cwd: home,
       prompt,
     }),

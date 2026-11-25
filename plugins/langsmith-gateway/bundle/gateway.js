@@ -671,6 +671,24 @@ var LEGACY_FLUSH_LOCK_FILE = new RegExp(`^[\\w.-]+\\.flush\\.lock(\\.${LEGACY_UU
 var BACKGROUND_AGENT_WAIT_MS = 4 * 60 * 60 * 1e3;
 var MODEL_HISTORY_RESULT_LIMIT_BYTES = 8 * 1024;
 var MODEL_HISTORY_TURN_LIMIT_BYTES = 4 * 1024 * 1024;
+var HOOK_EVENTS = {
+  userPromptSubmit: "UserPromptSubmit",
+  preToolUse: "PreToolUse",
+  postToolUse: "PostToolUse",
+  postToolUseFailure: "PostToolUseFailure",
+  postToolBatch: "PostToolBatch",
+  messageDisplay: "MessageDisplay",
+  stop: "Stop",
+  stopFailure: "StopFailure",
+  subagentStop: "SubagentStop",
+  preCompact: "PreCompact",
+  sessionEnd: "SessionEnd"
+};
+var NO_TRANSCRIPT_ONLY_EVENTS = [
+  HOOK_EVENTS.postToolUseFailure,
+  HOOK_EVENTS.postToolBatch,
+  HOOK_EVENTS.messageDisplay
+];
 var HOOK_TOOL_VALUE_MAX_BYTES = 1024 * 1024;
 
 // dist/src/integration-version.js

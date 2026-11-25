@@ -28,7 +28,6 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const gatewayRoot = join(root, "plugins/langsmith-gateway");
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 const events = ["SessionStart", "UserPromptSubmit", "SessionEnd"];
-const FILTERED_EVENTS = ["PostToolUseFailure", "PostToolBatch", "MessageDisplay"];
 type Hooks = Record<string, { hooks: { type: string; command: string }[] }[]>;
 
 function hookBundles(pluginRoot: string): string[] {
@@ -37,15 +36,9 @@ function hookBundles(pluginRoot: string): string[] {
     groups.flatMap((group) =>
       group.hooks.map((hook) => {
         expect(hook.type).toBe("command");
-        const starter = FILTERED_EVENTS.includes(event)
-          ? hook.command
-              .split("\n")[2]
-              .replace(/^printf '%s' "\$input" \| /, "exec ")
-              .split(" || ")[0]
-          : hook.command.split("\n")[0];
         const match =
           /^(?:node "\$\{CLAUDE_PLUGIN_ROOT\}\/(bundle\/[^" ]+\.js)"|exec "\$\{CLAUDE_PLUGIN_ROOT\}\/(hooks\/[^" ]+)")( \S+)?$/.exec(
-            starter,
+            hook.command.split("\n")[0],
           );
         expect(match, hook.command).not.toBeNull();
         const entry = match![1] ?? match![2];
@@ -95,17 +88,13 @@ describe("the standalone binary manifest", () => {
     ).hooks;
     expect(Object.keys(compiled)).toEqual(Object.keys(node));
     for (const [event, groups] of Object.entries(node)) {
-      const binaryCommand = FILTERED_EVENTS.includes(event)
-        ? [
-            "input=$(cat)",
-            `case "$input" in *'"transcript_path":"'[!\\"]*) exit 0 ;; esac`,
-            `printf '%s' "$input" | "\${HOME}/.langsmith/langsmith-claude-code-tracing" ${event}`,
-          ].join("\n")
-        : `"\${HOME}/.langsmith/langsmith-claude-code-tracing" ${event}`;
       expect(compiled[event]).toEqual(
         groups.map((group) => ({
           ...group,
-          hooks: group.hooks.map((hook) => ({ ...hook, command: binaryCommand })),
+          hooks: group.hooks.map((hook) => ({
+            ...hook,
+            command: `"\${HOME}/.langsmith/langsmith-claude-code-tracing" ${event}`,
+          })),
         })),
       );
     }

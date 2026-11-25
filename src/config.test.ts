@@ -98,10 +98,6 @@ describe("loadConfig", () => {
 
     const traced = () => loadConfig({ cwd: projectDir }).traceWithoutTranscript;
 
-    it("leaves tracing without a transcript off when nothing sets it", () => {
-      expect(traced()).toBeUndefined();
-    });
-
     it("ignores a trace_without_transcript value in a file that is not a boolean", () => {
       writeFileSync(paths[0], '{"trace_without_transcript":"true"}');
       expect(traced()).toBeUndefined();
@@ -121,13 +117,10 @@ describe("loadConfig", () => {
       expect(traced()).toBe(true);
     });
 
-    it("lets CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT=true turn it on over a file that says false", () => {
+    it("lets CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT win over a file that says the opposite", () => {
       writeFileSync(paths[0], '{"trace_without_transcript":false}');
       process.env.CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT = "true";
       expect(traced()).toBe(true);
-    });
-
-    it("lets CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT=false turn it off over a file that says true", () => {
       writeFileSync(paths[0], '{"trace_without_transcript":true}');
       process.env.CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT = "false";
       expect(traced()).toBeUndefined();

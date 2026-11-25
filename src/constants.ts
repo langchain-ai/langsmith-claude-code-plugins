@@ -401,6 +401,12 @@ export const HOOK_EVENTS = {
   sessionEnd: "SessionEnd",
 } as const;
 
+export const NO_TRANSCRIPT_ONLY_EVENTS = [
+  HOOK_EVENTS.postToolUseFailure,
+  HOOK_EVENTS.postToolBatch,
+  HOOK_EVENTS.messageDisplay,
+];
+
 export const CLAUDE_PROJECTS_PATH = [".claude", "projects"];
 export const TRANSCRIPT_HEAD_BYTES = 65_536;
 export const HOOK_ROUND_ID_PREFIX = "hook-round-";
