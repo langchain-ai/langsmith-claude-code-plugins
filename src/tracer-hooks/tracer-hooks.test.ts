@@ -115,6 +115,28 @@ describe("sessions without a transcript", () => {
     expect(note.details).toMatchObject({ hookContent: { text: "hi" } });
   });
 
+  it("sends a subagent start note only when the path is empty and the switch is on", async () => {
+    const payload = { agent_id: "a1", agent_type: "Explore", transcript_path: "" };
+    vi.stubEnv("CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT", "true");
+    vi.mocked(readStdin).mockResolvedValue({
+      session_id: "s1",
+      cwd: home,
+      ...payload,
+      transcript_path: "~/t.jsonl",
+    });
+    await NOTE_HANDLERS.SubagentStart();
+    vi.stubEnv("CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT", "false");
+    vi.mocked(readStdin).mockResolvedValue({ session_id: "s1", cwd: home, ...payload });
+    await NOTE_HANDLERS.SubagentStart();
+    expect(
+      existsSync(join(home, ".claude", "state", "langsmith_plugins_base", "notes.jsonl")),
+    ).toBe(false);
+    vi.stubEnv("CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT", "true");
+    const [note] = await runHook("SubagentStart", payload);
+    expect(note).toMatchObject({ event: "SubagentStart", agentId: "a1" });
+    expect(note.details).toMatchObject({ hookContent: { agentType: "Explore" } });
+  });
+
   describe("with a large tool value", () => {
     const LIMIT = 1024 * 1024;
     const sentHookContent = async (extra: Record<string, unknown>) => {
@@ -161,6 +183,21 @@ describe("sessions without a transcript", () => {
           toolResponse: `${"c".repeat(LIMIT)}\n[Cut to 1 MB, original size ${LIMIT + 1} bytes]`,
         },
       ]);
+    });
+
+    it("cuts a subagent's tool value the same way", async () => {
+      vi.stubEnv("CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT", "true");
+      const sent = await lastNote({
+        transcript_path: "",
+        agent_id: "a1",
+        tool_response: "c".repeat(LIMIT + 2),
+      });
+      expect(sent.agentId).toBe("a1");
+      expect(sent.details).toMatchObject({
+        hookContent: {
+          toolResponse: `${"c".repeat(LIMIT)}\n[Cut to 1 MB, original size ${LIMIT + 2} bytes]`,
+        },
+      });
     });
 
     it("does not split a multi-byte character at the cut", async () => {

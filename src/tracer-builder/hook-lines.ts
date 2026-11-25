@@ -65,6 +65,7 @@ export function hookLine(
     case HOOK_EVENTS.postToolUseFailure:
       return toolResultLine(base, details.toolUseId, details.error ?? "", { is_error: true });
     case HOOK_EVENTS.stop:
+    case HOOK_EVENTS.subagentStop:
       return {
         ...base,
         type: "assistant",

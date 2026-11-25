@@ -94,6 +94,7 @@ const HOOK_EVENT_NAMES = [
   "PostToolUseFailure",
   "PostToolBatch",
   "MessageDisplay",
+  "SubagentStart",
   "Stop",
   "StopFailure",
   "SubagentStop",
@@ -394,6 +395,7 @@ export const HOOK_EVENTS = {
   postToolUseFailure: "PostToolUseFailure",
   postToolBatch: "PostToolBatch",
   messageDisplay: "MessageDisplay",
+  subagentStart: "SubagentStart",
   stop: "Stop",
   stopFailure: "StopFailure",
   subagentStop: "SubagentStop",
@@ -405,10 +407,12 @@ export const NO_TRANSCRIPT_ONLY_EVENTS = [
   HOOK_EVENTS.postToolUseFailure,
   HOOK_EVENTS.postToolBatch,
   HOOK_EVENTS.messageDisplay,
+  HOOK_EVENTS.subagentStart,
 ];
 
 export const CLAUDE_PROJECTS_PATH = [".claude", "projects"];
 export const TRANSCRIPT_HEAD_BYTES = 65_536;
 export const HOOK_ROUND_ID_PREFIX = "hook-round-";
+export const SUBAGENT_HANDBACK_TOOL = "SubagentHandback";
 export const HOOK_TOOL_VALUE_MAX_BYTES = 1024 * 1024;
 export const HOOK_TOOL_VALUE_CUT_MARKER = "\n[Cut to 1 MB, original size {bytes} bytes]";

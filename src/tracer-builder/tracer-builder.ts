@@ -79,6 +79,7 @@ import {
   NO_MESSAGE_ID,
   NO_TOOL_RESULT,
   SESSION_ENDED_ERROR,
+  SUBAGENT_HANDBACK_TOOL,
   TRANSCRIPT_EXTENSION,
   SUBAGENT_CHAIN_SUFFIX,
   SYNTHETIC_MODEL,
@@ -555,7 +556,8 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
 
   function finishTool(tool: OpenTool, result: ToolResult) {
     tool.result = undefined;
-    if (state.mainPath !== undefined && result.agentId && AGENT_TOOL_NAMES.has(tool.toolName)) {
+    const tracesAgents = state.mainPath !== undefined || tool.agentId !== undefined;
+    if (tracesAgents && result.agentId && AGENT_TOOL_NAMES.has(tool.toolName)) {
       linkAgent(tool, result.agentId, result.agentType);
       if (result.launched) {
         const chainClosed = !state.threads[result.agentId];
@@ -926,24 +928,72 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
 
   function receiveNote(note: HookNote) {
     const details = (note.details ?? {}) as NoteDetails;
-    if (details.hookContent === undefined || note.agentId) applyNote(note);
+    if (details.hookContent === undefined) applyNote(note);
     else receiveHookNote(note, details);
+  }
+
+  function requestedSubagentType(tool: OpenTool): string {
+    const input = tool.input as { subagent_type?: unknown } | undefined;
+    return stringValue(input?.subagent_type) ?? DEFAULT_SUBAGENT_TYPE;
+  }
+
+  function agentToLink(agentType: string | undefined): OpenTool | undefined {
+    const openAgentTools = Object.values(state.tools).filter(
+      (tool) => AGENT_TOOL_NAMES.has(tool.toolName) && !tool.agentId && tool.run,
+    );
+    const sameType = openAgentTools.find((tool) => requestedSubagentType(tool) === agentType);
+    if (sameType) return sameType;
+    return openAgentTools.length === 1 ? openAgentTools[0] : undefined;
+  }
+
+  function awaitsToolResult(threadKey: string): boolean {
+    return Object.values(state.tools).some(
+      (tool) => tool.thread === threadKey && !tool.launch && !tool.result && !tool.held,
+    );
+  }
+
+  function closeHookSubagent(agentId: string) {
+    closeSubagent(agentId);
+    delete state.hookRounds?.[agentId];
+  }
+
+  function closeStoppingSubagents() {
+    for (const [agentId, thread] of Object.entries(state.threads)) {
+      if (thread.stopping) closeHookSubagent(agentId);
+    }
   }
 
   function receiveHookNote(note: HookNote, details: NoteDetails) {
     const time = noteTime(details);
-    const round = (state.hookRound ??= { number: 0, chunks: [] });
+    const threadKey = note.agentId ?? MAIN_THREAD;
+    const content = details.hookContent!;
+    const isSubagentEvent =
+      note.event === HOOK_EVENTS.subagentStart || note.event === HOOK_EVENTS.subagentStop;
+    if (isSubagentEvent && !note.agentId) return;
+    if (note.event === HOOK_EVENTS.subagentStart) {
+      const tool = agentToLink(content.agentType);
+      if (tool) linkAgent(tool, threadKey, content.agentType);
+      return;
+    }
+    if (threadKey !== MAIN_THREAD && !state.threads[threadKey]) return;
+    const rounds = (state.hookRounds ??= {});
+    const round = (rounds[threadKey] ??= { number: 0, chunks: [] });
     const feed = (text: string, event = note.event, lineDetails = details) => {
       const id = `${HOOK_ROUND_ID_PREFIX}${round.number}`;
       const line = hookLine(event, lineDetails, time, { id, text });
-      if (line) readMainLine(line, time);
+      if (line === undefined) return;
+      if (threadKey === MAIN_THREAD) readMainLine(line, time);
+      else readSubagentLine(threadKey, line, time);
     };
     const feedBufferedText = () => {
       const text = joinedText(round.chunks);
       if (text && state.currentTurn !== undefined) feed(text, HOOK_EVENTS.messageDisplay);
       round.chunks = [];
     };
-    const content = details.hookContent!;
+    const closeWhenAnswered = () => {
+      if (state.threads[threadKey]?.stopping && !awaitsToolResult(threadKey))
+        closeHookSubagent(threadKey);
+    };
     switch (note.event) {
       case HOOK_EVENTS.messageDisplay: {
         const chunk = {
@@ -968,19 +1018,35 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
         }
         round.number++;
         round.toolCalled = false;
+        closeWhenAnswered();
         return;
       case HOOK_EVENTS.preToolUse:
         round.toolCalled = true;
         applyNote(note);
         feed(joinedText(round.chunks));
         round.chunks = [];
+        if (threadKey !== MAIN_THREAD && content.toolName === SUBAGENT_HANDBACK_TOOL) {
+          const input = content.toolInput as { message?: unknown } | undefined;
+          const thread = state.threads[threadKey];
+          thread.lastText = stringValue(input?.message) ?? thread.lastText;
+        }
         return;
+      case HOOK_EVENTS.subagentStop: {
+        const text = details.lastAssistantMessage || joinedText(round.chunks);
+        if (text) feed(text);
+        const thread = state.threads[threadKey];
+        thread.lastTime = later(thread.lastTime, time);
+        thread.stopping = true;
+        closeWhenAnswered();
+        return;
+      }
       case HOOK_EVENTS.stop: {
         const text = details.lastAssistantMessage || joinedText(round.chunks);
         if (state.currentTurn !== undefined) feed(text);
         round.chunks = [];
         round.number++;
         round.toolCalled = false;
+        closeStoppingSubagents();
         applyNote({ ...note, details: { ...details, lastAssistantMessage: text } });
         return;
       }
@@ -995,6 +1061,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
         if (!state.tools[details.toolUseId ?? ""]) return;
         applyNote(note);
         feed("");
+        closeWhenAnswered();
         return;
       case HOOK_EVENTS.stopFailure:
       case HOOK_EVENTS.sessionEnd:

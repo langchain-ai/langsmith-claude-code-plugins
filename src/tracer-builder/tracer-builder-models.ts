@@ -15,6 +15,7 @@ export interface HookContent {
   index?: number;
   text?: string;
   toolCalls?: HookToolCall[];
+  agentType?: string;
 }
 
 export interface HookToolCall {
@@ -144,6 +145,7 @@ export interface Thread {
   lastTime?: string;
   lastLineId?: string;
   closeAtLineId?: string;
+  stopping?: boolean;
   chain?: OpenRun;
   toolUseId?: string;
 }
@@ -211,7 +213,7 @@ export interface BuilderState {
   threads: Record<string, Thread>;
   tools: Record<string, OpenTool>;
   hookTimes: Record<string, { time: number; mode?: TracingMode }>;
-  hookRound?: HookRound;
+  hookRounds?: Record<string, HookRound>;
 }
 
 export interface ClaudeLine {
