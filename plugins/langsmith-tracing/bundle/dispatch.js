@@ -24548,6 +24548,9 @@ var TRACE_FAILED = "Could not run the trace command. Session ID: {sessionId}. No
 var HARNESS_DIRECTORY = ".claude";
 var TURN_START_FAILED = "Could not start the turn: {error}";
 var RESPONSE_WRITE_FAILED = "Could not write the UserPromptSubmit response: {error}";
+var PLUGIN_ROOT_VARIABLE = "CLAUDE_PLUGIN_ROOT";
+var PLUGIN_CONFIG_FILE = "langsmith.json";
+var PLUGIN_CONFIG_UNUSABLE = "Ignoring the langsmith.json in the plugin folder: it is not a readable JSON object.";
 var BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
   defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
@@ -26740,6 +26743,16 @@ function envCooldown() {
 function resolveStateFilePath() {
   return process.env.STATE_FILE ?? join30(homedir3(), ...STATE_FILE_DEFAULT);
 }
+function readPluginConfigFile() {
+  const pluginRoot = process.env[PLUGIN_ROOT_VARIABLE];
+  if (!pluginRoot)
+    return { status: "absent", common: {}, diagnostics: [] };
+  const file = readCommonConfigFile(join30(pluginRoot, PLUGIN_CONFIG_FILE));
+  if (file.status !== "invalid")
+    return file;
+  error(PLUGIN_CONFIG_UNUSABLE);
+  return { ...file, common: {} };
+}
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
   const homeDir = homedir3();
@@ -26801,6 +26814,7 @@ function loadConfig(options) {
     }
   }
   const files = readCommonConfigFiles({ cwd, home: homeDir, harnessDirectory: HARNESS_DIRECTORY });
+  const pluginFile = readPluginConfigFile();
   const common = mergeCommonConfig({
     harness: files.harness.common,
     root: files.root.common,
@@ -26819,7 +26833,12 @@ function loadConfig(options) {
       redact: process.env.CC_LANGSMITH_REDACT === void 0 ? void 0 : redact,
       redact_extra_rules: redactExtraRules
     },
-    defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" }
+    defaults: {
+      api_key: "",
+      api_url: "https://api.smith.langchain.com",
+      project: "claude-code",
+      ...pluginFile.common
+    }
   }, { envFirst: true });
   if (replicas === void 0 || common.locked.includes("replicas")) {
     replicas = toSdkReplicas(common.replicas);
@@ -26828,7 +26847,7 @@ function loadConfig(options) {
   const credential = resolveUploadCredential({
     apiKey: common.api_key,
     apiUrl: common.api_url,
-    apiUrlIsDefault: common.defaulted.includes("api_url"),
+    apiUrlIsDefault: common.defaulted.includes("api_url") && pluginFile.common.api_url === void 0,
     profile: common.profile,
     workspaceId: common.workspace_id,
     agentId: common.agent_id

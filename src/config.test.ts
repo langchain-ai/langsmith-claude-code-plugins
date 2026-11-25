@@ -5,11 +5,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mergeCommonConfig, type CommonConfigResult } from "@langchain/plugins-base/settings";
 import { loadConfig, pinnedRepositoryKeys } from "./config.js";
 import { writerOptions } from "./engine-writer.js";
+import { error } from "./logger.js";
 import { writeLoginConfig } from "./fixtures/login-config.js";
 import { execFileSync } from "node:child_process";
 
 vi.mock("@langchain/plugins-base/settings", { spy: true });
 vi.mock("node:child_process", { spy: true });
+vi.mock("./logger.js", { spy: true });
 
 const { mergeCommonConfig: merge } = await vi.importActual<
   typeof import("@langchain/plugins-base/settings")
@@ -43,6 +45,7 @@ describe("loadConfig", () => {
     delete process.env.CC_LANGSMITH_REDACT;
     delete process.env.CC_LANGSMITH_REDACT_EXTRA;
     delete process.env.LANGSMITH_RUNS_ENDPOINTS;
+    delete process.env.CLAUDE_PLUGIN_ROOT;
 
     // Isolate home-directory reads on every platform.
     tmpHome = mkdtempSync(join(tmpdir(), "ls-cc-test-"));
@@ -285,6 +288,98 @@ describe("loadConfig", () => {
       });
       delete process.env.CC_LANGSMITH_API_KEY;
       expect(loadConfig({ cwd: projectDir }).apiKey).toBe("user-key");
+    });
+  });
+
+  describe("the plugin folder file", () => {
+    let projectDir: string;
+    let pluginDir: string;
+    const shipped = {
+      enabled: true,
+      api_key: "plugin-key",
+      api_url: "https://plugin.example",
+      project: "plugin-project",
+    };
+
+    beforeEach(() => {
+      vi.mocked(error).mockImplementation(() => {});
+      projectDir = join(tmpHome, "project");
+      pluginDir = join(tmpHome, "plugin");
+      mkdirSync(join(projectDir, ".claude"), { recursive: true });
+      mkdirSync(join(tmpHome, ".claude"));
+      mkdirSync(pluginDir);
+      process.env.CLAUDE_PLUGIN_ROOT = pluginDir;
+      writeFileSync(join(pluginDir, "langsmith.json"), JSON.stringify(shipped));
+    });
+
+    it("turns tracing on and supplies the key, endpoint and project when nothing else is set", () => {
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: true,
+        apiKey: "plugin-key",
+        apiBaseUrl: "https://plugin.example",
+        project: "plugin-project",
+      });
+    });
+
+    it("loses to the user's home file", () => {
+      writeFileSync(
+        join(tmpHome, ".claude", "langsmith.json"),
+        JSON.stringify({ project: "home-project" }),
+      );
+      expect(loadConfig({ cwd: projectDir }).project).toBe("home-project");
+    });
+
+    it("loses to a project file", () => {
+      writeFileSync(
+        join(projectDir, ".claude", "langsmith.json"),
+        JSON.stringify({ project: "project-file-project" }),
+      );
+      expect(loadConfig({ cwd: projectDir }).project).toBe("project-file-project");
+    });
+
+    it("loses to an environment variable", () => {
+      process.env.CC_LANGSMITH_PROJECT = "env-project";
+      expect(loadConfig({ cwd: projectDir }).project).toBe("env-project");
+    });
+
+    it("does not treat its endpoint as the built-in default when choosing a login", () => {
+      const { api_key: _key, ...withoutKey } = shipped;
+      writeFileSync(join(pluginDir, "langsmith.json"), JSON.stringify(withoutKey));
+      process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://api.smith.langchain.com");
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        apiBaseUrl: "https://plugin.example",
+        credentialProblem: expect.any(String),
+      });
+    });
+
+    it("changes nothing and logs one line when the file cannot be used", () => {
+      writeFileSync(join(pluginDir, "langsmith.json"), "{");
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: false,
+        defaultMuted: false,
+        apiKey: "",
+        apiBaseUrl: "https://api.smith.langchain.com",
+        project: "claude-code",
+      });
+      expect(error).toHaveBeenCalledTimes(1);
+    });
+
+    it("changes nothing and logs nothing when the file is missing", () => {
+      rmSync(join(pluginDir, "langsmith.json"));
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: false,
+        project: "claude-code",
+      });
+      expect(error).not.toHaveBeenCalled();
+    });
+
+    it("changes nothing when there is no plugin folder", () => {
+      delete process.env.CLAUDE_PLUGIN_ROOT;
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: false,
+        apiKey: "",
+        project: "claude-code",
+      });
     });
   });
 

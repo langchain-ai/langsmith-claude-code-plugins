@@ -6,13 +6,14 @@ import {
 } from "@langchain/plugins-base/auth";
 import {
   mergeCommonConfig,
+  readCommonConfigFile,
   readCommonConfigFiles,
   toSdkReplicas,
 } from "@langchain/plugins-base/settings";
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import type { RunTreeConfig } from "langsmith";
-import type { CommonRedactRule } from "@langchain/plugins-base/settings";
+import type { CommonConfigResult, CommonRedactRule } from "@langchain/plugins-base/settings";
 import { debug, error } from "./logger.js";
 import {
   REPOSITORY_METADATA_KEYS,
@@ -24,6 +25,9 @@ import {
   NO_PINNED_KEYS,
   NOTICE_COOLDOWN_OFF,
   PINNED_REPOSITORY_KEYS,
+  PLUGIN_CONFIG_FILE,
+  PLUGIN_CONFIG_UNUSABLE,
+  PLUGIN_ROOT_VARIABLE,
   STATE_FILE_DEFAULT,
 } from "./constants.js";
 import type { BooleanSetting, Config, MetadataWithPins } from "./types.js";
@@ -97,6 +101,15 @@ function envCooldown(): number | "off" | undefined {
 
 export function resolveStateFilePath(): string {
   return process.env.STATE_FILE ?? join(homedir(), ...STATE_FILE_DEFAULT);
+}
+
+function readPluginConfigFile(): CommonConfigResult {
+  const pluginRoot = process.env[PLUGIN_ROOT_VARIABLE];
+  if (!pluginRoot) return { status: "absent", common: {}, diagnostics: [] };
+  const file = readCommonConfigFile(join(pluginRoot, PLUGIN_CONFIG_FILE));
+  if (file.status !== "invalid") return file;
+  error(PLUGIN_CONFIG_UNUSABLE);
+  return { ...file, common: {} };
 }
 
 export function loadConfig(options?: { cwd?: string }): Config {
@@ -185,6 +198,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
   }
 
   const files = readCommonConfigFiles({ cwd, home: homeDir, harnessDirectory: HARNESS_DIRECTORY });
+  const pluginFile = readPluginConfigFile();
   const common = mergeCommonConfig(
     {
       harness: files.harness.common,
@@ -204,7 +218,12 @@ export function loadConfig(options?: { cwd?: string }): Config {
         redact: process.env.CC_LANGSMITH_REDACT === undefined ? undefined : redact,
         redact_extra_rules: redactExtraRules,
       },
-      defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" },
+      defaults: {
+        api_key: "",
+        api_url: "https://api.smith.langchain.com",
+        project: "claude-code",
+        ...pluginFile.common,
+      },
     },
     { envFirst: true },
   );
@@ -216,7 +235,8 @@ export function loadConfig(options?: { cwd?: string }): Config {
   const credential = resolveUploadCredential({
     apiKey: common.api_key,
     apiUrl: common.api_url,
-    apiUrlIsDefault: common.defaulted.includes("api_url"),
+    apiUrlIsDefault:
+      common.defaulted.includes("api_url") && pluginFile.common.api_url === undefined,
     profile: common.profile,
     workspaceId: common.workspace_id,
     agentId: common.agent_id,

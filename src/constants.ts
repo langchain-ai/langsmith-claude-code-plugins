@@ -164,6 +164,11 @@ const HARNESS_DIRECTORY = ".claude";
 const TURN_START_FAILED = "Could not start the turn: {error}";
 const RESPONSE_WRITE_FAILED = "Could not write the UserPromptSubmit response: {error}";
 
+const PLUGIN_ROOT_VARIABLE = "CLAUDE_PLUGIN_ROOT";
+const PLUGIN_CONFIG_FILE = "langsmith.json";
+const PLUGIN_CONFIG_UNUSABLE =
+  "Ignoring the langsmith.json in the plugin folder: it is not a readable JSON object.";
+
 const BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
   defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
@@ -261,6 +266,9 @@ export {
   TURN_RECORD_LINE,
   USAGE_TEMPLATE,
   BOOLEAN_SETTINGS,
+  PLUGIN_ROOT_VARIABLE,
+  PLUGIN_CONFIG_FILE,
+  PLUGIN_CONFIG_UNUSABLE,
   NOTICE_KINDS,
   NOTICE_COOLDOWN_OFF,
   MUTE_LOCKED_REPLY,
