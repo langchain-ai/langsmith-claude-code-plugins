@@ -150,8 +150,6 @@ Each setting has a config file key and an environment variable. The environment 
 | `profile`              | none                           | the CLI's current one             | Which CLI login to use                                                                                                                                                              |
 | `workspace_id`         | none                           | the login's own                   | Workspace for a login's traces                                                                                                                                                      |
 
-An admin can ship a `langsmith.json` in the plugin's own folder to turn tracing on where no settings exist, such as a cloud session. It is the lowest-priority source, so any other setting you have wins over it.
-
 `profile` is personal so the managed file can't lock it. `LANGSMITH_PROFILE` and `LANGSMITH_WORKSPACE_ID` are only used when no `profile` or `workspace_id` is set in a settings file.
 
 Set `capture_hook_outputs` (`CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS`) to `true` to add the text your own hooks give Claude to the turn or tool call it belongs to, which is off by default.

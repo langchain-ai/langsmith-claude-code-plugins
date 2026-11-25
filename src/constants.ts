@@ -166,6 +166,7 @@ const RESPONSE_WRITE_FAILED = "Could not write the UserPromptSubmit response: {e
 
 const PLUGIN_ROOT_VARIABLE = "CLAUDE_PLUGIN_ROOT";
 const PLUGIN_CONFIG_FILE = "langsmith.json";
+const PLUGIN_DEFAULT_SETTINGS = ["enabled", "project"] as const;
 const PLUGIN_CONFIG_UNUSABLE =
   "Ignoring the langsmith.json in the plugin folder: it is not a readable JSON object.";
 
@@ -268,6 +269,7 @@ export {
   BOOLEAN_SETTINGS,
   PLUGIN_ROOT_VARIABLE,
   PLUGIN_CONFIG_FILE,
+  PLUGIN_DEFAULT_SETTINGS,
   PLUGIN_CONFIG_UNUSABLE,
   NOTICE_KINDS,
   NOTICE_COOLDOWN_OFF,

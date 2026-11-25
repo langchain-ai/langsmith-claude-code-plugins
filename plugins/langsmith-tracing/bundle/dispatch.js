@@ -24550,6 +24550,7 @@ var TURN_START_FAILED = "Could not start the turn: {error}";
 var RESPONSE_WRITE_FAILED = "Could not write the UserPromptSubmit response: {error}";
 var PLUGIN_ROOT_VARIABLE = "CLAUDE_PLUGIN_ROOT";
 var PLUGIN_CONFIG_FILE = "langsmith.json";
+var PLUGIN_DEFAULT_SETTINGS = ["enabled", "project"];
 var PLUGIN_CONFIG_UNUSABLE = "Ignoring the langsmith.json in the plugin folder: it is not a readable JSON object.";
 var BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
@@ -26753,6 +26754,34 @@ function readPluginConfigFile() {
   error(PLUGIN_CONFIG_UNUSABLE);
   return { ...file, common: {} };
 }
+function pluginDefaults(plugin) {
+  return Object.fromEntries(PLUGIN_DEFAULT_SETTINGS.filter((key) => plugin[key] !== void 0).map((key) => [
+    key,
+    plugin[key]
+  ]));
+}
+function resolveCredentialFor(common) {
+  return resolveUploadCredential({
+    apiKey: common.api_key,
+    apiUrl: common.api_url,
+    apiUrlIsDefault: common.defaulted.includes("api_url"),
+    profile: common.profile,
+    workspaceId: common.workspace_id,
+    agentId: common.agent_id
+  });
+}
+function chooseCredential(userCommon, plugin) {
+  const own = resolveCredentialFor(userCommon);
+  const usesPluginPair = own.kind === "none" && userCommon.defaulted.includes("api_url") && sdkSetting(plugin.api_key) !== void 0;
+  if (!usesPluginPair)
+    return { common: userCommon, credential: own };
+  const common = {
+    ...userCommon,
+    api_key: plugin.api_key,
+    api_url: plugin.api_url ?? userCommon.api_url
+  };
+  return { common, credential: resolveCredentialFor(common) };
+}
 function loadConfig(options) {
   const cwd = options?.cwd ?? process.cwd();
   const homeDir = homedir3();
@@ -26815,7 +26844,7 @@ function loadConfig(options) {
   }
   const files = readCommonConfigFiles({ cwd, home: homeDir, harnessDirectory: HARNESS_DIRECTORY });
   const pluginFile = readPluginConfigFile();
-  const common = mergeCommonConfig({
+  const userCommon = mergeCommonConfig({
     harness: files.harness.common,
     root: files.root.common,
     user: files.user.common,
@@ -26834,24 +26863,17 @@ function loadConfig(options) {
       redact_extra_rules: redactExtraRules
     },
     defaults: {
-      api_key: "",
-      api_url: "https://api.smith.langchain.com",
       project: "claude-code",
-      ...pluginFile.common
+      ...pluginDefaults(pluginFile.common),
+      api_key: "",
+      api_url: "https://api.smith.langchain.com"
     }
   }, { envFirst: true });
+  const { common, credential } = chooseCredential(userCommon, pluginFile.common);
   if (replicas === void 0 || common.locked.includes("replicas")) {
     replicas = toSdkReplicas(common.replicas);
   }
   redactExtraRules = common.redact_extra_rules;
-  const credential = resolveUploadCredential({
-    apiKey: common.api_key,
-    apiUrl: common.api_url,
-    apiUrlIsDefault: common.defaulted.includes("api_url") && pluginFile.common.api_url === void 0,
-    profile: common.profile,
-    workspaceId: common.workspace_id,
-    agentId: common.agent_id
-  });
   const unreachable = credential.kind === "login" ? loginReplicaRefusal(uploadReplicas(replicas), credential.apiUrl) : void 0;
   customMetadata = common.metadata && withBothGitMetadataNames(common.metadata);
   const anthropicUserId = readAnthropicUserId();

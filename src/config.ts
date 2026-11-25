@@ -13,7 +13,12 @@ import {
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import type { RunTreeConfig } from "langsmith";
-import type { CommonConfigResult, CommonRedactRule } from "@langchain/plugins-base/settings";
+import type {
+  CommonConfig,
+  CommonConfigResult,
+  CommonRedactRule,
+  MergedCommonConfig,
+} from "@langchain/plugins-base/settings";
 import { debug, error } from "./logger.js";
 import {
   REPOSITORY_METADATA_KEYS,
@@ -27,6 +32,7 @@ import {
   PINNED_REPOSITORY_KEYS,
   PLUGIN_CONFIG_FILE,
   PLUGIN_CONFIG_UNUSABLE,
+  PLUGIN_DEFAULT_SETTINGS,
   PLUGIN_ROOT_VARIABLE,
   STATE_FILE_DEFAULT,
 } from "./constants.js";
@@ -110,6 +116,41 @@ function readPluginConfigFile(): CommonConfigResult {
   if (file.status !== "invalid") return file;
   error(PLUGIN_CONFIG_UNUSABLE);
   return { ...file, common: {} };
+}
+
+function pluginDefaults(plugin: CommonConfig): CommonConfig {
+  return Object.fromEntries(
+    PLUGIN_DEFAULT_SETTINGS.filter((key) => plugin[key] !== undefined).map((key) => [
+      key,
+      plugin[key],
+    ]),
+  );
+}
+
+function resolveCredentialFor(common: MergedCommonConfig) {
+  return resolveUploadCredential({
+    apiKey: common.api_key,
+    apiUrl: common.api_url,
+    apiUrlIsDefault: common.defaulted.includes("api_url"),
+    profile: common.profile,
+    workspaceId: common.workspace_id,
+    agentId: common.agent_id,
+  });
+}
+
+function chooseCredential(userCommon: MergedCommonConfig, plugin: CommonConfig) {
+  const own = resolveCredentialFor(userCommon);
+  const usesPluginPair =
+    own.kind === "none" &&
+    userCommon.defaulted.includes("api_url") &&
+    sdkSetting(plugin.api_key) !== undefined;
+  if (!usesPluginPair) return { common: userCommon, credential: own };
+  const common = {
+    ...userCommon,
+    api_key: plugin.api_key,
+    api_url: plugin.api_url ?? userCommon.api_url,
+  };
+  return { common, credential: resolveCredentialFor(common) };
 }
 
 export function loadConfig(options?: { cwd?: string }): Config {
@@ -199,7 +240,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
 
   const files = readCommonConfigFiles({ cwd, home: homeDir, harnessDirectory: HARNESS_DIRECTORY });
   const pluginFile = readPluginConfigFile();
-  const common = mergeCommonConfig(
+  const userCommon = mergeCommonConfig(
     {
       harness: files.harness.common,
       root: files.root.common,
@@ -219,28 +260,20 @@ export function loadConfig(options?: { cwd?: string }): Config {
         redact_extra_rules: redactExtraRules,
       },
       defaults: {
+        project: "claude-code",
+        ...pluginDefaults(pluginFile.common),
         api_key: "",
         api_url: "https://api.smith.langchain.com",
-        project: "claude-code",
-        ...pluginFile.common,
       },
     },
     { envFirst: true },
   );
+  const { common, credential } = chooseCredential(userCommon, pluginFile.common);
   // Environment replicas retain their SDK format, including legacy tuples.
   if (replicas === undefined || common.locked.includes("replicas")) {
     replicas = toSdkReplicas(common.replicas);
   }
   redactExtraRules = common.redact_extra_rules;
-  const credential = resolveUploadCredential({
-    apiKey: common.api_key,
-    apiUrl: common.api_url,
-    apiUrlIsDefault:
-      common.defaulted.includes("api_url") && pluginFile.common.api_url === undefined,
-    profile: common.profile,
-    workspaceId: common.workspace_id,
-    agentId: common.agent_id,
-  });
   const unreachable =
     credential.kind === "login"
       ? loginReplicaRefusal(uploadReplicas(replicas), credential.apiUrl)

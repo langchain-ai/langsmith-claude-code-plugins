@@ -342,13 +342,100 @@ describe("loadConfig", () => {
       expect(loadConfig({ cwd: projectDir }).project).toBe("env-project");
     });
 
-    it("does not treat its endpoint as the built-in default when choosing a login", () => {
-      const { api_key: _key, ...withoutKey } = shipped;
-      writeFileSync(join(pluginDir, "langsmith.json"), JSON.stringify(withoutKey));
+    it("loses to a CLI login", () => {
       process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://api.smith.langchain.com");
       expect(loadConfig({ cwd: projectDir })).toMatchObject({
-        apiBaseUrl: "https://plugin.example",
+        apiKey: "",
+        apiBaseUrl: "https://api.smith.langchain.com",
+        login: { profile: "work" },
+      });
+    });
+
+    it("loses to LANGSMITH_API_KEY in the environment", () => {
+      process.env.LANGSMITH_API_KEY = "env-key";
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        apiKey: "env-key",
+        apiBaseUrl: "https://api.smith.langchain.com",
+      });
+    });
+
+    it("does not send its key to an endpoint the user chose", () => {
+      writeFileSync(
+        join(tmpHome, ".claude", "langsmith.json"),
+        JSON.stringify({ api_url: "https://self-hosted.example" }),
+      );
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        apiKey: "",
+        apiBaseUrl: "https://self-hosted.example",
         credentialProblem: expect.any(String),
+      });
+    });
+
+    it("ignores its endpoint when it ships no key", () => {
+      const { api_key: _key, ...withoutKey } = shipped;
+      writeFileSync(join(pluginDir, "langsmith.json"), JSON.stringify(withoutKey));
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        apiKey: "",
+        apiBaseUrl: "https://api.smith.langchain.com",
+        credentialProblem: expect.any(String),
+      });
+    });
+
+    it("ignores a shipped agent id so the user's project is kept", () => {
+      writeFileSync(
+        join(pluginDir, "langsmith.json"),
+        JSON.stringify({ ...shipped, agent_id: "shipped-agent" }),
+      );
+      writeFileSync(
+        join(tmpHome, ".claude", "langsmith.json"),
+        JSON.stringify({ project: "home-project" }),
+      );
+      const config = loadConfig({ cwd: projectDir });
+      expect(config.project).toBe("home-project");
+      expect(config.agentId).toBeUndefined();
+    });
+
+    it("ignores shipped replicas so the SDK's own endpoints variable still applies", () => {
+      writeFileSync(
+        join(pluginDir, "langsmith.json"),
+        JSON.stringify({
+          ...shipped,
+          replicas: [{ api_url: "https://replica.example", api_key: "replica-key" }],
+        }),
+      );
+      expect(loadConfig({ cwd: projectDir }).replicas).toBeUndefined();
+    });
+
+    it("supplies enabled and project", () => {
+      expect(loadConfig({ cwd: projectDir })).toMatchObject({
+        enabled: true,
+        project: "plugin-project",
+      });
+    });
+
+    it("ignores a shipped workspace id so the user's login keeps its own", () => {
+      writeFileSync(
+        join(pluginDir, "langsmith.json"),
+        JSON.stringify({ ...shipped, workspace_id: "11111111-2222-4333-8444-555555555555" }),
+      );
+      process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig(
+        "https://api.smith.langchain.com",
+        "99999999-2222-4333-8444-555555555555",
+      );
+      expect(loadConfig({ cwd: projectDir }).login).toMatchObject({
+        workspaceId: "99999999-2222-4333-8444-555555555555",
+      });
+    });
+
+    it("ignores a shipped workspace id so LANGSMITH_WORKSPACE_ID still applies", () => {
+      writeFileSync(
+        join(pluginDir, "langsmith.json"),
+        JSON.stringify({ ...shipped, workspace_id: "11111111-2222-4333-8444-555555555555" }),
+      );
+      process.env.LANGSMITH_CONFIG_FILE = writeLoginConfig("https://api.smith.langchain.com");
+      process.env.LANGSMITH_WORKSPACE_ID = "88888888-2222-4333-8444-555555555555";
+      expect(loadConfig({ cwd: projectDir }).login).toMatchObject({
+        workspaceId: "88888888-2222-4333-8444-555555555555",
       });
     });
 
