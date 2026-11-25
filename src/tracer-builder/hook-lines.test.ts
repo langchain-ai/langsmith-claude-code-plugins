@@ -317,3 +317,307 @@ describe("sessions without a transcript", () => {
     );
   });
 });
+
+describe("subagents in sessions without a transcript", () => {
+  const agent = (send: ReturnType<typeof hookSession>["send"], id: string, type?: string) =>
+    send(
+      "PreToolUse",
+      { toolName: "Agent", toolInput: { ...(type && { subagent_type: type }), prompt: id } },
+      { toolUseId: id },
+    );
+  const start = (send: ReturnType<typeof hookSession>["send"], agentId: string, type: string) =>
+    send("SubagentStart", { agentType: type }, {}, { agentId });
+  const inner = (send: ReturnType<typeof hookSession>["send"], id = "s1") =>
+    send("PreToolUse", { toolName: "Grep" }, { toolUseId: id }, { agentId: "a1" });
+  const batched = (response?: string) => ({
+    toolCalls: [{ toolUseId: "s1", toolResponse: response }],
+  });
+  const chainsOf = (posts: { name: string }[]) =>
+    posts.filter((post) => post.name.endsWith(" Subagent"));
+  const outputOf = (patches: RunPatch[], id: string) =>
+    patches.find((patch) => patch.id === id)?.outputs;
+
+  it("nests a subagent's tools and reply under its chain, closing it before the Agent tool's own result", () => {
+    const { patches, send, run, go, stop } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    inner(send);
+    send("PostToolBatch", batched("found"), {}, { agentId: "a1" });
+    send("SubagentStop", {}, { lastAssistantMessage: "two hits" }, { agentId: "a1" });
+    const [chain] = run("Explore Subagent");
+    expect(outputOf(patches, chain.id)).toEqual({ output: "two hits" });
+    send(
+      "PostToolUse",
+      { toolResponse: { status: "completed", agentId: "a1" } },
+      { toolUseId: "t1" },
+    );
+    stop();
+    expect(chain.parent_run_id).toBe(run("Agent")[0].id);
+    expect(run("Grep")[0].parent_run_id).toBe(chain.id);
+    expect(outputOf(patches, run("Grep")[0].id)).toEqual({ output: "found" });
+    expect(patches.some((patch) => patch.id === run("Agent")[0].id)).toBe(true);
+  });
+
+  it("keeps the error of a subagent's failed tool whose failure note came before the batch", () => {
+    const { patches, send, run, go } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    inner(send);
+    send("PostToolUseFailure", {}, { toolUseId: "s1", error: "exit 2" }, { agentId: "a1" });
+    send("PostToolBatch", batched("exit 2 text"), {}, { agentId: "a1" });
+    send("SubagentStop", {}, { lastAssistantMessage: "failed" }, { agentId: "a1" });
+    const grep = patches.filter((patch) => patch.id === run("Grep")[0].id);
+    expect(grep.map((patch) => patch.error)).toEqual(["exit 2"]);
+  });
+
+  it.each([
+    ["before the final reply", true],
+    ["after the subagent stopped", false],
+  ])("keeps the output of a held subagent tool whose result arrives %s", (_, beforeStop) => {
+    const { patches, send, run, go } = hookSession();
+    go({ captureHookOutputs: true });
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    inner(send);
+    const result = () =>
+      send("PostToolUse", { toolResponse: "found" }, { toolUseId: "s1" }, { agentId: "a1" });
+    if (beforeStop) result();
+    send("SubagentStop", {}, { lastAssistantMessage: "" }, { agentId: "a1" });
+    if (!beforeStop) result();
+    const grep = patches.filter((patch) => patch.id === run("Grep")[0].id);
+    expect(grep.map((patch) => [patch.outputs, patch.error])).toEqual([
+      [{ output: "found" }, undefined],
+    ]);
+  });
+
+  it("links a subagent launched by another subagent and closes every level", () => {
+    const { patches, send, run, go, stop } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    send(
+      "PreToolUse",
+      { toolName: "Agent", toolInput: { subagent_type: "Plan", prompt: "t2" } },
+      { toolUseId: "t2" },
+      { agentId: "a1" },
+    );
+    send("SubagentStart", { agentType: "Plan" }, {}, { agentId: "a2" });
+    send("PreToolUse", { toolName: "Grep" }, { toolUseId: "s1" }, { agentId: "a2" });
+    send("PostToolUse", { toolResponse: "found" }, { toolUseId: "s1" }, { agentId: "a2" });
+    send("SubagentStop", {}, { lastAssistantMessage: "inner" }, { agentId: "a2" });
+    send(
+      "PostToolUse",
+      { toolResponse: { status: "completed", agentId: "a2" } },
+      { toolUseId: "t2" },
+      { agentId: "a1" },
+    );
+    send("SubagentStop", {}, { lastAssistantMessage: "outer" }, { agentId: "a1" });
+    send(
+      "PostToolUse",
+      { toolResponse: { status: "completed", agentId: "a1" } },
+      { toolUseId: "t1" },
+    );
+    stop();
+    const [turn] = run("Claude Code Turn");
+    const [outer, inside] = run("Agent");
+    const [chain1] = run("Explore Subagent");
+    const [chain2] = run("Plan Subagent");
+    expect([
+      outer.parent_run_id,
+      chain1.parent_run_id,
+      inside.parent_run_id,
+      chain2.parent_run_id,
+      run("Grep")[0].parent_run_id,
+    ]).toEqual([turn.id, outer.id, chain1.id, inside.id, chain2.id]);
+    const closed = (id: string) => patches.some((patch) => patch.id === id && patch.end_time);
+    expect([outer, chain1, inside, chain2, run("Grep")[0]].map((r) => closed(r.id))).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  it("gives a subagent's first model run the delegated prompt as its first message", () => {
+    const { send, run, go } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    inner(send);
+    send("PostToolUse", { toolResponse: "found" }, { toolUseId: "s1" }, { agentId: "a1" });
+    send("SubagentStop", {}, { lastAssistantMessage: "x" }, { agentId: "a1" });
+    const [chain] = run("Explore Subagent");
+    const first = run("Claude").find((call) => call.parent_run_id === chain.id);
+    expect(first?.inputs).toEqual({
+      messages: [{ role: "user", content: [{ type: "text", text: "t1" }] }],
+    });
+  });
+
+  it("links a subagent whose agent tool has no prompt and gives it no first message", () => {
+    const { send, run, go } = hookSession();
+    go();
+    send(
+      "PreToolUse",
+      { toolName: "Agent", toolInput: { subagent_type: "Explore" } },
+      { toolUseId: "t1" },
+    );
+    start(send, "a1", "Explore");
+    inner(send);
+    send("PostToolUse", { toolResponse: "found" }, { toolUseId: "s1" }, { agentId: "a1" });
+    send("SubagentStop", {}, { lastAssistantMessage: "x" }, { agentId: "a1" });
+    const [chain] = run("Explore Subagent");
+    const first = run("Claude").find((call) => call.parent_run_id === chain.id);
+    expect(first?.inputs).toEqual({ messages: [] });
+  });
+
+  it("matches an agent tool with no subagent type to the default type", () => {
+    const { send, run, go } = hookSession();
+    go();
+    agent(send, "t1", "Plan");
+    agent(send, "t2");
+    start(send, "a1", "general-purpose");
+    expect(run("general-purpose Subagent")[0].inputs).toEqual({ prompt: "t2" });
+  });
+
+  it("links the only open agent tool even when its type differs", () => {
+    const { send, run, go } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Plan");
+    expect(run("Plan Subagent")[0].inputs).toEqual({ subagent_type: "Explore", prompt: "t1" });
+  });
+
+  it("links nothing when no type matches and two agent tools are open", () => {
+    const { posts, send, go } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    agent(send, "t2", "Plan");
+    start(send, "a1", "Review");
+    expect(chainsOf(posts)).toEqual([]);
+  });
+
+  it("gives two agents of the same type their own tool in the order the tools started", () => {
+    const { send, run, go } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    agent(send, "t2", "Explore");
+    start(send, "a1", "Explore");
+    start(send, "a2", "Explore");
+    expect(run("Explore Subagent").map((chain) => chain.inputs)).toEqual([
+      { subagent_type: "Explore", prompt: "t1" },
+      { subagent_type: "Explore", prompt: "t2" },
+    ]);
+  });
+
+  it("ignores a subagent start or stop that carries no agent id", () => {
+    const { posts, send, run, go, stop } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    send("SubagentStart", { agentType: "Explore" });
+    send("SubagentStop", {}, { lastAssistantMessage: "stray" });
+    stop();
+    expect(chainsOf(posts)).toEqual([]);
+    expect(JSON.stringify(run("Claude")[0].outputs)).not.toContain("stray");
+  });
+
+  it("keeps a result that reaches the worker after the subagent stopped, then closes it", () => {
+    const { patches, send, run, go } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    inner(send);
+    send("PostToolBatch", batched(), {}, { agentId: "a1" });
+    send("SubagentStop", {}, { lastAssistantMessage: "two hits" }, { agentId: "a1" });
+    const [chain] = run("Explore Subagent");
+    expect(outputOf(patches, chain.id)).toBeUndefined();
+    send("PostToolUse", { toolResponse: "found" }, { toolUseId: "s1" }, { agentId: "a1" });
+    expect(outputOf(patches, run("Grep")[0].id)).toEqual({ output: "found" });
+    expect(patches.find((patch) => patch.id === run("Grep")[0].id)?.error).toBeUndefined();
+    expect(outputOf(patches, chain.id)).toEqual({ output: "two hits" });
+  });
+
+  it("closes a stopped subagent's unanswered tool as interrupted when the main turn ends", () => {
+    const { patches, send, run, go, stop } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    inner(send);
+    send("SubagentStop", {}, { lastAssistantMessage: "two hits" }, { agentId: "a1" });
+    stop();
+    expect(patches.find((patch) => patch.id === run("Grep")[0].id)?.error).toBe("Interrupted");
+    expect(outputOf(patches, run("Explore Subagent")[0].id)).toEqual({ output: "two hits" });
+  });
+
+  it("uses the text buffered since the last tool when the last message is empty", () => {
+    const { patches, send, run, go } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    send("PreToolUse", { toolName: "SubagentHandback" }, { toolUseId: "s0" }, { agentId: "a1" });
+    send("PostToolUse", { toolResponse: "ok" }, { toolUseId: "s0" }, { agentId: "a1" });
+    send("PostToolBatch", {}, {}, { agentId: "a1" });
+    send(
+      "MessageDisplay",
+      { messageId: "m1", index: 0, text: "buffered words" },
+      {},
+      { agentId: "a1" },
+    );
+    send("SubagentStop", {}, { lastAssistantMessage: "" }, { agentId: "a1" });
+    expect(outputOf(patches, run("Explore Subagent")[0].id)).toEqual({ output: "buffered words" });
+  });
+
+  it("reports the handback message when the last message is empty", () => {
+    const { patches, send, run, go } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    send(
+      "PreToolUse",
+      { toolName: "SubagentHandback", toolInput: { message: "the findings" } },
+      { toolUseId: "s0" },
+      { agentId: "a1" },
+    );
+    send("PostToolUse", { toolResponse: "ok" }, { toolUseId: "s0" }, { agentId: "a1" });
+    send("SubagentStop", {}, { lastAssistantMessage: "" }, { agentId: "a1" });
+    expect(outputOf(patches, run("Explore Subagent")[0].id)).toEqual({ output: "the findings" });
+  });
+
+  it("closes a background agent's run once it has stopped and its notification turn is done", () => {
+    const { patches, send, run, go, stop } = hookSession();
+    go();
+    agent(send, "t1", "general-purpose");
+    start(send, "a9", "general-purpose");
+    send(
+      "PostToolUse",
+      { toolResponse: { status: "async_launched", agentId: "a9" } },
+      { toolUseId: "t1" },
+    );
+    stop("started");
+    send("SubagentStop", {}, { lastAssistantMessage: "bg done" }, { agentId: "a9" });
+    const agentRunId = run("Agent")[0].id;
+    expect(outputOf(patches, agentRunId)).toBeUndefined();
+    send("UserPromptSubmit", {
+      prompt:
+        "<task-notification><task-id>a9</task-id><result>bg done</result></task-notification>",
+      promptId: "p2",
+    });
+    stop("noted");
+    expect(run("Claude Code Turn")[1].parent_run_id).toBe(agentRunId);
+    expect(outputOf(patches, agentRunId)).toBeDefined();
+  });
+
+  it("keeps the main agent's tool calls in one model call when a subagent ends a round between them", () => {
+    const { send, run, go, stop } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    send("PostToolBatch", {}, {}, { agentId: "a1" });
+    agent(send, "t2", "Plan");
+    stop();
+    const [turn] = run("Claude Code Turn");
+    expect(run("Claude").filter((model) => model.parent_run_id === turn.id)).toHaveLength(1);
+  });
+});

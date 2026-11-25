@@ -113,7 +113,7 @@ it.runIf(!onWindows)(
 
 const commandOf = (event: string) => hooks[event][0].hooks[0].command;
 
-it.each(["PostToolBatch", "PostToolUseFailure"])(
+it.each(["PostToolBatch", "PostToolUseFailure", "SubagentStart"])(
   "runs %s synchronously with a 10 second timeout",
   (event) => {
     const [hook] = hooks[event][0].hooks;

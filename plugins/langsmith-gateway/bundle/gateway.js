@@ -678,6 +678,7 @@ var HOOK_EVENTS = {
   postToolUseFailure: "PostToolUseFailure",
   postToolBatch: "PostToolBatch",
   messageDisplay: "MessageDisplay",
+  subagentStart: "SubagentStart",
   stop: "Stop",
   stopFailure: "StopFailure",
   subagentStop: "SubagentStop",
@@ -687,7 +688,8 @@ var HOOK_EVENTS = {
 var NO_TRANSCRIPT_ONLY_EVENTS = [
   HOOK_EVENTS.postToolUseFailure,
   HOOK_EVENTS.postToolBatch,
-  HOOK_EVENTS.messageDisplay
+  HOOK_EVENTS.messageDisplay,
+  HOOK_EVENTS.subagentStart
 ];
 var HOOK_TOOL_VALUE_MAX_BYTES = 1024 * 1024;
 

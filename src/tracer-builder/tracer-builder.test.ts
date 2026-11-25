@@ -677,6 +677,25 @@ describe("subagents", () => {
     expect(posts.filter((r) => !ended.has(r.id)).map((r) => r.name)).toEqual([]);
     expect(Object.keys((builder.state() as BuilderState).threads)).toEqual(["main"]);
   });
+
+  it("closes a transcript subagent's tool whose held result was never released as having no result", () => {
+    const { patches, main, subagent, meta, send, run } = fakeSession();
+    send("UserPromptSubmit", {}, { time: ms(0), captureHookOutputs: true });
+    main(prompt("p1", 1, "go"), assistant("a1", 2, [toolUse("t1", "Agent")]));
+    send("PreToolUse", {}, { time: ms(3), toolUseId: "t1" });
+    const lines = subagent("a1", [
+      prompt("s1", 4, "task"),
+      assistant("s2", 5, [toolUse("t2")]),
+      toolResult("s3", 6, "t2", undefined, "listed"),
+    ]);
+    meta("a1", "t1");
+    send("SubagentStop", { agentId: "a1" });
+    lines();
+    const bash = patches.filter((patch) => patch.id === run("Bash").id);
+    expect(bash.map((patch) => [patch.outputs, patch.error])).toEqual([
+      [{ output: "No result" }, "Interrupted"],
+    ]);
+  });
 });
 
 describe("repositories", () => {

@@ -781,6 +781,7 @@ export interface TracerHookInput {
   message_id?: string;
   index?: number;
   delta?: string;
+  agent_type?: string;
   tool_calls?: BatchToolCall[];
 }
 

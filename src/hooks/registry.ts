@@ -19,6 +19,7 @@ export const HOOK_HANDLERS: Record<HookEventName, () => Promise<void>> = {
   PostToolUseFailure: ignored,
   PostToolBatch: ignored,
   MessageDisplay: ignored,
+  SubagentStart: ignored,
   Stop: stop,
   StopFailure: stopFailure,
   SubagentStop: subagentStop,

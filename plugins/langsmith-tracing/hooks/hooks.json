@@ -69,6 +69,17 @@
         ]
       }
     ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" SubagentStart\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" SubagentStart",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
