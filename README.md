@@ -154,6 +154,8 @@ Each setting has a config file key and an environment variable. The environment 
 
 Set `capture_hook_outputs` (`CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS`) to `true` to add the text your own hooks give Claude to the turn or tool call it belongs to, which is off by default.
 
+Set `trace_without_transcript` (`CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT`) to `true` to trace sessions that have no transcript, such as Claude Cowork cloud tasks, which is off by default.
+
 If the new tracing worker misbehaves, set `CC_LANGSMITH_LEGACY_TRACING=true` and restart Claude Code to trace the way earlier versions did until a fix ships.
 
 ## More

@@ -5,6 +5,40 @@ import type { TracingMode } from "@langchain/plugins-base/tracer";
 
 export type Message = Record<string, unknown>;
 
+export interface HookContent {
+  prompt?: string;
+  promptId?: string;
+  toolName?: string;
+  toolInput?: unknown;
+  toolResponse?: unknown;
+  messageId?: string;
+  index?: number;
+  text?: string;
+  toolCalls?: HookToolCall[];
+}
+
+export interface HookToolCall {
+  toolUseId: string;
+  toolResponse?: unknown;
+}
+
+export interface TextChunk {
+  messageId: string;
+  index: number;
+  text: string;
+}
+
+export interface HookRound {
+  number: number;
+  chunks: TextChunk[];
+  toolCalled?: boolean;
+}
+
+export interface HookRoundText {
+  id: string;
+  text: string;
+}
+
 export interface NoteDetails {
   time?: number;
   toolUseId?: string;
@@ -17,6 +51,7 @@ export interface NoteDetails {
   parentDottedOrder?: string;
   cwd?: string;
   captureHookOutputs?: boolean;
+  hookContent?: HookContent;
 }
 
 export interface RunPlace {
@@ -176,6 +211,7 @@ export interface BuilderState {
   threads: Record<string, Thread>;
   tools: Record<string, OpenTool>;
   hookTimes: Record<string, { time: number; mode?: TracingMode }>;
+  hookRound?: HookRound;
 }
 
 export interface ClaudeLine {

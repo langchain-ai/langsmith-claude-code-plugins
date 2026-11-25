@@ -9,11 +9,16 @@ import { main as stopFailure } from "./stop-failure.js";
 import { main as subagentStop } from "./subagent-stop.js";
 import { main as userPromptSubmit } from "./user-prompt-submit.js";
 
+const ignored = async (): Promise<void> => {};
+
 /** A complete `Record`, so a new `HOOK_EVENT_NAMES` entry without a handler fails to compile. */
 export const HOOK_HANDLERS: Record<HookEventName, () => Promise<void>> = {
   UserPromptSubmit: userPromptSubmit,
   PreToolUse: preToolUse,
   PostToolUse: postToolUse,
+  PostToolUseFailure: ignored,
+  PostToolBatch: ignored,
+  MessageDisplay: ignored,
   Stop: stop,
   StopFailure: stopFailure,
   SubagentStop: subagentStop,

@@ -35,6 +35,40 @@
         ]
       }
     ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${HOME}/.langsmith/langsmith-claude-code-tracing\" PostToolUseFailure",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${HOME}/.langsmith/langsmith-claude-code-tracing\" PostToolBatch",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "MessageDisplay": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${HOME}/.langsmith/langsmith-claude-code-tracing\" MessageDisplay",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

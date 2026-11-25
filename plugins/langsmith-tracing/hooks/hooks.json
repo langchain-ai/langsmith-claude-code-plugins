@@ -35,6 +35,40 @@
         ]
       }
     ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" PostToolUseFailure\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PostToolUseFailure",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" PostToolBatch\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PostToolBatch",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "MessageDisplay": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exec \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" MessageDisplay\nnode \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" MessageDisplay",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

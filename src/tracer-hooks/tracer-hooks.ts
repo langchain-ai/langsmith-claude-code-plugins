@@ -7,6 +7,7 @@ import {
   ENGINE_WORKER_ARG,
   HOOK_EVENT_NAMES,
   LS_INTEGRATION,
+  NO_TRANSCRIPT_ONLY_EVENTS,
   STOP_FLUSH_WAIT_MS,
 } from "../constants.js";
 import { pinnedRepositoryKeys } from "../config.js";
@@ -21,6 +22,7 @@ import type { Config, HookEventName, TurnStarter } from "../types.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { expandHome, initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { hookContentOf } from "./hook-content.js";
 import { readLegacySessions } from "./legacy-sessions.js";
 import type { TracerHookInput } from "../types.js";
 
@@ -52,6 +54,10 @@ export async function sendTracerNote(
         pinnedRepositoryKeys: [...pinnedRepositoryKeys(config.customMetadata)],
         parentDottedOrder: config.parentDottedOrder,
         captureHookOutputs: config.captureHookOutputs,
+        hookContent:
+          config.traceWithoutTranscript && !input.transcript_path
+            ? hookContentOf(input)
+            : undefined,
       } satisfies NoteDetails,
       writer: tracerWriter(config),
     },
@@ -77,6 +83,15 @@ function noteHandler(event: HookEventName): () => Promise<void> {
   };
 }
 
+function noTranscriptHandler(event: HookEventName): () => Promise<void> {
+  return async () => {
+    const input = await readStdin<TracerHookInput>();
+    if (!isPayloadForHook(input, event) || input.transcript_path) return;
+    const config = initHook(input.cwd);
+    if (config?.traceWithoutTranscript) await sendTracerNote(event, input, config);
+  };
+}
+
 const sendPromptNote: TurnStarter = async (input, output, currentTurnMode) => {
   const config = await promptTracingConfig(input, output);
   if (!config) return;
@@ -86,6 +101,9 @@ const sendPromptNote: TurnStarter = async (input, output, currentTurnMode) => {
 
 export const NOTE_HANDLERS = {
   ...Object.fromEntries(HOOK_EVENT_NAMES.map((event) => [event, noteHandler(event)])),
+  ...Object.fromEntries(
+    NO_TRANSCRIPT_ONLY_EVENTS.map((event) => [event, noTranscriptHandler(event)]),
+  ),
   UserPromptSubmit: () => answerPrompt(sendPromptNote),
   Stop: () => sleep(STOP_FLUSH_WAIT_MS).then(noteHandler("Stop")),
 } as Record<HookEventName, () => Promise<void>>;

@@ -91,6 +91,9 @@ const HOOK_EVENT_NAMES = [
   "UserPromptSubmit",
   "PreToolUse",
   "PostToolUse",
+  "PostToolUseFailure",
+  "PostToolBatch",
+  "MessageDisplay",
   "Stop",
   "StopFailure",
   "SubagentStop",
@@ -169,6 +172,7 @@ const BOOLEAN_SETTINGS = {
   defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
   strict_auth: { env: "CC_LANGSMITH_STRICT_AUTH", restrictive: false },
   capture_hook_outputs: { env: "CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS", restrictive: false },
+  trace_without_transcript: { env: "CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT", restrictive: false },
 } as const;
 
 const USAGE_TEMPLATE = `Usage:
@@ -386,6 +390,10 @@ export const TRACING_MODE_STRICTNESS = ["full", "metadata", "off"];
 export const HOOK_EVENTS = {
   userPromptSubmit: "UserPromptSubmit",
   preToolUse: "PreToolUse",
+  postToolUse: "PostToolUse",
+  postToolUseFailure: "PostToolUseFailure",
+  postToolBatch: "PostToolBatch",
+  messageDisplay: "MessageDisplay",
   stop: "Stop",
   stopFailure: "StopFailure",
   subagentStop: "SubagentStop",
@@ -393,5 +401,14 @@ export const HOOK_EVENTS = {
   sessionEnd: "SessionEnd",
 } as const;
 
+export const NO_TRANSCRIPT_ONLY_EVENTS = [
+  HOOK_EVENTS.postToolUseFailure,
+  HOOK_EVENTS.postToolBatch,
+  HOOK_EVENTS.messageDisplay,
+];
+
 export const CLAUDE_PROJECTS_PATH = [".claude", "projects"];
 export const TRANSCRIPT_HEAD_BYTES = 65_536;
+export const HOOK_ROUND_ID_PREFIX = "hook-round-";
+export const HOOK_TOOL_VALUE_MAX_BYTES = 1024 * 1024;
+export const HOOK_TOOL_VALUE_CUT_MARKER = "\n[Cut to 1 MB, original size {bytes} bytes]";

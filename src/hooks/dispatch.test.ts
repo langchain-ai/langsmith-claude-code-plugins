@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { binary } from "../binary-target.js";
-import { HOOK_EVENT_NAMES, LEGACY_TRACING_ENV } from "../constants.js";
+import { HOOK_EVENT_NAMES, LEGACY_TRACING_ENV, NO_TRANSCRIPT_ONLY_EVENTS } from "../constants.js";
 import cursorHooks from "../fixtures/cursor-hooks.json" with { type: "json" };
 import { noManagedConfigEnv } from "../fixtures/no-managed-config-env.js";
 import { tracerPaths } from "@langchain/plugins-base/tracer";
@@ -20,6 +20,10 @@ const { version } = JSON.parse(readFileSync(new URL("package.json", root), "utf8
 let home: string;
 beforeEach(() => (home = mkdtempSync(join(tmpdir(), "ls-dispatch-"))));
 afterEach(() => rmSync(home, { recursive: true, force: true }));
+
+const ALWAYS_RUN_EVENTS = HOOK_EVENT_NAMES.filter(
+  (event) => !NO_TRANSCRIPT_ONLY_EVENTS.some((name) => name === event),
+);
 
 // Claude Code runs the bundle, not the source, so drive the built artifact.
 function dispatch(args: string[], prompt = "ordinary prompt", cwd = home, filler = "") {
@@ -56,7 +60,7 @@ describe("bundle/dispatch.js", () => {
     expect(existsSync(logDir())).toBe(false);
   });
 
-  it.each(HOOK_EVENT_NAMES)(
+  it.each(ALWAYS_RUN_EVENTS)(
     "runs the %s handler and writes no state while tracing is off",
     (event) => {
       const result = dispatch([event]);
@@ -99,7 +103,7 @@ describe("bundle/dispatch.js", () => {
   function claudePayload(event: string) {
     return {
       session_id: "dispatch-test",
-      transcript_path: join(home, "missing.jsonl"),
+      transcript_path: "",
       cwd: home,
       hook_event_name: event,
       prompt: "ordinary prompt",
@@ -124,6 +128,19 @@ describe("bundle/dispatch.js", () => {
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
     expect(existsSync(logDir()), result.stderr).toBe(true);
+  });
+
+  it("runs a handler that only counts without a transcript only when the path is empty", () => {
+    const send = (transcript_path: string) =>
+      dispatchPayload(
+        "MessageDisplay",
+        { ...claudePayload("MessageDisplay"), transcript_path },
+        { TRACE_TO_LANGSMITH: "false" },
+      );
+    send(join(home, "missing.jsonl"));
+    expect(existsSync(logDir())).toBe(false);
+    expect(send("").status).toBe(0);
+    expect(existsSync(logDir())).toBe(true);
   });
 
   it("stands down when the payload names another Claude Code event", () => {

@@ -786,7 +786,7 @@ async function removeEmptyAncestors(directory, root) {
       await rmdir(current);
     } catch (error2) {
       const code = errorCode(error2);
-      if (CLEANUP_IGNORED_DIRECTORY_CODES.some((ignored) => ignored === code))
+      if (CLEANUP_IGNORED_DIRECTORY_CODES.some((ignored2) => ignored2 === code))
         return;
       throw error2;
     }
@@ -24496,6 +24496,9 @@ var HOOK_EVENT_NAMES = [
   "UserPromptSubmit",
   "PreToolUse",
   "PostToolUse",
+  "PostToolUseFailure",
+  "PostToolBatch",
+  "MessageDisplay",
   "Stop",
   "StopFailure",
   "SubagentStop",
@@ -24552,7 +24555,8 @@ var BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
   defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
   strict_auth: { env: "CC_LANGSMITH_STRICT_AUTH", restrictive: false },
-  capture_hook_outputs: { env: "CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS", restrictive: false }
+  capture_hook_outputs: { env: "CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS", restrictive: false },
+  trace_without_transcript: { env: "CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT", restrictive: false }
 };
 var USAGE_TEMPLATE = `Usage:
   {name} <HookEventName>
@@ -24634,14 +24638,26 @@ var TRACING_MODE_STRICTNESS = ["full", "metadata", "off"];
 var HOOK_EVENTS = {
   userPromptSubmit: "UserPromptSubmit",
   preToolUse: "PreToolUse",
+  postToolUse: "PostToolUse",
+  postToolUseFailure: "PostToolUseFailure",
+  postToolBatch: "PostToolBatch",
+  messageDisplay: "MessageDisplay",
   stop: "Stop",
   stopFailure: "StopFailure",
   subagentStop: "SubagentStop",
   preCompact: "PreCompact",
   sessionEnd: "SessionEnd"
 };
+var NO_TRANSCRIPT_ONLY_EVENTS = [
+  HOOK_EVENTS.postToolUseFailure,
+  HOOK_EVENTS.postToolBatch,
+  HOOK_EVENTS.messageDisplay
+];
 var CLAUDE_PROJECTS_PATH = [".claude", "projects"];
 var TRANSCRIPT_HEAD_BYTES = 65536;
+var HOOK_ROUND_ID_PREFIX = "hook-round-";
+var HOOK_TOOL_VALUE_MAX_BYTES = 1024 * 1024;
+var HOOK_TOOL_VALUE_CUT_MARKER = "\n[Cut to 1 MB, original size {bytes} bytes]";
 
 // node_modules/.pnpm/@langchain+plugins-base@0.7.1_langsmith@0.11.6/node_modules/@langchain/plugins-base/dist/tracing/hook-outputs.js
 function hookOutputs(hooks) {
@@ -26728,6 +26744,10 @@ function envBoolean(field4) {
     return false;
   return setting.restrictive;
 }
+function fileBoolean(files, field4) {
+  const values = files.map((file) => file.raw?.[field4]);
+  return values.find((value) => typeof value === "boolean");
+}
 function envCooldown() {
   const env = process.env.CC_LANGSMITH_NOTICE_COOLDOWN?.trim().toLowerCase();
   if (!env)
@@ -26821,6 +26841,7 @@ function loadConfig(options) {
     },
     defaults: { api_key: "", api_url: "https://api.smith.langchain.com", project: "claude-code" }
   }, { envFirst: true });
+  const traceWithoutTranscript = envBoolean("trace_without_transcript") ?? fileBoolean([files.harness, files.root, files.user, files.userRoot], "trace_without_transcript");
   if (replicas === void 0 || common.locked.includes("replicas")) {
     replicas = toSdkReplicas(common.replicas);
   }
@@ -26866,6 +26887,7 @@ function loadConfig(options) {
     ...unreachable ? { credentialProblem: unreachable } : {},
     ...common.strict_auth ? { strictAuth: true } : {},
     ...common.capture_hook_outputs ? { captureHookOutputs: true } : {},
+    ...traceWithoutTranscript ? { traceWithoutTranscript: true } : {},
     ...common.notice_cooldown === void 0 ? {} : { noticeCooldown: common.notice_cooldown },
     ...common.locked.includes("project") ? { projectLocked: true } : {},
     ...common.locked.includes("defaultMuted") && common.defaultMuted ? { mutedLocked: true } : {}
@@ -30230,6 +30252,66 @@ var iso = (time) => new Date(time).toISOString();
 var later = (a, b) => a === void 0 || b !== void 0 && Date.parse(b) > Date.parse(a) ? b : a;
 var earlier = (a, b) => Date.parse(b) < Date.parse(a) ? b : a;
 
+// dist/src/tracer-builder/hook-lines.js
+function joinedText(chunks) {
+  const messageIds = [...new Set(chunks.map((chunk) => chunk.messageId))];
+  return messageIds.flatMap((id) => chunks.filter((chunk) => chunk.messageId === id).sort((a, b) => a.index - b.index)).map((chunk) => chunk.text).join("");
+}
+function textBlocks2(text) {
+  return text ? [{ type: "text", text }] : [];
+}
+function toolResultLine(base, id, content, extra) {
+  const block = { type: "tool_result", tool_use_id: id, content, ...extra };
+  return { ...base, type: "user", message: { content: [block] } };
+}
+function hookLine(event, details, time, round) {
+  const content = details.hookContent;
+  const base = { timestamp: time, cwd: details.cwd };
+  const response = content.toolResponse;
+  switch (event) {
+    case HOOK_EVENTS.userPromptSubmit:
+      return {
+        ...base,
+        type: "user",
+        promptId: content.promptId,
+        message: { content: content.prompt }
+      };
+    case HOOK_EVENTS.messageDisplay:
+      return {
+        ...base,
+        type: "assistant",
+        message: { id: round.id, content: textBlocks2(round.text) }
+      };
+    case HOOK_EVENTS.preToolUse: {
+      const use = {
+        type: "tool_use",
+        id: details.toolUseId,
+        name: content.toolName,
+        input: content.toolInput
+      };
+      return {
+        ...base,
+        type: "assistant",
+        message: { id: round.id, content: [...textBlocks2(round.text), use] }
+      };
+    }
+    case HOOK_EVENTS.postToolUse: {
+      const text = typeof response === "string" ? response : JSON.stringify(response);
+      const line = toolResultLine(base, details.toolUseId, text, {});
+      return isRecord(response) ? { ...line, toolUseResult: response } : line;
+    }
+    case HOOK_EVENTS.postToolUseFailure:
+      return toolResultLine(base, details.toolUseId, details.error ?? "", { is_error: true });
+    case HOOK_EVENTS.stop:
+      return {
+        ...base,
+        type: "assistant",
+        message: { id: round.id, content: textBlocks2(round.text), stop_reason: END_TURN }
+      };
+  }
+  return void 0;
+}
+
 // dist/src/tracer-builder/subagent-files.js
 import { readdirSync as readdirSync5, readFileSync as readFileSync19 } from "node:fs";
 import { basename as basename7, dirname as dirname25, join as join35 } from "node:path";
@@ -30703,7 +30785,7 @@ var createTranscriptBuilder = (context) => {
   }
   function finishTool(tool, result) {
     tool.result = void 0;
-    if (result.agentId && AGENT_TOOL_NAMES.has(tool.toolName)) {
+    if (state.mainPath !== void 0 && result.agentId && AGENT_TOOL_NAMES.has(tool.toolName)) {
       linkAgent(tool, result.agentId, result.agentType);
       if (result.launched) {
         const chainClosed = !state.threads[result.agentId];
@@ -31082,12 +31164,104 @@ var createTranscriptBuilder = (context) => {
       maybeCloseTurn(turnId);
     }
   }
+  function noteTime(details) {
+    return details.time === void 0 ? state.lastTime ?? iso(Date.now()) : iso(details.time);
+  }
   function receiveNote(note) {
+    const details = note.details ?? {};
+    if (details.hookContent === void 0 || note.agentId)
+      applyNote(note);
+    else
+      receiveHookNote(note, details);
+  }
+  function receiveHookNote(note, details) {
+    const time = noteTime(details);
+    const round = state.hookRound ??= { number: 0, chunks: [] };
+    const feed = (text, event = note.event, lineDetails = details) => {
+      const id = `${HOOK_ROUND_ID_PREFIX}${round.number}`;
+      const line = hookLine(event, lineDetails, time, { id, text });
+      if (line)
+        readMainLine(line, time);
+    };
+    const feedBufferedText = () => {
+      const text = joinedText(round.chunks);
+      if (text && state.currentTurn !== void 0)
+        feed(text, HOOK_EVENTS.messageDisplay);
+      round.chunks = [];
+    };
+    const content = details.hookContent;
+    switch (note.event) {
+      case HOOK_EVENTS.messageDisplay: {
+        const chunk = {
+          messageId: content.messageId ?? "",
+          index: content.index ?? 0,
+          text: content.text ?? ""
+        };
+        if (chunk.text !== "" && round.toolCalled)
+          feed(joinedText([chunk]));
+        else
+          round.chunks.push(chunk);
+        return;
+      }
+      case HOOK_EVENTS.postToolBatch:
+        for (const call of content.toolCalls ?? []) {
+          const tool = state.tools[call.toolUseId];
+          if (call.toolResponse === void 0 || !tool || tool.result || tool.held)
+            continue;
+          const resultDetails = {
+            ...details,
+            toolUseId: call.toolUseId,
+            hookContent: { toolResponse: call.toolResponse }
+          };
+          feed("", HOOK_EVENTS.postToolUse, resultDetails);
+        }
+        round.number++;
+        round.toolCalled = false;
+        return;
+      case HOOK_EVENTS.preToolUse:
+        round.toolCalled = true;
+        applyNote(note);
+        feed(joinedText(round.chunks));
+        round.chunks = [];
+        return;
+      case HOOK_EVENTS.stop: {
+        const text = details.lastAssistantMessage || joinedText(round.chunks);
+        if (state.currentTurn !== void 0)
+          feed(text);
+        round.chunks = [];
+        round.number++;
+        round.toolCalled = false;
+        applyNote({ ...note, details: { ...details, lastAssistantMessage: text } });
+        return;
+      }
+      case HOOK_EVENTS.userPromptSubmit:
+        feedBufferedText();
+        round.toolCalled = false;
+        applyNote(note);
+        feed("");
+        return;
+      case HOOK_EVENTS.postToolUse:
+      case HOOK_EVENTS.postToolUseFailure:
+        if (!state.tools[details.toolUseId ?? ""])
+          return;
+        applyNote(note);
+        feed("");
+        return;
+      case HOOK_EVENTS.stopFailure:
+      case HOOK_EVENTS.sessionEnd:
+        feedBufferedText();
+        applyNote(note);
+        return;
+      default:
+        applyNote(note);
+    }
+  }
+  function applyNote(note) {
     closeLateReply();
     if (note.details && "captureHookOutputs" in note.details)
       state.captureHookOutputs = note.details.captureHookOutputs === true;
     const details = note.details ?? {};
-    const time = details.time === void 0 ? state.lastTime ?? iso(Date.now()) : iso(details.time);
+    const time = noteTime(details);
     if (details.metadata) {
       state.baseMetadata = details.metadata;
       state.pinnedRepositoryKeys = details.pinnedRepositoryKeys;
@@ -31171,6 +31345,37 @@ var createTranscriptBuilder = (context) => {
   };
 };
 
+// dist/src/tracer-hooks/hook-content.js
+function cappedToolValue(value) {
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  if (text === void 0)
+    return value;
+  const bytes = Buffer.from(text);
+  if (bytes.length <= HOOK_TOOL_VALUE_MAX_BYTES)
+    return value;
+  let end = HOOK_TOOL_VALUE_MAX_BYTES;
+  while ((bytes[end] & 192) === 128)
+    end--;
+  const marker = HOOK_TOOL_VALUE_CUT_MARKER.replace("{bytes}", String(bytes.length));
+  return bytes.subarray(0, end).toString("utf8") + marker;
+}
+function hookContentOf(input) {
+  return {
+    prompt: input.prompt,
+    promptId: input.prompt_id,
+    toolName: input.tool_name,
+    toolInput: cappedToolValue(input.tool_input),
+    toolResponse: cappedToolValue(input.tool_response),
+    messageId: input.message_id,
+    index: input.index,
+    text: input.delta,
+    toolCalls: input.tool_calls?.map((call) => ({
+      toolUseId: call.tool_use_id,
+      toolResponse: cappedToolValue(call.tool_response)
+    }))
+  };
+}
+
 // dist/src/tracer-hooks/legacy-sessions.js
 import { closeSync as closeSync9, existsSync as existsSync8, openSync as openSync9, readdirSync as readdirSync6, readSync as readSync4 } from "node:fs";
 import { homedir as homedir5 } from "node:os";
@@ -31246,7 +31451,8 @@ async function sendTracerNote(event, input, config, tracingMode = resolveTurnTra
       metadata: config.customMetadata,
       pinnedRepositoryKeys: [...pinnedRepositoryKeys(config.customMetadata)],
       parentDottedOrder: config.parentDottedOrder,
-      captureHookOutputs: config.captureHookOutputs
+      captureHookOutputs: config.captureHookOutputs,
+      hookContent: config.traceWithoutTranscript && !input.transcript_path ? hookContentOf(input) : void 0
     },
     writer: tracerWriter(config)
   }, {
@@ -31270,6 +31476,16 @@ function noteHandler(event) {
       await sendTracerNote(event, input, config);
   };
 }
+function noTranscriptHandler(event) {
+  return async () => {
+    const input = await readStdin();
+    if (!isPayloadForHook(input, event) || input.transcript_path)
+      return;
+    const config = initHook(input.cwd);
+    if (config?.traceWithoutTranscript)
+      await sendTracerNote(event, input, config);
+  };
+}
 var sendPromptNote = async (input, output, currentTurnMode) => {
   const config = await promptTracingConfig(input, output);
   if (!config)
@@ -31279,6 +31495,7 @@ var sendPromptNote = async (input, output, currentTurnMode) => {
 };
 var NOTE_HANDLERS = {
   ...Object.fromEntries(HOOK_EVENT_NAMES.map((event) => [event, noteHandler(event)])),
+  ...Object.fromEntries(NO_TRANSCRIPT_ONLY_EVENTS.map((event) => [event, noTranscriptHandler(event)])),
   UserPromptSubmit: () => answerPrompt(sendPromptNote),
   Stop: () => sleep3(STOP_FLUSH_WAIT_MS).then(noteHandler("Stop"))
 };
@@ -31504,10 +31721,15 @@ async function main9() {
 }
 
 // dist/src/hooks/registry.js
+var ignored = async () => {
+};
 var HOOK_HANDLERS = {
   UserPromptSubmit: main4,
   PreToolUse: main9,
   PostToolUse: main7,
+  PostToolUseFailure: ignored,
+  PostToolBatch: ignored,
+  MessageDisplay: ignored,
   Stop: main,
   StopFailure: main2,
   SubagentStop: main5,

@@ -20,11 +20,12 @@ const onWindows = process.platform === "win32";
 const SHELL_TIMEOUT_MS = 60_000;
 const executable = binary.target.executableName;
 
-type Hooks = Record<string, { hooks: { command: string }[] }[]>;
+type Hooks = Record<string, { hooks: { command: string; async?: boolean; timeout?: number }[] }[]>;
 const hooks: Hooks = JSON.parse(
   readFileSync(join(root, "plugins/langsmith-tracing/hooks/hooks.json"), "utf8"),
 ).hooks;
 const registered = hooks.SessionEnd[0].hooks[0].command;
+const FILTERED_EVENTS = ["PostToolUseFailure", "PostToolBatch", "MessageDisplay"];
 
 function sandbox(builds: string[]): string {
   const dir = mkdtempSync(join(tmpdir(), "langsmith hooks "));
@@ -48,8 +49,8 @@ function sandbox(builds: string[]): string {
   return dir;
 }
 
-function shell(dir: string): string {
-  const command = registered.replaceAll("${CLAUDE_PLUGIN_ROOT}", dir);
+function shell(dir: string, registeredCommand = registered): string {
+  const command = registeredCommand.replaceAll("${CLAUDE_PLUGIN_ROOT}", dir);
   const options = {
     encoding: "utf8" as const,
     input: JSON.stringify({ hook_event_name: "SessionEnd" }),
@@ -93,7 +94,10 @@ it("gives every hook a starter line and a Node line carrying the same event", ()
 it.runIf(onWindows)(
   "reaches Node through PowerShell, which cannot start the starter",
   () => {
-    inSandbox([], (dir) => expect(shell(dir)).toBe("node SessionEnd"));
+    inSandbox([], (dir) => {
+      for (const event of ["SessionEnd", ...FILTERED_EVENTS])
+        expect(shell(dir, commandOf(event))).toBe(`node ${event}`);
+    });
   },
   SHELL_TIMEOUT_MS,
 );
@@ -105,4 +109,15 @@ it.runIf(!onWindows)(
     inSandbox([], (dir) => expect(shell(dir)).toBe("node SessionEnd"));
   },
   SHELL_TIMEOUT_MS,
+);
+
+const commandOf = (event: string) => hooks[event][0].hooks[0].command;
+
+it.each(["PostToolBatch", "PostToolUseFailure"])(
+  "runs %s synchronously with a 10 second timeout",
+  (event) => {
+    const [hook] = hooks[event][0].hooks;
+    expect(hook.async).toBeUndefined();
+    expect(hook.timeout).toBe(10);
+  },
 );
