@@ -372,6 +372,107 @@ describe("subagents in sessions without a transcript", () => {
     expect(grep.map((patch) => patch.error)).toEqual(["exit 2"]);
   });
 
+  it.each([
+    ["before the final reply", true],
+    ["after the subagent stopped", false],
+  ])("keeps the output of a held subagent tool whose result arrives %s", (_, beforeStop) => {
+    const { patches, send, run, go } = hookSession();
+    go({ captureHookOutputs: true });
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    inner(send);
+    const result = () =>
+      send("PostToolUse", { toolResponse: "found" }, { toolUseId: "s1" }, { agentId: "a1" });
+    if (beforeStop) result();
+    send("SubagentStop", {}, { lastAssistantMessage: "" }, { agentId: "a1" });
+    if (!beforeStop) result();
+    const grep = patches.filter((patch) => patch.id === run("Grep")[0].id);
+    expect(grep.map((patch) => [patch.outputs, patch.error])).toEqual([
+      [{ output: "found" }, undefined],
+    ]);
+  });
+
+  it("links a subagent launched by another subagent and closes every level", () => {
+    const { patches, send, run, go, stop } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    send(
+      "PreToolUse",
+      { toolName: "Agent", toolInput: { subagent_type: "Plan", prompt: "t2" } },
+      { toolUseId: "t2" },
+      { agentId: "a1" },
+    );
+    send("SubagentStart", { agentType: "Plan" }, {}, { agentId: "a2" });
+    send("PreToolUse", { toolName: "Grep" }, { toolUseId: "s1" }, { agentId: "a2" });
+    send("PostToolUse", { toolResponse: "found" }, { toolUseId: "s1" }, { agentId: "a2" });
+    send("SubagentStop", {}, { lastAssistantMessage: "inner" }, { agentId: "a2" });
+    send(
+      "PostToolUse",
+      { toolResponse: { status: "completed", agentId: "a2" } },
+      { toolUseId: "t2" },
+      { agentId: "a1" },
+    );
+    send("SubagentStop", {}, { lastAssistantMessage: "outer" }, { agentId: "a1" });
+    send(
+      "PostToolUse",
+      { toolResponse: { status: "completed", agentId: "a1" } },
+      { toolUseId: "t1" },
+    );
+    stop();
+    const [turn] = run("Claude Code Turn");
+    const [outer, inside] = run("Agent");
+    const [chain1] = run("Explore Subagent");
+    const [chain2] = run("Plan Subagent");
+    expect([
+      outer.parent_run_id,
+      chain1.parent_run_id,
+      inside.parent_run_id,
+      chain2.parent_run_id,
+      run("Grep")[0].parent_run_id,
+    ]).toEqual([turn.id, outer.id, chain1.id, inside.id, chain2.id]);
+    const closed = (id: string) => patches.some((patch) => patch.id === id && patch.end_time);
+    expect([outer, chain1, inside, chain2, run("Grep")[0]].map((r) => closed(r.id))).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  it("gives a subagent's first model run the delegated prompt as its first message", () => {
+    const { send, run, go } = hookSession();
+    go();
+    agent(send, "t1", "Explore");
+    start(send, "a1", "Explore");
+    inner(send);
+    send("PostToolUse", { toolResponse: "found" }, { toolUseId: "s1" }, { agentId: "a1" });
+    send("SubagentStop", {}, { lastAssistantMessage: "x" }, { agentId: "a1" });
+    const [chain] = run("Explore Subagent");
+    const first = run("Claude").find((call) => call.parent_run_id === chain.id);
+    expect(first?.inputs).toEqual({
+      messages: [{ role: "user", content: [{ type: "text", text: "t1" }] }],
+    });
+  });
+
+  it("links a subagent whose agent tool has no prompt and gives it no first message", () => {
+    const { send, run, go } = hookSession();
+    go();
+    send(
+      "PreToolUse",
+      { toolName: "Agent", toolInput: { subagent_type: "Explore" } },
+      { toolUseId: "t1" },
+    );
+    start(send, "a1", "Explore");
+    inner(send);
+    send("PostToolUse", { toolResponse: "found" }, { toolUseId: "s1" }, { agentId: "a1" });
+    send("SubagentStop", {}, { lastAssistantMessage: "x" }, { agentId: "a1" });
+    const [chain] = run("Explore Subagent");
+    const first = run("Claude").find((call) => call.parent_run_id === chain.id);
+    expect(first?.inputs).toEqual({ messages: [] });
+  });
+
   it("matches an agent tool with no subagent type to the default type", () => {
     const { send, run, go } = hookSession();
     go();

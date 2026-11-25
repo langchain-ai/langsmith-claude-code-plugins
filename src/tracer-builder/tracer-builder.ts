@@ -641,6 +641,7 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     const thread = state.threads[agentId];
     if (thread?.chain === undefined) return;
     finishCall(agentId);
+    if (state.mainPath === undefined) releaseHeldTools();
     const end = thread.lastTime ?? thread.chain.start;
     for (const tool of Object.values(state.tools)) {
       if (tool.thread !== agentId || tool.launch) continue;
@@ -939,11 +940,25 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
 
   function agentToLink(agentType: string | undefined): OpenTool | undefined {
     const openAgentTools = Object.values(state.tools).filter(
-      (tool) => AGENT_TOOL_NAMES.has(tool.toolName) && !tool.agentId && tool.run,
+      (tool) =>
+        AGENT_TOOL_NAMES.has(tool.toolName) &&
+        !tool.agentId &&
+        (tool.run || tool.thread !== MAIN_THREAD),
     );
     const sameType = openAgentTools.find((tool) => requestedSubagentType(tool) === agentType);
     if (sameType) return sameType;
     return openAgentTools.length === 1 ? openAgentTools[0] : undefined;
+  }
+
+  function seedSubagentPrompt(agentId: string, tool: OpenTool) {
+    const thread = state.threads[agentId];
+    const prompt = stringValue((tool.input as { prompt?: unknown } | undefined)?.prompt);
+    if (!thread || thread.prompted || prompt === undefined) return;
+    thread.prompted = true;
+    thread.turnNumber = 1;
+    changeHistory(thread, 0, 0, [
+      { role: "user", content: textBlocks(stripContentMarkup(prompt) ?? prompt) },
+    ]);
   }
 
   function awaitsToolResult(threadKey: string): boolean {
@@ -972,7 +987,10 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     if (isSubagentEvent && !note.agentId) return;
     if (note.event === HOOK_EVENTS.subagentStart) {
       const tool = agentToLink(content.agentType);
-      if (tool) linkAgent(tool, threadKey, content.agentType);
+      if (!tool) return;
+      if (!tool.run) postTool(tool, time);
+      linkAgent(tool, threadKey, content.agentType);
+      seedSubagentPrompt(threadKey, tool);
       return;
     }
     if (threadKey !== MAIN_THREAD && !state.threads[threadKey]) return;
