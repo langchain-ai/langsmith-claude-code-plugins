@@ -35,6 +35,41 @@
         ]
       }
     ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat)\ncase \"$input\" in *'\"transcript_path\":\"'[!\\\"]*) exit 0 ;; esac\nprintf '%s' \"$input\" | \"${HOME}/.langsmith/langsmith-claude-code-tracing\" PostToolUseFailure",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat)\ncase \"$input\" in *'\"transcript_path\":\"'[!\\\"]*) exit 0 ;; esac\nprintf '%s' \"$input\" | \"${HOME}/.langsmith/langsmith-claude-code-tracing\" PostToolBatch",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "MessageDisplay": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat)\ncase \"$input\" in *'\"transcript_path\":\"'[!\\\"]*) exit 0 ;; esac\nprintf '%s' \"$input\" | \"${HOME}/.langsmith/langsmith-claude-code-tracing\" MessageDisplay",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

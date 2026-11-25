@@ -21,6 +21,7 @@ import type { Config, HookEventName, TurnStarter } from "../types.js";
 import { isPayloadForHook } from "../utils/harness.js";
 import { expandHome, initHook } from "../utils/hook-init.js";
 import { readStdin } from "../utils/stdin.js";
+import { hookContentOf } from "./hook-content.js";
 import { readLegacySessions } from "./legacy-sessions.js";
 import type { TracerHookInput } from "../types.js";
 
@@ -52,6 +53,10 @@ export async function sendTracerNote(
         pinnedRepositoryKeys: [...pinnedRepositoryKeys(config.customMetadata)],
         parentDottedOrder: config.parentDottedOrder,
         captureHookOutputs: config.captureHookOutputs,
+        hookContent:
+          config.traceWithoutTranscript && !input.transcript_path
+            ? hookContentOf(input)
+            : undefined,
       } satisfies NoteDetails,
       writer: tracerWriter(config),
     },

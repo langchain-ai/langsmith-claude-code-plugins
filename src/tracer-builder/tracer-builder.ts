@@ -44,6 +44,7 @@ import type {
   TranscriptMessage,
   Turn,
 } from "../types.js";
+import { hookLine, joinedText } from "./hook-lines.js";
 import {
   lastLineUuid,
   metaAgentId,
@@ -68,6 +69,7 @@ import {
   HOOK_CONTEXT_ATTACHMENT,
   HOOK_ENTRY_TYPE,
   HOOK_EVENTS,
+  HOOK_ROUND_ID_PREFIX,
   LATE_REPLY_WINDOW_MS,
   MAIN_THREAD,
   MODEL_HISTORY_RESULT_LIMIT_BYTES,
@@ -918,13 +920,81 @@ export const createTranscriptBuilder: CreateTranscriptBuilder = (context) => {
     }
   }
 
+  function noteTime(details: NoteDetails) {
+    return details.time === undefined ? (state.lastTime ?? iso(Date.now())) : iso(details.time);
+  }
+
   function receiveNote(note: HookNote) {
+    const details = (note.details ?? {}) as NoteDetails;
+    if (details.hookContent === undefined || note.agentId) applyNote(note);
+    else receiveHookNote(note, details);
+  }
+
+  function receiveHookNote(note: HookNote, details: NoteDetails) {
+    const time = noteTime(details);
+    const round = (state.hookRound ??= { number: 0, chunks: [] });
+    const feed = (text: string) => {
+      const id = `${HOOK_ROUND_ID_PREFIX}${round.number}`;
+      const line = hookLine(note.event, details, time, { id, text });
+      if (line) readMainLine(line, time);
+    };
+    const content = details.hookContent!;
+    switch (note.event) {
+      case HOOK_EVENTS.messageDisplay: {
+        const chunk = {
+          messageId: content.messageId ?? "",
+          index: content.index ?? 0,
+          text: content.text ?? "",
+        };
+        const isLate =
+          chunk.text !== "" &&
+          round.firstToolTime !== undefined &&
+          details.time !== undefined &&
+          details.time < round.firstToolTime;
+        if (isLate) feed(joinedText([chunk]));
+        else round.chunks.push(chunk);
+        return;
+      }
+      case HOOK_EVENTS.postToolBatch:
+        round.number++;
+        round.firstToolTime = undefined;
+        return;
+      case HOOK_EVENTS.preToolUse:
+        round.firstToolTime ??= details.time;
+        applyNote(note);
+        feed(joinedText(round.chunks));
+        round.chunks = [];
+        return;
+      case HOOK_EVENTS.stop: {
+        const text = details.lastAssistantMessage || joinedText(round.chunks);
+        if (state.currentTurn !== undefined) feed(text);
+        round.chunks = [];
+        round.number++;
+        round.firstToolTime = undefined;
+        applyNote({ ...note, details: { ...details, lastAssistantMessage: text } });
+        return;
+      }
+      case HOOK_EVENTS.userPromptSubmit:
+        round.chunks = [];
+        applyNote(note);
+        feed("");
+        return;
+      case HOOK_EVENTS.postToolUse:
+      case HOOK_EVENTS.postToolUseFailure:
+        applyNote(note);
+        feed("");
+        return;
+      default:
+        applyNote(note);
+    }
+  }
+
+  function applyNote(note: HookNote) {
     closeLateReply();
     if (note.details && "captureHookOutputs" in note.details)
       state.captureHookOutputs = (note.details as NoteDetails).captureHookOutputs === true;
     const details = (note.details ?? {}) as NoteDetails;
-    const time =
-      details.time === undefined ? (state.lastTime ?? iso(Date.now())) : iso(details.time);
+    const time = noteTime(details);
     if (details.metadata) {
       state.baseMetadata = details.metadata;
       state.pinnedRepositoryKeys = details.pinnedRepositoryKeys;

@@ -96,6 +96,43 @@ describe("loadConfig", () => {
       expect(loadConfig({ cwd: projectDir }).project).toBe("claude-code");
     });
 
+    const traced = () => loadConfig({ cwd: projectDir }).traceWithoutTranscript;
+
+    it("leaves tracing without a transcript off when nothing sets it", () => {
+      expect(traced()).toBeUndefined();
+    });
+
+    it("ignores a trace_without_transcript value in a file that is not a boolean", () => {
+      writeFileSync(paths[0], '{"trace_without_transcript":"true"}');
+      expect(traced()).toBeUndefined();
+    });
+
+    it("turns tracing without a transcript on from a file that sets it to true", () => {
+      writeFileSync(paths[3], '{"trace_without_transcript":true}');
+      expect(traced()).toBe(true);
+    });
+
+    it("lets the project file's trace_without_transcript win over the user file's", () => {
+      writeFileSync(paths[0], '{"trace_without_transcript":false}');
+      writeFileSync(paths[2], '{"trace_without_transcript":true}');
+      expect(traced()).toBeUndefined();
+      writeFileSync(paths[0], '{"trace_without_transcript":true}');
+      writeFileSync(paths[2], '{"trace_without_transcript":false}');
+      expect(traced()).toBe(true);
+    });
+
+    it("lets CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT=true turn it on over a file that says false", () => {
+      writeFileSync(paths[0], '{"trace_without_transcript":false}');
+      process.env.CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT = "true";
+      expect(traced()).toBe(true);
+    });
+
+    it("lets CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT=false turn it off over a file that says true", () => {
+      writeFileSync(paths[0], '{"trace_without_transcript":true}');
+      process.env.CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT = "false";
+      expect(traced()).toBeUndefined();
+    });
+
     it("signs in with the configured profile and sends logins to the configured workspace", () => {
       writeFileSync(
         join(tmpHome, ".claude", "langsmith.json"),

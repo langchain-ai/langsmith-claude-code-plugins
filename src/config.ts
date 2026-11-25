@@ -12,7 +12,7 @@ import {
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import type { RunTreeConfig } from "langsmith";
-import type { CommonRedactRule } from "@langchain/plugins-base/settings";
+import type { CommonConfigResult, CommonRedactRule } from "@langchain/plugins-base/settings";
 import { debug, error } from "./logger.js";
 import {
   REPOSITORY_METADATA_KEYS,
@@ -85,6 +85,11 @@ function envBoolean(field: BooleanSetting): boolean | undefined {
   if (env === "true") return true;
   if (env === "false") return false;
   return setting.restrictive;
+}
+
+function fileBoolean(files: CommonConfigResult[], field: BooleanSetting): boolean | undefined {
+  const values = files.map((file) => file.raw?.[field]);
+  return values.find((value): value is boolean => typeof value === "boolean");
 }
 
 function envCooldown(): number | "off" | undefined {
@@ -208,6 +213,12 @@ export function loadConfig(options?: { cwd?: string }): Config {
     },
     { envFirst: true },
   );
+  const traceWithoutTranscript =
+    envBoolean("trace_without_transcript") ??
+    fileBoolean(
+      [files.harness, files.root, files.user, files.userRoot],
+      "trace_without_transcript",
+    );
   // Environment replicas retain their SDK format, including legacy tuples.
   if (replicas === undefined || common.locked.includes("replicas")) {
     replicas = toSdkReplicas(common.replicas);
@@ -271,6 +282,7 @@ export function loadConfig(options?: { cwd?: string }): Config {
     ...(unreachable ? { credentialProblem: unreachable } : {}),
     ...(common.strict_auth ? { strictAuth: true } : {}),
     ...(common.capture_hook_outputs ? { captureHookOutputs: true } : {}),
+    ...(traceWithoutTranscript ? { traceWithoutTranscript: true } : {}),
     ...(common.notice_cooldown === undefined ? {} : { noticeCooldown: common.notice_cooldown }),
     ...(common.locked.includes("project") ? { projectLocked: true } : {}),
     ...(common.locked.includes("defaultMuted") && common.defaultMuted ? { mutedLocked: true } : {}),

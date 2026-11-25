@@ -656,7 +656,8 @@ var BOOLEAN_SETTINGS = {
   enabled: { env: "TRACE_TO_LANGSMITH", ...COMMON_BOOLEAN_SETTINGS.enabled },
   defaultMuted: { env: "CC_LANGSMITH_DEFAULT_MUTED", ...COMMON_BOOLEAN_SETTINGS.defaultMuted },
   strict_auth: { env: "CC_LANGSMITH_STRICT_AUTH", restrictive: false },
-  capture_hook_outputs: { env: "CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS", restrictive: false }
+  capture_hook_outputs: { env: "CC_LANGSMITH_CAPTURE_HOOK_OUTPUTS", restrictive: false },
+  trace_without_transcript: { env: "CC_LANGSMITH_TRACE_WITHOUT_TRANSCRIPT", restrictive: false }
 };
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
 var LEGACY_MAX_AGE_MS = 6 * 60 * 60 * 1e3;
@@ -670,6 +671,7 @@ var LEGACY_FLUSH_LOCK_FILE = new RegExp(`^[\\w.-]+\\.flush\\.lock(\\.${LEGACY_UU
 var BACKGROUND_AGENT_WAIT_MS = 4 * 60 * 60 * 1e3;
 var MODEL_HISTORY_RESULT_LIMIT_BYTES = 8 * 1024;
 var MODEL_HISTORY_TURN_LIMIT_BYTES = 4 * 1024 * 1024;
+var HOOK_TOOL_VALUE_MAX_BYTES = 1024 * 1024;
 
 // dist/src/integration-version.js
 var LS_INTEGRATION_VERSION = typeof __LS_INTEGRATION_VERSION__ !== "undefined" ? __LS_INTEGRATION_VERSION__ : process.env.CC_LANGSMITH_INTEGRATION_VERSION || void 0;

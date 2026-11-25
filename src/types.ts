@@ -706,6 +706,7 @@ export interface Config {
   noticeCooldown?: number | "off";
   strictAuth?: boolean;
   captureHookOutputs?: boolean;
+  traceWithoutTranscript?: boolean;
   projectLocked?: boolean;
   mutedLocked?: boolean;
 }
@@ -772,4 +773,12 @@ export interface TracerHookInput {
   last_assistant_message?: string;
   error?: string;
   error_details?: string;
+  prompt?: string;
+  prompt_id?: string;
+  tool_name?: string;
+  tool_input?: unknown;
+  tool_response?: unknown;
+  message_id?: string;
+  index?: number;
+  delta?: string;
 }

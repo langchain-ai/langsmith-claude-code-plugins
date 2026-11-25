@@ -35,6 +35,41 @@
         ]
       }
     ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat)\ncase \"$input\" in *'\"transcript_path\":\"'[!\\\"]*) exit 0 ;; esac\nprintf '%s' \"$input\" | \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" PostToolUseFailure || printf '%s' \"$input\" | node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PostToolUseFailure",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat)\ncase \"$input\" in *'\"transcript_path\":\"'[!\\\"]*) exit 0 ;; esac\nprintf '%s' \"$input\" | \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" PostToolBatch || printf '%s' \"$input\" | node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" PostToolBatch",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "MessageDisplay": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat)\ncase \"$input\" in *'\"transcript_path\":\"'[!\\\"]*) exit 0 ;; esac\nprintf '%s' \"$input\" | \"${CLAUDE_PLUGIN_ROOT}/hooks/langsmith-tracing\" MessageDisplay || printf '%s' \"$input\" | node \"${CLAUDE_PLUGIN_ROOT}/bundle/dispatch.js\" MessageDisplay",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
