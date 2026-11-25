@@ -12,9 +12,20 @@ Cowork installs plugins from your claude.ai account rather than inside a task:
 
 The plugin loads into the next Cowork task you start. To install it for everyone in your organization, see Anthropic's [Choose a rollout route](https://claude.com/docs/plugins/org-rollout). For more on installing plugins in Cowork, see Anthropic's [Cowork plugins](https://claude.com/docs/cowork/guide/plugins) guide.
 
+## Cloud tasks
+
+Cowork tasks run on your computer or on Anthropic's servers, depending on the **Run Cowork in the cloud** setting in **Organization settings** then **Cowork** on claude.ai. Only organization owners can see or change it. For more, see Anthropic's [Use Claude Cowork on Team and Enterprise plans](https://support.claude.com/en/articles/13455879-use-claude-cowork-on-team-and-enterprise-plans).
+
+Tasks on your computer need nothing beyond the steps on this page. Tasks in the cloud start fresh each time and can only reach approved sites, so an owner needs to:
+
+1. Add your LangSmith API host, such as `api.smith.langchain.com`, to **Organization settings** then **Capabilities** then **Network egress**.
+2. Set the plugin's settings and API key in Claude's [server-managed settings](https://code.claude.com/docs/en/server-managed-settings). [TBD: exact steps once proven for cloud tasks]
+
+Cloud traces include each turn's prompt and reply, tool calls with their inputs and outputs, and subagents. Token counts and cost are only available for tasks that run on your computer.
+
 ## Sign in and turn on tracing
 
-In a desktop Cowork task the plugin's hooks run on your computer, so it reads the same settings as Claude Code. Sign in once with the LangSmith CLI, which you can [install from its docs](https://docs.langchain.com/langsmith/langsmith-cli#install) if you don't have it yet:
+In a Cowork task that runs on your computer the plugin's hooks run there too, so it reads the same settings as Claude Code. For cloud tasks, see [Cloud tasks](#cloud-tasks). Sign in once with the LangSmith CLI, which you can [install from its docs](https://docs.langchain.com/langsmith/langsmith-cli#install) if you don't have it yet:
 
 ```bash
 langsmith auth login
